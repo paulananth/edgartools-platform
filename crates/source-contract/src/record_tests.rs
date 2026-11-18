@@ -298,7 +298,7 @@ pub(crate) fn evaluate_record_test(
         | "kind_equal@1"
         | "gleif_entity_eligible@1"
         | "holds_no_other_lei@1"
-        | "cascade_pass@1" => Err("Binding and compatibility tests run in the Merge Stage".into()),
+        | "waterfall_pass@1" => Err("Binding and compatibility tests run in the Merge Stage".into()),
         _ => Err(format!("Policy names an unknown primitive: {name}")),
     }
 }

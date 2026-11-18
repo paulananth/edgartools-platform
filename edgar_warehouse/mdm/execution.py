@@ -24,9 +24,9 @@ def runtime_files() -> list[Path]:
     """The execution module owns the code its caller must pin."""
     from edgar_warehouse.bookkeeping.clean import config
     from edgar_warehouse.mdm import (
-        activation, adapters, assessment, binding, cascade, catalog, classification,
+        activation, adapters, assessment, binding, catalog, classification,
         correction, evidence, identifier_types, identity, matching, registration,
-        names, prepared, prepared_registry, prepared_publication, master_index, master_search, detail_lookups, record_reads, primitives, quality, relationships, schema, scope, store, survivorship,
+        names, prepared, prepared_registry, prepared_publication, master_index, master_search, detail_lookups, record_reads, primitives, quality, relationships, schema, scope, store, survivorship, waterfall_passes,
     )
     from edgar_warehouse.rules import files, source_engine
     from edgar_warehouse.workers import source_mapping
@@ -34,10 +34,10 @@ def runtime_files() -> list[Path]:
     # Explicit execution dependencies.
     # CLI presentation is not executable merge behavior. This is not
     # the separately tracked complete environment/reproducibility fingerprint.
-    modules = (activation, adapters, assessment, binding, cascade, catalog, classification, config,
+    modules = (activation, adapters, assessment, binding, catalog, classification, config,
                correction, evidence, files, identifier_types,
                identity, limits, matching, names, prepared, prepared_registry, prepared_publication, master_index, master_search, detail_lookups, record_reads, primitives, quality,
-               relationships, registration, schema, scope, source_mapping, store, survivorship)
+               relationships, registration, schema, scope, source_mapping, store, survivorship, waterfall_passes)
     adapter = store.storage_adapter()
     adapter_files = [Path(getfile(adapter)).with_name(name) for name in
                      ("database_adapter.py", "adapter_model.py", "adapter_sql.py", "registry_migration.py")]

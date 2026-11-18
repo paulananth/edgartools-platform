@@ -80,7 +80,7 @@ CONDITION_WORDS = {
                     "no digits or forbidden characters (suffixes from {suffix_list} allowed)",
     "values_overlap@1": "{field} holds {count} of the list {values}",
     "evidence_present@1": "The record has {document}",
-    "cascade_pass@1": "Pass {pass}: the names are equal, legal form kept (GLEIF's other names count), and, "
+    "waterfall_pass@1": "Pass {pass}: the names are equal, legal form kept (GLEIF's other names count), and, "
                       "of what earlier passes left, exactly one SEC company and one GLEIF entity agree on "
                       "{compare}. An address more than {over_shared} entities share counts by its country only. "
                       "Refused flags: {refused_flags}",
@@ -302,7 +302,7 @@ def _source_sheets(name: str, body: dict, policy: dict, root: Path) -> dict[str,
 # --- a kind's workbook --------------------------------------------------------------
 
 def _compare(parts: list | None) -> str:
-    """A cascade pass's address parts in words: none listed is the country
+    """A waterfall pass's address parts in words: none listed is the country
     alone; none at all is the name alone."""
     if parts is None:
         return "the name alone"
@@ -331,7 +331,7 @@ def _conditions(items: list[dict], kind: str) -> str:
             found = {**found, "count": _count(found)}
         if found.get("exclude_list"):  # words of the list that do not count
             found = {**found, "token_list": f"{found['token_list']} (not counting {found['exclude_list']})"}
-        if w.get("primitive") != "cascade_pass@1":
+        if w.get("primitive") != "waterfall_pass@1":
             return found
         return {**found, "compare": _compare(found.get("compare")), "refused_flags": found.get("refused_flags") or "none"}
 

@@ -28,7 +28,7 @@ The scripts use the existing local captures below and write evidence under
    document did not contain them.
 4. *Deleted with the retired Name Count builder it compared against (ticket 88).*
    `whole_source_frequency.py` compared the whole pinned GLEIF JSON archive's
-   Name Count and its seven cascade passes with that builder; the tests now
+   Name Count and its seven waterfall passes with that builder; the tests now
    hold the Name Count each case makes (`tests/engine/fixtures/configured-name-count-cases.json`).
 
 Use `uv run python crates/source-contract/tests/qualification/<script>.py`.

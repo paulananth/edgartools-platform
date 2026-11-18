@@ -115,8 +115,8 @@ REGISTRY = MappingProxyType(
             for name in (
                 "gleif_entity_eligible@1",
                 "holds_no_other_lei@1",
-                # Ticket 21: one pass of the cascade the name count ran.
-                "cascade_pass@1",
+                # Ticket 21: one pass of the waterfall the name count ran.
+                "waterfall_pass@1",
             )
         },
         "evidence_present@1": Primitive(partial(apply_record_test, "evidence_present@1"), "classification"),

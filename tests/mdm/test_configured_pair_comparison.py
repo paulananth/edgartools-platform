@@ -22,8 +22,8 @@ def configured_root(tmp_path):
         "name_field": "invented_name",
         "identifier_namespace": "invented_reference",
         "name_count_field": "invented_name_count",
-        "cascade_field": "invented_assignment",
-        "cascade_identifier_field": "invented_target",
+        "waterfall_field": "invented_assignment",
+        "waterfall_identifier_field": "invented_target",
         "eligibility_kind": "invented-kind",
         "eligibility_categories": ["INVENTED"],
         "status_field": "matching.invented_status",
@@ -38,7 +38,7 @@ def configured_root(tmp_path):
 PROGRAM = '''
 import copy
 from edgar_warehouse.mdm.matching import compare_candidate_records
-from edgar_warehouse.mdm.cascade import VERSION as CASCADE
+from edgar_warehouse.mdm.waterfall_passes import VERSION as PASSES_VERSION
 from edgar_warehouse.mdm.store import Conflict
 
 def field(value): return {"op": "value", "value": value}
@@ -46,7 +46,7 @@ place = {"street": "1 INVENTED WAY", "city": "EXAMPLE", "postcode": "11111", "co
 entry = {"key": "INVENTED LAB INC", "invented_keys": ["origin-1"],
          "invented_key_count": 1, "invented_matches": [["target-1", "2026-01-01T00:00:00Z"]],
          "invented_match_count": 1, "invented_other_count": 0,
-         "invented_assignment": {"version": CASCADE, "pass": "name and full address", "invented_target": "target-1",
+         "invented_assignment": {"version": PASSES_VERSION, "pass": "name and full address", "invented_target": "target-1",
              "last_update": "2026-01-01T00:00:00Z", "key": "INVENTED LAB INC", "flags": [], "via": "legal name"}}
 left = {"record_key": "origin-1", "fields": {"invented_name": field("INVENTED LAB INC")},
         "provenance": {"matching": {"invented_name_count": entry, "invented_location": place}}}
@@ -60,10 +60,10 @@ eligibility = {"categories": ["INVENTED"], "entity_statuses": ["ACCEPTED"],
 def compare(primitive, args):
     return compare_candidate_records({"when": [{"primitive": primitive, "args": args}]}, [(left, right)])
 def eligible(): return compare("gleif_entity_eligible@1", eligibility)
-def cascade(): return compare("cascade_pass@1", {**names, "pass": "name and full address", "compare": ["street", "city", "postcode"], "refused_flags": []})
+def waterfall_pass(): return compare("waterfall_pass@1", {**names, "pass": "name and full address", "compare": ["street", "city", "postcode"], "refused_flags": []})
 def either(**changes):  # the shape of "name and city or postcode": the city or the postcode
     right["provenance"]["matching"]["invented_preferred"] = {**place, **changes}
-    return compare("cascade_pass@1", {**names, "pass": "name and full address", "compare": [["city", "postcode"]], "refused_flags": []})
+    return compare("waterfall_pass@1", {**names, "pass": "name and full address", "compare": [["city", "postcode"]], "refused_flags": []})
 '''
 
 
@@ -73,14 +73,14 @@ SCENARIOS = {
     "eligibility_refused": 'right["fields"]["invented_registration"] = field("REFUSED"); assert eligible() == [[False, False]]',
     "eligibility_missing_status": 'del right["provenance"]["matching"]["invented_status"]; assert eligible() == [[False, False]]',
     "eligibility_withheld_status": 'right["provenance"]["quality"] = {"withheld": ["matching.invented_status"]}; assert eligible() == [[False, False]]',
-    "cascade": 'assert cascade() == [[True, False]]',
-    "cascade_mismatch": 'right["provenance"]["matching"]["invented_preferred"] = {**place, "street": "2 ELSEWHERE"}; assert cascade() == [[False, False]]',
-    "cascade_fallback": 'del right["provenance"]["matching"]["invented_preferred"]; right["provenance"]["matching"]["invented_fallback"] = place; assert cascade() == [[True, False]]',
-    "cascade_either_city": 'assert either(postcode="99999") == [[True, False]]',
-    "cascade_either_postcode": 'assert either(city="ELSEWHERE") == [[True, False]]',
-    "cascade_either_neither": 'assert either(city="ELSEWHERE", postcode="99999") == [[False, False]]',
-    "cascade_either_country": 'assert either(country="YY") == [[False, False]]',
-    "cascade_stale_version": 'right["effective_at"] = "2026-02-01T00:00:00Z"; assert cascade() == [[False, False]]',
+    "waterfall_pass": 'assert waterfall_pass() == [[True, False]]',
+    "waterfall_mismatch": 'right["provenance"]["matching"]["invented_preferred"] = {**place, "street": "2 ELSEWHERE"}; assert waterfall_pass() == [[False, False]]',
+    "waterfall_fallback": 'del right["provenance"]["matching"]["invented_preferred"]; right["provenance"]["matching"]["invented_fallback"] = place; assert waterfall_pass() == [[True, False]]',
+    "waterfall_either_city": 'assert either(postcode="99999") == [[True, False]]',
+    "waterfall_either_postcode": 'assert either(city="ELSEWHERE") == [[True, False]]',
+    "waterfall_either_neither": 'assert either(city="ELSEWHERE", postcode="99999") == [[False, False]]',
+    "waterfall_either_country": 'assert either(country="YY") == [[False, False]]',
+    "waterfall_stale_version": 'right["effective_at"] = "2026-02-01T00:00:00Z"; assert waterfall_pass() == [[False, False]]',
     "unknown_profile": '''
 try:
     compare_candidate_records({"pair_comparison": "absent-profile", "when": []}, [(left, right)])
@@ -111,12 +111,12 @@ def compare(primitive, args):
     return compare_candidate_records({"pair_comparison": "invented-comparison",
         "when": [{"primitive": primitive, "args": args}]}, [(left, right)])
 assert eligible() == [[True, False]]
-assert cascade() == [[True, False]]
+assert waterfall_pass() == [[True, False]]
 from edgar_warehouse.mdm.activation import check_name_binding_rule
 rule = {"rule_id": "invented-rule", "pair_comparison": "invented-comparison",
     "applies_to_verdict": "invented-kind", "emits": ["bind"], "on_no_match": "wait",
     "source": "invented-right", "holder_source": "invented-left", "when": [
-        {"primitive": "cascade_pass@1", "args": {**names, "pass": "name only", "compare": None, "over_shared": 25,
+        {"primitive": "waterfall_pass@1", "args": {**names, "pass": "name only", "compare": None, "over_shared": 25,
                                                  "refused_flags": []}},
         {"primitive": "gleif_entity_eligible@1", "args": eligibility},
         {"primitive": "holds_no_other_lei@1", "args": {}}]}

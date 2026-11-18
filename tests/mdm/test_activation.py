@@ -368,7 +368,7 @@ class TestTheCompanyPolicy:
     {"refused_flags": ["anything"]},
     {"pass": None},
 ])
-def test_a_cascade_pass_with_invalid_arguments_is_refused(changes):
+def test_a_waterfall_pass_with_invalid_arguments_is_refused(changes):
     from edgar_warehouse.mdm.activation import check_name_binding_rule
 
     rule = copy.deepcopy(next(r for r in POLICY["kinds"]["company"]["rules"]
@@ -378,7 +378,7 @@ def test_a_cascade_pass_with_invalid_arguments_is_refused(changes):
         check_name_binding_rule("company", rule, POLICY["kinds"])
 
 
-def test_a_cascade_pass_must_keep_the_one_lei_veto():
+def test_a_waterfall_pass_must_keep_the_one_lei_veto():
     from edgar_warehouse.mdm.activation import check_name_binding_rule
 
     rule = copy.deepcopy(next(r for r in POLICY["kinds"]["company"]["rules"]
@@ -388,7 +388,7 @@ def test_a_cascade_pass_must_keep_the_one_lei_veto():
         check_name_binding_rule("company", rule, POLICY["kinds"])
 
 
-def test_two_cascade_passes_with_one_name_are_refused():
+def test_two_waterfall_passes_with_one_name_are_refused():
     from edgar_warehouse.mdm.activation import check_policy
 
     body = copy.deepcopy(POLICY)

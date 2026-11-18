@@ -615,7 +615,7 @@ def sec_filer_without_a_pass():
                      provenance={"matching": {"business_postal_code": "90000", "business_country": "US"}})
 
 
-def test_the_waterfall_pairs_reach_the_merge_as_cascade_name_keys_and_a_second_call_changes_nothing(database_factory):
+def test_the_waterfall_pairs_reach_the_merge_as_name_keys_and_a_second_call_changes_nothing(database_factory):
     pair = {"lei": LEI, "pass": "name and city or postcode"}
     with opened(database_factory) as db:
         filer = sec_filer_without_a_pass()
@@ -654,15 +654,15 @@ def joined(db, *, gleif_first=False):
     """Merge the invented filer and GLEIF entity, then give the merge the waterfall pass's pair: the two records
     are one golden record. Answers (filer, entity)."""
     from collections import Counter
-    from edgar_warehouse.mdm import cascade, waterfall
+    from edgar_warehouse.mdm import waterfall_passes, waterfall
 
-    spec = cascade.spec(POLICY)
+    spec = waterfall_passes.spec(POLICY)
     filer, entity = placed_filer(), placed_entity()
     if gleif_first:
         merge.merge_file(db, COMPANY, [entity])  # it creates its own Company: the pair cannot join it afterwards
     merge.merge_file(db, COMPANY, [filer])
     found = waterfall.assignments(
-        waterfall.stored_filers(db, SEC), [cascade.entity_of(entity, frozenset({"INVENTED CO"}), eligible=True)],
+        waterfall.stored_filers(db, SEC), [waterfall_passes.entity_of(entity, frozenset({"INVENTED CO"}), eligible=True)],
         spec["passes"], gleif_addresses=Counter(), over_shared=spec["over_shared"])
     merge.apply_pairs(db, COMPANY, SEC, found)
     if not gleif_first:
@@ -677,9 +677,9 @@ def test_the_pass_pairs_and_the_merge_joins_the_company_when_the_pair_comes_firs
     rule holds a pair for wait, and the rule joins it. A GLEIF record that came before its filer was paired created its
     own Company, which a name rule cannot join afterwards: a known limit, kept here so it is seen."""
     from collections import Counter
-    from edgar_warehouse.mdm import cascade, waterfall
+    from edgar_warehouse.mdm import waterfall_passes, waterfall
 
-    spec = cascade.spec(POLICY)
+    spec = waterfall_passes.spec(POLICY)
     with opened(database_factory) as db:
         filer, entity = placed_filer(), placed_entity()
         if gleif_first:
@@ -688,7 +688,7 @@ def test_the_pass_pairs_and_the_merge_joins_the_company_when_the_pair_comes_firs
         assert len(live(db)) == (2 if gleif_first else 1)
 
         found = waterfall.assignments(
-            waterfall.stored_filers(db, SEC), [cascade.entity_of(entity, frozenset({"INVENTED CO"}), eligible=True)],
+            waterfall.stored_filers(db, SEC), [waterfall_passes.entity_of(entity, frozenset({"INVENTED CO"}), eligible=True)],
             spec["passes"], gleif_addresses=Counter(), over_shared=spec["over_shared"])
         assert set(found) == {"0000000017"}
         merge.apply_pairs(db, COMPANY, SEC, found)
@@ -764,11 +764,11 @@ def test_changed_pair_evidence_is_retained_when_its_lookup_key_already_exists(da
         filer = placed_filer()
         merge.merge_file(db, COMPANY, [filer])
         from collections import Counter
-        from edgar_warehouse.mdm import cascade, waterfall
+        from edgar_warehouse.mdm import waterfall_passes, waterfall
         entity = placed_entity()
-        spec = cascade.spec(POLICY)
-        [answer] = waterfall.assignments([cascade.filer_of(filer)],
-            [cascade.entity_of(entity, frozenset({"INVENTED CO"}), eligible=True)], spec["passes"],
+        spec = waterfall_passes.spec(POLICY)
+        [answer] = waterfall.assignments([waterfall_passes.filer_of(filer)],
+            [waterfall_passes.entity_of(entity, frozenset({"INVENTED CO"}), eligible=True)], spec["passes"],
             gleif_addresses=Counter(), over_shared=spec["over_shared"]).values()
         original = {**answer, "last_update": "2026-08-01T00:00:00Z"}
         updated = {**original, "last_update": "2026-09-01T00:00:00Z"}

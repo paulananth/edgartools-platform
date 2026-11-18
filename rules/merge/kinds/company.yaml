@@ -301,7 +301,7 @@ rules:
   - primitive: identifier_cardinality@1
     args:
       namespace: cik
-# The cascade (company mastering ticket 21; operator, 2026-09-27: "name and
+# The waterfall (company mastering ticket 21; operator, 2026-09-27: "name and
 # address first ... then reduce the fields gradually"). One rule per pass, in
 # order; the Name Count runs the passes once over both whole sources, one to
 # one over what earlier passes left, on the addresses the quality rule leaves
@@ -321,9 +321,10 @@ rules:
 # (ticket 09; operator, 2026-10-17: "Delete both"): too few new links to prove
 # (8 and 22 of 52 needed); a pair either matched shares the postcode or the
 # city, which "name and city or postcode" now compares. Each pass is named by
-# what it compares (operator, 2026-11-03: no pass numbers).
+# what it compares (operator, 2026-11-03: no pass numbers). Both name passes are
+# `waterfall_pass@1` (operator, 2026-11-10 12:12 ET: "use waterfall"; 2026-11-17: "Fix 11").
 - rule_id: sec-gleif-name-city-or-postcode
-  version: 2026-11-03.named-by-what-it-compares
+  version: 2026-11-17.name-and-city-or-postcode
   family: name_binding
   source: gleif.level1.v1
   holder_source: sec.company.v1
@@ -332,7 +333,7 @@ rules:
   - bind
   on_no_match: wait
   when:
-  - primitive: cascade_pass@1
+  - primitive: waterfall_pass@1
     args:
       pass: name and city or postcode
       compare:
@@ -362,7 +363,7 @@ rules:
 # (ticket 250). A LAPSED registration of an ACTIVE entity counts, as in the pass above ("Yes"). Two earlier passes
 # that compared less were deleted for adding too few links to prove.
 - rule_id: sec-gleif-name-jurisdiction
-  version: 2026-11-16.name-and-state-of-incorporation
+  version: 2026-11-17.name-and-state-of-incorporation
   family: name_binding
   source: gleif.level1.v1
   holder_source: sec.company.v1
@@ -371,7 +372,7 @@ rules:
   - bind
   on_no_match: wait
   when:
-  - primitive: cascade_pass@1
+  - primitive: waterfall_pass@1
     args:
       pass: name and jurisdiction
       compare:

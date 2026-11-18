@@ -17,7 +17,7 @@ struct Command {
     #[serde(default)]
     pairs: Option<Vec<[Object; 2]>>,
     normalizers: IndexMap<String, bool>,
-    cascade_version: String,
+    waterfall_version: String,
     pair_comparison: PairComparison,
     /// The pinned crosswalk from a state of incorporation code (EDGAR's) to the jurisdiction GLEIF writes
     /// (ticket 250). Rules holds the table; the engine decides with it. None gives a `jurisdiction` part nothing.
@@ -30,8 +30,8 @@ struct PairComparison {
     name_field: String,
     identifier_namespace: String,
     name_count_field: String,
-    cascade_field: String,
-    cascade_identifier_field: String,
+    waterfall_field: String,
+    waterfall_identifier_field: String,
     eligibility_kind: String,
     eligibility_categories: Vec<String>,
     status_field: String,
@@ -279,20 +279,20 @@ fn test_record_pair(
                 && contains("entity_statuses", &status)?
                 && !contains("refused_registration_statuses", &registration)?)
         }
-        "cascade_pass@1" => {
+        "waterfall_pass@1" => {
             let answer = values::read_object(
                 &values::read_object(&read_matching_values(left)?, &shape.name_count_field)?,
-                &shape.cascade_field,
+                &shape.waterfall_field,
             )?;
             let key = read_name(args, left, "sec_normalizer", command)?;
             let other_key = read_name(args, right, "gleif_normalizer", command)?;
-            if !value_matches_rule(&answer, "version", &command.cascade_version)?
+            if !value_matches_rule(&answer, "version", &command.waterfall_version)?
                 || !values::values_match(
                     &values::read_optional_value(&answer, "pass")?,
                     &values::read_optional_value(args, "pass")?,
                 )?
                 || !values::values_match(
-                    &values::read_optional_value(&answer, &shape.cascade_identifier_field)?,
+                    &values::read_optional_value(&answer, &shape.waterfall_identifier_field)?,
                     &values::read_optional_value(
                         &values::read_object(right, "identifiers")?,
                         &shape.identifier_namespace,
@@ -347,7 +347,7 @@ fn compare_record_pair(command: &Command, tests: &[Object]) -> Result<(bool, boo
         }
     }
     let has_flags = tests.iter().any(|test| {
-        values::read_text(test, "primitive").ok().as_deref() == Some("cascade_pass@1")
+        values::read_text(test, "primitive").ok().as_deref() == Some("waterfall_pass@1")
             && values::read_object(test, "args")
                 .is_ok_and(|args| values::has_value(&args, "refused_flags"))
     });

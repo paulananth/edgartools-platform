@@ -5,7 +5,7 @@ from collections import Counter
 
 import pytest
 
-from edgar_warehouse.mdm import cascade, waterfall
+from edgar_warehouse.mdm import waterfall_passes, waterfall
 from edgar_warehouse.mdm.store import Conflict
 
 ADDRESS = {"street": "1 Example Way", "city": "Exampleton", "postcode": "12345", "country": "US"}
@@ -14,21 +14,21 @@ PASSES = [{"pass": "name and street", "compare": ["street", "city", "postcode"],
 
 
 def sec_record(cik, name, address=ADDRESS):
-    return cascade.record(cik, {"name": name, "state_of_incorporation": "DE"},
+    return waterfall_passes.record(cik, {"name": name, "state_of_incorporation": "DE"},
                           {"address": address, "business_country": "US"}, None, {"cik": cik})
 
 
 def entity(lei, *names, address=ADDRESS, eligible=True):
-    keys = frozenset(cascade.legal_form_key(n) for n in names)
-    return cascade.Entity(lei, keys, cascade.place(address), "US-DE", eligible, "2026-01-01",
-                          legal=cascade.legal_form_key(names[0]))
+    keys = frozenset(waterfall_passes.legal_form_key(n) for n in names)
+    return waterfall_passes.Entity(lei, keys, waterfall_passes.place(address), "US-DE", eligible, "2026-01-01",
+                          legal=waterfall_passes.legal_form_key(names[0]))
 
 
 def test_filers_come_from_the_stored_company_records():
     [filer] = waterfall.filers_from_records([sec_record("0000000001", "Alpha Widgets Inc")])
 
     assert filer.cik == "0000000001"
-    assert filer.key == cascade.sec_legal_form_key("Alpha Widgets Inc")
+    assert filer.key == waterfall_passes.sec_legal_form_key("Alpha Widgets Inc")
     assert filer.place.key == ("1 Example Way", "12345", "US")
 
 
@@ -104,7 +104,7 @@ def gleif_tables(*legal_names, address=ADDRESS, copies=1):
     """The whole-publication reading's tables for invented entities (one legal name each)."""
     rows = []
     for number, name in enumerate(legal_names):
-        key = cascade.legal_form_key(name)
+        key = waterfall_passes.legal_form_key(name)
         rows.append({"key": key, "lei": f"LEI-{number}", "updated": "2026-01-01", "source_index": number,
                      "cascade": {"legal": key, "lei": f"LEI-{number}", "place": address, "jurisdiction": "US-DE",
                                  "eligible": True, "last_update": "2026-01-01"}})
@@ -114,16 +114,16 @@ def gleif_tables(*legal_names, address=ADDRESS, copies=1):
 
 
 def test_folding_keeps_the_entities_that_hold_a_wanted_name_and_counts_every_address():
-    wanted = {cascade.legal_form_key("Alpha Widgets Inc")}
+    wanted = {waterfall_passes.legal_form_key("Alpha Widgets Inc")}
     counts = Counter()
 
     legal, other, entities = waterfall.fold_reading(
-        [gleif_tables("Alpha Widgets Inc", "Unrelated Holdings Inc", copies=2)], cascade_wanted=wanted,
+        [gleif_tables("Alpha Widgets Inc", "Unrelated Holdings Inc", copies=2)], names_wanted=wanted,
         address_counts=counts)
 
     assert [e.lei for e in entities] == ["LEI-0"]  # the entity that holds no wanted name is not a candidate
-    assert legal == {cascade.legal_form_key("Alpha Widgets Inc"): {"LEI-0": "2026-01-01"},
-                     cascade.legal_form_key("Unrelated Holdings Inc"): {"LEI-1": "2026-01-01"}}
+    assert legal == {waterfall_passes.legal_form_key("Alpha Widgets Inc"): {"LEI-0": "2026-01-01"},
+                     waterfall_passes.legal_form_key("Unrelated Holdings Inc"): {"LEI-1": "2026-01-01"}}
     assert counts == Counter({("1 Example Way", "12345", "US"): 2})
 
 

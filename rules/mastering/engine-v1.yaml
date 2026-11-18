@@ -54,8 +54,8 @@ pair_comparisons:
     name_field: name
     identifier_namespace: lei
     name_count_field: name_count
-    cascade_field: cascade
-    cascade_identifier_field: lei
+    waterfall_field: cascade
+    waterfall_identifier_field: lei
     eligibility_kind: company
     eligibility_categories:
     - GENERAL

@@ -1,10 +1,10 @@
-"""The cascade: SEC-to-GLEIF matching passes, strict to loose (ticket 21)."""
+"""The waterfall: SEC-to-GLEIF matching passes, strict to loose (ticket 21)."""
 
 from __future__ import annotations
 
 from collections import Counter
 
-from edgar_warehouse.mdm.cascade import Entity, Filer, assign, fit_place, place
+from edgar_warehouse.mdm.waterfall_passes import Entity, Filer, assign, fit_place, place
 
 PASSES = [
     {"pass": "name and full address", "compare": ["street", "city", "postcode"]},
@@ -105,7 +105,7 @@ def _record(fields, matching, withheld=(), **extra):
 
 
 def test_a_filer_is_read_from_the_record_the_stage_holds():
-    from edgar_warehouse.mdm.cascade import filer_of
+    from edgar_warehouse.mdm.waterfall_passes import filer_of
 
     sec = _record({"name": "Acme Inc /DE/", "state_of_incorporation": "DE"},
                   {"address": HQ, "business_country": "US"}, record_key="0000000001")
@@ -115,7 +115,7 @@ def test_a_filer_is_read_from_the_record_the_stage_holds():
 
 
 def test_an_entity_is_read_from_the_record_the_stage_holds_headquarters_first():
-    from edgar_warehouse.mdm.cascade import entity_of
+    from edgar_warehouse.mdm.waterfall_passes import entity_of
 
     gleif = _record({"name": "ACME INC", "jurisdiction": "US-DE", "gleif_last_update": "2026-09-01"},
                     {"headquarters_address": HQ, "address": {**HQ, "street": "1209 ORANGE ST"}},
@@ -126,11 +126,11 @@ def test_an_entity_is_read_from_the_record_the_stage_holds_headquarters_first():
 
 
 def test_the_passes_come_from_the_company_rules_in_order():
-    from edgar_warehouse.mdm.cascade import spec
+    from edgar_warehouse.mdm.waterfall_passes import spec
 
     def rule(n, compare):
         return {"rule_id": f"pass-{n}", "when": [
-            {"primitive": "cascade_pass@1", "args": {"pass": ["name and full address", "name, street and postcode"][n - 1], "compare": compare, "over_shared": 25}},
+            {"primitive": "waterfall_pass@1", "args": {"pass": ["name and full address", "name, street and postcode"][n - 1], "compare": compare, "over_shared": 25}},
             {"primitive": "gleif_entity_eligible@1", "args": {"entity_statuses": ["ACTIVE"],
                                                               "refused_registration_statuses": ["ANNULLED"]}}]}
 

@@ -187,7 +187,7 @@ counts look wrong, or **compare** lists drift handled by data-quality:
 
 ### change-matching: add or tune a matching rule
 
-For example: a cascade pass, a name rule, or records waiting for review.
+For example: a waterfall pass, a name rule, or records waiting for review.
 1. Read `rules/merge/kinds/<kind>.yaml` and `rules/merge/policy.yaml` (which
    rules are on: those listed under `automatic_rules`).
 2. Describe the change in plain words: what it would join, and what it
@@ -226,7 +226,7 @@ where the name is unique on both sides:
    the matching rules change: it carries the passes' answers.
 2. **A name rule** binds a pair whose name the Name Matching counts once on each
    side, plus one more agreeing value (a jurisdiction, a postal code);
-   **a cascade** runs passes strict to loose (name and address parts, then
+   **a waterfall** runs passes strict to loose (name and address parts, then
    fewer parts), each pass binding one to one over what earlier passes left.
    A pass part given as a list agrees when any one of its parts does.
 3. The preparation of the source whose records bind reads the Name Matching file,
@@ -273,8 +273,8 @@ Never invent a command.
 - Name matching across two sources: SEC Company to GLEIF. The waterfall pass
   (`waterfall.py`, from the SEC Companies in the store and the whole GLEIF publication; its answer
   reaches the merge through `merge.apply_pairs`); the pass `sec-gleif-name-city-or-postcode` (the older name rules and the passes that compared less are deleted)
-  (`cascade_pass@1`; "name and city or postcode" compares `[[city, postcode]]`); the code in
-  `edgar_warehouse/mdm/waterfall.py` and `cascade.py`. Name a matching rule by what it compares, never by a pass
+  (`waterfall_pass@1`; "name and city or postcode" compares `[[city, postcode]]`); the code in
+  `edgar_warehouse/mdm/waterfall.py` and `waterfall_passes.py`. Name a matching rule by what it compares, never by a pass
   number (operator). A rename or a deletion moves the policy
   digest: add a policy layer in `tests/mdm/policy_layers.py` that restores the
   old form, then run the whole CI set (`tests/unit tests/architecture

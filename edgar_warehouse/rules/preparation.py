@@ -49,11 +49,11 @@ def registered_store(policy_digest, environment):
 
 def _runtime():
     from edgar_warehouse.mastering import merge
-    from edgar_warehouse.mdm import cascade, matching, names, waterfall
+    from edgar_warehouse.mdm import waterfall_passes, matching, names, waterfall
     from edgar_warehouse.workers import source_read
 
     paths = {*source_read.runtime_files(), *(Path(m.__file__) for m in
-             (merge, cascade, matching, names, waterfall)), Path(__file__)}
+             (merge, waterfall_passes, matching, names, waterfall)), Path(__file__)}
     hashes = []
     for path in sorted(paths):
         with path.open("rb") as stream:
@@ -87,7 +87,7 @@ def population(filers):
 
 def _waterfall(*, options, capture, folder, facts, as_of, deadline, say, environment):
     from edgar_warehouse.mastering import merge
-    from edgar_warehouse.mdm import cascade, waterfall
+    from edgar_warehouse.mdm import waterfall_passes, waterfall
     from edgar_warehouse.mdm.activation import activated
 
     required = {"kind", "holder_source", "files", "full_filename", "completeness", "count_fact"}
@@ -112,7 +112,7 @@ def _waterfall(*, options, capture, folder, facts, as_of, deadline, say, environ
         raise RunStopped("Waterfall preparation names no configured identity kind")
     # Prepare only the rules which may actually act; declared but inactive rules cannot expand scope.
     active = [r for r in body.get("rules", []) if activated(policy, kind, r, "bind")]
-    spec = cascade.spec({"kinds": {kind: {**body, "rules": active}}}, kind)
+    spec = waterfall_passes.spec({"kinds": {kind: {**body, "rules": active}}}, kind)
     if not spec["passes"]:
         raise RunStopped("Waterfall preparation has no active matching pass")
     import fnmatch

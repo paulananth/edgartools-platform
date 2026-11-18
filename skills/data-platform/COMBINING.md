@@ -401,7 +401,7 @@ the last candidate occurrence per holder wins. Legal-name timestamps remain last
 occurrence per name key and holder, rather than globally per holder. Complete legal
 holder sets are subtracted from other-name holders before counts or samples.
 
-The retained seven cascade functions compare the complete population after
+The waterfall's passes compare the complete population after
 original-source EOF. A repackaged prefix, a source-extract prefix or a capped
 sample does not prove completeness. Keep whole-source comparison evidence,
 installed empty-database qualification, active-caller replacement and parser
