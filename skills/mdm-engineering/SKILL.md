@@ -184,6 +184,12 @@ it took; the last pass must change nothing.
 Never load "everything connected" to a batch. Through one shared end, a
 network of links makes every batch cost the whole network.
 
+## A worker's memory is its imports plus its data
+
+Every load runs several worker processes. A worker holds a bounded piece of its input, never the whole of it: what must
+span the input (the distinct keys of a receipt and a digest of them) goes to disk in sorted runs and is read back merged
+(`silver_writer/keyset.py`), never held as a set of every key. Measure before and after with the same invented keys.
+
 ## Lookups and indexes
 
 On every engine, a list of keys is one index seek per key. A plan that scans
