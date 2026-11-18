@@ -3,22 +3,18 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[2] / "skills/data-platform/scripts/exposure"))
 
-from exposure_manifest import build_manifest
+from tests.support.exposure import invented_manifest
 from exposure_parity import check_parity
 
 
 def manifest():
-    return build_manifest({"tables": [{
-        "database": "EDGARTOOLS_PROD", "schema": "EDGARTOOLS_GOLD", "table": "COMPANY",
-        "description": "Mastered companies.", "authority": "mdm",
-        "columns": [{"name": "company_id", "data_type": "BIGINT", "description": "Key."}],
-        "lineage": [],
-    }]})
+    return invented_manifest({"layer": "mdm", "table": "company", "description": "Mastered companies.",
+                              "columns": [("company_id", "BIGINT", "Key.")]})
 
 
 def snapshot(description="Mastered companies.", authority="mdm", column_type="BIGINT"):
     return {"tables": [{
-        "database": "EDGARTOOLS_PROD", "schema": "EDGARTOOLS_GOLD", "table": "COMPANY",
+        "database": "INVENTED_MIRROR", "schema": "MDM", "table": "COMPANY",
         "description": description, "authority": authority,
         "columns": [{"name": "company_id", "data_type": column_type}],
     }], "lineage": []}
@@ -44,7 +40,7 @@ def test_parity_separates_physical_and_business_drift_with_remediation():
 
 def test_parity_reports_extra_assets_and_lineage_separately():
     extra = snapshot()
-    extra["tables"].append({"database": "EDGARTOOLS_PROD", "schema": "EDGARTOOLS_GOLD", "table": "EXTRA", "columns": []})
+    extra["tables"].append({"database": "INVENTED_MIRROR", "schema": "MDM", "table": "EXTRA", "columns": []})
     extra["lineage"] = [{"from": "x", "to": "y"}]
     result = check_parity(manifest(), snowflake=extra, openmetadata=snapshot(), autoontology=snapshot())
     assert any(m["kind"] == "extra_asset" for m in result["mismatches"])

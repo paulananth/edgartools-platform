@@ -1,0 +1,166 @@
+# The final tables that may leave the processing stores, for the managed Snowflake mirror,
+# AutoOntology and the OpenMetadata projection (data-platform skill, "Final exposable tables").
+# One list for every consumer; a table not named here is not exposed. The manifest is made from this
+# list and the stores themselves by skills/data-platform/scripts/exposure/exposure_manifest.py.
+#
+# Operator, 2026-11-17, asked which tables AutoOntology and OpenMetadata may see: "Silver, MDM and RDM";
+# then, told RDM's tables hold draft versions beside published ones: "Published-only RDM tables
+# (Recommended)". RDM joins this list once those tables exist (connectivity ticket 06).
+version: exposure-2026-11-17.silver-and-mdm-golden-records
+approval:
+  date: "2026-11-17"
+  words:
+  - Silver, MDM and RDM
+  - Published-only RDM tables (Recommended)
+
+# The managed mirror keeps a PostgreSQL schema's and table's names, upper-cased (snowflake-postgres
+# skill, mirror), in one database with MDM, RDM and SILVER schemas (data-platform
+# SINGLE-DATABASE-ICEBERG.md). It is not built yet, so every Snowflake identity is planned, not read back.
+target:
+  database: DB_EDGARTOOLS_MIRROR
+  verified: false
+
+# Each layer: the store's connection setting (its name, never its value), its PostgreSQL schema, the
+# Snowflake schema the mirror gives it, and who owns the meaning.
+layers:
+  silver:
+    connection: SILVER_DATABASE_URL
+    source_schema: silver
+    target_schema: SILVER
+    authority: silver
+  mdm:
+    connection: MDM_DATABASE_URL
+    source_schema: public
+    target_schema: MDM
+    authority: mdm
+
+# Silver: every registered table. Its spec is its requirement (approved when its source was onboarded);
+# the writer puts the spec's definitions on the table and its columns, which the manifest reads back.
+# A load mode of append keeps every row (history); the others hold the current rows. A table with an
+# MDM id column is filled from the golden records.
+#
+# MDM: its two final tables (edgar_warehouse/mastering/schema/postgresql.sql), which carry no comments,
+# so their definitions are here. The other mastering_* tables are working tables: source records,
+# reviews, decisions, lookups and progress.
+tables:
+- layer: silver
+  table: relationship
+  scope: current
+  grain: one row per relationship and period start
+  requirement: rules/silver/silver-relationship.yaml
+- layer: silver
+  table: adv_custody
+  scope: history
+  grain: one row per filing and custody row (a custodian listed twice is two rows)
+  requirement: rules/sources/iapd.adv/silver-custody.yaml
+  lineage: [mdm.mastering_master]
+- layer: silver
+  table: company_fact
+  scope: history
+  grain: one row per filed fact (company, taxonomy, concept, unit, period, filing)
+  requirement: rules/sources/sec.company-facts/silver-company-fact.yaml
+  lineage: [mdm.mastering_master]
+- layer: silver
+  table: company_line_item
+  scope: current
+  grain: one row per company, line item and fiscal year
+  requirement: rules/sources/sec.company-facts/silver-company-line-item.yaml
+  lineage: [mdm.mastering_master]
+- layer: silver
+  table: company_measure
+  scope: current
+  grain: one row per company, measure, fiscal year and window
+  requirement: rules/sources/sec.company-facts/silver-company-measure.yaml
+  lineage: [mdm.mastering_master]
+- layer: silver
+  table: ipo_filing
+  scope: history
+  grain: one row per accession number and CIK
+  requirement: rules/sources/sec.ipo/silver-filing.yaml
+  lineage: [mdm.mastering_master]
+- layer: silver
+  table: nport_holding
+  scope: history
+  grain: one row per filing (accession number) and holding id
+  requirement: rules/sources/sec.nport.security/silver-holding.yaml
+  lineage: [mdm.mastering_master]
+- layer: silver
+  table: insider_position
+  scope: history
+  grain: one row per filing (accession number), table and line
+  requirement: rules/sources/sec.ownership/silver-line.yaml
+  lineage: [mdm.mastering_master]
+- layer: silver
+  table: insider_reporting_owner
+  scope: history
+  grain: one row per filing (accession number) and reporting owner (CIK)
+  requirement: rules/sources/sec.ownership/silver-owner.yaml
+  lineage: [mdm.mastering_master]
+- layer: silver
+  table: prospectus_cover_line
+  scope: history
+  grain: one row per accession number, table, row and line
+  requirement: rules/sources/sec.prospectus/silver-cover-line.yaml
+  lineage: [mdm.mastering_master]
+- layer: silver
+  table: prospectus_offering
+  scope: history
+  grain: one row per accession number
+  requirement: rules/sources/sec.prospectus/silver-offering.yaml
+  lineage: [mdm.mastering_master]
+- layer: silver
+  table: prospectus_underwriter
+  scope: history
+  grain: one row per accession number, table and row
+  requirement: rules/sources/sec.prospectus/silver-underwriter.yaml
+  lineage: [mdm.mastering_master]
+- layer: silver
+  table: registration_offering
+  scope: history
+  grain: one row per accession number
+  requirement: rules/sources/sec.registration/silver-offering.yaml
+  lineage: [mdm.mastering_master]
+- layer: silver
+  table: registration_statement_line
+  scope: history
+  grain: one row per accession number, table and row
+  requirement: rules/sources/sec.registration/silver-statement-line.yaml
+  lineage: [mdm.mastering_master]
+- layer: silver
+  table: thirteenf_filing
+  scope: history
+  grain: one row per accession number and manager (a filing listed by two managers has a row for each)
+  requirement: rules/sources/sec.thirteenf.filings/silver-filing.yaml
+  lineage: [mdm.mastering_master]
+- layer: silver
+  table: thirteenf_holding
+  scope: history
+  grain: one row per filing (accession number) and holding (its place in the information table)
+  requirement: rules/sources/sec.thirteenf.securities/silver-holding.yaml
+  lineage: [mdm.mastering_master]
+- layer: mdm
+  table: mastering_master
+  scope: current
+  grain: one row per MDM id
+  requirement: rules/context/definitions.yaml
+  definition: >-
+    One golden record per row, of any kind, keyed by its MDM id: its fields, identifiers and the
+    sources it was built from, as JSON in `body`. A golden record merged into another stays as an
+    alias row whose body names the record it now is (`canonical_id`, status alias).
+  columns:
+    entity_id: The golden record's MDM id.
+    changed_file: The mastering file that last changed the record, in the order files were merged.
+    body: The golden record as JSON, its kind, fields and identifiers, or an alias's canonical_id.
+    created_at: When the row was first written.
+- layer: mdm
+  table: mastering_identifier
+  scope: current
+  grain: one row per identifier namespace, value and MDM id
+  requirement: rules/merge/kinds
+  definition: >-
+    Each identifier a golden record holds (a CIK, an LEI, a CUSIP), one row per value, for finding a
+    golden record by an identifier.
+  columns:
+    namespace: The identifier's type, as the kind's Identifier Contract names it (cik, lei, cusip).
+    value: The identifier as the golden record holds it.
+    entity_id: The MDM id of the golden record that holds it.

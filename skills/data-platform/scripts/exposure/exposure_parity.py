@@ -17,7 +17,7 @@ def _identity(row: dict[str, Any]) -> str:
 
 
 def _manifest_tables(manifest: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    return {".".join(table["physical"].values()): table for table in manifest["tables"]}
+    return {".".join(table["physical"][k] for k in ("database", "schema", "table")): table for table in manifest["tables"]}
 
 
 def _system_tables(snapshot: dict[str, Any]) -> dict[str, dict[str, Any]]:
