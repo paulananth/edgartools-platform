@@ -76,6 +76,11 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    ```
    Done when `doctor` prints `"ok": true` under `worker.env` (it checks MDM, Rules, Bookkeeping and the Change Journal; steps
    4 and 6 prove RDM and Silver) and `load --plan` reads a capture.
+8. **Catalog.** A catalog (the [openmetadata skill](../../../skills/openmetadata/SKILL.md)) describes the rules, so a reset of the stores
+   changes none of it, but its text may have moved since it was last published. With the catalog's private file sourced:
+   `edgar-warehouse rules catalog --root rules publish`, then `... check`. Done when `check` prints `confirmed` with no differences.
+   The statuses it already holds for the steps are the previous load's history; the new load's statuses supersede them (see
+   [data-operations](../../../skills/data-operations/SKILL.md#publish-a-steps-status-to-the-catalog)).
 
 A missing grant or login that a command names is a gap to fix through the central connection section, not to work around.
 
