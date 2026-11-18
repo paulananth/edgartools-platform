@@ -257,6 +257,8 @@ def build_manifest(
     for entry, built in tables:
         for reference in entry.get("lineage") or []:
             layer, _, table = _words(reference, "a lineage reference").partition(".")
+            if (layer, table) == (built["layer"], built["source"]["table"]):
+                raise ValueError(f"{built['source']['table']} names itself as its lineage")
             if (layer, table) not in by_name:
                 raise ValueError(
                     f"{built['source']['table']} names lineage {reference!r} that the list does not expose"

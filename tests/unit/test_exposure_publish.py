@@ -1,100 +1,101 @@
-from urllib.parse import unquote
+"""The exposure's catalog plan: one owned service, the store's types translated, exactly two owned tags a table,
+only the manifest's lineage, and no glossary term or certification. Every name here is invented; the readback
+against a running server is the ticket's live proof."""
 
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parents[2] / "skills/data-platform/scripts/exposure"))
 
-from tests.support.exposure import invented_manifest
-from exposure_publish import exposure_plan, publish_exposure
+from exposure_publish import APPROVED, PublishError, _owned, column_type, exposure_plan, retagged, verify  # noqa: E402
+
+from tests.support.exposure import invented_manifest  # noqa: E402
 
 
-def _manifest():
-    return invented_manifest({"layer": "mdm", "table": "company", "description": "Mastered companies.",
-                              "columns": [("company_id", "BIGINT", "Master key.")]},
-                             schemas={"mdm": "EDGARTOOLS_GOLD"})
+def manifest():
+    return invented_manifest(
+        {"layer": "mdm", "table": "golden", "description": "Invented golden records.",
+         "columns": [("entity_id", "character(36)", "The id."), ("body", "text", "The record.")]},
+        {"layer": "silver", "table": "sale", "description": "Invented sales.", "lineage": ["mdm.golden"],
+         "columns": [("amount", "numeric(18,2)", "The amount."), ("sold_at", "timestamp with time zone", "When.")]},
+    )
 
 
-class _Catalog:
-    def __init__(self):
-        self.entities = {}
-        self.certification = {}
-        self.tags = {}
-        self.lineage = {}
-        self.glossary_writes = []
-
-    def __call__(self, method, path, body=None, params=None):
-        if path == "/system/version":
-            return {"version": "2.0.7"}
-        if path == "/system/settings":
-            return {"data": [{"config_type": "assetCertificationSettings", "config_value": {"validityPeriod": "P30D"}},
-                             {"config_type": "entityRulesSettings", "config_value": {"entitySemantics": []}}]}
-        if method == "PUT" and path == "/glossaryTerms":
-            self.glossary_writes.append(body)
-            return {}
-        if method == "PUT":
-            parent = (body or {}).get("databaseSchema") or (body or {}).get("database") or (body or {}).get("service")
-            name = body["name"] if parent is None else parent + "." + body["name"]
-            if path == "/services/databaseServices":
-                name = body["name"]
-            entity = {**body, "id": name, "fullyQualifiedName": name}
-            self.entities[name] = entity
-            return entity
-        if method == "PATCH" and path.startswith("/tables/") and body and body[0]["path"] == "/certification":
-            self.certification[path.removeprefix("/tables/")] = body[0]["value"]
-            return {}
-        if method == "PATCH" and "/tags/-" in str(body):
-            self.tags.setdefault(path.removeprefix("/tables/"), []).append(body[0]["value"]["tagFQN"])
-            return {}
-        if method == "PUT" and path == "/lineage":
-            edge = body["edge"]
-            self.lineage[(edge["fromEntity"]["id"], edge["toEntity"]["id"])] = edge
-            return {}
-        if method == "GET" and path.startswith("/services/databaseServices/name/"):
-            return self.entities.get(unquote(path.rsplit("/", 1)[-1]))
-        if method == "GET" and "/name/" in path:
-            name = unquote(path.split("/name/", 1)[1])
-            entity = dict(self.entities.get(name) or {})
-            if (params or {}).get("fields") == "certification":
-                entity["certification"] = self.certification.get(entity.get("id"))
-            if (params or {}).get("fields") == "tags":
-                entity["tags"] = [{"tagFQN": tag} for tag in self.tags.get(entity.get("id"), [])]
-            return entity
-        if method == "GET" and path in ("/tables", "/databases", "/databaseSchemas"):
-            wanted = {"/tables": 4, "/databases": 2, "/databaseSchemas": 3}[path]
-            rows = [entity for entity in self.entities.values() if entity["fullyQualifiedName"].count(".") == wanted - 1]
-            return {"data": rows, "paging": {}}
-        if method == "GET" and path.startswith("/lineage/table/name/"):
-            table = unquote(path.removeprefix("/lineage/table/name/"))
-            edges = [{"fromEntity": source, "toEntity": target, "lineageDetails": edge["lineageDetails"]}
-                     for (source, target), edge in self.lineage.items() if target == table]
-            return {"upstreamEdges": edges}
-        if method == "GET" and path.startswith("/services/pipelineServices/name/"):
-            return None
-        if method == "DELETE":
-            return {}
-        return {"data": [], "paging": {}}
+def test_every_table_lives_in_the_one_service_the_manifest_owns_named_by_its_parts():
+    plan = exposure_plan(manifest(), service="invented-exposure")
+    assert plan["service"]["name"] == "invented-exposure"
+    assert {t["databaseSchema"] for t in plan["tables"]} == {"invented-exposure.INVENTED_MIRROR.MDM",
+                                                            "invented-exposure.INVENTED_MIRROR.SILVER"}
+    assert "planned, not yet read back" in plan["service"]["description"]
 
 
-def test_plan_uses_physical_identity_and_omits_unverified_lineage():
-    plan = exposure_plan(_manifest())
-    table = plan["tables"][0]
-    assert table["name"] == "COMPANY"
-    assert table["databaseSchema"] == "edgartools-snowflake.INVENTED_MIRROR.EDGARTOOLS_GOLD"
-    assert table["columns"][0]["dataType"] == "BIGINT"
-    assert plan["certifications"] == [{
-        "table": "edgartools-snowflake.INVENTED_MIRROR.EDGARTOOLS_GOLD.COMPANY",
-        "tag": "Certification.Gold",
-    }]
-    assert plan["data_class_marks"][0]["tag"] == "data_class.master_data"
-    assert plan["lineage"] == []
+def test_each_table_carries_the_exposure_tag_and_its_layers_data_class_and_nothing_else():
+    plan = exposure_plan(manifest(), service="s")
+    assert plan["tags"] == {"s.INVENTED_MIRROR.MDM.GOLDEN": sorted([APPROVED, "data_class.master_data"]),
+                            "s.INVENTED_MIRROR.SILVER.SALE": sorted([APPROVED, "data_class.transaction_data"])}
 
 
-def test_publish_matches_catalog_readback_without_inventing_glossary_terms():
-    server = _Catalog()
-    result = publish_exposure(_manifest(), server)
-    assert result["verified"]["differences"] == []
-    assert server.glossary_writes == []
-    assert server.certification["edgartools-snowflake.INVENTED_MIRROR.EDGARTOOLS_GOLD.COMPANY"]["tagLabel"]["tagFQN"] == "Certification.Gold"
-    assert "edgartools-snowflake" in server.entities
-    assert "edgartools-snowflake.INVENTED_MIRROR.EDGARTOOLS_GOLD" in server.entities
+def test_no_glossary_term_certification_or_classification_is_planned():
+    plan = exposure_plan(manifest())
+    assert not {"glossary_terms", "glossaries", "certifications", "classifications", "data_class_marks"} & set(plan)
+
+
+def test_the_lineage_is_the_manifests_and_nothing_more():
+    plan = exposure_plan(manifest(), service="s")
+    assert [(e["from"], e["to"]) for e in plan["lineage"]] == [("s.INVENTED_MIRROR.MDM.GOLDEN",
+                                                               "s.INVENTED_MIRROR.SILVER.SALE")]
+
+
+@pytest.mark.parametrize("store, catalog", [
+    ("text", {"dataType": "TEXT"}),
+    ("character(36)", {"dataType": "CHAR", "dataLength": 36}),
+    ("character varying(128)", {"dataType": "VARCHAR", "dataLength": 128}),
+    ("numeric(38,10)", {"dataType": "NUMERIC"}),
+    ("timestamp with time zone", {"dataType": "TIMESTAMPZ"}),
+    ("jsonb", {"dataType": "JSON"}),
+    ("boolean", {"dataType": "BOOLEAN"}),
+])
+def test_a_store_type_is_translated_and_kept_for_display(store, catalog):
+    assert column_type(store) == {**catalog, "dataTypeDisplay": store}
+
+
+def test_a_store_type_with_no_catalog_type_is_refused():
+    with pytest.raises(PublishError, match="no catalog type"):
+        column_type("tsvector")
+
+
+def test_an_unknown_layer_is_refused_not_dropped():
+    with pytest.raises(PublishError, match="no data class"):
+        exposure_plan(invented_manifest({"layer": "gold", "table": "x", "description": "Invented.",
+                                         "columns": [("id", "text", "The id.")]}))
+
+
+def test_only_the_tags_of_the_two_owned_classifications_are_this_publications():
+    tags = [{"tagFQN": APPROVED}, {"tagFQN": "data_class.master_data"}, {"tagFQN": "PII.None"}]
+    assert _owned(tags) == sorted([APPROVED, "data_class.master_data"])
+
+
+def test_a_republish_replaces_only_the_owned_tags_and_keeps_a_stewards():
+    wanted = sorted([APPROVED, "data_class.transaction_data"])
+    held = [{"tagFQN": "data_class.master_data"}, {"tagFQN": "PII.None"}]
+    assert [t["tagFQN"] for t in retagged(held, wanted)] == ["PII.None", *wanted]
+    assert retagged([{"tagFQN": "PII.None"}, *({"tagFQN": t} for t in wanted)], wanted) is None
+
+
+def test_a_varchar_with_no_length_is_text_not_one_character():
+    assert column_type("character varying") == {"dataType": "TEXT", "dataTypeDisplay": "character varying"}
+    assert column_type("character varying(128)")["dataLength"] == 128
+
+
+def test_a_readback_on_an_unqualified_version_is_refused_before_it_reads_anything():
+    asked = []
+
+    def call(method, path, body=None, params=None):
+        asked.append(path)
+        return {"version": "9.9.9"} if path == "/system/version" else {}
+
+    with pytest.raises(PublishError, match="not a qualified version"):
+        verify(manifest(), call)
+    assert asked == ["/system/version"]

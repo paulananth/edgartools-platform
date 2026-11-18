@@ -18,11 +18,27 @@ dot are refused; `check` refuses a manifest its list no longer makes. A store is
 only: a driver's error can carry the address, so only its class is reported. The env files hold
 SQLAlchemy addresses (`postgresql+psycopg2://`); the script drops the driver for libpq.
 
+## The OpenMetadata publication (qualified)
+
+`exposure_publish.py` projects a manifest into one database service it owns (default `edgartools-exposure`)
+through the repository's catalog publisher, then reads it back. Inside that service it is the whole truth:
+a table the manifest drops is deleted there. Each table gets exactly `exposure.approved` and its layer's data
+class among the two classifications this publication owns; any other tag, such as a steward's, is kept. The
+data class tags must already exist (the rules catalog defines them). No glossary term or certification is
+published. A repeat publish changes no table's version.
+
+```bash
+set +x; set -a; source <private OpenMetadata env file>; set +a
+uv run --no-project --with pyyaml python <SKILL_DIR>/scripts/exposure/exposure_publish.py \
+  --manifest <manifest.json> --config rules/exposure.yaml   # add --check to read back only
+```
+
+An expired token answers HTTP 401 on every call but `/system/version`: renew the token, and never print it.
+
 ## The other scripts (unqualified)
 
-`exposure_publish.py`, `autoontology.py`, `exposure_parity.py` and `exposure_operations.py` carry the open
-findings of the connectivity tracker (`.scratch/snowflake-openmetadata-autoontology-connectivity-20261116/`).
-Do not run them against a live service until their ticket is closed.
+`autoontology.py`, `exposure_parity.py` and `exposure_operations.py` are not qualified yet.
+Do not run them against a live service.
 
 ## Local verification
 
