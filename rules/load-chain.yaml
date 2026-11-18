@@ -9,7 +9,7 @@
 # the links table is built once, after the last load (`load_chain.py --finish`).
 # Ten lanes: A the Companies the others follow; P the Persons; S the Securities; C the other Companies; L funds, share
 # classes and N-PORT Securities; G GLEIF and what follows it (it joins only the SEC Company masters, so it starts when
-# those are done, not behind the Securities); N N-PORT silver (it needs no master but its funds' and registrants');
+# those are done); N N-PORT silver (it needs no master but its funds' and registrants');
 # O ownership; D the other silver-only sources; F company-facts.
 version: 1
 # What a step takes unless it says otherwise.

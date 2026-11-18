@@ -298,6 +298,21 @@ def test_the_scheduler_starts_each_step_when_its_lane_is_free_and_ends_when_all_
     assert sorted(started) == ["a1", "a2", "b1"]
 
 
+def test_the_scheduler_stops_on_a_cycle_of_waits_instead_of_sleeping_forever(monkeypatch, tmp_path):
+    steps = [_step("a1", "A", waits=["b1"]), _step("a2", "A"), _step("b1", "B", waits=["a2"])]
+    state, started = _scheduler(monkeypatch, tmp_path, {"a1": 0, "a2": 0, "b1": 0})
+    assert chain.auto(steps, state, slots=2) == 1
+    assert started == []
+
+
+def test_the_loads_running_on_the_machine_are_read_from_their_command_lines(monkeypatch):
+    listing = ("/x/.venv/bin/python edgar-warehouse load --source one --target mastering --capture /c\n"
+               "/bin/sh something else\n"
+               "uv run edgar-warehouse load --source two --target silver --workers 2\n")
+    monkeypatch.setattr(chain.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": listing})())
+    assert chain.external_loads() == {("one", "mastering"), ("two", "silver")}
+
+
 def test_the_scheduler_carries_on_past_a_failed_step_and_stops_when_only_blocked_steps_remain(monkeypatch, tmp_path):
     steps = [_step("a1", "A"), _step("a2", "A"), _step("c1", "C")]
     state, started = _scheduler(monkeypatch, tmp_path, {"a1": 1, "a2": 0, "c1": 0})

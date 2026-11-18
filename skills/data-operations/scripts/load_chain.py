@@ -150,8 +150,10 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30) -> int:
         for name in starts:
             note(f"scheduler starts {name}", state)
             children[name] = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--only", name])
-        if not starts and not children and not busy and (stuck := stalled(steps, done, set(), failed)):
-            note(f"scheduler stops: {', '.join(sorted(failed))} failed, so {', '.join(stuck)} cannot start", state)
+        if not children and not busy and not ready(steps, done, set(), failed, len(steps)):
+            left = sorted(names - done)
+            blockers = f"{', '.join(sorted(failed))} failed, so " if failed else "no step can follow what it waits for, so "
+            note(f"scheduler stops: {blockers}{', '.join(left)} cannot start", state)
             return 1
         time.sleep(poll)
 
