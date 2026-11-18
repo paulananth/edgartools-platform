@@ -888,7 +888,7 @@ def test_the_catalogs_answer_is_read_as_published_or_not_with_its_cause_and_neve
 
 def test_a_steps_catalog_status_is_published_after_it_finishes_and_a_failure_never_fails_the_step(monkeypatch, tmp_path):
     asked = []
-    monkeypatch.setattr(chain, "publish_catalog_status", lambda name: asked.append(name) or "published to svc.t")
+    monkeypatch.setattr(chain, "publish_catalog_status", lambda step: asked.append(step["name"]) or "published to svc.t")
     steps = [_step("a1", "A")]
     state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=10)
     log = tmp_path / "log"
@@ -897,7 +897,7 @@ def test_a_steps_catalog_status_is_published_after_it_finishes_and_a_failure_nev
     monkeypatch.setattr(chain, "note", lambda message, path: notes.append(message))
     chain.after_done(steps[0], state)
     assert asked == ["a1"] and any("catalog status" in n and "published to svc.t" in n for n in notes)
-    monkeypatch.setattr(chain, "publish_catalog_status", lambda name: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(chain, "publish_catalog_status", lambda step: (_ for _ in ()).throw(RuntimeError("boom")))
     chain.after_done(steps[0], state)  # raises nothing: the load is done whatever the catalog says
     assert any("not published" in n for n in notes)
 
@@ -910,7 +910,7 @@ def test_a_catch_up_publishes_the_status_of_every_step_already_done_from_its_own
     monkeypatch.setattr(chain, "RUN", "fresh-v1")
     monkeypatch.setattr(chain, "note", lambda message, path: None)
     seen = []
-    monkeypatch.setattr(chain, "publish_catalog_status", lambda name: seen.append(name) or "published to svc.t")
+    monkeypatch.setattr(chain, "publish_catalog_status", lambda step: seen.append(step["name"]) or "published to svc.t")
     steps = [_step("a1", "A"), _step("b1", "B"), _step("c1", "C")]
     assert chain.catch_up(steps, state) == {"a1": "published to svc.t", "b1": "published to svc.t", "c1": None}
     assert seen == ["a1", "b1"]  # c1 is not done: nothing to say
@@ -954,7 +954,7 @@ def test_a_catalog_that_hangs_is_cut_off_at_sixty_seconds_with_its_whole_process
 
     monkeypatch.setattr(chain.subprocess, "Popen", lambda *a, **k: Hung())
     monkeypatch.setattr(chain.os, "killpg", lambda pid, sig: killed.append(pid))
-    assert chain.run_catalog_status(["x"], {}) == ""
+    assert chain.run_catalog_status(["x"], {})[0] == ""
     assert killed == [4242]  # the group, so no orphan keeps calling the catalog
 
 
@@ -971,3 +971,41 @@ def test_the_catalogs_private_file_is_found_by_the_variable_then_the_private_fol
     named.write_text("x=1\n")
     assert chain.catalog_env_file({"OPENMETADATA_ENV_FILE": str(named)}, home, root) == named  # the operator's variable wins
     assert chain.catalog_env_file({"OPENMETADATA_ENV_FILE": str(tmp_path / "gone.env")}, home, root) == private  # a missing one is skipped
+
+
+RUNS = [
+    {"run_id": "r-old", "name": "sec.nport.security", "target": "silver", "state": "complete", "completed_at": "2026-11-18 11:00:00+00:00"},
+    {"run_id": "r-new", "name": "sec.nport.security", "target": "silver", "state": "complete", "completed_at": "2026-11-18 13:00:00+00:00"},
+    {"run_id": "r-other", "name": "sec.nport.security", "target": "mastering", "state": "complete", "completed_at": "2026-11-18 14:00:00+00:00"},
+    {"run_id": "r-live", "name": "sec.nport.security", "target": "silver", "state": "running", "completed_at": None},
+]
+
+
+def test_the_latest_completed_run_of_a_source_and_target_comes_from_bookkeepings_own_rows():
+    assert chain.latest_run(RUNS, "sec.nport.security", "silver") == "r-new"  # not the older one, not another target's, not a live one
+    assert chain.latest_run(RUNS, "sec.nport.security", "mastering") == "r-other"
+    assert chain.latest_run(RUNS, "gleif", "mastering") is None
+    assert chain.latest_run([], "x", "y") is None
+
+
+def test_a_step_with_no_run_in_any_log_falls_back_to_bookkeepings_latest_for_its_source_and_target(monkeypatch, tmp_path):
+    monkeypatch.setattr(chain, "LOGS", tmp_path)
+    monkeypatch.setattr(chain, "RUN", "fresh-v1")
+    (tmp_path / "chain-fresh-v1-s1.log").write_text("Bundle 1/1: all 1 documents already loaded\n")
+    monkeypatch.setattr(chain, "bookkeeping_runs", lambda: RUNS)
+    step = {"name": "s1", "source": "sec.nport.security", "target": "silver"}
+    assert chain.run_to_publish(step) == "r-new"
+    (tmp_path / "chain-fresh-v1-s1.log").write_text(STEP_LOG)
+    assert chain.run_to_publish(step) == "22222222-2222-4222-8222-222222222222"  # the log, when it names one, wins
+
+
+def test_the_engine_is_the_executable_the_operator_names_else_uv(monkeypatch):
+    assert chain.engine_command({"EDGAR_WAREHOUSE": "/x/venv/bin/edgar-warehouse"}) == ["/x/venv/bin/edgar-warehouse"]
+    assert chain.engine_command({}) == ["uv", "run", "--no-sync", "edgar-warehouse"]
+
+
+def test_an_answer_that_cannot_be_read_names_why_from_the_commands_last_error_line():
+    assert chain.catalog_outcome("", "warning: x\nerror: Failed to spawn: edgar-warehouse\n  cause: No such file or directory") == \
+        "not published: no readable answer (cause: No such file or directory)"
+    assert chain.catalog_outcome("", "") == "not published: no readable answer"
+    assert "postgresql://" not in chain.catalog_outcome("", "boom postgresql://u:pw@h/db")  # an address is hidden

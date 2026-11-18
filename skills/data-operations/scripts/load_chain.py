@@ -46,7 +46,13 @@ ROOTS = {"captures": Path(os.environ.get("CAPTURES") or HOME / ".local/share/edg
          "proving": Path(os.environ.get("PROVING") or HOME / ".local/share/edgartools/mdm/proving")}
 LOGS = Path(os.environ.get("LOGS") or HOME / ".local/share/edgartools/load-logs")
 RUN = os.environ.get("RUN", "fresh-v1")
-ENGINE = ["uv", "run", "--no-sync", "edgar-warehouse"]
+def engine_command(environ: dict) -> list[str]:
+    """The command that runs `edgar-warehouse`: the executable `EDGAR_WAREHOUSE` names (a checkout whose environment is
+    built elsewhere), else `uv run --no-sync` in the checkout."""
+    return [environ["EDGAR_WAREHOUSE"]] if environ.get("EDGAR_WAREHOUSE") else ["uv", "run", "--no-sync", "edgar-warehouse"]
+
+
+ENGINE = engine_command(os.environ)
 
 
 def load_env(path: Path) -> dict:
@@ -798,7 +804,7 @@ def catalog_env(path: Path) -> dict[str, str]:
     return {key: found[key] for key in CATALOG_KEYS} if all(found.get(key) for key in CATALOG_KEYS) else {}
 
 
-def catalog_outcome(answer: str) -> str:
+def catalog_outcome(answer: str, error: str = "") -> str:
     """What `rules catalog status` answered (its JSON report on stdout), in a few words: confirmed as the status it read back,
     or not published and why. Never raises."""
     try:
@@ -806,7 +812,8 @@ def catalog_outcome(answer: str) -> str:
     except ValueError:
         body = None
     if not isinstance(body, dict):
-        return "not published: no readable answer"
+        lines = [line.strip() for line in redact(error).splitlines() if line.strip()]
+        return f"not published: no readable answer ({lines[-1][:120]})" if lines else "not published: no readable answer"
     if body.get("ok"):
         return f"confirmed as {(body.get('pipeline_status') or {}).get('execution_status', 'its status')}"
     return f"not published: {redact(str(body.get('cause') or 'no cause given'))[:120]}"
@@ -823,17 +830,17 @@ def step_run_id(step_name: str) -> str | None:
     return None
 
 
-def run_catalog_status(command: list[str], env: dict) -> str:
-    """Run the status command and return its stdout, cut off at sixty seconds with its whole process group: a catalog that
-    hangs must not stall the lane or leave a process calling it."""
-    child = subprocess.Popen(command, env=env, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+def run_catalog_status(command: list[str], env: dict, timeout: int = 60) -> tuple[str, str]:
+    """Run a command and return its stdout and stderr, cut off at `timeout` seconds with its whole process group: a catalog
+    that hangs must not stall the lane or leave a process calling it."""
+    child = subprocess.Popen(command, env=env, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                              start_new_session=True)
     try:
-        return child.communicate(timeout=60)[0]
+        return child.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
         with contextlib.suppress(ProcessLookupError):
             os.killpg(child.pid, signal.SIGKILL)
-        return ""
+        return "", "the command did not answer in time"
 
 
 SAFE_BASE = ("PATH", "HOME", "USER", "LANG", "LC_ALL", "TMPDIR", "UV_CACHE_DIR", "UV_PROJECT_ENVIRONMENT", "VIRTUAL_ENV")
@@ -848,25 +855,55 @@ def status_env(base: dict, worker: dict, catalog: dict) -> dict:
     return {**given, **catalog}
 
 
-def publish_catalog_status(step_name: str) -> str:
+def latest_run(rows: list[dict], source: str, target: str) -> str | None:
+    """The newest completed Bookkeeping run of a source and target, from Bookkeeping's own run rows."""
+    done = [row for row in rows if row.get("name") == source and row.get("target") == target
+            and row.get("state") == "complete" and row.get("completed_at")]
+    return max(done, key=lambda row: row["completed_at"])["run_id"] if done else None
+
+
+_RUNS: list[dict] | None = None
+
+
+def bookkeeping_runs() -> list[dict]:
+    """Bookkeeping's run rows (`bookkeeping runs`), read once and kept for the process: the authority on which run is a step's,
+    where its logs name none (a step the lanes re-ran logged only `already loaded`)."""
+    global _RUNS
+    if _RUNS is None:
+        answer, _ = run_catalog_status([*ENGINE, "bookkeeping", "runs", "--limit", "5000"],
+                                       status_env(os.environ, load_env(STORES / "worker.env"), {}), timeout=300)
+        try:
+            _RUNS = json.JSONDecoder().raw_decode(answer[answer.index("["):])[0] if "[" in answer else []
+        except ValueError:
+            _RUNS = []
+    return _RUNS
+
+
+def run_to_publish(step: dict) -> str | None:
+    """A step's run for the catalog: the last one its logs completed, else Bookkeeping's latest for its source and target."""
+    return step_run_id(step["name"]) or latest_run(bookkeeping_runs(), step["source"], step["target"])
+
+
+def publish_catalog_status(step: dict) -> str:
     """Publish a finished step's latest Bookkeeping run as its target Pipeline's status in the catalog
     (`rules catalog status --bookkeeping-run`), when the catalog's address and token are configured."""
-    run = step_run_id(step_name)
+    run = run_to_publish(step)
     env = catalog_env(catalog_env_file(os.environ, Path.home(), ROOT))
     if not run:
         return "not published: the step completed no run of its own"
     if not env:
         return "not published: no catalog address and token configured"
-    return catalog_outcome(run_catalog_status(
+    answer, error = run_catalog_status(
         [*ENGINE, "rules", "catalog", "status", "--bookkeeping-run", run, "--root", str(ROOT / "rules")],
-        status_env(os.environ, load_env(STORES / "worker.env"), env)))
+        status_env(os.environ, load_env(STORES / "worker.env"), env))
+    return catalog_outcome(answer, error)
 
 
 def tell_catalog(step: dict, state: Path) -> str:
     """Publish a step's status and note the outcome. A status that cannot be published is a note, never a failed load: the
     catalog describes the load and never decides it."""
     try:
-        outcome = publish_catalog_status(step["name"])
+        outcome = publish_catalog_status(step)
     except Exception as error:  # noqa: BLE001  whatever went wrong, the step stays done
         outcome = f"not published: {type(error).__name__}"
     note(f"{step['name']} catalog status: {outcome}", state)
