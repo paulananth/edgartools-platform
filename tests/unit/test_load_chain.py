@@ -1145,18 +1145,29 @@ def test_a_higher_priority_step_starts_before_one_with_a_longer_chain_behind_it(
     assert chain.ready(steps, done=set(), running=set(), failed=set(), free=1) == ["long"]  # equal priority: the longest chain
 
 
-def test_every_step_has_a_priority_of_one_two_or_three_and_a_step_without_one_is_three():
+def test_every_step_has_a_priority_of_one_two_or_three_and_the_chain_file_refuses_any_other(tmp_path):
     assert {step["priority"] for step in STEPS} <= {1, 2, 3}
-    assert chain.chain_steps()[0]["priority"] in (1, 2, 3)
-    bad = ROOT / "rules" / "load-chain.yaml"
-    text = bad.read_text().replace("defaults: {workers: 2, bundles: 1, priority: 3}", "defaults: {workers: 2, bundles: 1, priority: 4}")
-    other = bad.parent / "load-chain-priority-test.yaml"
-    other.write_text(text)
-    try:
+    text = (ROOT / "rules" / "load-chain.yaml").read_text()
+    for bad in ("4", "true", "2.0"):
+        other = tmp_path / "load-chain.yaml"
+        other.write_text(text.replace("defaults: {workers: 2, bundles: 1, priority: 3}", "defaults: {workers: 2, bundles: 1, priority: " + bad + "}"))
         with pytest.raises(ValueError, match="priority"):
             chain.chain_steps(other)
-    finally:
-        other.unlink()
+
+
+def test_a_step_that_says_no_priority_is_three_and_starts_after_a_priority_two():
+    steps = [_step("plain", "A", minutes=500), _step("second", "B", minutes=5)]
+    steps[1]["priority"] = 2
+    assert "priority" not in steps[0]
+    assert chain.ready(steps, done=set(), running=set(), failed=set(), free=1) == ["second"]
+
+
+def test_no_step_waits_on_one_of_a_lower_priority_than_the_step_that_follows_it():
+    """A step that holds a higher tier behind it is at least that urgent itself: the priorities come from the chain behind a step."""
+    follows = chain.needs(STEPS)
+    for name, before in follows.items():
+        for earlier in before:
+            assert BY_NAME[earlier]["priority"] <= BY_NAME[name]["priority"], (earlier, name)
 
 
 def test_the_runbook_names_exactly_the_steps_the_chain_file_gives_priority_one_and_two():

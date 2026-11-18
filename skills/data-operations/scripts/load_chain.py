@@ -77,8 +77,9 @@ def chain_steps(path: Path = ROOT / "rules/load-chain.yaml") -> list[dict]:
     chain = yaml.safe_load(path.read_text())
     steps = [{**(chain.get("defaults") or {}), **step} for step in chain["steps"]]
     for step in steps:
-        if step.get("priority", 3) not in (1, 2, 3):
-            raise ValueError(f"{step['name']}: priority must be 1, 2 or 3, not {step.get('priority')!r}")
+        priority = step.get("priority", 3)
+        if type(priority) is not int or priority not in (1, 2, 3):  # `true` and `2.0` are not tiers
+            raise ValueError(f"{step['name']}: priority must be 1, 2 or 3, not {priority!r}")
         measured = step.get("worker_gb")
         if measured is not None and not (isinstance(measured, (int, float)) and 0.01 <= measured <= 64):
             raise ValueError(f"{step['name']}: worker_gb must be a number from 0.01 to 64 gigabytes, not {measured!r}")
@@ -406,7 +407,7 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
         for name in starts:
             low, top = range_of(name)
             count = min(max(by_name[name].get("workers", low), low), top)
-            note(f"scheduler starts {name} at {count} workers", state)
+            note(f"scheduler starts {name} (priority {by_name[name].get('priority', 3)}) at {count} workers", state)
             spawn(name, count)
         if not starts and (change := rescale(workers, {name: length[name] for name in workers}, level, {name: range_of(name) for name in workers})):
             name, count = change
@@ -1087,7 +1088,7 @@ def main() -> int:
         return 2
     if args.list:
         for step in steps:
-            print(f"{step['lane']} {step['name']:30} {step['source']} {step['target']} {step['capture']}")
+            print(f"{step['lane']} p{step.get('priority', 3)} {step['name']:30} {step['source']} {step['target']} {step['capture']}")
         return 0
     state = LOGS / f"chain-{RUN}.log"
     if args.status:  # read-only: the reader login only, no loader login, no wake lock, nothing written

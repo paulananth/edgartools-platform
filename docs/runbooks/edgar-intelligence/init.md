@@ -223,9 +223,9 @@ table to that file):
 
 | Priority | Steps | Why |
 |---|---|---|
-| 1 | `13f-filings`, `registration`, `ipo`, `company`, `nport-security`, `gleif-pairs`, `gleif`, `openfigi-answers` | The critical path: 100 minutes or more of chain behind each. `13f-filings` and `registration` are short but hold `ipo` (the longest step) behind them in their lane; `company` and `gleif-pairs` hold GLEIF behind them |
-| 2 | `company-facts`, `nport-security-silver`, `person` | 30 to 100 minutes of chain: long, but nothing waits on them |
-| 3 | every other step | Under 30 minutes of chain |
+| 1 | `13f-filings`, `registration`, `ipo`, `company`, `nport-security`, `gleif-pairs`, `gleif`, `openfigi-answers` | The critical path: 100 minutes or more of chain behind each (measured: 242, 222, 214, 162, 147, 135, 134 and 111). `13f-filings` and `registration` are short but hold `ipo` (the longest step) behind them in their lane; `company` and `gleif-pairs` hold GLEIF behind them |
+| 2 | `company-facts`, `nport-security-silver`, `person` | 30 to under 100 minutes of chain (measured: 90, 90 and 50): long, but nothing waits on them |
+| 3 | every other step | Under 30 minutes of chain (the longest measured: 28) |
 
 Every other step is priority 3, and a step added without a `priority` is priority 3. Measure again after a load that changed the
 critical path (`load_chain.py --status` shows each step's progress and `chain-<RUN>.log` its time) and move a step only on that evidence.
