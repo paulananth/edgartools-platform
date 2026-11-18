@@ -14,7 +14,7 @@ Operator, 2026-11-18, after the hosted stores were reset and loaded again: "Do y
 - The statuses the first load published stay in the catalog and say "Successful" for steps the empty stores no longer hold. The status
   command publishes a finished run; it has no reset, so the new load's statuses supersede them step by step.
 - Neither the data-operations skill nor the init runbook said any of this, and the commit script's guard stopped a rules change
-  silently (its cause was one line above its STOP) because the checkout had no Python with the engine's dependencies.
+  without naming its cause (the cause was one line above its STOP) because the checkout had no Python with the engine's dependencies.
 
 ## Parts
 

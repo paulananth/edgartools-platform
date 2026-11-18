@@ -32,7 +32,7 @@ After a store is reset and loaded again, the catalog still holds each step's sta
 step's new run supersedes it as the step finishes. Until then it says "Successful" for a step the store no longer holds, so read a
 status with its run's time, and never delete the old ones without the operator's word (`rules catalog status` publishes a run;
 it has no reset). Bring the catalog's own text up to the rules once the stores are initialized, before the load
-(`rules catalog publish`, then `check`: the init runbook's catalog step).
+([the init runbook's catalog step](../../docs/runbooks/edgar-intelligence/init.md#initialize-a-hosted-store)).
 
 ## Report a running load from its evidence
 
