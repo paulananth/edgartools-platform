@@ -1134,3 +1134,16 @@ def test_the_memory_edges_of_pressure():
     assert chain.pressure(2.0, 8, 0.60, memory_free=0.39) == "ok"
     assert chain.pressure(2.0, 8, 0.76, memory_free=None) == "high"  # unreadable memory counts as short
     assert chain.pressure(13.0, 8, 0.95, relaxed=True, memory_free=0.5) == "ok"  # behind: the relaxed load limit still holds
+
+
+def test_a_running_step_is_moved_at_most_once_in_ten_minutes_however_the_pressure_swings(monkeypatch, tmp_path):
+    """Each move stops the step's load and starts it again, abandoning the bundles in flight and paying a start: the second
+    hosted load moved IPO between 1 and 2 workers five times in twenty minutes as the load average crossed a line."""
+    steps = [_step("a1", "A", minutes=600)]
+    steps[0]["workers"] = 1
+    state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=1)
+    swings = iter(["low", "high"] * 40)
+    monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: next(swings))
+    chain.auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=25))
+    assert len(started) - 1 <= 2  # the start, then one move in the first ten minutes and one in the next, not a move a minute
+    assert len(started) - 1 >= 1  # and a step is still moved when the machine says so

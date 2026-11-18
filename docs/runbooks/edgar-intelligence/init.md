@@ -100,7 +100,7 @@ python <data-operations skill>/scripts/load_chain.py --from <step>   # carry on;
 first, while a slot is free (`--slots`, by default half the machine's gigabytes, at most its cores, at least two) and the machine has
 headroom (a load average under one and a half times the cores, and memory not short: swap over three quarters used counts only while less than a quarter of memory is free, since the system keeps swap long after the load that filled it; under a tenth of memory free presses on its own, and an unreadable memory counts as short); it also reads the database as the reader login (a step starts only while fewer than three sessions wait on locks, none for a minute, and
 less than four fifths of its connections are in use), and it starts one step a
-cycle, since the load average lags. It moves each running step's workers within its capacity profile's range (`--capacity`) by the readings: the step with the
+cycle, since the load average lags. It moves each running step's workers within its capacity profile's range (`--capacity`) by the readings, a step at most once in ten minutes (a move stops the step's load and starts it again, abandoning the bundles in flight): the step with the
 longest chain behind it doubles when there is room, and the step with the shortest halves when the machine or the
 database is pressed, by stopping its load and starting it again (a load resumes where it stopped). Priorities and the projected end use each step's measured minutes (its first start to its `done` line) where it has run, and
 an estimate where it has not: its bound times the share of its bound the done steps used. A running step that outruns its
