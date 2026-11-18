@@ -177,10 +177,11 @@ invented fixture values may appear in public evidence.
 
 On failure, retain pinned configuration and evidence before cleanup. Cleanup
 requires approval naming the exact test mirror, target database, source
-database and any test instance/Gold objects. Pass `drop_target_database`
-explicitly, as the second positional argument (`DROP_MIRROR('<mirror>', TRUE)`):
-named after a positional mirror name, it is refused. Never rely on a destructive default. Do not restart/re-snapshot
-just to get a green result. A mirror left running after a deadline keeps
+database and any test instance/Gold objects. Pass the target-database
+flag explicitly, as the second positional argument: `DROP_MIRROR('<mirror>',
+TRUE)`. The named form `drop_target_database => TRUE` after a positional
+mirror name is refused. Never rely on a destructive default. Do not
+restart/re-snapshot just to get a green result. A mirror left running after a deadline keeps
 incurring cost; arrange authorized scoped cleanup or report the remaining
 billable resources. Preserve production and other agents' databases/volumes.
 

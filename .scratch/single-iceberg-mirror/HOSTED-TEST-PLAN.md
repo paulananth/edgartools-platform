@@ -1,6 +1,7 @@
 # Hosted foundation test approval plan
 
-Status: not run; approval required.
+Status: approved by the operator (2026-11-17 20:39 ET) and run the same evening; each stage's result is in
+[the ticket](issues/01-qualify-from-empty.md). The text below is the plan as approved.
 
 ## Exact isolated resources
 
