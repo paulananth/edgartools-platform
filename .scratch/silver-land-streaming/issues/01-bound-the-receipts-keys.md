@@ -22,8 +22,9 @@ arrive in pieces and land in deliveries of up to 10,000.
 - [x] The missing-keys check reads the keys in order and asks silver for 500 first-key values at a time (`missing`), where it
   held every key (2026-11-18 09:06 ET; `test_missing_asks_silver_a_group_of_first_key_values_at_a_time_and_counts_what_it_lacks`)
 - [x] Measured on 3 million invented keys of the shape of a holding's key (accession and holding id): the set peaked at 612 MB,
-  the key set at 46 MB, with the same digest; the key set takes about half as long again (26.9 s against 17.5 s) (2026-11-18 09:06 ET;
-  `scripts/dev/bench_silver_keys.py set 3000000` and `... keyset 3000000`)
+  the key set at 43 to 46 MB, with the same digest; the time was 17.5 s for the set and 17.7 to 26.9 s for the key set over
+  three runs (2026-11-18 09:14 ET; `scripts/dev/bench_silver_keys.py set 3000000` and `... keyset 3000000`)
+- [x] Spec review: a merge never opens more runs than its fan-in (64), merging down in passes (`test_a_merge_never_opens_more_runs_than_its_fan_in_however_many_were_spilled`: about 300 runs at a fan-in of 4 opened them all, so a unit near the 100 million row cap would have hit the open-file limit); a missing-keys question also ends at 50,000 keys, so a first column with few distinct values cannot bring every key back (`test_missing_also_bounds_a_group_by_its_keys_so_few_first_values_cannot_bring_every_key_back_into_memory`: `missing` had no key limit) (2026-11-18 09:14 ET)
 - [ ] The real effect on the N-PORT silver worker, measured after the hosted load ends (`footprint -p` on the step against its
   1.2 GB): the checkout the load runs from cannot change under it
 - [ ] The rest of that worker's memory, if any: the pieces of the reading and the quality reports are bounded by design

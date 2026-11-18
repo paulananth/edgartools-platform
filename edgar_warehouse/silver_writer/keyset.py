@@ -19,11 +19,17 @@ from pathlib import Path
 
 
 class KeySet:
-    def __init__(self, limit: int = 100_000):
+    def __init__(self, limit: int = 100_000, fan_in: int = 64):
         self._limit = limit
+        self._fan_in = fan_in
         self._buffer: set[tuple[str, ...]] = set()
         self._folder = Path(tempfile.mkdtemp(prefix="silver-keys-"))
         self._runs: list[Path] = []
+        self._serial = 0
+
+    def _new_run(self) -> Path:
+        self._serial += 1
+        return self._folder / f"run-{self._serial:06d}"
 
     def __enter__(self) -> Self:
         return self
@@ -38,7 +44,7 @@ class KeySet:
                 self._spill()
 
     def _spill(self) -> None:
-        path = self._folder / f"run-{len(self._runs):06d}"
+        path = self._new_run()
         with path.open("w") as out:
             for key in sorted(self._buffer):
                 out.write(json.dumps(list(key)) + "\n")
@@ -51,8 +57,28 @@ class KeySet:
             for line in source:
                 yield tuple(json.loads(line))
 
+    def _merge_down(self) -> None:
+        """Merge the runs `fan_in` at a time into longer ones until no more than `fan_in` remain, so a read never holds
+        more files open than that however large the input (the open-file limit of the machine is not the input's)."""
+        while len(self._runs) > self._fan_in:
+            merged = []
+            for start in range(0, len(self._runs), self._fan_in):
+                group = self._runs[start:start + self._fan_in]
+                path = self._new_run()
+                last = None
+                with path.open("w") as out:
+                    for key in heapq.merge(*(self._read(run) for run in group)):
+                        if key != last:
+                            out.write(json.dumps(list(key)) + "\n")
+                            last = key
+                for run in group:
+                    run.unlink()
+                merged.append(path)
+            self._runs = merged
+
     def sorted(self) -> Iterator[tuple[str, ...]]:
         """Every distinct key, once, in key order."""
+        self._merge_down()
         last = None
         for key in heapq.merge(*(self._read(run) for run in self._runs), sorted(self._buffer)):
             if key != last:
@@ -69,10 +95,12 @@ class KeySet:
         return count, digest.hexdigest()
 
 
-def missing(keys: Iterator[tuple[str, ...]], fetch: Callable[[list[str]], set[tuple[str, ...]]], group: int = 500) -> int:
-    """How many of the keys (in key order) silver lacks, asking it for `group` first-key values at a time: only the rows
-    of those values (a filer, an accession), so another unit's rows cannot hide a missing one, and never more of them
-    in memory than one group holds."""
+def missing(keys: Iterator[tuple[str, ...]], fetch: Callable[[list[str]], set[tuple[str, ...]]], group: int = 500,
+            limit: int = 50_000) -> int:
+    """How many of the keys (in key order) silver lacks, asking it for up to `group` first-key values at a time: only the
+    rows of those values (a filer, an accession), so another unit's rows cannot hide a missing one. A question also
+    ends once it holds `limit` keys, so a table whose first column has few distinct values cannot bring every key back
+    into memory; one first-key value with more keys than that is still asked as a whole."""
     lacking, wanted, firsts = 0, [], []
 
     def flush() -> None:
@@ -83,7 +111,7 @@ def missing(keys: Iterator[tuple[str, ...]], fetch: Callable[[list[str]], set[tu
 
     for key in keys:
         if not firsts or firsts[-1] != key[0]:
-            if len(firsts) == group:
+            if len(firsts) == group or len(wanted) >= limit:
                 flush()
             firsts.append(key[0])
         wanted.append(key)

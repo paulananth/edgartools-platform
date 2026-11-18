@@ -57,3 +57,38 @@ def test_missing_asks_silver_a_group_of_first_key_values_at_a_time_and_counts_wh
     assert missing(iter(wanted), fetch, group=2) == 2
     assert asked == [["a1", "a2"], ["a3", "a4"]]  # never more than the group's first-key values in one question
     assert missing(iter([]), fetch, group=2) == 0
+
+
+def test_a_merge_never_opens_more_runs_than_its_fan_in_however_many_were_spilled(monkeypatch):
+    import edgar_warehouse.silver_writer.keyset as module
+
+    opened, most = [0], [0]
+    real = module.KeySet._read
+
+    def counting(path):
+        opened[0] += 1
+        most[0] = max(most[0], opened[0])
+        try:
+            yield from real(path)
+        finally:
+            opened[0] -= 1
+
+    monkeypatch.setattr(module.KeySet, "_read", staticmethod(counting))
+    keys = _keys(4000, seed=11)
+    with KeySet(limit=10, fan_in=4) as held:  # about 300 runs, merged four at a time
+        held.add(keys)
+        assert list(held.sorted()) == sorted(set(keys))
+        assert held.summary()[1] == _old_digest(set(keys))
+    assert most[0] <= 4
+
+
+def test_missing_also_bounds_a_group_by_its_keys_so_few_first_values_cannot_bring_every_key_back_into_memory():
+    wanted = [("one", f"k{i:03d}") for i in range(10)] + [("two", "k")]
+    asked = []
+
+    def fetch(values):
+        asked.append(list(values))
+        return set(wanted)
+
+    assert missing(iter(wanted), fetch, group=500, limit=4) == 0
+    assert asked == [["one"], ["two"]]  # "one" alone holds ten keys, more than four: it goes in a question of its own
