@@ -21,11 +21,13 @@ verdict. The database sessions are shown by store (working, or waiting on the cl
 
 Read the verdict, not the word "running":
 - **progressing**: it wrote rows, its processes worked, or its log moved in the last ten minutes;
+- **unclear**: the step's own processes used no CPU and its log is silent, but its store is written by other running
+  steps, so the rows may be theirs: check its log and its processes before calling it alive;
 - **no sign of work**: no CPU, no rows written and a silent log: read its log and the stores folder's `load-errors.log`
   before saying anything else, since it may be stalled;
 - **waiting on database locks** (three or more sessions): the contention ladder of the daily-run runbook;
-- **client-bound, not the database** (most sessions waiting on the client): the machine running the loads is the limit,
-  so more workers on it will not help; run the loaders on more compute;
+- a store note, **client-bound, not the database** (more than half its sessions waiting on the client): the machine
+  running the loads is the limit, so more workers on it will not help; run the loaders on more compute;
 - **cannot finish in its remaining attempts**: raise its workers or its minutes now, not at its last attempt.
 
 A single-document step has no progress in its log: say so, and report its database rows and sessions. A store's rows are

@@ -339,10 +339,11 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
 
 
 def bundle_progress(text: str) -> tuple[int, int] | None:
-    """(bundles completed, bundles in all) from a step's log: the `run ... complete in` lines against the last
-    `Bundle i/N:` line. None when the log names no bundles."""
+    """(bundles done, bundles in all) from a step's log: the `run ... complete in` lines, and the bundles an earlier
+    attempt already loaded, against the last `Bundle i/N:` line. None when the log names no bundles."""
     found = re.findall(r"^Bundle \d+/(\d+):", text, re.M)
-    return (len(re.findall(r"^\s+run \S+ complete in", text, re.M)), int(found[-1])) if found else None
+    finished = len(re.findall(r"^\s+run \S+ complete in", text, re.M)) + len(re.findall(r"^Bundle \d+/\d+: all \d+ documents already loaded", text, re.M))
+    return (finished, int(found[-1])) if found else None
 
 
 def minutes_left(done: int, total: int, elapsed: float) -> float | None:
@@ -384,12 +385,16 @@ def outlook(left: float | None, elapsed: float, bound: int, attempt: int, attemp
             "raise its workers or its minutes")
 
 
-def verdict(elapsed: float, bound: int, log_age: float, cpu: float, writes_per_min: float, lock_waiters: int) -> str:
+def verdict(elapsed: float, bound: int, log_age: float, cpu: float, writes_per_min: float, lock_waiters: int,
+            shares_store: list[str] | None = None) -> str:
     """A step's state by its own evidence: waiting on locks; progressing (it wrote rows, its processes work, or its log
     moved in the last ten minutes); or no sign of work, which names what is silent. Past its bound is said first."""
     late = f"past its bound of {bound} min; " if elapsed > bound else ""
     if lock_waiters >= 3:  # the scheduler's own threshold: one waiting session is normal
-        return f"{late}waiting on database locks ({lock_waiters} sessions)"
+        return f"{late}waiting on database locks ({lock_waiters} sessions on the store)"
+    if shares_store and cpu < 5 and log_age >= 10:
+        return (f"{late}unclear: its own processes used no CPU and its log is {log_age:.0f} min old, and the rows written "
+                f"are the store's, shared with {', '.join(shares_store)}, so they may be theirs; check its log and processes")
     if writes_per_min > 0 or cpu >= 5 or log_age < 10:
         return f"{late}progressing"
     return f"{late}no sign of work: no CPU, no rows written, log silent for {log_age:.0f} min; read its log, it may be stalled"
@@ -426,7 +431,7 @@ def session_summary(rows: list[tuple[str, str, int]]) -> dict[str, dict[str, int
 
 def session_note(database: str, counts: dict[str, int]) -> str:
     note = f"{database}: {counts['active']} sessions working, {counts['waiting_on_client']} waiting on the client"
-    return note + ": client-bound, not the database" if counts["waiting_on_client"] > 4 * max(counts["active"], 1) else note
+    return note + ": client-bound, not the database" if counts["waiting_on_client"] > counts["active"] else note
 
 
 def database_sessions(reader_url: str) -> dict[str, dict[str, int]]:
@@ -442,22 +447,35 @@ def database_sessions(reader_url: str) -> dict[str, dict[str, int]]:
         return {}
 
 
-def process_use(source: str, target: str) -> tuple[float, float, int]:
-    """CPU seconds used so far, memory in MB and process count of the load running one source and target (its driver
-    and workers); two readings give the CPU percent."""
+def window_cpu(before: dict[int, float], after: dict[int, float]) -> float:
+    """CPU seconds used in a window by the processes present in both readings: one that began in the window has only
+    its lifetime to show, which is not the window's."""
+    return sum(max(after[pid] - used, 0.0) for pid, used in before.items() if pid in after)
+
+
+def is_load_process(args: str, source: str, target: str) -> bool:
+    """A process of the platform's load of one source and target: its driver or a worker, never another command that
+    happens to carry the same words."""
+    return bool(re.search(r"edgar[-_]warehouse", args)) and bool(
+        re.search(rf"--source {re.escape(source)} --target {re.escape(target)}( |$)", args))
+
+
+def process_use(source: str, target: str) -> tuple[dict[int, float], float]:
+    """Each process's CPU seconds so far, by pid, and the memory in MB, of the load running one source and target (its
+    driver and workers); two readings give the CPU percent."""
     listing = subprocess.run(["ps", "-Ao", "pid,time,rss,args"], check=False, capture_output=True, text=True).stdout
-    seconds = memory = 0.0
-    found = 0
+    seconds: dict[int, float] = {}
+    memory = 0.0
     for line in listing.splitlines():
-        if re.search(rf"--source {re.escape(source)} --target {re.escape(target)}( |$)", line):
-            pid, used, rss = line.split(None, 3)[:3]
-            seconds += cpu_seconds(used)
-            found += 1
+        parts = line.split(None, 3)
+        if len(parts) == 4 and is_load_process(parts[3], source, target):
+            pid, used, rss = parts[:3]
+            seconds[int(pid)] = cpu_seconds(used)
             footprint = subprocess.run(["footprint", "-p", pid], check=False, capture_output=True, text=True).stdout \
                 if sys.platform == "darwin" else ""
             sized = re.search(r"Footprint: ([\d.]+) (KB|MB|GB)", footprint)
             memory += float(sized.group(1)) * {"KB": 1 / 1024, "MB": 1, "GB": 1024}[sized.group(2)] if sized else int(rss) / 1024
-    return seconds, memory, found
+    return seconds, memory
 
 
 def status(steps: list[dict], state: Path, reader_url: str | None, sample: int = 20) -> list[str]:
@@ -487,8 +505,9 @@ def status(steps: list[dict], state: Path, reader_url: str | None, sample: int =
         log = LOGS / f"chain-{RUN}-{step['name']}.log"
         age = (time.time() - log.stat().st_mtime) / 60 if log.exists() else elapsed
         progress = bundle_progress(log.read_text()) if log.exists() else None
-        seconds, memory, count = process_use(step["source"], step["target"])
-        cpu = cpu_percent(cpu_before[step["name"]], seconds, sample)
+        seconds, memory = process_use(step["source"], step["target"])
+        count = len(seconds)
+        cpu = cpu_percent(0.0, window_cpu(cpu_before[step["name"]], seconds), sample)
         store = store_of(step["target"])
         mine = rate.get(store, 0.0)
         sharing = [o["name"] for o in running if o is not step and store_of(o["target"]) == store]
@@ -499,7 +518,7 @@ def status(steps: list[dict], state: Path, reader_url: str | None, sample: int =
                  if progress and progress[1] > 1 else "one document, so its log shows no progress; the database does")
         lines.append(f"  {step['name']} (lane {step['lane']}, attempt {attempt}, {step.get('workers', 2)} workers): {elapsed:.0f} min of {step['minutes']}; "
                      f"{shown}; {count} processes, {cpu:.0f}% CPU, {memory:,.0f} MB; wrote {wrote}; log {age:.0f} min old; "
-                     + verdict(elapsed, step["minutes"], age, cpu, mine, waiters) + (f"; {warn}" if warn else ""))
+                     + verdict(elapsed, step["minutes"], age, cpu, mine, waiters, sharing) + (f"; {warn}" if warn else ""))
     return lines
 
 
@@ -621,19 +640,19 @@ def main() -> int:
         for step in steps:
             print(f"{step['lane']} {step['name']:30} {step['source']} {step['target']} {step['capture']}")
         return 0
+    state = LOGS / f"chain-{RUN}.log"
+    if args.status:  # read-only: the reader login only, no loader login, no wake lock, nothing written
+        reader = STORES / "reader.env"
+        print("\n".join(status(steps, state, load_env(reader).get("DIAGNOSE_DATABASE_URL") if reader.exists() else None)))
+        return 0
     env = {**os.environ, **load_env(STORES / "worker.env")}
     LOGS.mkdir(parents=True, exist_ok=True)
-    state = LOGS / f"chain-{RUN}.log"
     if args.plan:
         for step in steps:
             print(f"{step['name']:30} {plan(step, env)}", flush=True)
         return 0
     if sys.platform == "darwin":
         subprocess.Popen(["caffeinate", "-dimsu", "-w", str(os.getpid())])
-    if args.status:
-        reader = STORES / "reader.env"
-        print("\n".join(status(steps, state, load_env(reader).get("DIAGNOSE_DATABASE_URL") if reader.exists() else None)))
-        return 0
     if args.workers is not None:
         if not args.only or not MIN_WORKERS <= args.workers <= MAX_WORKERS:
             print(f"--workers goes with --only and is {MIN_WORKERS} to {MAX_WORKERS}", file=sys.stderr)

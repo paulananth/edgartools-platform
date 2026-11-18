@@ -553,3 +553,42 @@ def test_a_stores_sessions_are_counted_by_what_they_wait_for_and_mostly_waiting_
     assert chain.session_note("mdm", summary["mdm"]) == "mdm: 3 sessions working, 34 waiting on the client: client-bound, not the database"
     assert chain.session_note("silver", summary["silver"]) == "silver: 4 sessions working, 1 waiting on the client"
     assert chain.session_summary([]) == {}
+
+
+def test_a_step_sharing_a_store_whose_own_processes_are_idle_is_unclear_not_progressing():
+    shared = {"elapsed": 120.0, "bound": 480, "log_age": 120.0, "cpu": 0.0, "writes_per_min": 214000.0, "lock_waiters": 0}
+    said = chain.verdict(**shared, shares_store=["gleif"])
+    assert said.startswith("unclear: its own processes used no CPU") and "gleif" in said
+    assert chain.verdict(**shared, shares_store=[]).startswith("progressing")  # alone, the writes are its own
+    assert chain.verdict(**{**shared, "cpu": 40.0}, shares_store=["gleif"]).startswith("progressing")
+
+
+RESUMED = """Bundle 1/149: all 512 documents already loaded
+Bundle 2/149: all 512 documents already loaded
+Bundle 3/149: 512 of 512 documents to load
+  run c complete in 1.5 min
+Bundle 4/149: 512 of 512 documents to load
+"""
+
+
+def test_bundles_already_loaded_by_an_earlier_attempt_count_as_done():
+    assert chain.bundle_progress(RESUMED) == (3, 149)  # two skipped and one completed
+    assert chain.minutes_left(done=3, total=149, elapsed=4.5) == 219.0
+
+
+def test_a_store_is_client_bound_when_more_than_half_its_sessions_wait_on_the_client():
+    assert chain.session_note("mdm", {"active": 10, "waiting_on_client": 30}).endswith("client-bound, not the database")
+    assert chain.session_note("mdm", {"active": 10, "waiting_on_client": 11}).endswith("client-bound, not the database")
+    assert not chain.session_note("mdm", {"active": 10, "waiting_on_client": 9}).endswith("not the database")
+
+
+def test_cpu_over_the_window_counts_only_processes_present_in_both_readings():
+    assert chain.window_cpu({1: 100.0, 2: 50.0}, {1: 118.0, 2: 50.0, 3: 9000.0}) == 18.0  # pid 3 began in the window
+    assert chain.window_cpu({}, {1: 5.0}) == 0.0
+
+
+def test_only_a_chain_loads_own_processes_are_matched_by_command_line():
+    assert chain.is_load_process("/x/python -c from edgar_warehouse.cli import main; ... rules run --source gleif --target mastering", "gleif", "mastering")
+    assert chain.is_load_process("uv run --no-sync edgar-warehouse load --source gleif --target mastering --capture /c", "gleif", "mastering")
+    assert not chain.is_load_process("vim --source gleif --target mastering", "gleif", "mastering")  # not the platform's
+    assert not chain.is_load_process("edgar-warehouse load --source gleif --target silver", "gleif", "mastering")
