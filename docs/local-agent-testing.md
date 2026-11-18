@@ -39,8 +39,7 @@ stored outside Git with mode `0600`; do not print it, paste it into chat or
 commit it. Schema-owner connections stay separate from runtime connections.
 Startup applies the real migrations; repeating startup preserves existing data.
 It creates the Bookkeeping worker login, grants it every registered profile,
-creates a narrow MDM registration login, and installs MDM's Bookkeeping lease
-guard. The governance login registers a source's rules in MDM.
+and creates a narrow MDM registration login. The governance login registers a source's rules in MDM.
 
 Three private files are written in the environment folder:
 
