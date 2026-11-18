@@ -22,7 +22,7 @@ from .store import Conflict, Store, current_reading, reading_at, storage_adapter
 
 def runtime_files() -> list[Path]:
     """The execution module owns the code its caller must pin."""
-    from edgar_warehouse.bookkeeping.clean import config, destinations
+    from edgar_warehouse.bookkeeping.clean import config
     from edgar_warehouse.mdm import (
         activation, adapters, assessment, binding, catalog, classification,
         correction, evidence, identifier_types, identity, matching, registration,
@@ -31,11 +31,11 @@ def runtime_files() -> list[Path]:
     from edgar_warehouse.rules import files, source_engine
     from edgar_warehouse.workers import source_mapping
 
-    # Explicit execution dependencies, including destination authority.
+    # Explicit execution dependencies.
     # CLI presentation is not executable merge behavior. This is not
     # the separately tracked complete environment/reproducibility fingerprint.
     modules = (activation, adapters, assessment, binding, catalog, classification, config,
-               correction, destinations, evidence, files, identifier_types,
+               correction, evidence, files, identifier_types,
                identity, limits, matching, names, prepared, prepared_registry, prepared_publication, master_index, master_search, detail_lookups, record_reads, primitives, quality,
                relationships, registration, schema, scope, source_mapping, store, survivorship, waterfall_passes)
     adapter = store.storage_adapter()

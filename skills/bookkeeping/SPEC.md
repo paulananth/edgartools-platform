@@ -20,8 +20,7 @@ not add a sixth control table. No old history or checkpoints are imported.
 Runtime may read the tables and execute bounded control functions. It may
 not change tables directly, create schema objects, or compact records.
 Migration checks inherited privileges as well as explicit grants. An
-independent destination has `bookkeeping_guard.resource`, and the shared
-Change Journal has an append-only `journal.event`; neither is another
+shared Change Journal has an append-only `journal.event`, which is not another
 Bookkeeping root run.
 
 The interface is the task protocol (mastering to-do 20a). `Bookkeeping.start`
@@ -286,15 +285,13 @@ after its own checkpoint.
 MDM steps must lease `mdm:consumer:<command consumer>`; publication steps
 must lease `mdm:publication:<consumer>`. Configured batch/consumer keys must
 agree with the immutable command. Additional declared resource scopes are
-allowed. The guard also covers assessment retention and supersession inside
-their own transactions; these occur separately from the master commit.
+allowed.
 
 Lease acquisition sorts resources, rolls back a partially acquired set on
 contention, and increments tokens on takeover. Ownership checks use database
-time. A destination guard locks its resource rows inside the business
-transaction; a deferred check rejects expiry at commit. Bookkeeping completion
-has its own deferred authority check. Transactions in different databases
-are explicitly separate.
+time. Bookkeeping completion has its own deferred authority check. A destination
+is protected by its own lock, key or immutable store, not by a lease check inside
+its transaction. Transactions in different databases are explicitly separate.
 
 Verified completion and its outbox intent commit together. Delivery uses an
 idempotent exact-envelope key in the Change Journal. Lost sink acknowledgements
@@ -319,7 +316,7 @@ Migrate existing control databases only when explicitly authorized, using
 `bookkeeping migrate --runtime-role <role>` and `rules init` under their
 selected owner duties. Use `bookkeeping init` only to initialize the fresh
 control schema; `bookkeeping migrate` refuses a missing schema.
-`change-journal init` or `change-journal migrate` and `bookkeeping init-guard`
+`change-journal init` or `change-journal migrate`
 remain separate owner-authorized operations. They do not populate business or
 source data. Resource checkpoint and request authorization migrations retain
 the five-table control boundary; see

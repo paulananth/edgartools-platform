@@ -216,7 +216,7 @@ class LocalStores:
             # Clear a previous shell's owner/silver settings before choosing a duty.
             unset = [*migration, "BOOKKEEPING_MIGRATION_DATABASE_URL",
                      "BOOKKEEPING_ADMIN_DATABASE_URL",
-                     "MDM_REGISTRATION_DATABASE_URL", "DESTINATION_MIGRATION_DATABASE_URL"]
+                     "MDM_REGISTRATION_DATABASE_URL"]
             if not include_silver:
                 unset += ["SILVER_DATABASE_URL", "SILVER_MIGRATION_DATABASE_URL"]
             lines = ["unset " + " ".join(unset)]
@@ -276,9 +276,6 @@ class LocalStores:
                         key = "application_role" if database == "mdm" else "agent_role" if database == "rules" else "runtime_role"
                         role = "bookkeeping_control" if database == "bookkeeping" else database + "_runtime"
                         migrations[database](engine, **{key: role})
-                        if database == "mdm":
-                            from edgar_warehouse.bookkeeping.clean.destinations import migrate_guard
-                            migrate_guard(engine, runtime_role="mdm_runtime")
                     finally:
                         engine.dispose()
                 self.execution_access(name)

@@ -37,9 +37,7 @@ class Renewal:
     A renewal that cannot reach Bookkeeping is tried again at each heartbeat:
     the lease outlasts several. A renewal Bookkeeping refuses ends the work.
 
-    The renewed proof is also written into the envelope the work holds
-    (`claim.proof`), so a destination that fences its own transaction with it
-    (MDM, `bookkeeping_guard`) always checks the current lease.
+    The renewed proof is also written into the envelope the work holds (`claim.proof`).
     """
 
     def __init__(self, envelope: dict):

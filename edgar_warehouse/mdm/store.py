@@ -487,9 +487,7 @@ class Publisher(Protocol):
 
 
 class Store:
-    def __init__(
-        self, engine: Engine, *, lease_authority=None, read_only: bool = False
-    ):
+    def __init__(self, engine: Engine, *, read_only: bool = False):
         if type(read_only) is not bool:
             raise ValueError("read_only must be a boolean")
         if engine.dialect.name not in ("postgresql", "mysql"):
@@ -500,7 +498,6 @@ class Store:
             self.protocol = require_installed(conn).protocol
         self.prepared = True
         self.engine = engine
-        self.lease_authority = lease_authority
         self.read_only = read_only
 
     def commit(self, conn: Connection, request: dict, run_id: str) -> dict:

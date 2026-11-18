@@ -36,8 +36,8 @@ def stale(exc) -> bool:
 
 def supersede(store, key: str, run_id: str) -> None:
     from .store import storage_adapter
-    from .prepared import authority, _refusals
+    from .prepared import _refusals
 
     api = storage_adapter().Adapter(store.engine, prefix="mdm_store", protocol=store.protocol)
-    _refusals(lambda: api.supersede_proposal(key, run_id, authority=authority(store)))
+    _refusals(lambda: api.supersede_proposal(key, run_id))
     return
