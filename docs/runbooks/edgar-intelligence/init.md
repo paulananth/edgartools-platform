@@ -110,7 +110,8 @@ rest carry on, and the scheduler stops, naming what cannot start, when nothing e
 
 **A fresh store starts a fresh state file.** The chain's `done` lines are read from `chain-<RUN>.log`, which names the store it belongs to (by its instance's address,
 never shown). A run against another store sets the old file aside as `chain-<RUN>.log.<store>` and starts a fresh one, so an
-earlier store's lines never satisfy a wait.
+earlier store's lines never satisfy a wait. A file with done lines and no marker (one that began before markers) may be any
+store's: the run stops and asks, changing nothing; `--adopt-state` says it is this store's, or move it aside.
 
 Masters come first and each source's silver target last, so silver rows find their masters as they land; a silver step
 needs none before it (a row lands with its link key, and `--finish` fills the master ids). A source's later

@@ -33,7 +33,7 @@ import sys
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 from zoneinfo import ZoneInfo
 
 import yaml
@@ -600,37 +600,60 @@ def plan(step: dict, env: dict) -> str:
 
 def store_id(url: str) -> str:
     """Eight hex digits naming a store by its instance's address, so a state file can tell which store its lines belong
-    to without showing the address. Any login and database of one instance give the same name."""
-    part = urlsplit(url.replace("postgresql+psycopg2", "postgresql"))
-    return hashlib.sha256(f"{part.hostname}:{part.port}".encode()).hexdigest()[:8]
+    to without showing the address. Any login and database of one instance give the same name; the host's case and the
+    default port do not matter; a socket's directory (`?host=/dir`) is its host. A URL that names no host is an error: it
+    would give distinct stores one name. (`localhost` and `127.0.0.1` are different names.)"""
+    text = url.replace("postgresql+psycopg2", "postgresql")
+    try:
+        part = urlsplit(text)
+        host, port = part.hostname, part.port
+    except ValueError:  # an unescaped `/` or `:` in a password: read the address after the last `@`
+        part = urlsplit("postgresql://" + text.split("@")[-1])
+        host, port = part.hostname, part.port
+    host = host or (parse_qs(part.query).get("host") or [""])[0]
+    if not host:
+        raise ValueError("The URL names no host: a store cannot be told from another")
+    return hashlib.sha256(f"{host.lower()}:{port or 5432}".encode()).hexdigest()[:8]
 
 
-def ensure_store(state: Path, store: str) -> str:
-    """Make the state file this store's. A file marked for another store is set aside (`<file>.<its store>`), so its `done`
-    lines never satisfy a wait the new store has not earned ("set aside"). A file with lines and no marker belongs to a run
-    that began before markers existed: it is adopted, not set aside, so that run keeps its done lines ("adopted"; the
-    operator checks it is this store's). Else "same" (already this store's) or "fresh" (no file)."""
+def ensure_store(state: Path, store: str, adopt: bool = False) -> str:
+    """Make the state file this store's, under a lock so lanes starting together do it once.
+    - "same": already this store's; "fresh": there was no file;
+    - "set aside": it was marked for another store, so it is renamed `<file>.<its store>` and its `done` lines never
+      satisfy a wait this store has not earned;
+    - "unmarked": it holds lines and no marker, so it may be another store's: nothing is touched and the operator is
+      asked; with `adopt` (their word that it is this store's) it is marked and kept ("adopted")."""
+    import fcntl
+
     marker = re.compile(r"chain store (\w+)$", re.M)
     stamp = f"{datetime.now(ZoneInfo('America/New_York')):%m-%d %H:%M:%S} ET chain store {store}\n"
-    text = state.read_text() if state.exists() else ""
-    found = marker.findall(text)
-    if found and found[-1] == store:
-        return "same"
-    if text and not found:
-        state.write_text(text + stamp)
-        return "adopted"
-    if text:
-        state.rename(state.with_name(f"{state.name}.{found[-1]}"))
-    state.write_text(stamp)
-    return "set aside" if text else "fresh"
+    state.parent.mkdir(parents=True, exist_ok=True)
+    with state.with_name(state.name + ".lock").open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        text = state.read_text() if state.exists() else ""  # read again under the lock: another lane may have done it
+        found = marker.findall(text)
+        if found and found[-1] == store:
+            return "same"
+        if text and not found:
+            if not adopt:
+                return "unmarked"
+            state.write_text(text + stamp)
+            return "adopted"
+        if text:
+            state.rename(state.with_name(f"{state.name}.{found[-1]}"))
+        state.write_text(stamp)
+        return "set aside" if text else "fresh"
+
+
+CLEARS_ITSELF = re.compile(r"deadline|deadlock|lock timeout|lock not available|could not obtain lock|could not connect|"
+                           r"connection (?:timed out|refused|reset|closed)|server closed the connection|timed out", re.I)
 
 
 def retry_is_pointless(previous: str, current: str) -> bool:
-    """A failure that comes back unchanged, with only its numbers differing, is not one a retry can change. A window that
-    ran out (`deadline`) is not that: the next attempt resumes where this one stopped."""
-    if not previous or "deadline" in current:
-        return False
-    return re.sub(r"\d+", "N", previous) == re.sub(r"\d+", "N", current)
+    """A failure that comes back exactly as it was, with nothing moved (its bundle and counts are the same), is not one
+    a retry can change. A window that ran out, a lock or deadlock, and a lost connection are not that: they clear when
+    the other load ends or the connection returns, and the next attempt resumes where this one stopped."""
+    return bool(previous) and previous == current and not CLEARS_ITSELF.search(current)
 
 
 SECRET_KEY = r"(?:password|passwd|secret|token|api[_-]?key|private[_-]?key|dsn|url|credential)\w*"
@@ -644,14 +667,19 @@ def redact(text: str) -> str:
     return re.sub(r"\bhost=\S+", "host=<hidden>", text)
 
 
-def errors_since(path: Path, offset: int) -> str:
-    """What was written to the shared error log after `offset`, with every address hidden: the attempt's own errors,
-    kept with its step (the file is shared by every lane and every run)."""
+def errors_since(path: Path, offset: int, source: str | None = None, target: str | None = None) -> str:
+    """What was written to the shared error log after `offset`, addresses hidden, and, given a source and target, only
+    the blocks of that step's own commands (a block opens with `$ <command> --source X --target Y`): the file is shared
+    by every lane and every run, so another lane's errors in the same window are not this step's."""
     if not path.exists() or path.stat().st_size <= offset:
         return ""
     with path.open("rb") as handle:
         handle.seek(offset)
-        return redact(handle.read().decode(errors="replace"))
+        text = handle.read().decode(errors="replace")
+    if source and target:
+        wanted = re.compile(rf"--source {re.escape(source)} --target {re.escape(target)}( |$)")
+        text = "".join(block for block in re.split(r"(?m)^(?=\$ )", text) if wanted.search(block.split("\n", 1)[0]))
+    return redact(text)
 
 
 def done_steps(state: Path) -> set[str]:
@@ -691,7 +719,7 @@ def attempt_loop(step: dict, env: dict, state: Path) -> bool:
         note(f"{name} attempt {attempt} stopped rc={code}: "
              f"{redact(why[-1])[:200] if why else ''}", state)
         log.rename(log.with_name(log.name + f".attempt-{attempt}"))
-        kept = errors_since(errors, offset)
+        kept = errors_since(errors, offset, step["source"], step["target"])
         if kept:
             log.with_name(log.name + f".attempt-{attempt}.errors").write_text(kept)
         current = why[-1] if why else ""
@@ -724,6 +752,8 @@ def main() -> int:
     parser.add_argument("--from", dest="start")
     parser.add_argument("--only")
     parser.add_argument("--lane")
+    parser.add_argument("--adopt-state", action="store_true",
+                        help="the chain state file has done lines and no store marker: it is this store's")
     parser.add_argument("--status", action="store_true",
                         help="one line a running step: progress, rate, processes, database writes and a verdict")
     parser.add_argument("--workers", type=int, help="with --only: the step's workers, within the capacity's range, instead of the chain file's")
@@ -757,16 +787,6 @@ def main() -> int:
         return 0
     env = {**os.environ, **load_env(STORES / "worker.env")}
     LOGS.mkdir(parents=True, exist_ok=True)
-    if not args.plan and env.get("MDM_DATABASE_URL"):
-        outcome = ensure_store(state, store_id(env["MDM_DATABASE_URL"]))
-        if outcome == "set aside":
-            print(f"{state.name} belonged to another store: set aside, this store starts a fresh chain state", flush=True)
-        elif outcome == "adopted":
-            print(f"{state.name} had no store marker: adopted as this store's (check it is, or move it aside)", flush=True)
-    if args.plan:
-        for step in steps:
-            print(f"{step['name']:30} {plan(step, env)}", flush=True)
-        return 0
     if sys.platform == "darwin":
         subprocess.Popen(["caffeinate", "-dimsu", "-w", str(os.getpid())])
     if args.workers is not None:
@@ -775,6 +795,24 @@ def main() -> int:
             print(f"--workers goes with --only and is {low} to {top} on {args.capacity}", file=sys.stderr)
             return 2
         steps = [{**step, "workers": args.workers} if step["name"] == args.only else step for step in steps]
+    if not args.plan and env.get("MDM_DATABASE_URL"):
+        try:
+            outcome = ensure_store(state, store_id(env["MDM_DATABASE_URL"]), adopt=args.adopt_state)
+        except ValueError as refused:
+            print(refused, file=sys.stderr)
+            return 2
+        if outcome == "set aside":
+            print(f"{state.name} belonged to another store: set aside, this store starts a fresh chain state", flush=True)
+        elif outcome == "adopted":
+            print(f"{state.name} adopted as this store's, on your word", flush=True)
+        elif outcome == "unmarked":
+            print(f"{state.name} holds done lines and no store marker, so it may be another store's. If it is this store's, run "
+                  "again with --adopt-state; if not, move it aside. Nothing was changed.", file=sys.stderr)
+            return 2
+    if args.plan:
+        for step in steps:
+            print(f"{step['name']:30} {plan(step, env)}", flush=True)
+        return 0
     if args.auto:
         deadline = None
         if args.hours:

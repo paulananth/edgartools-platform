@@ -34,9 +34,25 @@ No new cause appeared in today's run.
   one `redact` hides every address form and the value of any key named `password`, `secret`, `token`, `key`, `dsn` or `url`
   (2026-11-18 09:23 ET; `test_redaction_hides_every_address_form_and_every_value_named_like_a_secret`: `redact` did not exist, and the old
   pattern left `postgresql+psycopg2://u:pw@h` unchanged)
-- [x] A state file with lines and no marker (the live run's, started before markers existed) is adopted, not set aside, so a run
-  in progress keeps its done lines (2026-11-18 09:23 ET; `test_a_state_file_with_lines_and_no_marker_is_adopted_not_set_aside_so_a_run_in_progress_keeps_its_done_lines`:
-  `ensure_store` would have archived it)
+- [x] Spec review, six findings fixed (2026-11-18 09:25 ET; 71 tests, each failing first):
+  - a state file with lines and no marker may be another store's, so neither setting it aside (it breaks a run in progress that
+    appends to it) nor adopting it silently (it reintroduces the stale lines) is right: the run stops and asks, `--adopt-state`
+    is the operator's word (`test_a_state_file_with_lines_and_no_marker_asks_the_operator_and_is_adopted_only_on_their_word`);
+  - two lanes starting at once lost the archive in 156 of 200 trials and crashed in 44: a lock and a re-read under it
+    (`test_two_lanes_starting_at_once_against_another_stores_file_set_it_aside_once_and_lose_nothing`);
+  - `store_id` crashed on an unescaped `/` in a password, and an empty URL or two sockets gave distinct stores one name: the
+    default port and the host's case are normalised, a socket names its directory, and no host is an error
+    (`test_a_store_is_named_by_its_address_without_ever_showing_it`,
+    `test_a_url_that_names_no_host_is_an_error_not_a_shared_name_and_a_socket_names_its_directory`);
+  - `retry_is_pointless` stopped a step whose bundle moved from 17 to 230, and a lock or deadlock that clears: it now needs the
+    identical error, nothing moved, and not a lock, deadlock, lost connection or window
+    (`test_a_retry_is_pointless_only_when_the_same_error_comes_back_with_nothing_moved_and_not_a_lock_or_the_window`);
+  - a step's errors file held another lane's block written in the same window: it keeps only the blocks of the step's own
+    source and target (`test_the_errors_an_attempt_wrote_to_the_shared_error_log_are_kept_with_that_step_and_not_another_lanes`);
+  - the store check ran before `--workers` was validated, so a refused command had already set the file aside: it runs after
+- [x] Redaction: one `redact` hides every address form and the value of any key named `password`, `secret`, `token`, `key`,
+  `dsn` or `url` (2026-11-18 09:25 ET; `test_redaction_hides_every_address_form_and_every_value_named_like_a_secret`: `redact` did not
+  exist, and the old pattern left `postgresql+psycopg2://u:pw@h` unchanged)
 - [x] Learning → skill: the data-operations skill and the initialize and daily-run runbooks say the state file names its
   store, a step's errors are kept with it, and an unchanged failure stops (2026-11-18 09:23 ET; the skill lints pass: bundle
   portability, role skills, no tickets in skills)
