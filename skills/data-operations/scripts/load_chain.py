@@ -788,7 +788,19 @@ def catalog_outcome(answer: str) -> str:
     return f"not published: {redact(str(body.get('cause') or 'no cause given'))[:120]}"
 
 
-def publish_catalog_status(step: dict, text: str, state: Path) -> str:
+SAFE_BASE = ("PATH", "HOME", "USER", "LANG", "LC_ALL", "TMPDIR", "UV_CACHE_DIR", "UV_PROJECT_ENVIRONMENT", "VIRTUAL_ENV")
+
+
+def status_env(base: dict, worker: dict, catalog: dict) -> dict:
+    """The environment of `rules catalog status`: a short allowlist of the process's own (a path, a home), the Bookkeeping
+    login it reads the run with, and the catalog's address and token. No other login, key or password reaches it."""
+    given = {key: base[key] for key in SAFE_BASE if key in base}
+    if worker.get("BOOKKEEPING_DATABASE_URL"):
+        given["BOOKKEEPING_DATABASE_URL"] = worker["BOOKKEEPING_DATABASE_URL"]
+    return {**given, **catalog}
+
+
+def publish_catalog_status(text: str) -> str:
     """Publish a finished step's latest Bookkeeping run as its target Pipeline's status in the catalog
     (`rules catalog status --bookkeeping-run`), when the catalog's address and token are configured."""
     run = last_run_id(text)
@@ -798,19 +810,25 @@ def publish_catalog_status(step: dict, text: str, state: Path) -> str:
     if not env:
         return "not published: no catalog address and token configured"
     done = subprocess.run([*ENGINE, "rules", "catalog", "status", "--bookkeeping-run", run, "--root", str(ROOT / "rules")],
-                          env={**os.environ, **load_env(STORES / "worker.env"), **env}, cwd=ROOT, capture_output=True,
+                          env=status_env(os.environ, load_env(STORES / "worker.env"), env), cwd=ROOT, capture_output=True,
                           text=True, check=False, timeout=300)
     return catalog_outcome(done.stdout + done.stderr)
 
 
-def after_done(step: dict, text: str, state: Path) -> None:
-    """After a step is done: tell the catalog. Whatever the catalog answers, the step stays done: the catalog describes
-    the load and never decides it."""
+def tell_catalog(step: dict, text: str, state: Path) -> str:
+    """Publish a step's status and note the outcome. A status that cannot be published is a note, never a failed load: the
+    catalog describes the load and never decides it."""
     try:
-        outcome = publish_catalog_status(step, text, state)
-    except Exception as error:  # noqa: BLE001  a status that cannot be published is a note, never a failed load
+        outcome = publish_catalog_status(text)
+    except Exception as error:  # noqa: BLE001  whatever went wrong, the step stays done
         outcome = f"not published: {type(error).__name__}"
     note(f"{step['name']} catalog status: {outcome}", state)
+    return outcome
+
+
+def after_done(step: dict, text: str, state: Path) -> None:
+    """After a step is done: tell the catalog."""
+    tell_catalog(step, text, state)
 
 
 def catch_up(steps: list[dict], state: Path) -> dict[str, str | None]:
@@ -825,11 +843,7 @@ def catch_up(steps: list[dict], state: Path) -> dict[str, str | None]:
         if not log.exists():
             outcomes[step["name"]] = "not published: no log of this step"
             continue
-        try:
-            outcomes[step["name"]] = publish_catalog_status(step, log.read_text(), state)
-        except Exception as error:  # noqa: BLE001  one step's failure never stops the rest
-            outcomes[step["name"]] = f"not published: {type(error).__name__}"
-        note(f"{step['name']} catalog status: {outcomes[step['name']]}", state)
+        outcomes[step["name"]] = tell_catalog(step, log.read_text(), state)
     return outcomes
 
 

@@ -882,7 +882,7 @@ def test_the_catalogs_answer_is_read_as_published_or_not_with_its_cause_and_neve
 
 def test_a_steps_catalog_status_is_published_after_it_finishes_and_a_failure_never_fails_the_step(monkeypatch, tmp_path):
     asked = []
-    monkeypatch.setattr(chain, "publish_catalog_status", lambda step, text, state: asked.append(step["name"]) or "published to svc.t")
+    monkeypatch.setattr(chain, "publish_catalog_status", lambda text: asked.append(chain.last_run_id(text)) or "published to svc.t")
     steps = [_step("a1", "A")]
     state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=10)
     log = tmp_path / "log"
@@ -890,8 +890,8 @@ def test_a_steps_catalog_status_is_published_after_it_finishes_and_a_failure_nev
     notes = []
     monkeypatch.setattr(chain, "note", lambda message, path: notes.append(message))
     chain.after_done(steps[0], log.read_text(), state)
-    assert asked == ["a1"] and any("catalog status" in n and "published to svc.t" in n for n in notes)
-    monkeypatch.setattr(chain, "publish_catalog_status", lambda *a: (_ for _ in ()).throw(RuntimeError("boom")))
+    assert asked == ["22222222-2222-4222-8222-222222222222"] and any("catalog status" in n and "published to svc.t" in n for n in notes)
+    monkeypatch.setattr(chain, "publish_catalog_status", lambda text: (_ for _ in ()).throw(RuntimeError("boom")))
     chain.after_done(steps[0], log.read_text(), state)  # raises nothing: the load is done whatever the catalog says
     assert any("not published" in n for n in notes)
 
@@ -904,7 +904,16 @@ def test_a_catch_up_publishes_the_status_of_every_step_already_done_from_its_own
     monkeypatch.setattr(chain, "RUN", "fresh-v1")
     monkeypatch.setattr(chain, "note", lambda message, path: None)
     seen = []
-    monkeypatch.setattr(chain, "publish_catalog_status", lambda step, text, st: seen.append((step["name"], chain.last_run_id(text))) or "published to svc.t")
+    monkeypatch.setattr(chain, "publish_catalog_status", lambda text: seen.append(chain.last_run_id(text)) or "published to svc.t")
     steps = [_step("a1", "A"), _step("b1", "B"), _step("c1", "C")]
     assert chain.catch_up(steps, state) == {"a1": "published to svc.t", "b1": "not published: no log of this step", "c1": None}
-    assert seen == [("a1", "22222222-2222-4222-8222-222222222222")]  # c1 is not done: nothing to say
+    assert seen == ["22222222-2222-4222-8222-222222222222"]  # c1 is not done: nothing to say
+
+
+def test_the_status_command_gets_a_short_environment_the_bookkeeping_login_and_the_catalog_and_nothing_else():
+    base = {"PATH": "/bin", "HOME": "/h", "AWS_SECRET_ACCESS_KEY": "no", "MDM_DATABASE_URL": "no", "OPENMETADATA_ADMIN_PASSWORD": "no"}
+    worker = {"BOOKKEEPING_DATABASE_URL": "postgresql://b:p@h/x", "MDM_DATABASE_URL": "postgresql://m:p@h/y", "SILVER_DATABASE_URL": "no"}
+    catalog = {"OPENMETADATA_URL": "http://127.0.0.1:8587/api", "OPENMETADATA_TOKEN": "t"}
+    given = chain.status_env(base, worker, catalog)
+    assert set(given) == {"PATH", "HOME", "BOOKKEEPING_DATABASE_URL", "OPENMETADATA_URL", "OPENMETADATA_TOKEN"}
+    assert "no" not in given.values()  # no other login, key or password reaches it

@@ -1,6 +1,6 @@
 # The chain publishes each step's status to the catalog
 
-Status: resolved
+Status: open
 Type: task
 
 Operator, 2026-11-18: "Are you updating the status in open metadata? If not the skills should be updated".
@@ -16,8 +16,9 @@ Operator, 2026-11-18: "Are you updating the status in open metadata? If not the 
 ## Parts
 
 - [x] After a step is done the chain publishes its latest run's status when the catalog's address and token are configured; a status
-  that cannot be published is a note in the state file, never a failed load; only the address and the token reach the command
+  that cannot be published is a note in the state file, never a failed load; the command gets a short environment: a path and a home, the Bookkeeping login it reads the run with, and the catalog's address and token
   (2026-11-18 10:16 ET; `test_the_run_to_publish_is_the_last_one_a_step_completed`, `test_only_the_catalogs_address_and_token_reach_the_status_command_and_only_when_both_are_set`,
+  `test_the_status_command_gets_a_short_environment_the_bookkeeping_login_and_the_catalog_and_nothing_else` (a review found the command inherited every login in `worker.env` and the process environment: `status_env` did not exist),
   `test_the_catalogs_answer_is_read_as_published_or_not_with_its_cause_and_never_raises`,
   `test_a_steps_catalog_status_is_published_after_it_finishes_and_a_failure_never_fails_the_step`: `last_run_id`, `catalog_env`,
   `catalog_outcome`, `after_done` did not exist, `AttributeError`)
@@ -28,5 +29,5 @@ Operator, 2026-11-18: "Are you updating the status in open metadata? If not the 
   .scratch/catalog-status/issues/02-repoint-the-catalog-credentials-to-8587.md: it writes credentials and `init.sh` runs `docker compose up`
   from the main checkout, which could recreate the stack another runtime started; it needs the operator's word
 - [ ] ~~Publish the catalog plan if the target Pipelines are absent, then run `--catalog-status` to catch the finished steps up~~ deferred to
-  the same ticket: needs the catalog reachable
+  .scratch/catalog-status/issues/02-repoint-the-catalog-credentials-to-8587.md: needs the catalog reachable
 - [x] Learning → skill: data-operations, "Publish a step's status to the catalog" (2026-11-18 10:16 ET)
