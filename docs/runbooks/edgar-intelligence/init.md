@@ -113,7 +113,7 @@ rest carry on, and the scheduler stops, naming what cannot start, when nothing e
 identity, so a store whose databases were made again is another store even at the same address. A run whose file was written for
 another store, another generation of this one, or no store at all (an old run's file, from before markers, under a label used
 again) sets it aside beside it (`chain-<RUN>.log.<store>`, `.<store>-<generation>`, `.unmarked`; never deleted, never overwritten) and starts a fresh one,
-so an earlier load's lines never satisfy a wait and never stop a run. A generation that cannot be read changes nothing.
+so an earlier load's lines never satisfy a wait and never stop a run. A generation that cannot be read changes nothing, and a file written without one (from before generations, or while it was unreadable) is trusted and learns it the next time it can be read; only from then is a reset of the stores caught for that file, so a label used again right after a reset should be a new one when the file is older than the generations. `--status` prints when the next run would set the file aside, and does not count its done lines.
 `--adopt-state` is for the operator who says an unmarked file is this store's and keeps it.
 
 Masters come first and each source's silver target last, so silver rows find their masters as they land; a silver step

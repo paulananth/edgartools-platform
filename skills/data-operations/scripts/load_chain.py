@@ -696,24 +696,44 @@ def database_generation(url: str) -> str:
     try:
         import psycopg2
 
-        with psycopg2.connect(url.replace("postgresql+psycopg2", "postgresql"), connect_timeout=5) as connection, connection.cursor() as cursor:
-            cursor.execute("select oid from pg_database where datname = current_database()")
-            return str(cursor.fetchone()[0])
+        with contextlib.closing(psycopg2.connect(url.replace("postgresql+psycopg2", "postgresql"), connect_timeout=5)) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("select oid from pg_database where datname = current_database()")
+                return str(cursor.fetchone()[0])
     except Exception:  # an unreadable store is no reason to touch a running load's file
         return ""
 
 
+def mdm_url_of(url: str) -> str:
+    """The same login and instance with the `mdm` database: the one whose generation names a store in the state file, read
+    through the diagnostic login, which may name another database."""
+    return re.sub(r"/[^/?]+(\?|$)", r"/mdm\1", url, count=1)
+
+
+STORE_MARKER = re.compile(r"chain store (\w+)(?: generation (\w+))?$", re.M)
+
+
+def state_verdict(text: str, store: str, generation: str = "", adopt: bool = False) -> str:
+    """What a state file's text is to this store, as a pure answer the run and `--status` share: "same" (written for this
+    store; a marker that names no generation, or a generation not readable now, is not compared), "fresh" (no file), "adopted"
+    (no marker, and the operator says it is this store's) or "set aside" (another store, another generation of this one, or lines
+    and no marker)."""
+    found = STORE_MARKER.findall(text)
+    if found and found[-1][0] == store and (not generation or not found[-1][1] or found[-1][1] == generation):
+        return "same"
+    if not text:
+        return "fresh"
+    return "adopted" if adopt and not found else "set aside"
+
+
 def ensure_store(state: Path, store: str, adopt: bool = False, generation: str = "") -> str:
-    """Make the state file this store's, under a lock so lanes starting together do it once. A store is its instance's name and,
-    when it can be read, its database's `generation`; a file is trusted only when it was written for both.
-    - "same": already this store's (a file that names no generation, or a generation not readable now, is not compared);
-      "fresh": there was no file;
-    - "set aside": it was marked for another store or another generation of this one, or held lines and no marker at all (an old
-      run's file under a label used again): it is renamed, never deleted, and its `done` lines never satisfy a wait this store
-      has not earned. With `adopt` (the operator's word that an unmarked file is this store's) it is marked and kept ("adopted")."""
+    """Make the state file this store's (`state_verdict`), under a lock so lanes starting together do it once. A store is its
+    instance's name and, when it can be read, its database's `generation`; a file is trusted only when it was written for both.
+    A file whose marker names no generation learns it the next time it is readable, so a blip at creation never leaves a reset
+    unseen. A file that is set aside is renamed, never deleted or overwritten, and its `done` lines never satisfy a wait this store
+    has not earned; `adopt` keeps an unmarked file on the operator's word."""
     import fcntl
 
-    marker = re.compile(r"chain store (\w+)(?: generation (\w+))?$", re.M)
     stamp = (f"{datetime.now(ZoneInfo('America/New_York')):%m-%d %H:%M:%S} ET chain store {store}"
              f"{f' generation {generation}' if generation else ''}\n")
     state.parent.mkdir(parents=True, exist_ok=True)
@@ -729,10 +749,14 @@ def ensure_store(state: Path, store: str, adopt: bool = False, generation: str =
     with state.with_name(state.name + ".lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         text = state.read_text() if state.exists() else ""  # read again under the lock: another lane may have done it
-        found = marker.findall(text)
-        if found and found[-1][0] == store and (not generation or not found[-1][1] or found[-1][1] == generation):
+        found = STORE_MARKER.findall(text)
+        verdict = state_verdict(text, store, generation, adopt)
+        if verdict == "same":
+            if generation and not found[-1][1]:
+                with state.open("a") as handle:  # appended, as the chain's own lines are
+                    handle.write(stamp)
             return "same"
-        if text and not found and adopt:
+        if verdict == "adopted":
             state.write_text(text + stamp)
             return "adopted"
         if text:
@@ -744,7 +768,7 @@ def ensure_store(state: Path, store: str, adopt: bool = False, generation: str =
                 suffix = found[-1][0]
             keep(suffix)
         state.write_text(stamp)
-        return "set aside" if text else "fresh"
+        return verdict
 
 
 CLEARS_ITSELF = re.compile(r"deadline|deadlock|lock timeout|lock not available|could not obtain lock|could not connect|"
@@ -1058,7 +1082,17 @@ def main() -> int:
     state = LOGS / f"chain-{RUN}.log"
     if args.status:  # read-only: the reader login only, no loader login, no wake lock, nothing written
         reader = STORES / "reader.env"
-        print("\n".join(status(steps, state, load_env(reader).get("DIAGNOSE_DATABASE_URL") if reader.exists() else None)))
+        reader_url = load_env(reader).get("DIAGNOSE_DATABASE_URL") if reader.exists() else None
+        counted = state
+        if reader_url and state.exists():  # the file the next run would set aside is no evidence about this store
+            try:
+                if state_verdict(state.read_text(), store_id(reader_url), database_generation(mdm_url_of(reader_url))) == "set aside":
+                    print(f"{state.name} was not written for this store (another store, a database made again, or no marker): "
+                          "the next run sets it aside, and its done lines are not counted here")
+                    counted = state.with_name(state.name + ".not-this-store")
+            except ValueError:
+                pass
+        print("\n".join(status(steps, counted, reader_url)))
         return 0
     env = {**os.environ, **load_env(STORES / "worker.env")}
     LOGS.mkdir(parents=True, exist_ok=True)

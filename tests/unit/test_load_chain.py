@@ -1090,3 +1090,29 @@ def test_lookups_are_refused_beside_a_partial_run_that_would_never_reach_them(mo
     monkeypatch.setattr(sys, "argv", ["load_chain.py", "--lookups", "--lane", "A"])
     assert chain.main() == 2
     assert "--lookups" in capsys.readouterr().err
+
+
+def test_a_file_made_while_the_generation_was_unreadable_learns_it_later_so_a_reset_is_still_caught(tmp_path):
+    state = tmp_path / "chain.log"
+    assert chain.ensure_store(state, "bbbb2222", generation="") == "fresh"  # a blip at creation: the marker names no generation
+    state.write_text(state.read_text() + "11-18 06:40:00 ET company done: Done\n")
+    assert chain.ensure_store(state, "bbbb2222", generation="2002") == "same"  # the next start can read it: the file learns it
+    assert state.read_text().splitlines()[-1].endswith("chain store bbbb2222 generation 2002")
+    assert chain.done_steps(state) == {"company"}
+    assert chain.ensure_store(state, "bbbb2222", generation="3003") == "set aside"  # and a reset after that is caught
+    assert chain.done_steps(state) == set()
+
+
+def test_the_verdict_on_a_state_file_is_the_same_pure_answer_status_and_the_run_give():
+    marked = "11-18 06:00:00 ET chain store aaaa1111 generation 7\n11-18 06:40:00 ET company done: Done\n"
+    assert chain.state_verdict(marked, "aaaa1111", "7") == "same"
+    assert chain.state_verdict(marked, "aaaa1111", "") == "same"  # unreadable: nothing is compared
+    assert chain.state_verdict(marked, "aaaa1111", "8") == "set aside"  # databases made again
+    assert chain.state_verdict(marked, "bbbb2222", "7") == "set aside"  # another store
+    assert chain.state_verdict("11-18 06:40:00 ET company done: Done\n", "aaaa1111", "7") == "set aside"  # no marker
+    assert chain.state_verdict("11-18 06:40:00 ET company done: Done\n", "aaaa1111", "7", adopt=True) == "adopted"
+    assert chain.state_verdict("", "aaaa1111", "7") == "fresh"
+
+
+def test_the_reader_reads_the_mdm_databases_generation_whatever_database_its_address_names():
+    assert chain.mdm_url_of("postgresql+psycopg2://ops:pw@host.invalid:5432/bookkeeping") == "postgresql+psycopg2://ops:pw@host.invalid:5432/mdm"
