@@ -28,12 +28,9 @@ A status that cannot be published (no catalog configured, the endpoint down, the
 chain's state file, never a failed load. Report it with the step: published, or not and why. Initializing the catalog's
 credentials is the openmetadata skill's, never done in a load.
 
-After a store is reset and loaded again, the catalog still holds each step's status from the load before: it is history, and each
-step's new run supersedes it as the step finishes. Until then it says "Successful" for a step the store no longer holds, so read a
-status with its run's time, and never delete the old ones without the operator's word (`rules catalog status` publishes a run;
-it has no reset). Bring the catalog's own text up to the rules once the stores are initialized, before the load
-(the init runbook's catalog step in this repository's `docs/runbooks/edgar-intelligence/`, which owns the commands; a skill
-cannot link outside the installed bundle).
+After a reset the catalog still holds each step's status from the load before: history, which each step's new run supersedes. Read a
+status with its run's time, and never delete the old ones without the operator's word (`rules catalog status` has no reset). Bring
+the catalog's text up to the rules before the load (the init runbook's catalog step, in `docs/runbooks/edgar-intelligence/`).
 
 ## Report a running load from its evidence
 
