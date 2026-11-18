@@ -246,10 +246,6 @@ def pressure(load: float, cores: int, swap_used: float | None, relaxed: bool = F
     return "low" if load < 0.75 * cores and roomy else "ok"
 
 
-def has_headroom(load: float, cores: int, swap_used: float | None, relaxed: bool = False) -> bool:
-    return pressure(load, cores, swap_used, relaxed) != "high"
-
-
 def machine_pressure(relaxed: bool = False) -> str:
     swap = subprocess.run(["sysctl", "-n", "vm.swapusage"], check=False, capture_output=True,
                           text=True).stdout if sys.platform == "darwin" else ""

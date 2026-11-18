@@ -93,7 +93,7 @@ python <data-operations skill>/scripts/load_chain.py --from <step>   # carry on;
 
 **`--auto` is the way to load a store.** It starts the step at the head of every lane whose dependencies are done, longest
 first, while a slot is free (`--slots`, by default half the machine's gigabytes, at most its cores, at least two) and the machine has
-headroom (a load average under one and a half times the cores, and memory not short: swap over three quarters used counts only while less than a quarter of memory is free, since the system keeps swap long after the load that filled it); it also reads the database as the reader login (a step starts only while fewer than three sessions wait on locks, none for a minute, and
+headroom (a load average under one and a half times the cores, and memory not short: swap over three quarters used counts only while less than a quarter of memory is free, since the system keeps swap long after the load that filled it; under a tenth of memory free presses on its own, and an unreadable memory counts as short); it also reads the database as the reader login (a step starts only while fewer than three sessions wait on locks, none for a minute, and
 less than four fifths of its connections are in use), and it starts one step a
 cycle, since the load average lags. It moves each running step's workers within its capacity profile's range (`--capacity`) by the readings: the step with the
 longest chain behind it doubles when there is room, and the step with the shortest halves when the machine or the
@@ -173,7 +173,7 @@ the rules, not from a lane's habit:
    total. If it is not the step the plan named, a step waited for something the rules do not state; fix the chain file
    and its test (`tests/unit/test_load_chain.py` holds each wait equal to the inference), then the lane.
 6. Machine size sets how many lanes run well at once, not their order (see daily run, "Resource sizing"). Memory in
-   use beyond the machine's, shown by swap and a load average above the cores, slows every lane: add lanes when the
+   use beyond the machine's, shown by short memory (swap used while little is free) and a load average above the cores, slows every lane: add lanes when the
    running ones leave memory free, and start the longest first.
 
 **`--plan` proves the documents, not the rest.** It counts what each step would read; it does not open a file a step reads
