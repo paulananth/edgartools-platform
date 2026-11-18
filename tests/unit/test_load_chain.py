@@ -486,3 +486,109 @@ def test_room_to_scale_up_needs_connections_below_the_target_as_well_as_a_machin
     assert chain.room("low", connections=250, target=250) == "ok"  # the target is used: more workers add nothing
     assert chain.room("high", connections=10, target=250) == "high"
     assert chain.room("ok", connections=10, target=250) == "ok"
+
+
+LOG = """Delivery of 2026-06-30, read from the capture: revision 1
+ipo silver: 149 documents in 149 bundles, 1 at once
+Bundle 1/149: 512 of 512 documents to load
+  run a complete in 1.6 min
+Bundle 2/149: 512 of 512 documents to load
+  run b complete in 1.4 min
+Bundle 3/149: 512 of 512 documents to load
+"""
+
+
+def test_a_multi_bundle_logs_progress_is_the_bundles_it_has_completed_of_the_total():
+    assert chain.bundle_progress(LOG) == (2, 149)
+    assert chain.bundle_progress("gleif mastering: 1 documents in 1 bundles\nBundle 1/1: 1 of 1 documents to load\n") == (0, 1)
+    assert chain.bundle_progress("") is None
+
+
+def test_the_minutes_left_follow_the_rate_so_far_and_are_unknown_before_one_bundle_is_done():
+    assert chain.minutes_left(done=2, total=149, elapsed=10.0) == 735.0  # five minutes a bundle, 147 to go
+    assert chain.minutes_left(done=0, total=149, elapsed=10.0) is None
+    assert chain.minutes_left(done=149, total=149, elapsed=700.0) == 0.0
+
+
+def test_a_step_is_progressing_waiting_on_locks_or_possibly_stalled_by_its_own_evidence():
+    busy = {"elapsed": 30.0, "bound": 480, "log_age": 40.0, "cpu": 85.0, "writes_per_min": 12000.0, "lock_waiters": 0}
+    assert chain.verdict(**busy).startswith("progressing")
+    assert chain.verdict(**{**busy, "writes_per_min": 0.0, "cpu": 0.0}).startswith("no sign of work")  # silent log too
+    assert chain.verdict(**{**busy, "writes_per_min": 0.0, "cpu": 0.0, "log_age": 2.0}).startswith("progressing")  # log moved
+    assert chain.verdict(**{**busy, "lock_waiters": 3}).startswith("waiting on database locks")
+    assert "past its bound of 480 min" in chain.verdict(**{**busy, "elapsed": 500.0})
+
+
+def test_the_database_writes_a_minute_come_from_two_cumulative_counts():
+    assert chain.writes_per_minute({"mdm": 1000, "silver": 50}, {"mdm": 1500, "silver": 50}, seconds=30.0) == {"mdm": 1000.0, "silver": 0.0}
+    assert chain.writes_per_minute({"mdm": 10}, {}, seconds=30.0) == {"mdm": 0.0}
+
+
+def test_cpu_percent_comes_from_the_cpu_time_used_in_the_window_not_a_lifetime_average():
+    assert chain.cpu_seconds("0:00.50\n1:02.25\n") == 62.75
+    assert chain.cpu_seconds("1:01:01.5") == 3661.5
+    assert chain.cpu_percent(before=100.0, after=118.0, seconds=20.0) == 90.0
+    assert chain.cpu_percent(before=100.0, after=100.0, seconds=20.0) == 0.0
+
+
+def test_a_step_is_judged_by_the_store_it_writes_and_one_waiting_session_is_not_a_lock_problem():
+    assert chain.store_of("silver") == "silver" and chain.store_of("mastering") == "mdm" and chain.store_of("custodians") == "mdm"
+    busy = {"elapsed": 30.0, "bound": 480, "log_age": 40.0, "cpu": 0.0, "writes_per_min": 0.0}
+    assert chain.verdict(**busy, lock_waiters=1).startswith("no sign of work")  # one waiter is normal
+    assert chain.verdict(**busy, lock_waiters=3).startswith("waiting on database locks")
+
+
+def test_a_step_that_cannot_finish_in_the_attempts_it_has_left_says_so():
+    assert chain.outlook(left=252.0, elapsed=22.0, bound=60, attempt=2, attempts=3) == \
+        "needs about 252 min but has 98 min left in its 1 remaining attempts: raise its workers or its minutes"
+    assert chain.outlook(left=30.0, elapsed=22.0, bound=60, attempt=2, attempts=3) == ""
+    assert chain.outlook(left=None, elapsed=22.0, bound=60, attempt=2, attempts=3) == ""
+
+
+def test_a_stores_sessions_are_counted_by_what_they_wait_for_and_mostly_waiting_on_the_client_means_client_bound():
+    rows = [("mdm", "active", 3), ("mdm", "idle", 29), ("mdm", "idle in transaction", 5), ("silver", "active", 4),
+            ("silver", "idle", 1)]
+    summary = chain.session_summary(rows)
+    assert summary["mdm"] == {"active": 3, "waiting_on_client": 34}  # idle and idle in transaction both wait on the client
+    assert chain.session_note("mdm", summary["mdm"]) == "mdm: 3 sessions working, 34 waiting on the client: client-bound, not the database"
+    assert chain.session_note("silver", summary["silver"]) == "silver: 4 sessions working, 1 waiting on the client"
+    assert chain.session_summary([]) == {}
+
+
+def test_a_step_sharing_a_store_whose_own_processes_are_idle_is_unclear_not_progressing():
+    shared = {"elapsed": 120.0, "bound": 480, "log_age": 120.0, "cpu": 0.0, "writes_per_min": 214000.0, "lock_waiters": 0}
+    said = chain.verdict(**shared, shares_store=["gleif"])
+    assert said.startswith("unclear: its own processes used no CPU") and "gleif" in said
+    assert chain.verdict(**shared, shares_store=[]).startswith("progressing")  # alone, the writes are its own
+    assert chain.verdict(**{**shared, "cpu": 40.0}, shares_store=["gleif"]).startswith("progressing")
+
+
+RESUMED = """Bundle 1/149: all 512 documents already loaded
+Bundle 2/149: all 512 documents already loaded
+Bundle 3/149: 512 of 512 documents to load
+  run c complete in 1.5 min
+Bundle 4/149: 512 of 512 documents to load
+"""
+
+
+def test_bundles_already_loaded_by_an_earlier_attempt_count_as_done():
+    assert chain.bundle_progress(RESUMED) == (3, 149)  # two skipped and one completed
+    assert chain.minutes_left(done=3, total=149, elapsed=4.5) == 219.0
+
+
+def test_a_store_is_client_bound_when_more_than_half_its_sessions_wait_on_the_client():
+    assert chain.session_note("mdm", {"active": 10, "waiting_on_client": 30}).endswith("client-bound, not the database")
+    assert chain.session_note("mdm", {"active": 10, "waiting_on_client": 11}).endswith("client-bound, not the database")
+    assert not chain.session_note("mdm", {"active": 10, "waiting_on_client": 9}).endswith("not the database")
+
+
+def test_cpu_over_the_window_counts_only_processes_present_in_both_readings():
+    assert chain.window_cpu({1: 100.0, 2: 50.0}, {1: 118.0, 2: 50.0, 3: 9000.0}) == 18.0  # pid 3 began in the window
+    assert chain.window_cpu({}, {1: 5.0}) == 0.0
+
+
+def test_only_a_chain_loads_own_processes_are_matched_by_command_line():
+    assert chain.is_load_process("/x/python -c from edgar_warehouse.cli import main; ... rules run --source gleif --target mastering", "gleif", "mastering")
+    assert chain.is_load_process("uv run --no-sync edgar-warehouse load --source gleif --target mastering --capture /c", "gleif", "mastering")
+    assert not chain.is_load_process("vim --source gleif --target mastering", "gleif", "mastering")  # not the platform's
+    assert not chain.is_load_process("edgar-warehouse load --source gleif --target silver", "gleif", "mastering")

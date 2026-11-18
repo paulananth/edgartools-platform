@@ -130,6 +130,9 @@ A slow load has one saturated tier. Throttling hides which, so it comes last.
 
 ## Progress, failure and recovery
 
+Report a running load from `load_chain.py --status` (progress, rate, processes, database sessions and a verdict for each
+step; see the data-operations skill), never as "running".
+
 Diagnose as the reader login (`reader.env`): it shows sessions, locks and waits and reads no table. A step that needs the
 owner or a runtime login to be understood is a gap in the reader, to fix there.
 
