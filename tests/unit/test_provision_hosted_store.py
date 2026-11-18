@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[2] / "skills/data-platform/scripts"))
 
-from provision_hosted_store import Refused, logins, main, provision, read_urls, rewrite
+from provision_hosted_store import Refused, ensure_reader, logins, main, provision, read_urls, rewrite
 
 OLD = "old.invalid"
 
@@ -55,7 +55,7 @@ def test_two_urls_giving_one_login_two_passwords_are_refused(tmp_path):
 
 def test_every_url_moves_to_the_new_instance_and_only_the_administrator_takes_a_new_password(tmp_path):
     folder = _folder(tmp_path)
-    assert rewrite(folder, "new.invalid", 5432, "admin", "a-new") == 10
+    assert rewrite(folder, "new.invalid", 5432, "admin", "a-new") == 10  # reader.env absent: skipped
     urls = read_urls(folder)
     assert urls["connection.env"]["MDM_MIGRATION_DATABASE_URL"] == "postgresql://admin:a-new@new.invalid:5432/mdm"
     assert urls["worker.env"]["MDM_DATABASE_URL"] == "postgresql://mdm_runtime:m-invented@new.invalid:5432/mdm"
@@ -131,3 +131,95 @@ def test_a_login_may_connect_and_use_temporary_tables_on_its_database():
     grants = [statement for statement in server.statements if "GRANT CONNECT, TEMPORARY" in statement]
     assert any("silver_runtime" in statement for statement in grants)
     assert len(grants) == 4  # rules_agent, rules_governance, bookkeeping_runtime, silver_runtime
+
+
+def test_the_diagnostic_login_reads_sessions_and_locks_and_connects_to_no_store():
+    server = _EmptyServer(owner="admin")
+    held = {**HELD, "ops_reader": ("o-invented", {"postgres"})}
+    steps = provision(server, held, "admin", confirm=True)
+    assert any(statement for statement in server.statements if "GRANT pg_monitor TO" in statement)
+    assert "give ops_reader pg_monitor: sessions, locks and statistics, no table" in steps
+    connects = [statement for statement in server.statements if "GRANT CONNECT, TEMPORARY" in statement]
+    assert not any("ops_reader" in statement for statement in connects)  # no temporary tables, so no writing
+    only_connect = [statement for statement in server.statements if "GRANT CONNECT ON DATABASE" in statement]
+    assert sum("ops_reader" in statement for statement in only_connect) == 6  # it reads catalogs and statistics, no table
+
+
+def test_reader_env_is_made_once_private_with_a_new_password_and_moves_with_the_other_urls(tmp_path):
+    folder = _folder(tmp_path)
+    assert read_urls(folder)["reader.env"] == {}  # absent is allowed
+    assert ensure_reader(folder, "old.invalid", 5432) is True
+    first = (folder / "reader.env").read_text()
+    assert (folder / "reader.env").stat().st_mode & 0o777 == 0o600
+    assert ensure_reader(folder, "other.invalid", 5432) is False and (folder / "reader.env").read_text() == first
+    held = logins(read_urls(folder), "admin")
+    assert held["ops_reader"][1] == {"postgres"}
+    rewrite(folder, "new.invalid", 5432, "admin", "a-new")
+    assert "new.invalid" in (folder / "reader.env").read_text() and "old.invalid" not in (folder / "reader.env").read_text()
+
+
+RUNTIME = ("mdm_runtime", "rdm_runtime", "rules_agent", "bookkeeping_runtime", "change_journal_runtime", "silver_runtime")
+
+
+def test_one_loader_login_is_a_member_of_every_runtime_role_and_holds_nothing_of_its_own():
+    server = _EmptyServer(owner="admin")
+    held = {"edgar_loader": ("l-invented", {"mdm", "rdm", "rules", "bookkeeping", "change_journal", "silver"}),
+            "rules_governance": ("g-invented", {"rules"})}
+    steps = provision(server, held, "admin", confirm=True)
+    for role in RUNTIME:
+        assert f"create group {role}" in steps and f"put edgar_loader in {role}" in steps
+    grants = " ".join(server.statements)
+    connects = [statement for statement in server.statements if "GRANT CONNECT, TEMPORARY" in statement]
+    assert sum("edgar_loader" in statement for statement in connects) == 6  # one login reaches all six databases
+    assert "ADMIN" not in grants and "CREATEDB" in grants  # NOCREATEDB NOCREATEROLE NOSUPERUSER on the login
+
+
+def test_a_login_holding_a_schema_create_or_an_object_is_refused():
+    from provision_hosted_store import ddl_free
+
+    class Database:
+        def __init__(self, creates, owned, privileged=0):
+            self.rows = [creates, owned, privileged]
+
+        def cursor(self):
+            return self
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def execute(self, *args):
+            pass
+
+        def fetchone(self):
+            return (self.rows.pop(0),)
+
+    assert ddl_free(Database("", 0), "edgar_loader", "silver") is None
+    with pytest.raises(Refused, match="edgar_loader can create in silver: public"):
+        ddl_free(Database("public", 0), "edgar_loader", "silver")
+    with pytest.raises(Refused, match="edgar_loader owns 3 objects in silver"):
+        ddl_free(Database("", 3), "edgar_loader", "silver")
+    with pytest.raises(Refused, match="edgar_loader is a superuser, or can create databases or roles"):
+        ddl_free(Database("", 0, 1), "edgar_loader", "silver")
+
+
+def test_every_runtime_url_in_worker_env_becomes_the_loader_login_and_the_old_file_is_kept(tmp_path):
+    from provision_hosted_store import use_loader
+
+    folder = _folder(tmp_path)
+    (folder / "worker.env").write_text("\n".join([
+        f"export MDM_DATABASE_URL='postgresql://mdm_runtime:m-invented@{OLD}:5432/mdm'",
+        f"export SILVER_DATABASE_URL='postgresql://silver_runtime:s-invented@{OLD}:5432/silver'",
+        "export BOOKKEEPING_MANIFEST_ROOT=file:///invented/manifests", ""]))
+    assert use_loader(folder) == 2
+    urls = read_urls(folder)["worker.env"]
+    assert set(urls) == {"MDM_DATABASE_URL", "SILVER_DATABASE_URL"}
+    users = {url.split("//")[1].split(":")[0] for url in urls.values()}
+    passwords = {url.split("//")[1].split(":")[1].split("@")[0] for url in urls.values()}
+    assert users == {"edgar_loader"} and len(passwords) == 1 and "m-invented" not in passwords
+    assert urls["SILVER_DATABASE_URL"].endswith("/silver") and "BOOKKEEPING_MANIFEST_ROOT" in (folder / "worker.env").read_text()
+    assert "m-invented" in (folder / "worker.env.before-loader").read_text()
+    assert (folder / "worker.env.before-loader").stat().st_mode & 0o777 == 0o600
+    assert use_loader(folder) == 0  # already the loader: nothing changes, the kept file stays
