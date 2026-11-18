@@ -30,4 +30,9 @@ Operator, 2026-11-18: "Are you updating the status in open metadata? If not the 
   from the main checkout, which could recreate the stack another runtime started; it needs the operator's word
 - [ ] ~~Publish the catalog plan if the target Pipelines are absent, then run `--catalog-status` to catch the finished steps up~~ deferred to
   .scratch/catalog-status/issues/02-repoint-the-catalog-credentials-to-8587.md: needs the catalog reachable
+- [x] Found while watching the live load: the status said `ipo` had "about 2 minutes left" at 122 of 149 bundles, but 27 bundles at
+  about 1.5 minutes each is about 40. The earlier fix counted bundles an earlier attempt already loaded as done, and the rate then
+  divided this attempt's minutes by all of them. The rate is now this attempt's minutes over the bundles it ran
+  (2026-11-18 10:20 ET; `test_bundles_already_loaded_by_an_earlier_attempt_count_as_done` expected `219.0` and now `657.0`, and
+  `minutes_left(done=120, total=149, elapsed=7.0, ran=0)` is `None`: `bundles_run` and `ran` did not exist; live: about 40 min)
 - [x] Learning → skill: data-operations, "Publish a step's status to the catalog" (2026-11-18 10:16 ET)

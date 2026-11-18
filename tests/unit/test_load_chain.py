@@ -508,9 +508,10 @@ def test_a_multi_bundle_logs_progress_is_the_bundles_it_has_completed_of_the_tot
 
 
 def test_the_minutes_left_follow_the_rate_so_far_and_are_unknown_before_one_bundle_is_done():
-    assert chain.minutes_left(done=2, total=149, elapsed=10.0) == 735.0  # five minutes a bundle, 147 to go
-    assert chain.minutes_left(done=0, total=149, elapsed=10.0) is None
-    assert chain.minutes_left(done=149, total=149, elapsed=700.0) == 0.0
+    assert chain.minutes_left(done=2, total=149, elapsed=10.0, ran=2) == 735.0  # five minutes a bundle, 147 to go
+    assert chain.minutes_left(done=0, total=149, elapsed=10.0, ran=0) is None
+    assert chain.minutes_left(done=149, total=149, elapsed=700.0, ran=149) == 0.0
+    assert chain.minutes_left(done=120, total=149, elapsed=7.0, ran=0) is None  # nothing run yet this attempt: no rate
 
 
 def test_a_step_is_progressing_waiting_on_locks_or_possibly_stalled_by_its_own_evidence():
@@ -576,7 +577,9 @@ Bundle 4/149: 512 of 512 documents to load
 
 def test_bundles_already_loaded_by_an_earlier_attempt_count_as_done():
     assert chain.bundle_progress(RESUMED) == (3, 149)  # two skipped and one completed
-    assert chain.minutes_left(done=3, total=149, elapsed=4.5) == 219.0
+    assert chain.bundles_run(RESUMED) == 1  # only the completed one took this attempt's time
+    # the rate is this attempt's minutes over the bundles it ran, never over the ones it skipped
+    assert chain.minutes_left(done=3, total=149, elapsed=4.5, ran=1) == 657.0
 
 
 def test_a_store_is_client_bound_when_more_than_half_its_sessions_wait_on_the_client():

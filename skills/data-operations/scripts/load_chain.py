@@ -406,9 +406,15 @@ def bundle_progress(text: str) -> tuple[int, int] | None:
     return (finished, int(found[-1])) if found else None
 
 
-def minutes_left(done: int, total: int, elapsed: float) -> float | None:
-    """The minutes left at the rate so far; None before a bundle is done (no rate yet)."""
-    return None if done <= 0 else max(total - done, 0) * elapsed / done
+def bundles_run(text: str) -> int:
+    """The bundles this attempt ran (its `run ... complete in` lines), not the ones an earlier attempt already loaded."""
+    return len(re.findall(r"^\s+run \S+ complete in", text, re.M))
+
+
+def minutes_left(done: int, total: int, elapsed: float, ran: int) -> float | None:
+    """The minutes left at this attempt's rate: its minutes over the bundles it ran (`ran`), for the bundles not yet done.
+    None before it has run one (no rate yet); the bundles an earlier attempt skipped never enter the rate."""
+    return None if ran <= 0 else max(total - done, 0) * elapsed / ran
 
 
 def writes_per_minute(before: dict[str, int], after: dict[str, int], seconds: float) -> dict[str, float]:
@@ -606,7 +612,7 @@ def status(steps: list[dict], state: Path, reader_url: str | None, sample: int =
         mine = rate.get(store, 0.0)
         sharing = [o["name"] for o in running if o is not step and store_of(o["target"]) == store]
         wrote = f"{store} {mine:,.0f} rows/min" + (f" shared with {', '.join(sharing)}" if sharing else "")
-        left = minutes_left(*progress, elapsed) if progress and progress[1] > 1 else None
+        left = minutes_left(*progress, elapsed, bundles_run(log.read_text())) if progress and progress[1] > 1 else None
         warn = outlook(left, elapsed, step["minutes"], attempt, step["attempts"])
         shown = (f"bundles {progress[0]} of {progress[1]}" + (f", about {left:.0f} min left" if left else "")
                  if progress and progress[1] > 1 else "one document, so its log shows no progress; the database does")
