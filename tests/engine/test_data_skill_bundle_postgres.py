@@ -235,7 +235,7 @@ right = {"kind": "bundle-invented-kind", "fields": {
 assert compare_candidate_records(rule, [({}, right)]) == [[True, False]]
 paths = candidate_paths(rule)
 assert paths["identifier"] == ("identifiers", "invented_namespace")
-assert paths["waterfall"] == ("provenance", "matching", "invented_name_count", "invented_waterfall", "invented_target")
+assert paths["cascade"] == ("provenance", "matching", "invented_name_count", "invented_waterfall", "invented_target")
 assert candidate_value({"identifiers":{"invented_namespace":"invented-value"}}, paths["identifier"]) == "invented-value"
 from edgar_warehouse.mdm.matching import candidate_routes
 from edgar_warehouse.mdm.evidence import assertion

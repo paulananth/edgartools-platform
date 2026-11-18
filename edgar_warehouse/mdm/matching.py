@@ -55,7 +55,7 @@ def candidate_paths(rule: dict) -> dict[str, tuple]:
     name_count = ("provenance", "matching", profile["name_count_field"])
     return {
         "identifier": ("identifiers", profile["identifier_namespace"]),
-        "waterfall": (*name_count, profile["waterfall_field"], profile["waterfall_identifier_field"]),
+        "cascade": (*name_count, profile["waterfall_field"], profile["waterfall_identifier_field"]),
     }
 
 
@@ -214,7 +214,7 @@ def propose(
         holders_here = [a for a in batch.values() if a["source_code"] == holder]
         paths = candidate_paths(rule)
         namespace = comparison_profile(rule)["identifier_namespace"]
-        lookup = paths["waterfall"]
+        lookup = paths["cascade"]
         def value_of(record):
             return candidate_value(record, lookup)
         # Each side of a pair: from this batch, or the latest stored version.
