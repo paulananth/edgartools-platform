@@ -1,6 +1,6 @@
 ---
 name: data-catalog
-description: Model, qualify and publish understandable business domains, glossaries, assets and lineage through a replaceable catalog or visualization destination. Use for OpenMetadata catalog work, catalog portability and missing semantic or lineage coverage.
+description: Model, qualify and publish understandable business domains, glossaries, assets and lineage through a replaceable catalog or visualization destination. Use for catalog work on any destination (a catalog's own mechanics are that catalog's skill, OpenMetadata's the openmetadata skill), catalog portability and missing semantic or lineage coverage.
 ---
 
 # Data catalog
@@ -179,6 +179,19 @@ actually connects. Include missing registrations, unsupported worker
 profiles, absent lineage and unverified execution as separate gaps. Do not
 call a catalog pipeline an operationally runnable or completed pipeline until
 its Bookkeeping registration, worker support and run evidence are verified.
+
+## Choose the catalog's own skill
+
+This skill is the top of the catalog work: the business meaning, the model and the publication outcomes, the same for every
+catalog. What it publishes to, and how, belongs to the destination's own skill, so more than one catalog can be supported:
+
+| Destination | Its skill (its API, native objects, publication, local server) |
+|---|---|
+| OpenMetadata | [openmetadata](../openmetadata/SKILL.md) |
+| Another catalog | a sibling skill of its own, `skills/<catalog>/SKILL.md`, made as [PORTABILITY.md](references/PORTABILITY.md) says |
+
+Keep a catalog's mechanics out of this skill and its meaning out of the catalog's skill. Two catalogs side by side each keep
+their own mapping from a logical key to their native identity (PORTABILITY.md): neither is the sole place a definition lives.
 
 ## Use the skill that owns the decision
 

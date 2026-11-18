@@ -11,7 +11,8 @@ The Edgartools local instance is a separate Compose project named
 `edgartools-openmetadata_db-data` and `edgartools-openmetadata_es-data`
 volumes. The prior `edgartools-catalog` project on port 8585 is independent;
 starting or initializing this instance must not stop it or remove its volumes.
-The operator handles any retirement of the prior instance separately.
+The `edgartools-catalog` instance is the one kept running; this isolated instance is started for an isolated rebuild or test
+and stopped afterwards (stopping keeps its volumes), since two instances together hold about 2.5 GB of a small machine's memory.
 
 The repository-root `.env` is ignored by Git and must remain mode `0600`.
 `bash infra/openmetadata/init.sh` reads it without printing values. On a fresh
