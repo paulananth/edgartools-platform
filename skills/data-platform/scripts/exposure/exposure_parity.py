@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # the sibling exposure scripts
+
 from typing import Any
 
-from edgar_warehouse.rules.exposure_manifest import validate_manifest
+from exposure_manifest import validate_manifest
 
 
 def _identity(row: dict[str, Any]) -> str:

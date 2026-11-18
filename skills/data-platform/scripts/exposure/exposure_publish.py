@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # the sibling exposure scripts
+
 from typing import Any, Callable
 
 from edgar_warehouse.rules import catalog
 from edgar_warehouse.rules.catalog import GOLD, SILVER_MARK, fqn
-from edgar_warehouse.rules.exposure_manifest import validate_manifest
+from exposure_manifest import validate_manifest
 
 SERVICE = "edgartools-snowflake"
 QUALIFIED_VERSIONS = frozenset({"2.0.2", "2.0.7"})

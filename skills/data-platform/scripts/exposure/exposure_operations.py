@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # the sibling exposure scripts
+
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from edgar_warehouse.rules.exposure_manifest import validate_manifest
-from edgar_warehouse.rules.exposure_parity import check_parity
+from exposure_manifest import validate_manifest
+from exposure_parity import check_parity
 
 MAX_MANIFEST_AGE_S = 24 * 60 * 60
 PRODUCTION_POLICY = {

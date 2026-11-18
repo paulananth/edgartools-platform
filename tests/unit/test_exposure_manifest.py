@@ -5,7 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from edgar_warehouse.rules.exposure_manifest import (
+import sys
+
+sys.path.insert(0, str(Path(__file__).parents[2] / "skills/data-platform/scripts/exposure"))
+
+from exposure_manifest import (
     MANIFEST_VERSION,
     build_manifest,
     validate_manifest,

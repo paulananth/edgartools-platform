@@ -1,11 +1,17 @@
 # Snowflake exposure connectivity operations
 
+Unqualified: these scripts carry the open findings of the connectivity tracker
+(`.scratch/snowflake-openmetadata-autoontology-connectivity-20261116/`). Do not run them against a live
+service until their ticket is closed.
+
 ## Local verification
 
 Use an approved manifest and credential-free metadata snapshots. Run the parity checker before any publication or schedule change:
 
 ```python
-from edgar_warehouse.rules.exposure_parity import check_parity
+import sys
+sys.path.insert(0, "<SKILL_DIR>/scripts/exposure")
+from exposure_parity import check_parity
 report = check_parity(manifest, snowflake=snowflake_snapshot,
                       openmetadata=openmetadata_snapshot,
                       autoontology=autoontology_snapshot)
