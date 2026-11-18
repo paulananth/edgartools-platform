@@ -36,6 +36,12 @@ The private repo-root `.env` names port 8585 and a token of the retired stack. T
   for 5000 and its maximum is 1000 (a traceback the chain read as no rows). It asks for 1000 and says when a full page may have more behind it
   (2026-11-18 10:38 ET; `test_bookkeepings_runs_are_asked_for_within_the_commands_own_maximum_and_a_full_page_is_said_to_be_possibly_cut`:
   `RUNS_LIMIT` did not exist; live: 540 runs read, every step found except `prospectus`, which has not run)
+- [x] CI failed two checks on this PR: `bookkeeping_runs()` read the stores folder's `worker.env` without checking it exists, and CI has none
+  (`FileNotFoundError`). It passed here only because this machine has the folder; a missing file now means no Bookkeeping login, never a
+  crash, and the tests were run as CI runs them (an empty stores folder and home) (2026-11-18 10:53 ET;
+  `test_a_missing_worker_env_means_no_bookkeeping_login_not_a_crash`: `worker_env` did not exist)
+- [x] `ipo` runs four bundles at once: its 149 bundles ran one at a time at about 1.2 minutes each, the longest step of the load, with the
+  machine idle (2026-11-18 10:53 ET; `test_ipo_has_a_window_that_fits_its_bundles_and_runs_several_at_once`: `assert 1 >= 4`)
 - [ ] `rules catalog check` (read-only) shows whether the target Pipelines exist; publish the catalog plan if not
 - [ ] `load_chain.py --catalog-status` catches the finished steps up; read each outcome
 - [ ] Learning → skill: openmetadata LOCAL-SERVER, the order of initialize, publish, status

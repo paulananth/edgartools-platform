@@ -750,9 +750,10 @@ def test_the_errors_an_attempt_wrote_to_the_shared_error_log_are_kept_with_that_
     assert chain.errors_since(tmp_path / "missing.log", 0, "sec.x", "mastering") == ""
 
 
-def test_ipo_has_a_window_that_fits_its_bundles():
+def test_ipo_has_a_window_that_fits_its_bundles_and_runs_several_at_once():
     ipo = BY_NAME["ipo"]
     assert ipo["minutes"] * ipo["attempts"] >= 300  # 149 bundles at about two minutes each, one at a time
+    assert ipo["bundles"] >= 4  # measured: one at a time took 181 minutes with the machine idle
 
 
 def test_redaction_hides_every_address_form_and_every_value_named_like_a_secret():
@@ -1023,3 +1024,14 @@ def test_bookkeepings_runs_are_asked_for_within_the_commands_own_maximum_and_a_f
     assert chain.bookkeeping_runs() == [{"run_id": "r1"}]
     assert seen["limit"] == chain.RUNS_LIMIT == 1000  # `bookkeeping runs` refuses more than 1000
     assert chain.runs_may_be_cut([{}] * 1000) and not chain.runs_may_be_cut([{}] * 999)
+
+
+def test_a_missing_worker_env_means_no_bookkeeping_login_not_a_crash(monkeypatch, tmp_path):
+    monkeypatch.setattr(chain, "STORES", tmp_path)  # a machine with no stores folder: CI, or a fresh checkout
+    assert chain.worker_env() == {}
+    (tmp_path / "worker.env").write_text("export BOOKKEEPING_DATABASE_URL='postgresql://b:p@h/x'\n")
+    assert chain.worker_env() == {"BOOKKEEPING_DATABASE_URL": "postgresql://b:p@h/x"}
+    monkeypatch.setattr(chain, "_RUNS", None)
+    monkeypatch.setattr(chain, "run_catalog_status", lambda command, env, timeout=60: ("[]", ""))
+    (tmp_path / "worker.env").unlink()
+    assert chain.bookkeeping_runs() == []  # reads nothing, asks nothing it cannot, never raises

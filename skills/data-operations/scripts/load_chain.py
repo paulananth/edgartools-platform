@@ -65,6 +65,12 @@ def load_env(path: Path) -> dict:
     return env
 
 
+def worker_env() -> dict:
+    """The stores folder's worker.env as data, or nothing when the folder has none (CI, a fresh checkout)."""
+    path = STORES / "worker.env"
+    return load_env(path) if path.exists() else {}
+
+
 def chain_steps(path: Path = ROOT / "rules/load-chain.yaml") -> list[dict]:
     """The chain's steps, each with the chain's `defaults` for what it does not say itself."""
     chain = yaml.safe_load(path.read_text())
@@ -877,7 +883,7 @@ def bookkeeping_runs() -> list[dict]:
     global _RUNS
     if _RUNS is None:
         answer, _ = run_catalog_status([*ENGINE, "bookkeeping", "runs", "--limit", str(RUNS_LIMIT)],
-                                       status_env(os.environ, load_env(STORES / "worker.env"), {}), timeout=300)
+                                       status_env(os.environ, worker_env(), {}), timeout=300)
         try:
             _RUNS = json.JSONDecoder().raw_decode(answer[answer.index("["):])[0] if "[" in answer else []
         except ValueError:
@@ -901,7 +907,7 @@ def publish_catalog_status(step: dict) -> str:
         return "not published: no catalog address and token configured"
     answer, error = run_catalog_status(
         [*ENGINE, "rules", "catalog", "status", "--bookkeeping-run", run, "--root", str(ROOT / "rules")],
-        status_env(os.environ, load_env(STORES / "worker.env"), env))
+        status_env(os.environ, worker_env(), env))
     return catalog_outcome(answer, error)
 
 
