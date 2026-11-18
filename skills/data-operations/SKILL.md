@@ -402,6 +402,11 @@ A schedule repeats steps 1 to 6 above; it adds no step of its own.
 - **Where it runs.** On the machine that holds the store, because the load
   needs the store's connection files. The agent runtime's scheduler can run a
   session-bound interval there; a hosted routine reaches only a hosted store.
+  A hosted production load writes Silver to Snowflake `EDGARTOOLS_SILVER` and
+  MDM to Snowflake-hosted Postgres. `--stores` selects connections, not an
+  environment by itself: verify they target the requested hosted stores before
+  planning or loading. See [AWS and Snowflake
+  operations](../aws-snowflake-operations/SKILL.md#data-layers).
 - **What one scheduled run does.** Read `profile_load.py progress` first. An open
   run is resumed by `edgar-warehouse load` and is never submitted again beside
   it; runs left `running` by a stopped load are reported, not reused. Then load,
