@@ -4,8 +4,13 @@ import json
 
 import pytest
 
-from edgar_warehouse.rules.exposure_manifest import build_manifest
-from edgar_warehouse.integrations.autoontology import (
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parents[2] / "skills/data-platform/scripts/exposure"))
+
+from exposure_manifest import build_manifest
+from autoontology import (
     build_snowflake_connection,
     configure_connection,
     validate_query,

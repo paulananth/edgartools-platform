@@ -66,6 +66,11 @@ authorization and verification gates.
 
 ## Capability gate
 
+The exposure scripts (manifest, OpenMetadata publication, AutoOntology connection, parity and
+operations) are in [scripts/exposure/](scripts/exposure/README.md). They are unqualified: their open
+findings are the connectivity tracker's tickets, and none runs against a live service until its
+ticket closes.
+
 These are operator requirements, not a claim of installed enforcement. Before
 execution, verify that the configuration parser, table-list resolution, mirror
 caller, reader grants, AutoOntology inventory check and catalog tag projection

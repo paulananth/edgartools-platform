@@ -1,7 +1,12 @@
 from urllib.parse import unquote
 
-from edgar_warehouse.rules.exposure_manifest import build_manifest
-from edgar_warehouse.rules.exposure_publish import exposure_plan, publish_exposure
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parents[2] / "skills/data-platform/scripts/exposure"))
+
+from exposure_manifest import build_manifest
+from exposure_publish import exposure_plan, publish_exposure
 
 
 def _manifest():

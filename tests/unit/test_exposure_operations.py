@@ -2,8 +2,13 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from edgar_warehouse.rules.exposure_manifest import build_manifest
-from edgar_warehouse.rules.exposure_operations import (
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parents[2] / "skills/data-platform/scripts/exposure"))
+
+from exposure_manifest import build_manifest
+from exposure_operations import (
     ExposureRunError,
     production_policy,
     run_exposure_cycle,

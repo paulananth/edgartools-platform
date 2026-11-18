@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # the sibling exposure scripts
+
 import json
 import os
 import re
@@ -9,7 +14,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request, urlopen
 
-from edgar_warehouse.rules.exposure_manifest import validate_manifest
+from exposure_manifest import validate_manifest
 
 
 _REQUEST_TIMEOUT_S = 30
