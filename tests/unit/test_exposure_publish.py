@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[2] / "skills/data-platform/scripts/exposure"))
 
-from exposure_publish import APPROVED, PublishError, _owned, column_type, exposure_plan, retagged  # noqa: E402
+from exposure_publish import APPROVED, PublishError, _owned, column_type, exposure_plan, retagged, verify  # noqa: E402
 
 from tests.support.exposure import invented_manifest  # noqa: E402
 
@@ -82,3 +82,20 @@ def test_a_republish_replaces_only_the_owned_tags_and_keeps_a_stewards():
     held = [{"tagFQN": "data_class.master_data"}, {"tagFQN": "PII.None"}]
     assert [t["tagFQN"] for t in retagged(held, wanted)] == ["PII.None", *wanted]
     assert retagged([{"tagFQN": "PII.None"}, *({"tagFQN": t} for t in wanted)], wanted) is None
+
+
+def test_a_varchar_with_no_length_is_text_not_one_character():
+    assert column_type("character varying") == {"dataType": "TEXT", "dataTypeDisplay": "character varying"}
+    assert column_type("character varying(128)")["dataLength"] == 128
+
+
+def test_a_readback_on_an_unqualified_version_is_refused_before_it_reads_anything():
+    asked = []
+
+    def call(method, path, body=None, params=None):
+        asked.append(path)
+        return {"version": "9.9.9"} if path == "/system/version" else {}
+
+    with pytest.raises(PublishError, match="not a qualified version"):
+        verify(manifest(), call)
+    assert asked == ["/system/version"]

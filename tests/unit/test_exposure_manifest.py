@@ -127,6 +127,7 @@ def test_the_manifest_is_the_same_whatever_order_the_list_names_its_tables():
         (lambda c, s: c["tables"][1].pop("columns"), "definition"),
         (lambda c, s: c["tables"][0].update({"table": "silver.widget_sale"}), "one plain name"),
         (lambda c, s: c["tables"][0].update({"lineage": ["mdm.unlisted"]}), "does not expose"),
+        (lambda c, s: c["tables"][0].update({"lineage": ["silver.widget_sale"]}), "itself"),
         (lambda c, s: c["tables"][0].update({"layer": "gold"}), "undeclared layer"),
         (lambda c, s: c["tables"][0].update({"scope": "forever"}), "scope"),
         (lambda c, s: c["approval"].update({"words": []}), "operator's words"),

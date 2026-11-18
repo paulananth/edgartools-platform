@@ -66,6 +66,8 @@ def column_type(data_type: str) -> dict:
     if not match or match[1] not in TYPES:
         raise PublishError(f"no catalog type for the store type {data_type!r}")
     kind = TYPES[match[1]]
+    if kind == "VARCHAR" and match[2] is None:
+        kind = "TEXT"  # a varchar with no declared length is unbounded, as text is
     typed = {"dataType": kind, "dataTypeDisplay": data_type}
     if kind in LENGTHS:
         typed["dataLength"] = int(match[2] or 1)
@@ -153,11 +155,15 @@ def _require_vocabulary(call: Call, plan: dict) -> None:
         call("PUT", "/tags", tag)
 
 
-def publish(manifest: dict, call: Call, *, service: str = SERVICE) -> dict:
-    """Make the service equal to the manifest, tags exactly, then read it all back."""
+def _require_qualified(call: Call) -> None:
     version = (call("GET", "/system/version") or {}).get("version")
     if version not in QUALIFIED_VERSIONS:
         raise PublishError(f"OpenMetadata {version} is not a qualified version")
+
+
+def publish(manifest: dict, call: Call, *, service: str = SERVICE) -> dict:
+    """Make the service equal to the manifest, tags exactly, then read it all back."""
+    _require_qualified(call)
     plan = exposure_plan(manifest, service=service)
     _require_vocabulary(call, plan)
     core = {k: v for k, v in plan.items() if k != "tags"}
@@ -174,6 +180,7 @@ def publish(manifest: dict, call: Call, *, service: str = SERVICE) -> dict:
 
 def verify(manifest: dict, call: Call, *, service: str = SERVICE) -> dict:
     """Read back the service, lineage and exact tags, and that no table outside it carries the exposure tag."""
+    _require_qualified(call)
     plan = exposure_plan(manifest, service=service)
     core = {k: v for k, v in plan.items() if k != "tags"}
     differences = list(catalog.verify(core, call)["differences"])
