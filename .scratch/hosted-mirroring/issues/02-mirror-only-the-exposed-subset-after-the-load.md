@@ -20,6 +20,8 @@ update skills and runbook".
 - [x] The guide says the mirror is created once, after the first load, from the exposure list only, with the four steps and the reset
   rule (2026-11-18 12:07 ET; read in the PR)
 - [x] The init runbook has the "Mirror the final tables" step with its done condition and the reset warning (2026-11-18 12:07 ET; read in the PR)
+- [x] The guide and the runbook say creation waits for the source-consolidation gate: one mirror reads one source database and the six
+  stores are separate (2026-11-18 12:09 ET; a review found the step could not be built on this layout as first written)
 - [ ] ~~Create the mirror~~ deferred to ticket 01 (`01-managed-mirror-guidance`, where creation stays unapproved): it needs the finished load, the read-only pre-flight and the
   operator's approval of the create plan (source database per mirror, tables, refresh, cost); `rules/exposure.yaml` says it is not built
 - [x] Learning → skill: data-platform HOSTED-MIRRORING.md, "After the first load: mirror only the exposed subset" (2026-11-18 12:07 ET; this ticket)

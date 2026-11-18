@@ -207,12 +207,10 @@ quarter's N-CEN registrants and advisers have nothing to follow, so they start a
 
 ## Mirror the final tables
 
-After the load (and `--finish`), the Snowflake mirror of the final tables is created from the repository's exposure list, which
-selects a subset of the stores' tables (`rules/exposure.yaml`; the silver and MDM final outputs, not the stage, control or
-reading tables). It is never created for a schema or for every table, and never before the load: a listed table must exist.
-The procedure, its read-only checks and its approvals are
+After the load (and `--finish`), the Snowflake mirror of the final tables is created from the repository's exposure list
+(`rules/exposure.yaml`), for those tables only, and only once the guide's source-consolidation gate is passed: the stores here are
+separate databases and one mirror reads one. The procedure, its read-only checks and its approvals are
 [the data-platform skill's hosted mirroring guide](../../../skills/data-platform/HOSTED-MIRRORING.md#after-the-first-load-mirror-only-the-exposed-subset).
 Done when the mirror lists exactly the configured tables, each replicating, with none missing or unexpected.
 
-A store **reset** (step 2) drops the databases a mirror reads: say so first, and plan the mirror's drop or restart with its own
-approval, then create it again from the list after the next load.
+A store **reset** (step 2) breaks a mirror: the guide says what to plan first.

@@ -119,18 +119,20 @@ only when requested; the mirror owns target writes.
 
 ## After the first load: mirror only the exposed subset
 
-The mirror is created once, after the stores' first load, for the tables of the repository's exposure list and no others
-(`rules/exposure.yaml`, [Final exposable tables](FINAL-TABLES.md)): never a schema, never "every table the stores hold". A table
-the list names must exist before a mirror can take it, so the order is the load, then:
+The mirror is created after the stores' first load, and again after a reset, for the tables of the repository's exposure list and
+no others (`rules/exposure.yaml`; [Final exposable tables](FINAL-TABLES.md) owns the scope). A listed table must exist before a
+mirror can take it, so the order is the load, then:
 
-1. Resolve the list against the loaded stores, read-only, with the exposure tooling (`scripts/exposure/README.md`: `generate`, then
-   `check`). It refuses a listed table or column the stores lack; an empty answer never falls back to a schema.
-2. Run the readiness checks above (instance family, source database, primary keys, types) on exactly those tables.
-3. Present the create plan: each mirror's source database, the included tables and the count excluded, the target database, the
-   refresh interval, serverless or warehouse, insert-only tables and the cost. A mirror reads one source database, and the stores
-   are separate databases: the plan says which database each mirror reads, never a shared one assumed. Wait for approval.
-4. `CREATE_MIRROR` with the explicit `postgres_tables` and `postgres_schemas => NULL`; verify per table until it replicates, then
-   compare the mirrored list with the configured one, missing and unexpected reported separately.
+1. Resolve the list against the loaded stores, read-only, with the exposure tooling ([its README](scripts/exposure/README.md):
+   `generate`, then `check`). It refuses a listed table or column the stores lack.
+2. Follow [Readiness before changes](#readiness-before-changes) and [Creation and verification](#creation-and-verification) on exactly
+   those tables: explicit `postgres_tables`, `postgres_schemas => NULL`, `target_table_type => 'ICEBERG'`
+   ([the single-database qualification](SINGLE-DATABASE-ICEBERG.md) pins the rest).
 
-A reset of the stores drops and recreates the databases a mirror reads, which breaks that mirror. Say so before the reset: the
-mirror is dropped, or restarted (a full re-snapshot), with its own approval, and created again from the list after the next load.
+**The source-consolidation gate comes first.** One mirror reads one source database and creates one target database, and the stores
+are separate databases. Until the listed tables share one source database, qualified and approved as the qualification requires,
+no mirror is created: never one mirror per store, never a target of several databases, and nothing consolidated as a side effect of
+a load. The create plan names the single source database and says so.
+
+A reset of the stores drops and recreates the databases a mirror reads, which breaks that mirror: plan its drop or restart, with its
+own approval, before the reset, and create it again from the list after the next load.
