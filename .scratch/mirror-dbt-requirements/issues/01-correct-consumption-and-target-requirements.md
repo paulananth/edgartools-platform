@@ -1,6 +1,6 @@
 # Correct mirror consumption and dbt destination requirements
 
-Status: claimed
+Status: resolved
 Type: task
 
 ## Operator ruling
@@ -29,8 +29,9 @@ with no fixed entity list or domain-specific copy. No generator is claimed live.
   blockers or worthwhile pattern refactor; 2026-11-17 06:40 ET.
 - [x] Publish the locally checked change for review: PR #1860 is draft while
   final-head CI is pending; 2026-11-17 06:41 ET.
-- [ ] Complete final-head CI and merge; retain the draft on failure or pending
-  validation. No live rollout is part of this change.
+- [x] Complete final-head CI and merge; retain the draft on failure or pending
+  validation. No live rollout is part of this change. PR #1860 merged with
+  12 of 12 checks green on its final head 91bfc1eb; 2026-11-17 20:38 ET.
 - [x] Record separate Gold entity dimension views, shared master keys and
   independent fact grains in GOLD.md and modeling requirements; verified by
   focused documentation checks; 2026-11-17 06:45 ET.

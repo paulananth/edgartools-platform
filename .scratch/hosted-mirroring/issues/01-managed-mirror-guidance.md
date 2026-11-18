@@ -1,6 +1,6 @@
 # Managed mirroring guidance and approved resize
 
-Status: claimed
+Status: resolved
 Type: task
 
 ## Parts
@@ -39,7 +39,7 @@ that reusable scripts live outside infra.
 - [x] Document one final-table contract derived from requirements/mappings, with human review before exposure approval and gates for both consumers; skill review, 2026-11-15 06:57 ET.
 - [x] Relocate reusable catalog helpers and resize template to their owning skills; callers and explicit configuration updated, 2026-11-15 06:57 ET.
 - [x] Verify moved-helper tests, CLI entrypoints, 113 genericity/path checks and isolated bundle portability; Standards/Spec/GoF reviews passed, 2026-11-15 06:57 ET.
-- [ ] Publish the revised PR and verify final-head CI.
+- [x] Publish the revised PR and verify final-head CI; PR #1794 merged; 12 of 12 checks green on its final head 11b3bd5c, 2026-11-17 20:38 ET.
 - [x] Learning → skill: data-profiling owns mapping/requirement evidence and human review; FINAL-TABLES.md owns common consumer scope; data-platform owns portable helper placement, 2026-11-15 06:57 ET.
 
 Exact table-selection configuration, eligibility-tag projection and runtime
@@ -72,7 +72,7 @@ Final Standards and Spec reviews found no conflicting approval rule.
 - [x] Update the installed snowflake-postgres mirror sub-skill with the same optional tag-controlled workflow and validate its frontmatter, 2026-11-15 07:06 ET.
 - [x] Keep reusable helpers with owning skills and preserve unrelated checkout WIP; no new infrastructure helper or live operation, 2026-11-15 07:06 ET.
 - [x] Verify 113 genericity/path checks, isolated bundle portability, diff formatting and Standards/Spec/GoF review, 2026-11-15 07:06 ET.
-- [ ] Publish the tag-controlled skill update and verify final-head CI.
+- [x] Publish the tag-controlled skill update and verify final-head CI; PR #1794 merged; 12 of 12 checks green on its final head 11b3bd5c, 2026-11-17 20:38 ET.
 - [x] Learning → skill: exact tag selection, independently verified OpenMetadata projection and explicit reconciliation for removed tags, 2026-11-15 07:06 ET.
 
 The installed mirror skill is a local installation update; the supplied archive
@@ -84,5 +84,5 @@ remain outside this skills-only task.
 - [x] Reproduce test_every_skill_file_is_short_enough_to_read_whole: the OpenMetadata main skill had 529 lines and failed the unchanged 500-line bound, 2026-11-15 07:17 ET.
 - [x] Move the exposure-tag procedure into the owning skills references/EXPOSURE-TAGS.md and link it from the main skill; preserve the full procedure, 2026-11-15 07:17 ET.
 - [x] Verify the exact failing test, all six skill-policy checks, isolated bundle portability and 114 guide/genericity checks; main skill is 499 lines, 2026-11-15 07:17 ET.
-- [ ] Publish repair and verify CI on its head before readiness/merge.
+- [x] Publish repair and verify CI on its head before readiness/merge; PR #1794 merged; 12 of 12 checks green on its final head 11b3bd5c, 2026-11-17 20:38 ET.
 - [x] Learning → skill: branch-specific OpenMetadata exposure procedure uses progressive disclosure inside the owning skill; helpers remain with their skill, 2026-11-15 07:17 ET.
