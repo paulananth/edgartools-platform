@@ -17,7 +17,7 @@ def test_the_catalog_skill_routes_each_destination_to_the_skill_that_owns_its_me
 
 
 def test_the_catalog_skill_is_not_the_home_of_openmetadata_mechanics():
-    mechanics = re.findall(r"/api/v1|rules catalog publish|OPENMETADATA_TOKEN|execution boundary|Context Center", CATALOG)
+    mechanics = re.findall(r"/api/v1|rules catalog (?:plan|publish|check)\b|OPENMETADATA_TOKEN|execution boundary|Context Center", CATALOG)
     assert mechanics == [], mechanics  # those live in the openmetadata skill
 
 
@@ -31,6 +31,6 @@ def test_the_catalog_skills_description_names_no_single_catalog_as_its_scope():
     assert "any destination" in description and "Use for OpenMetadata catalog work" not in description
 
 
-def test_the_local_server_doc_names_the_instance_kept_running():
-    doc = (ROOT / "skills/openmetadata/LOCAL-SERVER.md").read_text()
-    assert "`edgartools-catalog` instance is the one kept running" in doc
+def test_a_second_catalogs_skill_is_laid_out_like_the_first_and_the_publisher_commands_live_in_its_own_skill():
+    assert "laid out like [openmetadata](../openmetadata/SKILL.md)" in CATALOG
+    assert "rules catalog" in OPENMETADATA  # the OpenMetadata publisher's commands are documented where they belong

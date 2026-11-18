@@ -1,6 +1,6 @@
 # The catalog skill is the top; each catalog's mechanics live in its own skill
 
-Status: resolved
+Status: open
 Type: task
 
 Operator, 2026-11-18, asked which of two local OpenMetadata stacks should stay (they held about 2.5 GB together on an 8 GB
@@ -23,8 +23,19 @@ more than one catalog".
   `test_the_catalog_skills_description_names_no_single_catalog_as_its_scope` (the description began "Use for OpenMetadata catalog
   work"). Guarding the split, passing before and after: `test_the_catalog_skill_is_not_the_home_of_openmetadata_mechanics`,
   `test_the_openmetadata_skill_says_it_holds_only_that_catalogs_mechanics`
-- [x] The local-server doc of the openmetadata skill says `edgartools-catalog` is the instance kept running and the isolated
-  `edgartools-openmetadata` one is started for an isolated rebuild or test and stopped after (2026-11-18 10:02 ET; the skill lints pass)
-- [x] The isolated `edgartools-openmetadata` stack (port 8587) is stopped, its volumes kept, so it can be started again; the
-  `edgartools-catalog` stack (port 8585) runs (2026-11-18 10:02 ET; `docker ps`: three containers of `edgartools-catalog` remain)
+- [x] I stopped the isolated `edgartools-openmetadata` stack (port 8587) to save memory, reading the operator's answer as a
+  choice of stack; the repository's tooling targets that stack (`init.sh` refuses any other URL; credentials and publish default
+  to it), so it broke the catalog init and publish path. Restarted, both stacks run (2026-11-18 10:06 ET; `docker ps`). The decision stays
+  open: see part 5
+- [x] Spec review, three findings fixed (2026-11-18 10:06 ET): the generic skill named the OpenMetadata publisher's commands
+  (`rules catalog plan|publish|check`; the test caught only `publish`: `AssertionError: ['rules catalog plan', 'rules catalog plan']`
+  once it covered all three), the sibling-skill pointer went to a file that does not describe a skill's layout (it now points
+  to the openmetadata skill's layout and PORTABILITY for qualification), and the duplicated processing-layer rule in the
+  openmetadata skill is a link
+- [ ] The operator decides which stack to retire, for memory: the prior `edgartools-catalog` (8585, whose compose file is not in the
+  repository) or `edgartools-openmetadata` (8587, which every script targets). Recommendation: retire the prior one; the tooling
+  needs 8587
+- [ ] ~~Business-meaning passages in the openmetadata skill move to data-catalog~~ deferred to
+  .scratch/catalog-skill-routing/issues/02-move-business-meaning-out-of-the-openmetadata-skill.md: glossary scope rules (lines
+  233-250) and the domain-membership rule (182-183) are generic, and moving them touches the skill's references
 - [x] Learning → skill: data-catalog "Choose the catalog's own skill"; openmetadata LOCAL-SERVER (2026-11-18 10:02 ET)
