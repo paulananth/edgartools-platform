@@ -116,8 +116,8 @@ store's: the run stops and asks, changing nothing; `--adopt-state` says it is th
 Masters come first and each source's silver target last, so silver rows find their masters as they land; a silver step
 needs none before it (a row lands with its link key, and `--finish` fills the master ids). A source's later
 delivery is a new publication and carries the next `--revision`. The chain stops at the first step that does not finish
-in its attempts and names why in that step's log. After the last step it builds the lookups and the links table, once
-each, and fills each silver table's master ids (`--finish` runs only those). Check a running chain every 30 minutes; a step that stops reports at its
+in its attempts and names why in that step's log. After the last step it builds the links table once and fills each silver table's master ids (`--finish` runs only those; the
+name-search lookups are built only on `--finish --lookups`, since a load reads none of them and only the context search does). Check a running chain every 30 minutes; a step that stops reports at its
 check, never on a tighter loop.
 
 ### The links table is built once
@@ -135,7 +135,7 @@ record that finds no master and releases it when a later file gives one, so a lo
 rules state three kinds of ordering:
 
 - **Must** (a load leaves something out otherwise). A target that publishes a second batch of its source's records follows the
-  target that publishes the first. The lookups, the links table and each silver table's master ids follow every load (`--finish`).
+  target that publishes the first. The links table and each silver table's master ids follow every load (`--finish`).
 - **Prefer** (records wait until the other load is done; never wrong, only later). A source with a
   matching rule that waits follows the source the rule names (`holder_source`), else the sources whose minting rules use the
   same identifier namespace, else the sources that mint its kind. Links set no order. Two sources that each prefer the

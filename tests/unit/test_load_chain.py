@@ -1,5 +1,6 @@
 """The load chain names every target a store loads, each with the facts its target declares."""
 import importlib.util
+import sys
 from pathlib import Path
 
 import pytest
@@ -846,3 +847,22 @@ def test_the_start_count_and_the_rescale_use_each_steps_own_measured_range(monke
     assert dict(started) == {"gleif": 10, "plain": 8}
     assert chain.rescale({"gleif": 5}, {"gleif": 1}, "low", {"gleif": (1, 10)}) == ("gleif", 10)
     assert chain.rescale({"gleif": 5}, {"gleif": 1}, "low", {"gleif": (1, 8)}) == ("gleif", 8)
+
+
+def test_a_load_does_not_build_the_name_search_lookups_and_they_are_built_only_when_asked(monkeypatch):
+    """Nothing a load does reads them: only the context search does, and it refuses until they are built."""
+    calls = []
+    monkeypatch.setattr(chain, "run", lambda args, env, log=None: calls.append(args) or 0)
+    monkeypatch.setattr(chain, "note", lambda message, state: None)
+    chain.finish({}, Path("/dev/null"))
+    assert ["mdm", "build-lookups"] not in calls and ["silver", "links"] in calls
+    calls.clear()
+    chain.finish({}, Path("/dev/null"), lookups=True)
+    assert calls[0] == ["mdm", "build-lookups"]  # asked for: built first, then the links and the master ids
+    assert ["silver", "links"] in calls
+
+
+def test_lookups_are_refused_beside_a_partial_run_that_would_never_reach_them(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["load_chain.py", "--lookups", "--lane", "A"])
+    assert chain.main() == 2
+    assert "--lookups" in capsys.readouterr().err
