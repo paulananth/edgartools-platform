@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[2] / "skills/data-platform/scripts"))
 
-from provision_hosted_store import Refused, ensure_reader, logins, main, provision, read_urls, rewrite
+from provision_hosted_store import Refused, ensure_reader, logins, main, provision, read_urls, retire, rewrite
 
 OLD = "old.invalid"
 
@@ -223,3 +223,49 @@ def test_every_runtime_url_in_worker_env_becomes_the_loader_login_and_the_old_fi
     assert "m-invented" in (folder / "worker.env.before-loader").read_text()
     assert (folder / "worker.env.before-loader").stat().st_mode & 0o777 == 0o600
     assert use_loader(folder) == 0  # already the loader: nothing changes, the kept file stays
+
+
+class _Roles(_EmptyServer):
+    """An instance whose runtime roles may log in (`login`) and have sessions (`sessions`, by role)."""
+
+    def __init__(self, login=True, sessions=None):
+        super().__init__()
+        self.login, self.sessions, self.asked = login, sessions or {}, None
+
+    def execute(self, statement, *args):
+        super().execute(statement, *args)
+        self.asked = args[0][0] if args else None
+
+    def fetchone(self):
+        if "rolcanlogin" in self.last:
+            return (self.login,) if self.login is not None else None
+        if "pg_stat_activity" in self.last:
+            return (self.sessions.get(self.asked, 0),)
+        return None
+
+
+def test_the_six_runtime_logins_become_groups_and_the_loader_is_never_touched():
+    server = _Roles()
+    assert retire(server, confirm=False) == [f"would retire {role}: NOLOGIN" for role in RUNTIME]
+    assert not [statement for statement in server.statements if "ALTER ROLE" in statement]  # a listing changes nothing
+    server = _Roles()
+    steps = retire(server, confirm=True)
+    assert steps == [f"retire {role}: NOLOGIN" for role in RUNTIME]
+    altered = [statement for statement in server.statements if "ALTER ROLE" in statement]
+    assert altered == [f'ALTER ROLE "{role}" NOLOGIN' for role in RUNTIME]  # each runtime role, and no other
+    assert "edgar_loader" not in " ".join(altered)
+
+
+def test_a_runtime_login_a_session_still_holds_refuses_before_any_is_retired():
+    server = _Roles(sessions={"rdm_runtime": 2})
+    with pytest.raises(Refused, match="rdm_runtime has 2 sessions"):
+        retire(server, confirm=True)
+    assert not [statement for statement in server.statements if "ALTER ROLE" in statement]  # mdm_runtime, first in line, was not changed
+
+
+def test_a_role_that_cannot_log_in_or_is_absent_is_left_alone():
+    for login in (False, None):
+        server = _Roles(login=login)
+        steps = retire(server, confirm=True)
+        assert all("cannot log in already" in step for step in steps) and len(steps) == len(RUNTIME)
+        assert not [statement for statement in server.statements if "ALTER ROLE" in statement]

@@ -3,6 +3,7 @@
 
     python <this skill>/scripts/provision_hosted_store.py --service <pg service>            # lists what it would do
     python <this skill>/scripts/provision_hosted_store.py --service <pg service> --confirm  # does it
+    ... --loader   every load uses the one login edgar_loader        ... --retire   the six runtime logins become NOLOGIN groups
 
 The stores folder (default ~/.config/edgartools/hosted/) is authoritative: each login is created with the password its
 own URL there holds, so no login is rotated. The instance's administrator comes from the PostgreSQL service the
@@ -175,6 +176,31 @@ def ensure_reader(folder: Path, host: str, port: int) -> bool:
     return True
 
 
+def retire(conn, confirm: bool) -> list[str]:
+    """The runtime roles stop being logins once every load uses `edgar_loader`: each becomes a NOLOGIN group, and the loader
+    keeps its privileges through its membership. Refused, with nothing changed, while any session still holds one (a load
+    started before the one login), so retire them after such a load ends. A role that cannot log in, or does not exist,
+    is left alone."""
+    steps, change = [], []
+    with conn.cursor() as cur:
+        for role in RUNTIME_ROLES:
+            cur.execute("SELECT rolcanlogin FROM pg_roles WHERE rolname = %s", (role,))
+            found = cur.fetchone()
+            if not found or not found[0]:
+                steps.append(f"{role} cannot log in already")
+                continue
+            cur.execute("SELECT count(*) FROM pg_stat_activity WHERE usename = %s", (role,))
+            sessions = cur.fetchone()[0]
+            if sessions:
+                raise Refused(f"{role} has {sessions} sessions: a load started before the one login still holds it")
+            change.append(role)
+            steps.append(f"{'retire' if confirm else 'would retire'} {role}: NOLOGIN")
+        if confirm:
+            for role in change:  # the names are the fixed RUNTIME_ROLES, never read from anywhere
+                cur.execute(f'ALTER ROLE "{role}" NOLOGIN')
+    return steps
+
+
 def administrator(service: str) -> dict[str, str]:
     """Host, port, user and password of the service the instance's creation saved."""
     services = configparser.ConfigParser()
@@ -263,6 +289,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--confirm", action="store_true", help="Do it (without it, only list it)")
     parser.add_argument("--loader", action="store_true",
                         help=f"Point every runtime URL in worker.env at the one login {LOADER}, which creates nothing")
+    parser.add_argument("--retire", action="store_true",
+                        help="Make the six runtime logins NOLOGIN groups (refused while a session holds one; run after the loads that started under them end)")
     args = parser.parse_args(argv)
     try:
         import psycopg2
@@ -284,6 +312,9 @@ def main(argv: list[str] | None = None) -> int:
         try:
             for step in provision(conn, held, admin["user"], args.confirm):
                 print(step)
+            if args.retire:
+                for step in retire(conn, args.confirm):
+                    print(step)
         finally:
             conn.close()
         if args.confirm and LOADER in held:
