@@ -1145,5 +1145,17 @@ def test_a_running_step_is_moved_at_most_once_in_ten_minutes_however_the_pressur
     swings = iter(["low", "high"] * 40)
     monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: next(swings))
     chain.auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=25))
-    assert len(started) - 1 <= 2  # the start, then one move in the first ten minutes and one in the next, not a move a minute
+    assert len(started) - 1 <= 4  # a raise, its shedding the next minute, and the same again ten minutes later: not a move a minute
     assert len(started) - 1 >= 1  # and a step is still moved when the machine says so
+
+
+def test_a_pressed_machine_sheds_the_step_with_the_shortest_chain_even_when_it_moved_lately(monkeypatch, tmp_path):
+    steps = [_step("long", "A", minutes=600), _step("short", "B", minutes=60)]
+    for step in steps:
+        step["workers"] = 8
+    state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=5)
+    levels = iter(["ok", "ok", "high", "high", "high", "high"])
+    monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: next(levels, "high"))
+    chain.auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=30))
+    moves = [move for move in started[2:]]
+    assert moves[:2] == [("short", 4), ("short", 2)]  # the second shed lands on the same step: its last move does not shield it

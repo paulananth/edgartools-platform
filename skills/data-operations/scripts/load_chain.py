@@ -190,7 +190,7 @@ def swap_fraction(text: str) -> float | None:
     return float(found.group(2)) / float(found.group(1)) if found and float(found.group(1)) else None
 
 
-MOVE_EVERY = timedelta(minutes=10)  # a step is moved (stopped and started again) at most this often: each move abandons its bundles in flight
+MOVE_EVERY = timedelta(minutes=10)  # a step is raised (stopped and started again) at most this often: each move abandons its bundles in flight
 WORKER_GB = 0.5  # the memory a worker is sized for
 WORKERS_PER_VCPU = 4  # a worker waits on the database much of the time, so a vCPU carries several
 
@@ -407,7 +407,8 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
             count = min(max(by_name[name].get("workers", low), low), top)
             note(f"scheduler starts {name} at {count} workers", state)
             spawn(name, count)
-        settled = {name for name in workers if clock() - moved.get(name, began[name]) >= MOVE_EVERY}  # not moved lately
+        # Raising a step waits for it to settle; a pressed machine sheds the step with the shortest chain at once, whenever it last moved
+        settled = set(workers) if level == "high" else {name for name in workers if clock() - moved.get(name, began[name]) >= MOVE_EVERY}
         if not starts and (change := rescale({n: workers[n] for n in settled}, {n: length[n] for n in settled}, level,
                                              {n: range_of(n) for n in settled})):
             name, count = change
