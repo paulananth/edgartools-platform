@@ -95,7 +95,8 @@ rest carry on, and the scheduler stops, naming what cannot start, when nothing e
 **A fresh store starts a fresh state file.** The chain's `done` lines are read from `chain-<RUN>.log`, and a line from an
 earlier store satisfies a wait it never earned. Move the old file aside before the first run of a store.
 
-Masters come first and each source's silver target last, so silver rows find their masters as they land. A source's later
+Masters come first and each source's silver target last, so silver rows find their masters as they land; a silver step
+needs none before it (a row lands with its link key, and `--finish` fills the master ids). A source's later
 delivery is a new publication and carries the next `--revision`. The chain stops at the first step that does not finish
 in its attempts and names why in that step's log. After the last step it builds the lookups and the links table, once
 each, and fills each silver table's master ids (`--finish` runs only those). Check a running chain every 30 minutes; a step that stops reports at its
@@ -124,13 +125,13 @@ rules state three kinds of ordering:
 - **Alone** (these take turns; they are not dependencies). Merges of one kind of master data that merge golden records or create them by exact name (one that joins stored ones, or creates by an identifier, runs beside the others), and two loads of one source and target (their outputs would collide).
 
 Everything else runs at the same time. The chain file turns that into lanes: `lane` marks steps that may run together,
-`waits_for` is exactly the edges above that cross lanes, and a test holds the chain equal to the inference, so a rule change
-that adds a dependency fails the test until the chain follows it.
+`waits_for` is the edges above that cross lanes, and tests hold every wait to an inferred edge and every inferred edge to a
+wait or an earlier step of its lane, so a rule change that adds a dependency fails a test until the chain follows it.
 
 By hand, instead of `--auto`:
 
 ```bash
-for lane in A P S C L O D F G N; do python <data-operations skill>/scripts/load_chain.py --lane $lane & done   # ten lanes, one process each
+for lane in A P S C L O D F G N Q; do python <data-operations skill>/scripts/load_chain.py --lane $lane & done   # eleven lanes, one process each
 python <data-operations skill>/scripts/load_chain.py --finish          # once every lane reports its last step done
 ```
 
@@ -148,7 +149,8 @@ the rules, not from a lane's habit:
    so it has a lane of its own and starts when those are done).
 3. Keep steps in one lane only when they must take turns (merges of one kind of master data that join stored records,
    or two loads of one source and target) or when each is too short to matter.
-4. Order the lanes' steps longest chain first, and start every lane at once.
+4. Order a lane's steps by what must follow, and start every lane at once. `--auto` starts first the ready step whose own
+   `minutes` plus the longest chain of steps that follow it is largest.
 5. Read the critical path from the logs, not the plan: the step still running when every other lane is done sets the
    total. If it is not the step the plan named, a step waited for something the rules do not state; fix the chain file
    and its test (`tests/unit/test_load_chain.py` holds each wait equal to the inference), then the lane.

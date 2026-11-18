@@ -78,15 +78,37 @@ def blocked(steps: list[dict], failed: set[str]) -> set[str]:
         stuck |= more
 
 
+def chain_length(steps: list[dict]) -> dict[str, int]:
+    """Each step's own `minutes` plus the longest chain of steps that must follow it. `minutes` bounds one attempt, so
+    this is a proxy for how long the steps behind a step wait, which is what starting the long chains first is for."""
+    after: dict[str, list[str]] = {step["name"]: [] for step in steps}
+    for name, before in needs(steps).items():
+        for earlier in before:
+            after[earlier].append(name)
+    minutes, memo, walking = {s["name"]: s["minutes"] for s in steps}, {}, set()
+
+    def total(name: str) -> int:
+        if name in walking:  # a cycle of waits: counted once, and `auto` stops on it
+            return 0
+        if name not in memo:
+            walking.add(name)
+            memo[name] = minutes[name] + max((total(later) for later in after[name]), default=0)
+            walking.discard(name)
+        return memo[name]
+
+    return {name: total(name) for name in minutes}
+
+
 def ready(steps: list[dict], done: set[str], running: set[str], failed: set[str], free: int,
           busy: frozenset | set = frozenset()) -> list[str]:
     """The steps to start now: each follows only done steps, is not blocked by a failure, and does not share its source
-    and target with a load already running (two loads of one pair write the same outputs). The longest chain first,
-    judged by the step's `minutes` (a bound on one attempt, so only a proxy for its length); at most `free`."""
+    and target with a load already running (two loads of one pair write the same outputs). The longest chain first (see
+    `chain_length`); at most `free`."""
     follows, stuck = needs(steps), blocked(steps, failed)
+    length = chain_length(steps)
     taken = set(busy) | {(s["source"], s["target"]) for s in steps if s["name"] in running}
     chosen: list[dict] = []
-    for step in sorted(steps, key=lambda s: -s["minutes"]):
+    for step in sorted(steps, key=lambda s: -length[s["name"]]):
         pair = (step["source"], step["target"])
         if (step["name"] in done or step["name"] in running or step["name"] in failed or step["name"] in stuck
                 or not follows[step["name"]] <= done or pair in taken or len(chosen) >= free):
@@ -94,14 +116,6 @@ def ready(steps: list[dict], done: set[str], running: set[str], failed: set[str]
         chosen.append(step)
         taken.add(pair)
     return [step["name"] for step in chosen]
-
-
-def stalled(steps: list[dict], done: set[str], running: set[str], failed: set[str]) -> list[str]:
-    """The steps that can never start: nothing runs, and each is blocked by a failure or follows one that is."""
-    if running:
-        return []
-    stuck = blocked(steps, failed)
-    return [s["name"] for s in steps if s["name"] in stuck and s["name"] not in done]
 
 
 def swap_fraction(text: str) -> float | None:

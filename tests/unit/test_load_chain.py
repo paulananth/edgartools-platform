@@ -113,11 +113,12 @@ def test_the_chain_builds_the_links_table_once_after_the_loads_and_no_target_bui
     assert calls.count(["silver", "links"]) == 1 and calls.index(["silver", "links"]) < calls.index(next(c for c in calls if c[1] == "refresh-ids"))
 
 
-def test_the_chain_has_ten_lanes_and_company_facts_is_beside_the_other_silver_only_sources():
+def test_the_chain_has_eleven_lanes_and_company_facts_is_beside_the_other_silver_only_sources():
     """GLEIF and N-PORT silver each have a lane: neither waits for the Securities that came before in one lane."""
-    assert {step["lane"] for step in STEPS} == set("APSCLODFGN")
+    assert {step["lane"] for step in STEPS} == set("APSCLODFGNQ")
     assert {s["lane"] for s in STEPS if s["source"] == "gleif"} == {"G"}
     assert {s["lane"] for s in STEPS if s["name"] == "nport-security-silver"} == {"N"}
+    assert {s["lane"] for s in STEPS if s["name"].startswith("nport-security") and s["target"] != "silver"} == {"Q"}
     assert {s["lane"] for s in STEPS if s["source"] == "sec.company-facts"} == {"F"}
 
 
@@ -128,10 +129,10 @@ def test_every_step_starts_at_two_workers_and_stays_at_most_eight():
     assert max(counts.values()) <= 8, counts
 
 
-def test_the_skill_names_ten_lanes_and_the_two_to_eight_worker_scale():
+def test_the_skill_names_eleven_lanes_and_the_two_to_eight_worker_scale():
     skill = (ROOT / "skills/data-operations/SKILL.md").read_text()
     runbook = (ROOT / "docs/runbooks/edgar-intelligence/init.md").read_text()
-    assert "A P S C L O D F G N" in skill and "A P S C L O D F G N" in runbook
+    assert "A P S C L O D F G N Q" in skill and "A P S C L O D F G N Q" in runbook
     assert "Start `--workers 2`" in skill
     assert "scales to 8" in skill
 
@@ -252,12 +253,6 @@ def test_the_machine_has_headroom_only_below_the_load_and_swap_limits():
     assert chain.has_headroom(load=2.0, cores=8, swap_used=None)  # no reading is no reason to wait
 
 
-def test_the_scheduler_stops_when_nothing_runs_nothing_is_ready_and_a_step_is_blocked():
-    steps = [_step("a1", "A"), _step("a2", "A")]
-    assert chain.stalled(steps, done=set(), running=set(), failed={"a1"}) == ["a2"]
-    assert chain.stalled(steps, done={"a1", "a2"}, running=set(), failed=set()) == []
-    assert chain.stalled(steps, done=set(), running={"a1"}, failed=set()) == []
-
 
 class _Child:
     """A started step that has already ended with `code`."""
@@ -318,3 +313,19 @@ def test_the_scheduler_carries_on_past_a_failed_step_and_stops_when_only_blocked
     state, started = _scheduler(monkeypatch, tmp_path, {"a1": 1, "a2": 0, "c1": 0})
     assert chain.auto(steps, state, slots=2) == 1
     assert sorted(started) == ["a1", "c1"]  # a2 follows the failed a1 and never starts
+
+
+def test_a_short_step_that_gates_a_long_tail_starts_before_a_longer_step_that_gates_nothing():
+    steps = [_step("gate", "A", minutes=10), _step("tail", "B", minutes=300, waits=["gate"]),
+             _step("alone", "C", minutes=120)]
+    assert chain.chain_length(steps) == {"gate": 310, "tail": 300, "alone": 120}
+    assert chain.ready(steps, set(), set(), set(), free=1) == ["gate"]
+
+
+def test_a_failure_with_low_headroom_does_not_stop_the_scheduler_while_a_step_can_still_start(monkeypatch, tmp_path):
+    steps = [_step("a1", "A"), _step("a2", "A"), _step("c1", "C")]
+    state, started = _scheduler(monkeypatch, tmp_path, {"a1": 1, "a2": 0, "c1": 0})
+    readings = iter([True, False, False, True, True, True, True, True, True])
+    monkeypatch.setattr(chain, "machine_headroom", lambda: next(readings))
+    assert chain.auto(steps, state, slots=2) == 1
+    assert "c1" in started  # the machine was too busy for two cycles, and the chain waited rather than stopping

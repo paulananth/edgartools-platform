@@ -4,12 +4,13 @@
 # `{run}` in a fact is the chain's run label. `minutes` bounds one attempt, which carries on where the last stopped.
 # Steps that may run at the same time are in different `lane`s, and `waits_for` names a step of another lane that must
 # be done first. Each lane runs its steps in file order (`load_chain.py --lane <name>`), so every lane can start at once.
-# Every `waits_for` comes from `infer_dependencies.py` (what the rules declare; a test holds the two equal), never from
+# Every `waits_for` comes from `infer_dependencies.py` (what the rules declare; tests hold each wait to an inferred edge
+# and each inferred edge to a wait or an earlier step of its lane), never from
 # a machine's size: a load waits only for the source whose golden records its own records join. Links set no order:
 # the links table is built once, after the last load (`load_chain.py --finish`).
-# Ten lanes: A the Companies the others follow; P the Persons; S the Securities; C the other Companies; L funds, share
-# classes and N-PORT Securities; G GLEIF and what follows it (it joins only the SEC Company masters, so it starts when
-# those are done); N N-PORT silver (it needs no master but its funds' and registrants');
+# Eleven lanes: A the Companies the others follow; P the Persons; S the Securities; C the other Companies; L funds and
+# share classes; Q N-PORT Securities (they wait for no fund); G GLEIF and what follows it (it joins only the SEC Company masters, so it starts when
+# those are done); N N-PORT silver (no master first: a row lands with its link key and `--finish` fills the ids);
 # O ownership; D the other silver-only sources; F company-facts.
 version: 1
 # What a step takes unless it says otherwise.
@@ -202,14 +203,14 @@ steps:
     minutes: 60
     attempts: 3
   - name: nport-security
-    lane: L
+    lane: Q
     source: sec.nport.security
     target: mastering
     capture: sec.nport-datasets/2026q2
     minutes: 480
     attempts: 8
   - name: nport-security-other-keys
-    lane: L
+    lane: Q
     source: sec.nport.security
     target: mastering_other_keys
     capture: sec.nport-datasets/2026q2
@@ -217,7 +218,7 @@ steps:
     attempts: 3
   - name: ncen-class-2025q4
     lane: L
-    waits_for: [openfigi-tickers, 13f-securities]
+    waits_for: [openfigi-tickers, 13f-securities, nport-security-other-keys]
     source: sec.ncen.class
     target: mastering
     capture: sec.ncen-datasets/2025q4
