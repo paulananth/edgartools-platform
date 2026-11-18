@@ -1,6 +1,7 @@
 # Find the root cause: five whys, silently
 
-Part of the `data-platform` skill. Every data skill (operate, onboard, bookkeeping, recover) applies it; none copies it.
+Part of the `data-platform` skill. The data skills (operate, onboard, refine, profile, quality, journal, bookkeeping) link it where
+they handle a failure or a surprise; none copies it.
 
 A result that surprises, a step that fails, two readings that disagree, or a fix that would treat a symptom is not
 finished until its root cause is found. Run the whys yourself. The operator reads the conclusion, never the chain: do not
@@ -31,11 +32,12 @@ narrate each why, and do not ask the operator what a log, a query, a test or the
 5. **Look sideways once.** Ask where else the same cause sits (the other sources, stores, lanes, readers) and fix or list
    what you find, so the lesson is not learned twice.
 6. **Put the lesson where it belongs**: a skill or runbook line for a method or rule; a ticket for the work; never only in
-   a conversation. Use the repository's four lines: Problem, Root cause, Fix, Lesson.
+   a conversation. Use the repository's lines: Problem, Root cause, Fix, Lesson, in four to eight lines.
 
 ## What you report
 
-Four lines at most, in business words: what was seen, the cause and the evidence for it (the one or two facts that prove
+Four lines in business words, in addition to anything the repository requires in a report (the elapsed time of a step over ten
+minutes; "incomplete" and the unchecked part for a ticket): what was seen, the cause and the evidence for it (the one or two facts that prove
 it), what was changed and how it was proved, and what remains open and why. Not the whys, not the dead ends, not "I checked
 X". If the evidence points two ways, say so and what would decide it.
 

@@ -1,6 +1,6 @@
 # Can GLEIF run 16 workers, or the same load on several lanes?
 
-Status: open
+Status: resolved
 Type: task
 
 Operator, 2026-11-18: "Can you scale up to 16 workers or can you run the same load on multiple lanes: GLEIF". Answered from
@@ -30,7 +30,7 @@ measurements on the running hosted load.
   the memory carries more of them (2026-11-18 09:54 ET; `test_a_workers_range_can_use_a_steps_measured_memory_not_only_the_default_share`)
 - [x] The status says its rows a minute are counted when a transaction commits: GLEIF's long transactions showed none for a
   minute and a burst the next (2026-11-18 09:54 ET; `test_the_status_header_says_writes_are_counted_at_commit`)
-- [ ] 16 workers on a task with the memory and vCPUs (about 6 GB and 3 cores), measured against 8: whether it shortens the
-  merge. Not run: no such compute exists here, and the AWS sizes are small, medium and large
+- [ ] ~~16 workers on a task with the memory and vCPUs, measured against 8~~ deferred to .scratch/gleif-scaling/issues/02-measure-16-workers.md: no
+  compute here carries them (about 6 GB, 3 cores), and the AWS sizes are small, medium and large
 - [x] Learning → skill: the data-operations skill, "Report a running load from its evidence", reads a step's workers by its
   process tree (2026-11-18 09:54 ET)

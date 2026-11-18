@@ -19,6 +19,8 @@ with merge rules.
 - you are running a feed, or recovering a run: use **bookkeeping**;
 - you are recording or recovering journal evidence: use **change-journal**.
 
+A failure, a surprise or two readings that disagree: find the root cause first, by the [five whys](../data-platform/ROOT-CAUSE.md), silently, and report the conclusion.
+
 ## Hard stops
 
 | Never | Instead |

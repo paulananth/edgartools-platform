@@ -14,11 +14,8 @@ load and never starts or resumes one ([execution boundary](../openmetadata/SKILL
 
 ## Find the root cause, silently
 
-A step that fails, a reading that disagrees with another (idle by CPU, busy by rows), a retry about to be the fix, or a
-surprising time: find the root cause with the [five whys](../data-platform/ROOT-CAUSE.md) before acting or reporting. Doubt the
-reading first (what does it count, what can it not see), answer each why from the log, the database or the code, fix the cause
-with a test, look once for the same cause elsewhere, and report four lines at most: seen, cause and its evidence, fixed and
-proved, open. Never the chain of whys, and never a question the evidence can answer.
+A step that fails, a reading that disagrees with another, a retry about to be the fix, or a surprising time: find the root
+cause by the [five whys](../data-platform/ROOT-CAUSE.md) before acting or reporting, silently, and report the conclusion.
 
 ## Report a running load from its evidence
 

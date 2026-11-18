@@ -61,7 +61,12 @@ def load_env(path: Path) -> dict:
 def chain_steps(path: Path = ROOT / "rules/load-chain.yaml") -> list[dict]:
     """The chain's steps, each with the chain's `defaults` for what it does not say itself."""
     chain = yaml.safe_load(path.read_text())
-    return [{**(chain.get("defaults") or {}), **step} for step in chain["steps"]]
+    steps = [{**(chain.get("defaults") or {}), **step} for step in chain["steps"]]
+    for step in steps:
+        measured = step.get("worker_gb")
+        if measured is not None and not (isinstance(measured, (int, float)) and 0.01 <= measured <= 64):
+            raise ValueError(f"{step['name']}: worker_gb must be a number from 0.01 to 64 gigabytes, not {measured!r}")
+    return steps
 
 
 def needs(steps: list[dict]) -> dict[str, set[str]]:
@@ -179,7 +184,7 @@ def workers_range(vcpu: float, memory_gb: float, worker_gb: float = WORKER_GB) -
     """The workers a task can carry, from what it has: its memory in worker-sized shares (`worker_gb`, half a gigabyte
     unless a step has been measured smaller), at most four to a vCPU, never fewer than one. The range follows the compute
     (a 1 vCPU, 4 GB task carries up to 4; 2 vCPU, 8 GB up to 8), so it is the configuration's, never a fixed two to eight."""
-    return 1, max(1, min(int(memory_gb // worker_gb), int(vcpu * WORKERS_PER_VCPU)))
+    return 1, max(1, min(int(memory_gb / worker_gb + 1e-9), int(vcpu * WORKERS_PER_VCPU)))
 
 
 def capacity_profiles(path: Path = ROOT / "rules/load-chain.yaml") -> dict[str, dict]:
@@ -227,28 +232,27 @@ def machine_pressure(relaxed: bool = False) -> str:
     return pressure(os.getloadavg()[0], os.cpu_count() or 1, swap_fraction(swap), relaxed)
 
 
-def clamped(steps: list[dict], bounds: tuple[int, int] | str, capacity: tuple[float, float] | None = None) -> list[dict]:
-    """The steps with each one's workers held to the capacity's range, whatever the run mode: the chain file asks for
-    what a step wants, the compute says what a task carries. Given a capacity name, each step's range uses its own
-    measured `worker_gb` where the chain file has one (`capacity` overrides the named compute, for a test)."""
+def clamped(steps: list[dict], name: str, capacity: tuple[float, float] | None = None) -> list[dict]:
+    """The steps with each one's workers held to the named capacity's range, whatever the run mode: the chain file asks
+    for what a step wants, the compute says what a task carries. Each step's range uses its own measured `worker_gb`
+    where the chain file has one (`capacity` replaces the named compute, for a test)."""
     held = []
     for step in steps:
-        low, top = bounds if isinstance(bounds, tuple) else workers_range(
-            *(capacity or capacity_of(bounds)), step.get("worker_gb", WORKER_GB))
+        low, top = workers_range(*(capacity or capacity_of(name)), step.get("worker_gb", WORKER_GB))
         held.append({**step, "workers": min(max(step["workers"], low), top)})
     return held
 
 
-def rescale(workers: dict[str, int], priority: dict[str, int], level: str, bounds: tuple[int, int]) -> tuple[str, int] | None:
-    """One change of workers within the capacity's `bounds`: with room (`low`) the step with the longest chain behind it
-    doubles, up to the top; when pressed (`high`) the step with the shortest halves, down to the floor. Anything else
-    changes nothing."""
-    low, top = bounds
+def rescale(workers: dict[str, int], priority: dict[str, int], level: str, bounds: dict[str, tuple[int, int]]) -> tuple[str, int] | None:
+    """One change of workers within each step's own range (`bounds` by step: the capacity's, for the step's measured
+    memory): with room (`low`) the step with the longest chain behind it doubles, up to its top; when pressed (`high`) the
+    step with the shortest halves, down to its floor. Anything else changes nothing."""
     order = sorted(workers, key=lambda name: -priority[name])
     if level == "low":
-        return next(((name, min(top, workers[name] * 2)) for name in order if workers[name] < top), None)
+        return next(((name, min(bounds[name][1], workers[name] * 2)) for name in order if workers[name] < bounds[name][1]), None)
     if level == "high":
-        return next(((name, max(low, workers[name] // 2)) for name in reversed(order) if workers[name] > low), None)
+        return next(((name, max(bounds[name][0], workers[name] // 2)) for name in reversed(order)
+                     if workers[name] > bounds[name][0]), None)
     return None
 
 
@@ -321,7 +325,9 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
     deadline every step this started is stopped and the run ends, naming what is left. A step that uses up its attempts
     blocks what follows it and the rest carry on. Ends when every step is done (then the lookups and the links), when
     nothing more can start, or at the deadline."""
-    bounds = bounds or bounds_for("local")
+    def range_of(name: str) -> tuple[int, int]:
+        return bounds or bounds_for(capacity, by_name[name].get("worker_gb", WORKER_GB))
+
     children: dict[str, subprocess.Popen] = {}
     workers: dict[str, int] = {}
     failed: set[str] = set()
@@ -374,10 +380,11 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
         free = slots - max(len(children), len(busy))
         starts = ready(steps, done, set(children), failed, 1, busy, estimate) if free > 0 and level != "high" else []
         for name in starts:
-            count = min(max(by_name[name].get("workers", bounds[0]), bounds[0]), bounds[1])
+            low, top = range_of(name)
+            count = min(max(by_name[name].get("workers", low), low), top)
             note(f"scheduler starts {name} at {count} workers", state)
             spawn(name, count)
-        if not starts and (change := rescale(workers, {name: length[name] for name in workers}, level, bounds)):
+        if not starts and (change := rescale(workers, {name: length[name] for name in workers}, level, {name: range_of(name) for name in workers})):
             name, count = change
             note(f"scheduler moves {name} from {workers[name]} to {count} workers ({level} load)", state)
             stop(children[name])
@@ -412,8 +419,12 @@ def cpu_seconds(text: str) -> float:
     """The CPU time of the processes in `ps -o time=` output (`M:SS.ss` or `H:MM:SS.ss`, one per line), summed."""
     total = 0.0
     for line in text.split():
-        parts = [float(part) for part in line.split(":")]
-        total += sum(value * 60 ** index for index, value in enumerate(reversed(parts)))
+        try:
+            days, _, clock_part = line.rpartition("-")
+            parts = [float(part) for part in clock_part.split(":")]
+        except ValueError:  # a time that is not one: no CPU counted, never an exception for the whole listing
+            continue
+        total += sum(value * 60 ** index for index, value in enumerate(reversed(parts))) + (float(days) * 86400 if days else 0.0)
     return total
 
 
@@ -518,8 +529,8 @@ def load_pids(listing: str, source: str, target: str) -> dict[int, float]:
     rows = {}
     for line in listing.splitlines():
         parts = line.split(None, 4)
-        if len(parts) == 5 and parts[0].isdigit():
-            rows[int(parts[0])] = (int(parts[1]), cpu_seconds(parts[2]), parts[4])
+        if len(parts) >= 4 and parts[0].isdigit() and parts[1].isdigit():
+            rows[int(parts[0])] = (int(parts[1]), cpu_seconds(parts[2]), parts[4] if len(parts) == 5 else "")
     found = {pid for pid, (_, _, args) in rows.items() if is_load_process(args, source, target)}
     grown = True
     while grown:
@@ -575,6 +586,7 @@ def status(steps: list[dict], state: Path, reader_url: str | None, sample: int =
     time.sleep(sample if before or running else 0)
     rate = writes_per_minute(before, database_writes(reader_url), sample) if before else {}
     waiters = (database_load(reader_url) or {}).get("lock_waiters", 0)
+    listing = subprocess.run(["ps", "-Ao", "pid,ppid,time,rss,args"], check=False, capture_output=True, text=True).stdout
     sessions = database_sessions(reader_url) if reader_url else {}
     lines = [f"{clock():%H:%M} ET: {len(running)} running, {len(done & {s['name'] for s in steps})} of {len(steps)} done; "
              f"database writes a minute: " + (", ".join(f"{k} {v:,.0f}" for k, v in rate.items() if v) or "none") +
@@ -597,8 +609,7 @@ def status(steps: list[dict], state: Path, reader_url: str | None, sample: int =
         warn = outlook(left, elapsed, step["minutes"], attempt, step["attempts"])
         shown = (f"bundles {progress[0]} of {progress[1]}" + (f", about {left:.0f} min left" if left else "")
                  if progress and progress[1] > 1 else "one document, so its log shows no progress; the database does")
-        started_with = load_workers(subprocess.run(["ps", "-Ao", "pid,ppid,time,rss,args"], check=False, capture_output=True,
-                                                   text=True).stdout, step["source"], step["target"])
+        started_with = load_workers(listing, step["source"], step["target"])
         lines.append(f"  {step['name']} (lane {step['lane']}, attempt {attempt}, {started_with or step.get('workers', 2)} workers): {elapsed:.0f} min of {step['minutes']}; "
                      f"{shown}; {count} processes, {cpu:.0f}% CPU, {memory:,.0f} MB; wrote {wrote}; log {age:.0f} min old; "
                      + verdict(elapsed, step["minutes"], age, cpu, mine, waiters, sharing) + (f"; {warn}" if warn else ""))
@@ -863,7 +874,7 @@ def main() -> int:
         elif args.deadline:
             hour, minute = map(int, args.deadline.split(":"))
             deadline = clock().replace(hour=hour, minute=minute, second=0, microsecond=0)
-        if auto(steps, state, args.slots, deadline=deadline, connections=args.connections, bounds=bounds_for(args.capacity), capacity=args.capacity,
+        if auto(steps, state, args.slots, deadline=deadline, connections=args.connections, capacity=args.capacity,
                 reader_url=load_env(STORES / "reader.env").get("DIAGNOSE_DATABASE_URL") if (STORES / "reader.env").exists() else None):
             return 1
         finish(env, state)
