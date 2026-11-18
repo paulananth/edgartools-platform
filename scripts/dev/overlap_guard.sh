@@ -63,7 +63,7 @@ if grep -q '^rules/' "$tmp/mine"; then
   python="${TEST_PYTHON:-.venv/bin/python}"
   if [[ -x "$python" ]]; then
     PYTHONPATH=. "$python" scripts/dev/rules_change_guard.py "$base" "$tmp/mine" --root rules \
-      || { echo "overlap_guard: STOP. A changed Rules document is refused or changes protected identity."; exit 1; }
+      || { echo "overlap_guard: STOP. A changed Rules document is refused or changes protected identity (or the check could not run: a ModuleNotFoundError above means set TEST_PYTHON to a Python with the engine's dependencies, such as another worktree's .venv/bin/python)."; exit 1; }
   else
     echo "overlap_guard: rules changed, not checked: no $python (set TEST_PYTHON)" >&2
   fi
