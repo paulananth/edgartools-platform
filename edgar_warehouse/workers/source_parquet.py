@@ -11,13 +11,17 @@ from datetime import date, datetime
 import io
 import json
 
-import pyarrow.parquet as pq
-import pyarrow._parquet as parquet_codec
+from importlib.util import find_spec
 from pathlib import Path
 
 
 def runtime_files():
-    return [Path(pq.__file__), Path(parquet_codec.__file__)]
+    """The files of the Parquet reader a run pins, found without importing it: pyarrow and numpy cost tens of megabytes
+    in every worker, and only a source that reads Parquet needs them."""
+    root = Path(find_spec("pyarrow").origin).parent
+    reader = root / "parquet" / "__init__.py"
+    return [reader if reader.exists() else root / "parquet.py",
+            next(path for path in sorted(root.glob("_parquet.*")) if path.suffix in (".so", ".pyd", ".dylib"))]
 
 
 def json_scalar(value):
@@ -54,6 +58,8 @@ def document(data, contract):
     take = settings.get("take")
     if take is not None and (type(take) is not int or not 1 <= take <= 1000):
         raise ValueError("Parquet take is 1..1000 or omitted")
+    import pyarrow.parquet as pq  # only a Parquet read pays for it
+
     parquet = pq.ParquetFile(io.BytesIO(data))
     # A take is a bounded sample of the authenticated physical file. Without
     # take, consume every projected row, including after the distinct set fills.

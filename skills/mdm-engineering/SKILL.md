@@ -184,6 +184,16 @@ it took; the last pass must change nothing.
 Never load "everything connected" to a batch. Through one shared end, a
 network of links makes every batch cost the whole network.
 
+## A worker's memory is its imports plus its data
+
+Every load runs several worker processes, and each pays for every library it imports before it reads a record. Import a
+library that only some sources need (Parquet's pyarrow, with numpy under it) inside the function that uses it, never at
+the top of a module a worker loads for every source. Measure before and after: `python -c` the modules a load imports and
+read `resource.getrusage(resource.RUSAGE_SELF).ru_maxrss`, and `footprint -p <pid>` on a running worker (macOS). A file a
+run pins (`runtime_files`) is named without importing it, so the processing identity does not change. A worker's data
+dominates a large load: bound what it holds (stream, never collect a whole file) before trimming a library.
+`tests/unit/test_worker_imports_stay_small.py` holds the line.
+
 ## Lookups and indexes
 
 On every engine, a list of keys is one index seek per key. A plan that scans

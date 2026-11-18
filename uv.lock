@@ -311,7 +311,6 @@ source = { editable = "." }
 dependencies = [
     { name = "httpx" },
     { name = "pyarrow" },
-    { name = "pytz" },
     { name = "pyyaml" },
 ]
 
@@ -365,7 +364,6 @@ requires-dist = [
     { name = "psycopg2-binary", marker = "extra == 'mdm'", specifier = ">=2.9.9" },
     { name = "psycopg2-binary", marker = "extra == 'mdm-runtime'", specifier = ">=2.9.9" },
     { name = "pyarrow", specifier = ">=17.0.0" },
-    { name = "pytz", specifier = ">=2024.1" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "source-contract", marker = "extra == 'engine'", directory = "crates/source-contract" },
     { name = "source-contract", marker = "extra == 'mdm'", directory = "crates/source-contract" },
