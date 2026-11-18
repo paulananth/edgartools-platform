@@ -10,7 +10,7 @@ Use an approved manifest and credential-free metadata snapshots. Run the parity 
 
 ```python
 import sys
-sys.path.insert(0, "skills/data-platform/scripts/exposure")
+sys.path.insert(0, "<SKILL_DIR>/scripts/exposure")
 from exposure_parity import check_parity
 report = check_parity(manifest, snowflake=snowflake_snapshot,
                       openmetadata=openmetadata_snapshot,
