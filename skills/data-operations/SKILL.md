@@ -75,6 +75,10 @@ statistics and the catalogs of each store (who holds what), never a table. Never
 runtime login: each can change or read data, and a diagnosis that needs more than the reader shows is a gap to name.
 `load_chain.py --auto` reads the database this way.
 
+The scheduler judges the machine by what is happening now: the load average against the cores, and memory free. Swap used presses
+only while memory is short, because the system keeps swap long after the load that filled it; reading swap alone holds every
+start back on a machine with memory to spare.
+
 ## Start with live state
 
 Resolve the requested environment, source and retained delivery from existing
