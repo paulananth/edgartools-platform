@@ -8,6 +8,7 @@
     python load_chain.py --only <step>        one step
     python load_chain.py --lane <name>        the steps of one lane; run several lanes at once (see the chain file)
     python load_chain.py --finish             only what follows the loads, once every lane is done
+    python load_chain.py --status             what each running step is doing: progress, rate, processes, a verdict
     python load_chain.py --auto [--slots N] [--hours H | --deadline HH:MM]
                                               watch the loads: start each step when its lane is free, move its
                                               workers (2 to 8) with the machine, stop at the deadline (see `auto`)
@@ -337,6 +338,171 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
         time.sleep(poll)
 
 
+def bundle_progress(text: str) -> tuple[int, int] | None:
+    """(bundles completed, bundles in all) from a step's log: the `run ... complete in` lines against the last
+    `Bundle i/N:` line. None when the log names no bundles."""
+    found = re.findall(r"^Bundle \d+/(\d+):", text, re.M)
+    return (len(re.findall(r"^\s+run \S+ complete in", text, re.M)), int(found[-1])) if found else None
+
+
+def minutes_left(done: int, total: int, elapsed: float) -> float | None:
+    """The minutes left at the rate so far; None before a bundle is done (no rate yet)."""
+    return None if done <= 0 else max(total - done, 0) * elapsed / done
+
+
+def writes_per_minute(before: dict[str, int], after: dict[str, int], seconds: float) -> dict[str, float]:
+    """Rows written a minute in each store, from two readings of its cumulative inserts, updates and deletes."""
+    return {name: max(after.get(name, count) - count, 0) * 60.0 / seconds for name, count in before.items()}
+
+
+def cpu_seconds(text: str) -> float:
+    """The CPU time of the processes in `ps -o time=` output (`M:SS.ss` or `H:MM:SS.ss`, one per line), summed."""
+    total = 0.0
+    for line in text.split():
+        parts = [float(part) for part in line.split(":")]
+        total += sum(value * 60 ** index for index, value in enumerate(reversed(parts)))
+    return total
+
+
+def cpu_percent(before: float, after: float, seconds: float) -> float:
+    """CPU percent over a window, from the CPU time used in it (`ps` shows a lifetime average, which hides work)."""
+    return max(after - before, 0.0) / seconds * 100.0
+
+
+def store_of(target: str) -> str:
+    """The store a target writes: the silver target writes silver; every other target is mastering's, in MDM."""
+    return "silver" if target == "silver" else "mdm"
+
+
+def outlook(left: float | None, elapsed: float, bound: int, attempt: int, attempts: int) -> str:
+    """A warning when the minutes left at the current rate exceed the time its remaining attempts allow (an attempt is
+    `bound` minutes; a stopped one resumes where it stopped). Empty when it fits, or when there is no rate yet."""
+    remaining = max(bound - elapsed, 0.0) + bound * (attempts - attempt)
+    if left is None or left <= remaining:
+        return ""
+    return (f"needs about {left:.0f} min but has {remaining:.0f} min left in its {attempts - attempt} remaining attempts: "
+            "raise its workers or its minutes")
+
+
+def verdict(elapsed: float, bound: int, log_age: float, cpu: float, writes_per_min: float, lock_waiters: int) -> str:
+    """A step's state by its own evidence: waiting on locks; progressing (it wrote rows, its processes work, or its log
+    moved in the last ten minutes); or no sign of work, which names what is silent. Past its bound is said first."""
+    late = f"past its bound of {bound} min; " if elapsed > bound else ""
+    if lock_waiters >= 3:  # the scheduler's own threshold: one waiting session is normal
+        return f"{late}waiting on database locks ({lock_waiters} sessions)"
+    if writes_per_min > 0 or cpu >= 5 or log_age < 10:
+        return f"{late}progressing"
+    return f"{late}no sign of work: no CPU, no rows written, log silent for {log_age:.0f} min; read its log, it may be stalled"
+
+
+STORE_DATABASES = ("mdm", "rdm", "rules", "bookkeeping", "change_journal", "silver")
+
+
+def database_writes(reader_url: str) -> dict[str, int]:
+    """Each store's cumulative rows inserted, updated and deleted, read as the diagnostic login (statistics, no table)."""
+    import psycopg2
+
+    totals = {}
+    for name in STORE_DATABASES:
+        url = re.sub(r"/[^/?]+((?:\?.*)?)$", rf"/{name}\1", reader_url.replace("postgresql+psycopg2", "postgresql"))
+        try:
+            with psycopg2.connect(url, connect_timeout=10) as conn, conn.cursor() as cur:
+                cur.execute("SELECT coalesce(sum(n_tup_ins + n_tup_upd + n_tup_del), 0) FROM pg_stat_user_tables")
+                totals[name] = int(cur.fetchone()[0])
+        except Exception:  # noqa: BLE001  a driver error can quote the address: no reading for this store
+            continue
+    return totals
+
+
+def session_summary(rows: list[tuple[str, str, int]]) -> dict[str, dict[str, int]]:
+    """Each store's sessions by what they do: working (active), or waiting on the client (idle, or idle in a
+    transaction): a session waiting on the client has asked the database for nothing, so the work is on the client."""
+    summary: dict[str, dict[str, int]] = {}
+    for database, state, count in rows:
+        counts = summary.setdefault(database, {"active": 0, "waiting_on_client": 0})
+        counts["active" if state == "active" else "waiting_on_client"] += count
+    return summary
+
+
+def session_note(database: str, counts: dict[str, int]) -> str:
+    note = f"{database}: {counts['active']} sessions working, {counts['waiting_on_client']} waiting on the client"
+    return note + ": client-bound, not the database" if counts["waiting_on_client"] > 4 * max(counts["active"], 1) else note
+
+
+def database_sessions(reader_url: str) -> dict[str, dict[str, int]]:
+    """Sessions of the loads on each store by state, read as the diagnostic login (state only, never a query)."""
+    import psycopg2
+
+    try:
+        with psycopg2.connect(reader_url.replace("postgresql+psycopg2", "postgresql"), connect_timeout=10) as conn, conn.cursor() as cur:
+            cur.execute("""SELECT datname, state, count(*) FROM pg_stat_activity WHERE datname = ANY(%s)
+                           AND usename <> current_user AND state IS NOT NULL GROUP BY 1, 2""", (list(STORE_DATABASES),))
+            return session_summary(cur.fetchall())
+    except Exception:  # noqa: BLE001  a driver error can quote the address: no reading
+        return {}
+
+
+def process_use(source: str, target: str) -> tuple[float, float, int]:
+    """CPU seconds used so far, memory in MB and process count of the load running one source and target (its driver
+    and workers); two readings give the CPU percent."""
+    listing = subprocess.run(["ps", "-Ao", "pid,time,rss,args"], check=False, capture_output=True, text=True).stdout
+    seconds = memory = 0.0
+    found = 0
+    for line in listing.splitlines():
+        if re.search(rf"--source {re.escape(source)} --target {re.escape(target)}( |$)", line):
+            pid, used, rss = line.split(None, 3)[:3]
+            seconds += cpu_seconds(used)
+            found += 1
+            footprint = subprocess.run(["footprint", "-p", pid], check=False, capture_output=True, text=True).stdout \
+                if sys.platform == "darwin" else ""
+            sized = re.search(r"Footprint: ([\d.]+) (KB|MB|GB)", footprint)
+            memory += float(sized.group(1)) * {"KB": 1 / 1024, "MB": 1, "GB": 1024}[sized.group(2)] if sized else int(rss) / 1024
+    return seconds, memory, found
+
+
+def status(steps: list[dict], state: Path, reader_url: str | None, sample: int = 20) -> list[str]:
+    """One report line a running step: how long, how far, how fast, what it holds, and a verdict from the evidence.
+    The log gives the bundles done and the minutes left; the database (two readings `sample` seconds apart) the rows
+    written a minute; the processes their CPU and memory; the log's file its age."""
+    text = state.read_text() if state.exists() else ""
+    done = done_steps(state)
+    started = {}
+    for found in re.finditer(r"^(\d\d-\d\d \d\d:\d\d:\d\d) ET (\S+) attempt (\d+) start", text, re.M):
+        started[found.group(2)] = (datetime.strptime(found.group(1), "%m-%d %H:%M:%S").replace(year=clock().year), int(found.group(3)))
+    busy = external_loads()
+    running = [s for s in steps if (s["source"], s["target"]) in busy and s["name"] not in done and s["name"] in started]
+    before = database_writes(reader_url) if reader_url else {}
+    cpu_before = {s["name"]: process_use(s["source"], s["target"])[0] for s in running}
+    time.sleep(sample if before or running else 0)
+    rate = writes_per_minute(before, database_writes(reader_url), sample) if before else {}
+    waiters = (database_load(reader_url) or {}).get("lock_waiters", 0)
+    sessions = database_sessions(reader_url) if reader_url else {}
+    lines = [f"{clock():%H:%M} ET: {len(running)} running, {len(done & {s['name'] for s in steps})} of {len(steps)} done; "
+             f"database writes a minute: " + (", ".join(f"{k} {v:,.0f}" for k, v in rate.items() if v) or "none") +
+             f"; lock waiters {waiters}"]
+    lines += [f"  {session_note(name, counts)}" for name, counts in sorted(sessions.items()) if counts["active"] + counts["waiting_on_client"] > 1]
+    for step in running:
+        began, attempt = started[step["name"]]
+        elapsed = (clock().replace(tzinfo=None) - began).total_seconds() / 60
+        log = LOGS / f"chain-{RUN}-{step['name']}.log"
+        age = (time.time() - log.stat().st_mtime) / 60 if log.exists() else elapsed
+        progress = bundle_progress(log.read_text()) if log.exists() else None
+        seconds, memory, count = process_use(step["source"], step["target"])
+        cpu = cpu_percent(cpu_before[step["name"]], seconds, sample)
+        store = store_of(step["target"])
+        mine = rate.get(store, 0.0)
+        sharing = [o["name"] for o in running if o is not step and store_of(o["target"]) == store]
+        wrote = f"{store} {mine:,.0f} rows/min" + (f" shared with {', '.join(sharing)}" if sharing else "")
+        left = minutes_left(*progress, elapsed) if progress and progress[1] > 1 else None
+        warn = outlook(left, elapsed, step["minutes"], attempt, step["attempts"])
+        shown = (f"bundles {progress[0]} of {progress[1]}" + (f", about {left:.0f} min left" if left else "")
+                 if progress and progress[1] > 1 else "one document, so its log shows no progress; the database does")
+        lines.append(f"  {step['name']} (lane {step['lane']}, attempt {attempt}, {step.get('workers', 2)} workers): {elapsed:.0f} min of {step['minutes']}; "
+                     f"{shown}; {count} processes, {cpu:.0f}% CPU, {memory:,.0f} MB; wrote {wrote}; log {age:.0f} min old; "
+                     + verdict(elapsed, step["minutes"], age, cpu, mine, waiters) + (f"; {warn}" if warn else ""))
+    return lines
+
+
 def arguments(step: dict) -> list[str]:
     capture = ROOTS[step.get("capture_root", "captures")] / step["capture"]
     args = ["--source", step["source"], "--target", step["target"], "--capture", str(capture),
@@ -431,6 +597,8 @@ def main() -> int:
     parser.add_argument("--from", dest="start")
     parser.add_argument("--only")
     parser.add_argument("--lane")
+    parser.add_argument("--status", action="store_true",
+                        help="one line a running step: progress, rate, processes, database writes and a verdict")
     parser.add_argument("--workers", type=int, help="with --only: the step's workers, 2 to 8, instead of the chain file's")
     parser.add_argument("--connections", type=int, default=250,
                         help="with --auto: the database connections to aim for; workers rise until they are used")
@@ -462,6 +630,10 @@ def main() -> int:
         return 0
     if sys.platform == "darwin":
         subprocess.Popen(["caffeinate", "-dimsu", "-w", str(os.getpid())])
+    if args.status:
+        reader = STORES / "reader.env"
+        print("\n".join(status(steps, state, load_env(reader).get("DIAGNOSE_DATABASE_URL") if reader.exists() else None)))
+        return 0
     if args.workers is not None:
         if not args.only or not MIN_WORKERS <= args.workers <= MAX_WORKERS:
             print(f"--workers goes with --only and is {MIN_WORKERS} to {MAX_WORKERS}", file=sys.stderr)

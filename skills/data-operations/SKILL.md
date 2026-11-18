@@ -12,6 +12,26 @@ source's operational runbook and report verified progress with counts and reason
 Acquisition supplies completed deliveries independently. A catalog `Pipeline` entry describes a
 load and never starts or resumes one ([execution boundary](../openmetadata/SKILL.md#pipeline-execution-boundary)).
 
+## Report a running load from its evidence
+
+Never report a load as "running". Run `load_chain.py --status` and report, for each running step, what it prints:
+how long against its bound, how far (bundles done and the minutes left at the rate so far), what it wrote (rows a minute
+in its store, and which other running steps share that store), its processes' CPU and memory, the age of its log, and its
+verdict. The database sessions are shown by store (working, or waiting on the client), read as the reader login.
+
+Read the verdict, not the word "running":
+- **progressing**: it wrote rows, its processes worked, or its log moved in the last ten minutes;
+- **no sign of work**: no CPU, no rows written and a silent log: read its log and the stores folder's `load-errors.log`
+  before saying anything else, since it may be stalled;
+- **waiting on database locks** (three or more sessions): the contention ladder of the daily-run runbook;
+- **client-bound, not the database** (most sessions waiting on the client): the machine running the loads is the limit,
+  so more workers on it will not help; run the loaders on more compute;
+- **cannot finish in its remaining attempts**: raise its workers or its minutes now, not at its last attempt.
+
+A single-document step has no progress in its log: say so, and report its database rows and sessions. A store's rows are
+shared by every step that writes it and cannot be split: say which steps share it. Check a running chain every 30 minutes
+and report what changed, with the evidence, not that it is still going.
+
 ## One login for every load
 
 A load connects as one login, `edgar_loader` (`worker.env`), for every store. It is a member of each store's runtime
