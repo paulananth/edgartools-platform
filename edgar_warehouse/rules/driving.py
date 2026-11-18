@@ -159,8 +159,8 @@ class Commands:
 
 
 def run_steps(document: dict, target: str) -> list[dict]:
-    """The steps a run of the target holds in the database: a target marked `local` has its source read and combine
-    steps run by the loader (ticket 210), so a driver that waited on them would wait for ever."""
+    """The steps a run of the target holds in the database: none at grain `run`, whose loader does every step, so a
+    driver that waited on them would wait for ever."""
     from edgar_warehouse.bookkeeping.clean.config import staged
 
     return staged(document["bookkeeping"]["targets"][target])["steps"]

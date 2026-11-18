@@ -85,11 +85,7 @@ def _run(args, kind: str, name: str, rules) -> dict:
         export = frozen.export(kind, name, Path(args.root))
         rules.record(export)
         ref = book.artifacts.put(os.environ["BOOKKEEPING_MANIFEST_ROOT"], export)
-        from edgar_warehouse.rules.local import staged_inputs
-
-        # A target marked `local` has its source read and combine steps run here first.
-        inputs = staged_inputs(book.artifacts, export["body"], args.target,
-                               {"uri": args.input_manifest, "sha256": args.input_sha256})
+        inputs = {"uri": args.input_manifest, "sha256": args.input_sha256}
         run_id = book.start(rules_ref=ref, inputs_ref=inputs,
                             target=args.target, scope={"kind": kind, "name": name, "target": args.target,
                                                      **({"source": name} if kind == "source" else {}),

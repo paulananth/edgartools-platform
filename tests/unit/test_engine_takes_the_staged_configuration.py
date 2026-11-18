@@ -1,5 +1,5 @@
-"""A run of a target marked `local` holds only the steps after the local ones: the engine takes the staged
-configuration wherever it reads a target's configuration (ticket 210)."""
+"""A run at grain `run` holds no step in the database (the loader does them all): the engine takes the staged
+configuration wherever it reads a target's configuration."""
 from edgar_warehouse.bookkeeping.clean import engine as engine_module
 from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
 
@@ -10,7 +10,7 @@ STEPS = [
 ]
 
 
-def book(monkeypatch, local):
+def book(monkeypatch, grain):
     reads = []
 
     class Artifacts:
@@ -19,7 +19,7 @@ def book(monkeypatch, local):
             return {"body": {}, "digest": "d", "kind": "k", "name": "n", "version": "v"} if ref == "rules" else {}
 
     monkeypatch.setattr(engine_module, "digest", lambda value: "d" if value == {} else "s")
-    monkeypatch.setattr(engine_module, "validate", lambda body, target: {"local": local, "steps": [dict(s) for s in STEPS]})
+    monkeypatch.setattr(engine_module, "validate", lambda body, target: {**({"grain": grain} if grain else {}), "steps": [dict(s) for s in STEPS]})
     monkeypatch.setattr(engine_module, "worklist", lambda manifest, config: [{"step": "prepare", "key": "1"}])
     result = Bookkeeping.__new__(Bookkeeping)
     result.artifacts, result._frozen_static = Artifacts(), {}
@@ -31,17 +31,17 @@ SUBMISSION = {"rules": "rules", "inputs": "inputs", "kind": "k", "name": "n", "r
               "worklist_hash": "s", "scope": {}}
 
 
-def test_a_local_target_runs_only_its_database_steps(monkeypatch):
-    # The submission names the profiles of the steps it runs; a staged run names only the database step.
-    submission = {**SUBMISSION, "profiles": {"prepare": "mdm.prepare"}}
+def test_a_target_at_grain_run_holds_no_step_and_the_loader_has_them_all(monkeypatch):
+    # The submission names the profiles of the steps the database holds: none at grain `run`.
+    submission = {**SUBMISSION, "profiles": {}}
 
-    _, config, _, _ = book(monkeypatch, True)._static(submission)
+    _, config, _, _ = book(monkeypatch, "run")._static(submission)
 
-    assert [step["name"] for step in config["steps"]] == ["prepare"]
-    assert config["steps"][0]["requires"] == []
+    assert config["steps"] == []
+    assert [step["name"] for step in config["loader_steps"]] == ["read", "combine", "prepare"]
 
 
-def test_a_target_not_marked_local_runs_all_its_steps(monkeypatch):
-    _, config, _, _ = book(monkeypatch, False)._static(SUBMISSION)
+def test_a_target_held_by_the_unit_runs_all_its_steps(monkeypatch):
+    _, config, _, _ = book(monkeypatch, None)._static(SUBMISSION)
 
     assert [step["name"] for step in config["steps"]] == ["read", "combine", "prepare"]
