@@ -178,10 +178,11 @@ def worst(machine: str, database: str) -> str:
     return "high" if "high" in (machine, database) else machine
 
 
-def database_load(owner_url: str | None) -> dict | None:
+def database_load(reader_url: str | None) -> dict | None:
     """Active sessions, sessions waiting on locks and the longest wait, and connections against the limit, read as the
-    store's owner login; None when it cannot be read (no reading is no reason to wait). Prints no address."""
-    if not owner_url:
+    diagnostic login (pg_monitor: sessions and locks, no table; never the owner or a runtime login); None when it cannot
+    be read (no reading is no reason to wait). Prints no address."""
+    if not reader_url:
         return None
     query = """select count(*) filter (where state = 'active'), count(*) filter (where wait_event_type = 'Lock'),
         coalesce(max(extract(epoch from now() - state_change)) filter (where wait_event_type = 'Lock'), 0), count(*),
@@ -189,7 +190,7 @@ def database_load(owner_url: str | None) -> dict | None:
     try:
         import psycopg2
 
-        with psycopg2.connect(owner_url.replace("postgresql+psycopg2", "postgresql"), connect_timeout=10) as conn, conn.cursor() as cur:
+        with psycopg2.connect(reader_url.replace("postgresql+psycopg2", "postgresql"), connect_timeout=10) as conn, conn.cursor() as cur:
             cur.execute(query)
             active, waiters, longest, connections, limit = cur.fetchone()
         return {"active": active, "connections": connections, "max_connections": limit, "lock_waiters": waiters,
@@ -218,7 +219,7 @@ def stop(child: subprocess.Popen) -> None:
 
 
 def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: datetime | None = None,
-         owner_url: str | None = None) -> int:
+         reader_url: str | None = None) -> int:
     """Watch the loads and start the next ready step whenever a slot is free and the machine is not pressed. One start
     a cycle: the load average lags, so a started step is counted running before the next is judged. Each step runs as
     `load_chain.py --only <step> --workers <n>` (the attempt loop). The workers follow the machine, 2 to 8: with room
@@ -257,7 +258,7 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
             return 2
         slow = bool(deadline) and behind((clock() - started).total_seconds(), (deadline - started).total_seconds(),
                                          sum(by_name[n]["minutes"] for n in done if n in by_name), total)
-        reading = database_load(owner_url)
+        reading = database_load(reader_url)
         database = db_level(**reading) if reading else "ok"
         if database == "high":
             note(f"database pressed: {reading['lock_waiters']} waiting on locks (longest {reading['longest_wait']:.0f} s), "
@@ -419,7 +420,7 @@ def main() -> int:
             hour, minute = map(int, args.deadline.split(":"))
             deadline = clock().replace(hour=hour, minute=minute, second=0, microsecond=0)
         if auto(steps, state, args.slots, deadline=deadline,
-                owner_url=load_env(STORES / "connection.env").get("MDM_MIGRATION_DATABASE_URL")):
+                reader_url=load_env(STORES / "reader.env").get("DIAGNOSE_DATABASE_URL") if (STORES / "reader.env").exists() else None):
             return 1
         finish(env, state)
         return 0

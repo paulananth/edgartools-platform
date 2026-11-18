@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[2] / "skills/data-platform/scripts"))
 
-from provision_hosted_store import Refused, logins, main, provision, read_urls, rewrite
+from provision_hosted_store import Refused, ensure_reader, logins, main, provision, read_urls, rewrite
 
 OLD = "old.invalid"
 
@@ -55,7 +55,7 @@ def test_two_urls_giving_one_login_two_passwords_are_refused(tmp_path):
 
 def test_every_url_moves_to_the_new_instance_and_only_the_administrator_takes_a_new_password(tmp_path):
     folder = _folder(tmp_path)
-    assert rewrite(folder, "new.invalid", 5432, "admin", "a-new") == 10
+    assert rewrite(folder, "new.invalid", 5432, "admin", "a-new") == 10  # reader.env absent: skipped
     urls = read_urls(folder)
     assert urls["connection.env"]["MDM_MIGRATION_DATABASE_URL"] == "postgresql://admin:a-new@new.invalid:5432/mdm"
     assert urls["worker.env"]["MDM_DATABASE_URL"] == "postgresql://mdm_runtime:m-invented@new.invalid:5432/mdm"
@@ -131,3 +131,26 @@ def test_a_login_may_connect_and_use_temporary_tables_on_its_database():
     grants = [statement for statement in server.statements if "GRANT CONNECT, TEMPORARY" in statement]
     assert any("silver_runtime" in statement for statement in grants)
     assert len(grants) == 4  # rules_agent, rules_governance, bookkeeping_runtime, silver_runtime
+
+
+def test_the_diagnostic_login_reads_sessions_and_locks_and_connects_to_no_store():
+    server = _EmptyServer(owner="admin")
+    held = {**HELD, "ops_reader": ("o-invented", {"postgres"})}
+    steps = provision(server, held, "admin", confirm=True)
+    assert any(statement for statement in server.statements if "GRANT pg_monitor TO" in statement)
+    assert "give ops_reader pg_monitor: sessions, locks and statistics, no table" in steps
+    connects = [statement for statement in server.statements if "GRANT CONNECT, TEMPORARY" in statement]
+    assert not any("ops_reader" in statement for statement in connects)  # it reads statistics, never a store
+
+
+def test_reader_env_is_made_once_private_with_a_new_password_and_moves_with_the_other_urls(tmp_path):
+    folder = _folder(tmp_path)
+    assert read_urls(folder)["reader.env"] == {}  # absent is allowed
+    assert ensure_reader(folder, "old.invalid", 5432) is True
+    first = (folder / "reader.env").read_text()
+    assert (folder / "reader.env").stat().st_mode & 0o777 == 0o600
+    assert ensure_reader(folder, "other.invalid", 5432) is False and (folder / "reader.env").read_text() == first
+    held = logins(read_urls(folder), "admin")
+    assert held["ops_reader"][1] == {"postgres"}
+    rewrite(folder, "new.invalid", 5432, "admin", "a-new")
+    assert "new.invalid" in (folder / "reader.env").read_text() and "old.invalid" not in (folder / "reader.env").read_text()

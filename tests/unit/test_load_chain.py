@@ -206,7 +206,7 @@ def test_every_step_of_the_chain_has_its_sizes():
 @pytest.fixture(autouse=True)
 def _no_database(monkeypatch):
     """No test reads a real database."""
-    monkeypatch.setattr(chain, "database_load", lambda owner_url: None)
+    monkeypatch.setattr(chain, "database_load", lambda reader_url: None)
 
 
 def _step(name, lane, minutes=60, waits=(), source=None, target="mastering"):
@@ -437,7 +437,7 @@ def test_workers_fall_while_the_database_is_locking_even_when_the_machine_has_ro
     locking = {"active": 9, "connections": 30, "max_connections": 100, "lock_waiters": 5, "longest_wait": 90.0}
     quiet = {**locking, "lock_waiters": 0, "longest_wait": 0.0}
     readings = iter([quiet, quiet])  # both steps start while the store is quiet, then it locks
-    monkeypatch.setattr(chain, "database_load", lambda owner_url: next(readings, locking))
-    chain.auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=45), owner_url="x")
+    monkeypatch.setattr(chain, "database_load", lambda reader_url: next(readings, locking))
+    chain.auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=45), reader_url="x")
     assert started[:2] == [("a1", 8), ("b1", 8)]
     assert ("b1", 4) in started  # the shortest chain halved while the store was locking, with the machine at `low`

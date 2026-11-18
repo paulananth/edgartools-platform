@@ -108,7 +108,8 @@ A slow load has one saturated tier. Throttling hides which, so it comes last.
 
 1. **Measure each tier** (`load_chain.py --auto` reads the first two every cycle and acts on them):
    - the machine running the loads: load average against its cores, and swap;
-   - the database: sessions active, sessions waiting on locks and the longest wait, connections against the limit;
+   - the database, as the reader login: sessions active, sessions waiting on locks and the longest wait, connections
+     against the limit;
    - the source: how fast one reader opens a file.
 2. **Remove a shared hot spot by design** when the database is the tier that waits on locks:
    - merges of one kind of master data that join stored records take turns, so they share a lane; merges that only
@@ -128,6 +129,9 @@ A slow load has one saturated tier. Throttling hides which, so it comes last.
 5. Record the readings, the change and its effect in the ticket.
 
 ## Progress, failure and recovery
+
+Diagnose as the reader login (`reader.env`): it shows sessions, locks and waits and reads no table. A step that needs the
+owner or a runtime login to be understood is a gap in the reader, to fix there.
 
 Use current CLI help and [Bookkeeping recovery](../../../skills/bookkeeping/RECOVERY.md).
 Representative inspection commands are:

@@ -12,6 +12,14 @@ source's operational runbook and report verified progress with counts and reason
 Acquisition supplies completed deliveries independently. A catalog `Pipeline` entry describes a
 load and never starts or resumes one ([execution boundary](../openmetadata/SKILL.md#pipeline-execution-boundary)).
 
+## Diagnose with the reader login
+
+Diagnosis (sessions, locks, waits, connections, what a load is doing) reads the database as the diagnostic login in
+the stores folder's `reader.env` (`DIAGNOSE_DATABASE_URL`): it has `pg_monitor`, which shows sessions, locks and
+statistics, and it connects to no store, so it reads no table. Never diagnose as the owner, the administrator or a
+runtime login: each can change or read data, and a diagnosis that needs more than the reader shows is a gap to name.
+`load_chain.py --auto` reads the database this way.
+
 ## Start with live state
 
 Resolve the requested environment, source and retained delivery from existing

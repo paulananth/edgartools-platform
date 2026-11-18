@@ -32,7 +32,8 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    ```
    A fresh instance gets its six databases (`mdm`, `rdm`, `rules`, `bookkeeping`, `change_journal`, `silver`) and their
    restricted logins from the stores folder's own files, each login with the password its URL already holds (no login
-   is rotated). Each login gets CONNECT and TEMPORARY on its databases and PUBLIC gets nothing: a load stages its rows in a
+   is rotated; the first confirmed run also makes the diagnostic login `ops_reader`, with `pg_monitor` and no store, and its
+   `reader.env`). Each login gets CONNECT and TEMPORARY on its databases and PUBLIC gets nothing: a load stages its rows in a
    temporary table, and without that right a silver load stops with SQLSTATE 42501 in its step's message. Every URL then
    names the new instance, and the administrator's URLs its new password:
    ```bash
@@ -87,7 +88,7 @@ python <data-operations skill>/scripts/load_chain.py --from <step>   # carry on;
 
 **`--auto` is the way to load a store.** It starts the step at the head of every lane whose dependencies are done, longest
 first, while a slot is free (`--slots`, by default half the machine's gigabytes, at most its cores, at least two) and the machine has
-headroom (a load average under one and a half times the cores, swap under three quarters used); it also reads the database (a step starts only while fewer than three sessions wait on locks, none for a minute, and
+headroom (a load average under one and a half times the cores, swap under three quarters used); it also reads the database as the reader login (a step starts only while fewer than three sessions wait on locks, none for a minute, and
 less than four fifths of its connections are in use), and it starts one step a
 cycle, since the load average lags. It moves each running step's workers from 2 to 8 by the readings: the step with the
 longest chain behind it doubles when there is room, and the step with the shortest halves when the machine or the

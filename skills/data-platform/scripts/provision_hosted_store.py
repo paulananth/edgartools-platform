@@ -17,6 +17,7 @@ import argparse
 import configparser
 import os
 import re
+import secrets
 import shlex
 import sys
 from pathlib import Path
@@ -24,7 +25,11 @@ from urllib.parse import quote, unquote, urlsplit, urlunsplit
 from uuid import uuid4
 
 DATABASES = ("mdm", "rdm", "rules", "bookkeeping", "change_journal", "silver")
-FILES = ("connection.env", "worker.env", "governance.env")
+FILES = ("connection.env", "worker.env", "governance.env", "reader.env")
+# The diagnostic login: it reads sessions, locks and statistics (pg_monitor) and no table, and connects to no store.
+# Its URL is the only one in reader.env, which is made on the first confirmed run.
+READER, READER_FILE, READER_SETTING = "ops_reader", "reader.env", "DIAGNOSE_DATABASE_URL"
+OPTIONAL = {READER_FILE}
 # Group roles a login is put into: the Bookkeeping worker duty, and the Rules agent's access for Rules governance.
 GROUPS = {"bookkeeping_control": ("bookkeeping_runtime",), "rules_agent": ("rules_governance",)}
 LINE = re.compile(r"^(export )?([A-Z_]+)=(.*)$")
@@ -53,6 +58,9 @@ def read_urls(folder: Path) -> dict[str, dict[str, str]]:
     found = {}
     for name in FILES:
         urls = {}
+        if name in OPTIONAL and not (folder / name).exists():
+            found[name] = urls
+            continue
         for line in (folder / name).read_text().splitlines():
             match = LINE.match(line.strip())
             if match and _value(match[3]).startswith("postgres"):
@@ -95,6 +103,8 @@ def readdress(url: str, host: str, port: int, admin: str, admin_password: str) -
 def rewrite(folder: Path, host: str, port: int, admin: str, admin_password: str) -> int:
     changed = 0
     for name in FILES:
+        if name in OPTIONAL and not (folder / name).exists():
+            continue
         lines = []
         for line in (folder / name).read_text().splitlines():
             match = LINE.match(line.strip())
@@ -105,6 +115,16 @@ def rewrite(folder: Path, host: str, port: int, admin: str, admin_password: str)
             lines.append(line)
         private_write(folder / name, "\n".join(lines) + "\n")
     return changed
+
+
+def ensure_reader(folder: Path, host: str, port: int) -> bool:
+    """Make reader.env with a new password for the diagnostic login, unless it is there. True when it made it."""
+    path = folder / READER_FILE
+    if path.exists():
+        return False
+    url = f"postgresql://{READER}:{quote(secrets.token_urlsafe(24), safe='')}@{host}:{port}/postgres"
+    private_write(path, f"export {READER_SETTING}={shlex.quote(url)}\n")
+    return True
 
 
 def administrator(service: str) -> dict[str, str]:
@@ -137,6 +157,10 @@ def provision(conn, held: dict[str, tuple[str, set[str]]], admin: str, confirm: 
                                 .format(sql.Identifier(role)), (password,))
             elif not row[0]:
                 raise Refused(f"{role} exists and cannot log in")
+        if READER in held:
+            done.append(f"give {READER} pg_monitor: sessions, locks and statistics, no table")
+            if confirm:
+                cur.execute(sql.SQL("GRANT pg_monitor TO {}").format(sql.Identifier(READER)))
         for group, members in GROUPS.items():
             cur.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (group,))
             if cur.fetchone() is None and group not in held:  # a login made above serves as the group too
@@ -179,6 +203,10 @@ def main(argv: list[str] | None = None) -> int:
         import psycopg2
 
         admin = administrator(args.service)
+        if args.confirm and ensure_reader(args.stores, admin["host"], int(admin["port"])):
+            print(f"made {READER_FILE} with a new login {READER}")
+        elif not (args.stores / READER_FILE).exists():
+            print(f"would make {READER_FILE} with a new login {READER} (diagnosis reads with it, never the owner)")
         urls = read_urls(args.stores)
         held = logins(urls, admin["user"])
         conn = psycopg2.connect(host=admin["host"], port=admin["port"], user=admin["user"], password=admin["password"],
