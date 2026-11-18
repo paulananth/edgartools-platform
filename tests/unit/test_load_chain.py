@@ -1,5 +1,6 @@
 """The load chain names every target a store loads, each with the facts its target declares."""
 import importlib.util
+import sys
 from pathlib import Path
 
 import pytest
@@ -1035,3 +1036,22 @@ def test_a_missing_worker_env_means_no_bookkeeping_login_not_a_crash(monkeypatch
     monkeypatch.setattr(chain, "run_catalog_status", lambda command, env, timeout=60: ("[]", ""))
     (tmp_path / "worker.env").unlink()
     assert chain.bookkeeping_runs() == []  # reads nothing, asks nothing it cannot, never raises
+
+
+def test_a_load_does_not_build_the_name_search_lookups_and_they_are_built_only_when_asked(monkeypatch):
+    """Nothing a load does reads them: only the context search does, and it refuses until they are built."""
+    calls = []
+    monkeypatch.setattr(chain, "run", lambda args, env, log=None: calls.append(args) or 0)
+    monkeypatch.setattr(chain, "note", lambda message, state: None)
+    chain.finish({}, Path("/dev/null"))
+    assert ["mdm", "build-lookups"] not in calls and ["silver", "links"] in calls
+    calls.clear()
+    chain.finish({}, Path("/dev/null"), lookups=True)
+    assert calls[0] == ["mdm", "build-lookups"]  # asked for: built first, then the links and the master ids
+    assert ["silver", "links"] in calls
+
+
+def test_lookups_are_refused_beside_a_partial_run_that_would_never_reach_them(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["load_chain.py", "--lookups", "--lane", "A"])
+    assert chain.main() == 2
+    assert "--lookups" in capsys.readouterr().err

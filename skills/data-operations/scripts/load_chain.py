@@ -3,12 +3,13 @@
 
     python load_chain.py --list               the steps, in order
     python load_chain.py --plan               what each step would load (documents and bundles); writes nothing
-    python load_chain.py                      the whole chain, then the lookups and each silver table's master ids
+    python load_chain.py                      the whole chain, then the links table and each silver table's master ids
     python load_chain.py --from <step>        carry on from a step (a done step costs one call: nothing is loaded twice)
     python load_chain.py --only <step>        one step
     python load_chain.py --lane <name>        the steps of one lane; run several lanes at once (see the chain file)
     python load_chain.py --finish             only what follows the loads, once every lane is done
     python load_chain.py --catalog-status     publish the catalog status of every step already done (a catch-up)
+    python load_chain.py --finish --lookups   the same, with the name-search lookups built first (only the context search needs them)
     python load_chain.py --status             what each running step is doing: progress, rate, processes, a verdict
     python load_chain.py --auto [--slots N] [--hours H | --deadline HH:MM]
                                               watch the loads: start each step when its lane is free, move its
@@ -336,7 +337,7 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
     cycle, by stopping the step's load and starting it again (a load resumes where it stopped). With a `deadline`, a run
     behind its schedule (more of the window used than of the work done) is allowed twice the cores in load; at the
     deadline every step this started is stopped and the run ends, naming what is left. A step that uses up its attempts
-    blocks what follows it and the rest carry on. Ends when every step is done (then the lookups and the links), when
+    blocks what follows it and the rest carry on. Ends when every step is done (then the links table and the master ids), when
     nothing more can start, or at the deadline."""
     def range_of(name: str) -> tuple[int, int]:
         return bounds or bounds_for(capacity, by_name[name].get("worker_gb", WORKER_GB))
@@ -970,11 +971,13 @@ def attempt_loop(step: dict, env: dict, state: Path) -> bool:
     return False
 
 
-def finish(env: dict, state: Path) -> None:
-    """After the loads: the lookups and the links table are built once each, then each silver table's master ids are
-    filled from MDM as it is now (a row that landed before its master was mastered keeps an empty id)."""
-    note("lookups start", state)
-    note(f"lookups rc={run(['mdm', 'build-lookups'], env, LOGS / f'chain-{RUN}-lookups.log')}", state)
+def finish(env: dict, state: Path, lookups: bool = False) -> None:
+    """After the loads: the links table is built once, then each silver table's master ids are filled from MDM as it is now
+    (a row that landed before its master was mastered keeps an empty id). The name-search lookups are built only when asked
+    (`lookups`): a load reads none of them, only the context search does, and building them re-derives every master."""
+    if lookups:
+        note("lookups start", state)
+        note(f"lookups rc={run(['mdm', 'build-lookups'], env, LOGS / f'chain-{RUN}-lookups.log')}", state)
     note(f"links rc={run(['silver', 'links'], env, LOGS / f'chain-{RUN}-links.log')}", state)
     for spec in sorted((ROOT / "rules/sources").glob("*/silver-*.yaml")):
         table = yaml.safe_load(spec.read_text())["table"]
@@ -985,7 +988,7 @@ def finish(env: dict, state: Path) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    for flag in ("list", "plan", "finish"):
+    for flag in ("list", "plan", "finish", "lookups"):
         parser.add_argument(f"--{flag}", action="store_true")
     parser.add_argument("--from", dest="start")
     parser.add_argument("--only")
@@ -1015,6 +1018,9 @@ def main() -> int:
             return 2
     if args.lane and args.lane not in {step["lane"] for step in steps}:
         print(f"No lane named {args.lane}", file=sys.stderr)
+        return 2
+    if args.lookups and (args.only or args.lane or not args.finish and (args.list or args.plan)):
+        print("--lookups goes with --finish (or the whole chain), never a partial run that does not reach the finish", file=sys.stderr)
         return 2
     if args.list:
         for step in steps:
@@ -1068,7 +1074,7 @@ def main() -> int:
         if auto(steps, state, args.slots, deadline=deadline, connections=args.connections, capacity=args.capacity,
                 reader_url=load_env(STORES / "reader.env").get("DIAGNOSE_DATABASE_URL") if (STORES / "reader.env").exists() else None):
             return 1
-        finish(env, state)
+        finish(env, state, args.lookups)
         return 0
     if not args.finish:
         started = args.start is None
@@ -1080,7 +1086,7 @@ def main() -> int:
                 return 1
         if args.only or args.lane:
             return 0
-    finish(env, state)
+    finish(env, state, args.lookups)
     return 0
 
 

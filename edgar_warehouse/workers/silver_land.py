@@ -22,6 +22,7 @@ import json
 import os
 from datetime import datetime, timezone
 
+from edgar_warehouse.silver_writer.keyset import KeySet, missing
 from edgar_warehouse.workers import source_readings
 
 CHECK = "silver.landed"
@@ -95,11 +96,12 @@ def _deliveries(spec: dict, artifact_rows):
         yield batch
 
 
-def _receipt(count: int, seen: set, quality: dict | None = None) -> bytes:
-    """What the reading held for the table: rows, distinct keys and a digest of them."""
-    digest = hashlib.sha256(json.dumps(sorted(seen), separators=(",", ":")).encode()).hexdigest()
+def _receipt(count: int, seen: KeySet, quality: dict | None = None) -> bytes:
+    """What the reading held for the table: rows, distinct keys and a digest of them (read from the key set in one pass,
+    so no copy of every key is ever in memory)."""
+    distinct, digest = seen.summary()
     receipt = {"version": 2 if quality is not None else 1, "rows": count,
-               "distinct_keys": len(seen), "keys_sha256": digest}
+               "distinct_keys": distinct, "keys_sha256": digest}
     if quality is not None:
         receipt["quality"] = quality
     return json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode()
@@ -200,55 +202,57 @@ def execute(envelope: dict, artifacts) -> dict:
         raise ValueError(f"Version-2 quality evidence is disabled until recovery gates are met; "
                          f"set {QUALITY_V2_GATE}=enabled only after qualification")
     keys = _keys(envelope)
-    silver, mdm = engines()
-    try:
-        sink, ids = DatabaseSink(silver), MdmIds(mdm) if mdm is not None else None
-        spec = sink.spec(keys["silver"])
-        count, seen = 0, set()
-        quality_reports = []
+    with KeySet() as seen:
+        silver, mdm = engines()
+        try:
+            sink, ids = DatabaseSink(silver), MdmIds(mdm) if mdm is not None else None
+            spec = sink.spec(keys["silver"])
+            count = 0
+            quality_reports = []
 
-        def each_artifact():  # one pass: what lands is what the receipt counts
-            nonlocal count
-            for artifact in _artifacts(envelope, artifacts):
-                rows = _rows(artifact, keys)
-                count += len(rows)
-                seen.update(_tuple(row, spec) for row in rows)
-                yield rows
+            def each_artifact():  # one pass: what lands is what the receipt counts
+                nonlocal count
+                for artifact in _artifacts(envelope, artifacts):
+                    rows = _rows(artifact, keys)
+                    count += len(rows)
+                    seen.add(_tuple(row, spec) for row in rows)
+                    yield rows
 
-        for rows in _deliveries(spec, each_artifact()):
-            # The mutable legacy results file is for direct silver runs only;
-            # Bookkeeping has its own immutable, attempt-bound receipt.
-            landed = land(sink, keys["silver"], rows, ids, record_quality_results=False)
-            if landed.get("quality") is not None:
-                quality_reports.append(landed["quality"])
-        quality = None
-        if quality_enabled:
-            identity = _quality_identity(envelope, keys["silver"], spec)
-            observed_at = (_retained_observation(envelope, artifacts, identity)
-                           or datetime.now(timezone.utc).isoformat(timespec="milliseconds"))
-            quality = _quality_observation(identity, quality_reports, observed_at)
-        return artifacts.put_bytes(envelope["output"], _receipt(count, seen, quality))
-    finally:
-        silver.dispose()
-        if mdm is not None:
-            mdm.dispose()
+            for rows in _deliveries(spec, each_artifact()):
+                # The mutable legacy results file is for direct silver runs only;
+                # Bookkeeping has its own immutable, attempt-bound receipt.
+                landed = land(sink, keys["silver"], rows, ids, record_quality_results=False)
+                if landed.get("quality") is not None:
+                    quality_reports.append(landed["quality"])
+            quality = None
+            if quality_enabled:
+                identity = _quality_identity(envelope, keys["silver"], spec)
+                observed_at = (_retained_observation(envelope, artifacts, identity)
+                               or datetime.now(timezone.utc).isoformat(timespec="milliseconds"))
+                quality = _quality_observation(identity, quality_reports, observed_at)
+            return artifacts.put_bytes(envelope["output"], _receipt(count, seen, quality))
+        finally:
+            silver.dispose()
+            if mdm is not None:
+                mdm.dispose()
 
 
-def _missing(engine, spec: dict, wanted: set) -> int:
+def _missing(engine, spec: dict, wanted: KeySet) -> int:
     """How many of the unit's own keys silver lacks. Silver is asked only for the rows of the unit's
-    first-key values (a filer, say), in groups, so other units' rows cannot hide a missing one."""
+    first-key values (a filer, say), in groups, so other units' rows cannot hide a missing one; the keys are read in key
+    order from the key set, a group at a time."""
     from sqlalchemy import text
 
     columns = ", ".join(f'"{name}"::text' for name in spec["key"])
     first = spec["key"][0]
-    values = sorted({key[0] for key in wanted})
-    held = set()
-    with engine.connect() as conn:
-        for start in range(0, len(values), 500):
-            held.update(tuple(row) for row in conn.execute(
+
+    def fetch(values: list[str]) -> set:
+        with engine.connect() as conn:
+            return {tuple(row) for row in conn.execute(
                 text(f'select {columns} from silver."{spec["table"]}" where "{first}"::text = any(:values)'),
-                {"values": values[start:start + 500]}))
-    return len(wanted - held)
+                {"values": values})}
+
+    return missing(wanted.sorted(), fetch)
 
 
 def check(envelope: dict, artifacts) -> tuple[dict, list]:
@@ -260,44 +264,45 @@ def check(envelope: dict, artifacts) -> tuple[dict, list]:
     if requested not in ({CHECK}, {CHECK, QUALITY_CHECK}):
         raise ValueError(f"silver.land verifies {CHECK} only, with optional {QUALITY_CHECK}")
     keys = _keys(envelope)
-    silver, _ = engines()
-    try:
-        spec = DatabaseSink(silver).spec(keys["silver"])
-        count, seen = 0, set()
-        for artifact in _artifacts(envelope, artifacts):
-            rows = _rows(artifact, keys)
-            count += len(rows)
-            seen.update(_tuple(row, spec) for row in rows)
-        stored = artifacts.verified(envelope["candidate"])
+    with KeySet() as seen:
+        silver, _ = engines()
         try:
-            receipt = json.loads(stored)
-        except (TypeError, json.JSONDecodeError) as exc:
-            raise ValueError("The silver receipt is not valid JSON") from exc
-        if not isinstance(receipt, dict) or receipt.get("version") not in (1, 2):
-            raise ValueError("The silver receipt version is unsupported")
-        if receipt["version"] == 1:
-            expected = _receipt(count, seen)
-        else:
-            quality = receipt.get("quality")
-            if not isinstance(quality, dict) or not isinstance(quality.get("observed_at"), str):
-                raise ValueError("Version-2 silver receipt lacks its quality observation time")
+            spec = DatabaseSink(silver).spec(keys["silver"])
+            count = 0
+            for artifact in _artifacts(envelope, artifacts):
+                rows = _rows(artifact, keys)
+                count += len(rows)
+                seen.add(_tuple(row, spec) for row in rows)
+            stored = artifacts.verified(envelope["candidate"])
             try:
-                observed_at = datetime.fromisoformat(quality["observed_at"])
-            except ValueError as exc:
-                raise ValueError("Version-2 silver receipt has an invalid observation time") from exc
-            if observed_at.tzinfo is None:
-                raise ValueError("Version-2 silver receipt observation time must include a timezone")
-            identity = _quality_identity(envelope, keys["silver"], spec)
-            actual = _recomputed_quality(identity, artifacts, envelope, keys, spec, quality["observed_at"])
-            if quality != actual:
-                raise ValueError("The receipt's quality outcomes differ from the original reading")
-            expected = _receipt(count, seen, actual)
-        if stored != expected:
-            raise ValueError("The receipt differs from the reading")
-        if _missing(silver, spec, seen):
-            raise ValueError("Silver lacks keys the reading holds")
-    finally:
-        silver.dispose()
+                receipt = json.loads(stored)
+            except (TypeError, json.JSONDecodeError) as exc:
+                raise ValueError("The silver receipt is not valid JSON") from exc
+            if not isinstance(receipt, dict) or receipt.get("version") not in (1, 2):
+                raise ValueError("The silver receipt version is unsupported")
+            if receipt["version"] == 1:
+                expected = _receipt(count, seen)
+            else:
+                quality = receipt.get("quality")
+                if not isinstance(quality, dict) or not isinstance(quality.get("observed_at"), str):
+                    raise ValueError("Version-2 silver receipt lacks its quality observation time")
+                try:
+                    observed_at = datetime.fromisoformat(quality["observed_at"])
+                except ValueError as exc:
+                    raise ValueError("Version-2 silver receipt has an invalid observation time") from exc
+                if observed_at.tzinfo is None:
+                    raise ValueError("Version-2 silver receipt observation time must include a timezone")
+                identity = _quality_identity(envelope, keys["silver"], spec)
+                actual = _recomputed_quality(identity, artifacts, envelope, keys, spec, quality["observed_at"])
+                if quality != actual:
+                    raise ValueError("The receipt's quality outcomes differ from the original reading")
+                expected = _receipt(count, seen, actual)
+            if stored != expected:
+                raise ValueError("The receipt differs from the reading")
+            if _missing(silver, spec, seen):
+                raise ValueError("Silver lacks keys the reading holds")
+        finally:
+            silver.dispose()
     completed = {CHECK: True}
     if receipt["version"] == 2:
         if QUALITY_CHECK not in requested:

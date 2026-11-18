@@ -78,9 +78,8 @@ dataset. Use the kind code as the native name when configuration has one
 kind code. Their approved catalog names are `international_organization` and
 `market_venue`. Those names are destination identities, not kind codes.
 
-MDM, RDM and silver are processing layers: databases `mdm`, `rdm` and `silver`
-on the rules service. They are not subject domains. Do not create a domain
-named after a layer.
+MDM, RDM and silver are processing layers, not subject domains ([data-catalog](../data-catalog/SKILL.md)): do not create a
+domain named after a layer.
 
 `rules catalog publish` writes these domains, glossaries, the Gold and
 Silver certifications, and the three named data products. A product's domain
