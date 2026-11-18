@@ -108,9 +108,18 @@ do not count them as extra business tables. Confirm source-to-target schema,
 table and column mapping and verify every selected target is an actual
 Iceberg table using the service's object metadata (`SHOW ICEBERG TABLES`),
 not an ordinary table or a view. Unquoted target names fold to uppercase.
+The companions are one `<TABLE>$CHANGES` Iceberg table per mirrored table, on
+the mirror's own catalog integration, and one table under `SNOWFLAKE_CDC_LOGS`;
+a base table shows the Snowflake catalog and the Snowflake-managed volume.
+`LIST_MIRRORED_TABLES` names each row by `SOURCE_SCHEMA_NAME` and
+`SOURCE_TABLE_NAME`, with `STATE`, `SNAPSHOT_STATE` and `LAST_SNAPSHOT_ERROR`.
+Check the target types too: `bigint` arrives as `NUMBER(19,0)` and
+`numeric(38,9)` as `NUMBER(38,9)`.
 
 Read every synthetic row, key and exact decimal back from each base target
-table and compare with the independently written expected set. Counts must
+table and compare with the independently written expected set. Turn each decimal
+into text in Snowflake (`TO_VARCHAR(<column>, 'TM9')`), since a client that
+reads it as a float loses the digits the check is for. Counts must
 also equal three per table. Compare JSON/string fallback representations only
 when the approved requirement expects that mapping. Base tables are the
 consistent proof target; `$LIVE` is not a substitute for transactional checks.
@@ -135,7 +144,8 @@ that no transient partial state was ever observable.
 
 ## 6. Prove read-only consumption and Gold separately
 
-Use a test consumer with USAGE and SELECT only on the approved targets.
+Use a test consumer with USAGE and SELECT only on the approved targets, granted
+table by table so the `$CHANGES` companions stay out of its reach.
 Verify reads succeed and an INSERT/UPDATE attempt is denied under that
 consumer role, inside the isolated fixture scope. Do not test as ACCOUNTADMIN
 or infer read-only access because a table's name contains mirror.
@@ -167,9 +177,11 @@ invented fixture values may appear in public evidence.
 
 On failure, retain pinned configuration and evidence before cleanup. Cleanup
 requires approval naming the exact test mirror, target database, source
-database and any test instance/Gold objects. Pass `drop_target_database`
-explicitly: never rely on a destructive default. Do not restart/re-snapshot
-just to get a green result. A mirror left running after a deadline keeps
+database and any test instance/Gold objects. Pass the target-database
+flag explicitly, as the second positional argument: `DROP_MIRROR('<mirror>',
+TRUE)`. The named form `drop_target_database => TRUE` after a positional
+mirror name is refused. Never rely on a destructive default. Do not
+restart/re-snapshot just to get a green result. A mirror left running after a deadline keeps
 incurring cost; arrange authorized scoped cleanup or report the remaining
 billable resources. Preserve production and other agents' databases/volumes.
 
