@@ -58,6 +58,20 @@ including the hosted Bookkeeping control group.
 `init` is the whole step on a fresh store. `migrate` (each store has one) applies a schema file that arrives later and
 prints the same checksums when nothing has.
 
+**Where each table's shape is written.** Each store's definition sits beside the code that writes and migrates it (a silver
+source's spec sits under `rules/`), so the two change in one commit. That file is the source: the Data Catalog's columns and the DDL a spec registers are
+made from it, never edited by hand. Read the table's columns there, or in the Data Catalog for the published tables.
+
+| Store | Definition |
+|---|---|
+| MDM | `edgar_warehouse/mdm/migrations/schema.sql`; `registration_authority.sql` defines only the registration function, and the registration login's grants are in `edgar_warehouse/mdm/registration.py` |
+| RDM | `edgar_warehouse/rdm/migrations/schema.sql` (PostgreSQL); on MySQL, `mysql-v1.sql` and the later numbered `mysql-*.sql` files beside it, applied in order |
+| Rules | the `rules_used` table, written in Python (`edgar_warehouse/rules/db.py`) so one definition serves every dialect |
+| Bookkeeping | `edgar_warehouse/bookkeeping/clean/migrations/schema.sql`, with `mysql-v1.sql` |
+| Change Journal | `edgar_warehouse/change_journal/migrations/schema.sql`; `native/` holds one file per dialect |
+| Silver, fixed part | `edgar_warehouse/silver_writer/migrations/schema.sql`, with `mysql-v1.sql` |
+| Silver, one table per source | `rules/sources/<source>/silver-<table>.yaml` (and `rules/silver/`): a spec stewards review, registered as DDL by `deploy-silver.sh` for every dialect |
+
 Then every committed silver table, with the silver owner's login:
 `bash infra/scripts/deploy-silver.sh <local environment name | path to connection.env>`. It registers each
 `rules/sources/*/silver-*.yaml` and `rules/silver/silver-*.yaml`; an unchanged spec changes nothing and a changed one
