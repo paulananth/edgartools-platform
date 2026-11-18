@@ -1,5 +1,6 @@
 """The load chain names every target a store loads, each with the facts its target declares."""
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
@@ -1186,3 +1187,47 @@ def test_the_memory_edges_of_pressure():
     assert chain.pressure(2.0, 8, 0.60, memory_free=0.39) == "ok"
     assert chain.pressure(2.0, 8, 0.76, memory_free=None) == "high"  # unreadable memory counts as short
     assert chain.pressure(13.0, 8, 0.95, relaxed=True, memory_free=0.5) == "ok"  # behind: the relaxed load limit still holds
+
+
+def test_a_higher_priority_step_starts_before_one_with_a_longer_chain_behind_it():
+    steps = [_step("long", "A", minutes=500), _step("tail", "A", minutes=500), _step("urgent", "B", minutes=5)]
+    steps[2]["priority"] = 1
+    assert chain.ready(steps, done=set(), running=set(), failed=set(), free=1) == ["urgent"]  # priority first, the chain second
+    steps[2]["priority"] = 3
+    assert chain.ready(steps, done=set(), running=set(), failed=set(), free=1) == ["long"]  # equal priority: the longest chain
+
+
+def test_every_step_has_a_priority_of_one_two_or_three_and_the_chain_file_refuses_any_other(tmp_path):
+    assert {step["priority"] for step in STEPS} <= {1, 2, 3}
+    text = (ROOT / "rules" / "load-chain.yaml").read_text()
+    for bad in ("4", "true", "2.0"):
+        other = tmp_path / "load-chain.yaml"
+        other.write_text(text.replace("defaults: {workers: 2, bundles: 1, priority: 3}", "defaults: {workers: 2, bundles: 1, priority: " + bad + "}"))
+        with pytest.raises(ValueError, match="priority"):
+            chain.chain_steps(other)
+
+
+def test_a_step_that_says_no_priority_is_three_and_starts_after_a_priority_two():
+    steps = [_step("plain", "A", minutes=500), _step("second", "B", minutes=5)]
+    steps[1]["priority"] = 2
+    assert "priority" not in steps[0]
+    assert chain.ready(steps, done=set(), running=set(), failed=set(), free=1) == ["second"]
+
+
+def test_no_step_waits_on_one_of_a_lower_priority_than_the_step_that_follows_it():
+    """A step that holds a higher tier behind it is at least that urgent itself: the priorities come from the chain behind a step."""
+    follows = chain.needs(STEPS)
+    for name, before in follows.items():
+        for earlier in before:
+            assert BY_NAME[earlier]["priority"] <= BY_NAME[name]["priority"], (earlier, name)
+
+
+def test_the_runbook_names_exactly_the_steps_the_chain_file_gives_priority_one_and_two():
+    section = (ROOT / "docs/runbooks/edgar-intelligence/init.md").read_text().split("## Load priority", 1)[1].split("\n## ", 1)[0]
+    listed = {}
+    for line in section.splitlines():
+        row = re.match(r"\|\s*([12])\s*\|(.*?)\|", line)
+        if row:
+            listed[int(row.group(1))] = set(re.findall(r"`([a-z0-9-]+)`", row.group(2)))
+    assert listed == {tier: {s["name"] for s in STEPS if s["priority"] == tier} for tier in (1, 2)}
+    assert "Every other step is priority 3" in section
