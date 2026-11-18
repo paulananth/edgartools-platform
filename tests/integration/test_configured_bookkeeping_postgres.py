@@ -22,7 +22,6 @@ from sqlalchemy.exc import DBAPIError
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.bookkeeping.clean.config import Blocked, canonical, digest
 from edgar_warehouse.bookkeeping.clean.database import grant_profile, migrate
-from edgar_warehouse.bookkeeping.clean.destinations import guard, migrate_guard
 from edgar_warehouse.change_journal import ChangeJournal, JournalConflict
 from edgar_warehouse.change_journal.database import migrate as migrate_journal
 from edgar_warehouse.bookkeeping.clean.engine import CONTENTION, Bookkeeping
@@ -42,9 +41,6 @@ class Databases:
     rules: Rules
     ledger: ChangeJournal
     ledger_admin: object
-    destination: object
-    destination_admin: object
-    mdm: object
 
 
 @pytest.fixture(scope="module")
@@ -60,18 +56,17 @@ def databases():
 
             setup = engine("postgres")
             with setup.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-                for role in ("bk_runtime", "mdm_reader", "rules_agent", "operator", "ledger_runtime", "destination_runtime", "clean_application"):
+                for role in ("bk_runtime", "mdm_reader", "rules_agent", "operator", "ledger_runtime", "clean_application"):
                     conn.exec_driver_sql(f"CREATE ROLE {role} LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE")
                 # Control's grants go to one group; the worker (bk_runtime) is its member.
                 conn.exec_driver_sql("CREATE ROLE bk_control NOLOGIN")
                 conn.exec_driver_sql("GRANT bk_control TO bk_runtime")
-                for db in ("bookkeeping", "rules", "change_journal", "destination"):
+                for db in ("bookkeeping", "rules", "change_journal"):
                     conn.exec_driver_sql(f"CREATE DATABASE {db}")
             admin = engine("bookkeeping")
             runtime = engine("bookkeeping", "bk_runtime")
             rules_admin = engine("rules")
             ledger_admin = engine("change_journal")
-            destination_admin = engine("destination")
             with pytest.raises(Blocked, match="not initialized"):
                 migrate(admin, runtime_role="bk_control", existing_only=True)
             with pytest.raises(Blocked, match="not initialized"):
@@ -81,14 +76,8 @@ def databases():
                 grant_profile(admin, profile=profile, worker="bk_runtime")
             migrate_rules(rules_admin, agent_role="rules_agent")
             migrate_journal(ledger_admin, runtime_role="ledger_runtime")
-            migrate_guard(destination_admin, runtime_role="destination_runtime")
-            with destination_admin.begin() as conn:
-                conn.exec_driver_sql("CREATE TABLE effects(key text PRIMARY KEY, body jsonb NOT NULL)")
-                conn.exec_driver_sql("GRANT SELECT,INSERT ON effects TO destination_runtime")
-            migrate_guard(destination_admin, runtime_role="clean_application")
             yield Databases(admin, runtime, Rules(engine("rules", "rules_agent")),
-                            ChangeJournal(engine("change_journal", "ledger_runtime")), ledger_admin,
-                            engine("destination", "destination_runtime"), destination_admin, engine("destination", "clean_application"))
+                            ChangeJournal(engine("change_journal", "ledger_runtime")), ledger_admin)
         finally:
             for value in engines:
                 value.dispose()
@@ -790,30 +779,6 @@ def test_zero_work_explicit_configuration_and_manifest_evidence(databases, tmp_p
         submit(databases, tmp_path / "no", count=0)
     book, rid, _, _ = submit(databases, tmp_path / "yes", count=0, body=config(zero=True))
     assert drive(book, rid, databases.ledger)["run"]["state"] == "complete"
-
-
-def test_destination_transaction_fence_and_expiry_at_commit(databases, tmp_path):
-    book, rid, _, _ = submit(databases, tmp_path, count=1, body=config(seconds=2, resource="destination:guard"))
-    claim = book.claim(rid, "s0", "0")
-    key = uuid4().hex
-    with pytest.raises(DBAPIError), databases.destination.begin() as conn:
-        guard(conn, claim)
-        conn.execute(text("INSERT INTO effects VALUES(:k,'{}')"), {"k": key})
-        time.sleep(2.1)
-    with databases.destination.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM effects WHERE key=:k"), {"k": key}) == 0
-    new = book.claim(rid, "s0", "0")
-    with databases.destination.begin() as conn:
-        guard(conn, new)
-        conn.execute(text("INSERT INTO effects VALUES(:k,'{}')"), {"k": key})
-    # Same old token, with a fabricated later deadline, still cannot defeat
-    # the higher token stored by the destination.
-    old_proof = [{**p, "expires_at": new.proof[0]["expires_at"]} for p in claim.proof]
-    from dataclasses import replace
-    with pytest.raises(DBAPIError), databases.destination.begin() as conn:
-        guard(conn, replace(claim, proof=old_proof))
-    with pytest.raises(DBAPIError), databases.destination.begin() as conn:
-        conn.execute(text("UPDATE bookkeeping_guard.resource SET token=1"))
 
 
 def test_compaction_retains_receipts_checkpoints_and_tokens(databases, tmp_path):

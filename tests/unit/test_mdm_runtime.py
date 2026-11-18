@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-from edgar_warehouse.bookkeeping.clean import destinations
 from edgar_warehouse.mdm import binding, cli, connections, execution
 from edgar_warehouse.workers import __main__ as runner, control, mastering_merge
 from edgar_warehouse.workers.__main__ import runtime
@@ -24,7 +23,7 @@ def test_command_presentation_does_not_change_the_merge_runtime(monkeypatch):
     assert runtime(mastering_merge) == before
 
 
-@pytest.mark.parametrize("module", [execution, connections, binding, destinations])
+@pytest.mark.parametrize("module", [execution, connections, binding])
 def test_execution_connection_and_matching_code_change_the_merge_runtime(monkeypatch, module):
     before = runtime(mastering_merge)
     changed_file = Path(module.__file__)

@@ -5,7 +5,6 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import create_engine
 
-from edgar_warehouse.bookkeeping.clean.destinations import migrate_guard
 from edgar_warehouse.mdm.store import register_policy
 from tests.integration import test_mdm_postgres as core
 from tests.support.relationship_types import with_relationship_types
@@ -22,7 +21,6 @@ def mdm(databases):
     reader = create_engine(admin.url.set(username="mdm_reader", password="test"))
     try:
         core.initialize_database(admin, app)
-        migrate_guard(admin, runtime_role="clean_application")
         with admin.begin() as conn:
             policy = register_policy(conn, with_relationship_types({
                 "version": 1, "required_consumers": ["export", "graph", "journal"], "automatic_rules": [],

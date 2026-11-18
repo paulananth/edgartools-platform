@@ -7,7 +7,6 @@ Bookkeeping never names, imports or starts a worker (mastering to-do 20a).
 from __future__ import annotations
 
 import json
-import os
 import sys
 
 
@@ -85,7 +84,6 @@ TASK_COMMANDS = frozenset({"claim", "renew", "report", "fail"})
 
 def _handle(args):
     from .database import get_engine, migrate
-    from .destinations import migrate_guard
     operation = args.bookkeeping_command
     if operation == "serve":
         book = configured_bookkeeping()
@@ -112,10 +110,6 @@ def _handle(args):
             result = grant_profile(owner, profile=args.profile, worker=args.worker)
         finally:
             owner.dispose()
-    elif operation == "init-guard":
-        owner = get_engine(os.environ["DESTINATION_MIGRATION_DATABASE_URL"])
-        result = migrate_guard(owner, runtime_role=args.runtime_role)
-        owner.dispose()
     else:
         book = configured_bookkeeping()
         try:
@@ -129,11 +123,10 @@ def _handle(args):
 def register(subparsers):
     parser = subparsers.add_parser("bookkeeping", help="Runs, work units, leases and checkpoints")
     commands = parser.add_subparsers(dest="bookkeeping_command", required=True)
-    for name in ("init", "migrate", "init-guard"):
+    for name in ("init", "migrate"):
         command = commands.add_parser(name)
         command.add_argument("--runtime-role", required=True)
-        if name != "init-guard":
-            command.add_argument("--database-name", default="bookkeeping", help="The configured isolated control database")
+        command.add_argument("--database-name", default="bookkeeping", help="The configured isolated control database")
         command.set_defaults(handler=_handle)
     commands.add_parser("serve", help="Answer task protocol commands, one JSON line each, until stdin ends"
                         ).set_defaults(handler=_handle)

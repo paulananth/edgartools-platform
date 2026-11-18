@@ -352,10 +352,7 @@ step:
 A unit's input names the step before it (`{"from": {"step": "read", "key": ...}}`
 in a version-2 input manifest), so one run goes read → prepare → merge.
 
-Before the first run, once per MDM database: `edgar-warehouse mdm migrate`,
-then `edgar-warehouse bookkeeping init-guard --runtime-role <MDM application role>`
-with `DESTINATION_MIGRATION_DATABASE_URL` set to the MDM database's owner,
-since every MDM commit is checked against the worker's live lease. Then, for each profile in step order, as in Parse:
+Before the first run, once per MDM database: `edgar-warehouse mdm migrate`. Then, for each profile in step order, as in Parse:
 
 For an existing MDM store, before starting the new publication runtime,
 rerun `edgar-warehouse mdm migrate --application-role <MDM application role>`

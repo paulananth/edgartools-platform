@@ -1,7 +1,7 @@
 """Read and deliver original selected-store publication bytes."""
 import json
 
-from .prepared import authority, _refusals
+from .prepared import _refusals
 from .prepared_registry import installed
 from .store import Conflict, canonical
 
@@ -85,13 +85,12 @@ def deliver(store, consumer, worker, publisher, *, lease_seconds=300, batch_id=N
             return False
     _, row = retained(store, batch_id, consumer)
     if row is None:
-        # A no-work worker must also prove current authority at the destination.
         _refusals(lambda: api.retain_metadata("publication_observation", canonical([batch_id,consumer,worker]),
             {"batch_id":batch_id,"consumer":consumer,"unchanged":True},
-            immutable=True, authority=authority(store)))
+            immutable=True))
         return False
     claim = _refusals(lambda: api.claim_outbox(batch_id, consumer, worker,
-        seconds=lease_seconds, authority=authority(store), context=getattr(publisher,"origin",{})))
+        seconds=lease_seconds, context=getattr(publisher,"origin",{})))
     if claim is None:
         return False
     key, payload = consumer+"/"+batch_id, json.loads(claim["payload"])
@@ -101,10 +100,10 @@ def deliver(store, consumer, worker, publisher, *, lease_seconds=300, batch_id=N
     except Exception as error:
         try:
             _refusals(lambda: api.release_outbox(batch_id, consumer, worker,
-                claim["fence"], authority=authority(store)))
+                claim["fence"]))
         except Exception as release_error:
             raise error from release_error
         raise
     _refusals(lambda: api.ack_outbox(batch_id, consumer, worker,
-        claim["fence"], verified, authority=authority(store)))
+        claim["fence"], verified))
     return True

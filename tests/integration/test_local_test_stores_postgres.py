@@ -5,7 +5,6 @@ from pathlib import Path
 import shlex
 import subprocess
 import sys
-from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -102,17 +101,6 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
             with pytest.raises(DBAPIError):
                 with reader.begin() as conn:
                     conn.execute(text("DELETE FROM mdm.master_entity WHERE false"))
-        application = engine("mdm", "mdm_runtime")
-        def lease(until):
-            return json.dumps([{"resource": "invented", "token": 1, "run_id": str(uuid4()),
-                                "attempt": str(uuid4()), "expires_at": until.isoformat()}])
-        with application.begin() as conn:
-            conn.execute(text("SELECT bookkeeping_guard.authorize(CAST(:p AS jsonb))"),
-                         {"p": lease(datetime.now(timezone.utc) + timedelta(minutes=2))})
-        with pytest.raises(DBAPIError):
-            with application.begin() as conn:
-                conn.execute(text("SELECT bookkeeping_guard.authorize(CAST(:p AS jsonb))"),
-                             {"p": lease(datetime.now(timezone.utc) - timedelta(minutes=1))})
         # Run a real offline copy using the generated worker file.
         artifacts = Artifacts()
         inp = artifacts.put(tmp_path.as_uri() + "/inputs", {"invented": 1})

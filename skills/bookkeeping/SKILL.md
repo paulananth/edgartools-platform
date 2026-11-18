@@ -289,12 +289,9 @@ past lease expiry. Compare the exact retained receipts/cursors, not just counts.
 SQL Server's normal control lifecycle remains deferred; its existing read and
 prepared-transition helper checks do not qualify a whole run.
 
-Select one command for the requested state. Caller-held destination transaction
-guards are PostgreSQL-only. When those guards are in scope, provision them
-separately with `bookkeeping init-guard` and its restricted destination role,
-using the destination-owner setup in the central connection section.
-MySQL writers use their destination's own atomic capability; report unsupported
-legacy guard calls explicitly rather than emulating deferred commit enforcement.
+Select one command for the requested state. A destination protects itself
+(its own lock, key or immutable store); Bookkeeping's lease is the exclusion of
+a second worker on a unit, and its completion authority check is its own.
 Neither control-store mode silently provisions a destination or executes work.
 
 ## Plan mode
