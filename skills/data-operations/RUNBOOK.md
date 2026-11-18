@@ -56,8 +56,15 @@ The stores folder is `~/.config/edgartools/hosted/`, one folder for the store: `
 `worker.env` (the runtime logins and the manifest root), `governance.env` (the registration login). `load --stores`
 takes it. A second copy of these files elsewhere goes stale, and a stale copy fails `doctor` with a login error.
 
-1. **Instance.** [aws-snowflake-operations](../aws-snowflake-operations/SKILL.md) creates it. Wait for `state` to read
-   `READY`. A rotation of a login's password needs the operator's word, and nothing below needs one.
+1. **Instance.** [aws-snowflake-operations](../aws-snowflake-operations/SKILL.md) creates it (snowflake-postgres skill,
+   `pg_connect.py --create`; its comment takes letters and spaces, a `;` is refused). Wait for `state` to read `READY`,
+   then for its hostname to resolve on this machine. A lookup made before the name existed can stay cached as "not
+   found" for up to an hour while a public resolver already answers (`dig +short @8.8.8.8 <host>`, count the lines,
+   never print them): the operator flushes the cache (`sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder`
+   on macOS). A rotation of a login's password needs the operator's word, and nothing below needs one.
+   Run every command below from a checkout of today's `main` with its environment built
+   (`uv sync --extra mdm --extra s3`) or a bundle installed from it: an older `edgar-warehouse`
+   creates older schemas.
 2. **Databases.** An instance that holds an old store keeps its logins and gets its databases made again: with the
    operator's word, list them, then drop and create them with the owner and the grants each had:
    ```bash
@@ -66,7 +73,14 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    python infra/scripts/reset-hosted-databases.py --confirm
    ```
    A fresh instance gets its six databases (`mdm`, `rdm`, `rules`, `bookkeeping`, `change_journal`, `silver`) and their
-   restricted logins from the connection section, which names the grants each needs.
+   restricted logins from the stores folder's own files, each login with the password its URL already holds (no login
+   is rotated); every URL then names the new instance, and the administrator's URLs its new password:
+   ```bash
+   python <data-platform skill>/scripts/provision_hosted_store.py --service <the instance's saved service>            # lists
+   python <data-platform skill>/scripts/provision_hosted_store.py --service <the instance's saved service> --confirm
+   ```
+   The service is the one the instance's creation saved (snowflake-postgres skill, `pg_connect.py --create`). Wait for
+   its hostname to resolve first. Done when the second run prints that every URL names the new instance.
 3. **Schemas** (data-platform's step, [STORES.md](../data-platform/STORES.md)), each with its owner login, in one shell that holds `connection.env`. MDM and Bookkeeping read the owner
    from their ordinary variable, for that command only; the others read their `*_MIGRATION_DATABASE_URL`:
    ```bash
