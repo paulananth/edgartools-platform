@@ -1009,3 +1009,17 @@ def test_an_answer_that_cannot_be_read_names_why_from_the_commands_last_error_li
         "not published: no readable answer (cause: No such file or directory)"
     assert chain.catalog_outcome("", "") == "not published: no readable answer"
     assert "postgresql://" not in chain.catalog_outcome("", "boom postgresql://u:pw@h/db")  # an address is hidden
+
+
+def test_bookkeepings_runs_are_asked_for_within_the_commands_own_maximum_and_a_full_page_is_said_to_be_possibly_cut(monkeypatch):
+    seen = {}
+
+    def fake(command, env, timeout=60):
+        seen["limit"] = int(command[command.index("--limit") + 1])
+        return '[{"run_id": "r1"}]', ""
+
+    monkeypatch.setattr(chain, "run_catalog_status", fake)
+    monkeypatch.setattr(chain, "_RUNS", None)
+    assert chain.bookkeeping_runs() == [{"run_id": "r1"}]
+    assert seen["limit"] == chain.RUNS_LIMIT == 1000  # `bookkeeping runs` refuses more than 1000
+    assert chain.runs_may_be_cut([{}] * 1000) and not chain.runs_may_be_cut([{}] * 999)

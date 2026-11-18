@@ -32,6 +32,10 @@ The private repo-root `.env` names port 8585 and a token of the retired stack. T
   addresses hidden (`test_an_answer_that_cannot_be_read_names_why_from_the_commands_last_error_line`); a step with no run in any log uses
   Bookkeeping's own newest completed run for its source and target (`test_the_latest_completed_run_of_a_source_and_target_comes_from_bookkeepings_own_rows`,
   `test_a_step_with_no_run_in_any_log_falls_back_to_bookkeepings_latest_for_its_source_and_target`)
+- [x] The second catch-up confirmed 25 steps and left 16 unpublished: the Bookkeeping fallback read no rows, because I asked `bookkeeping runs`
+  for 5000 and its maximum is 1000 (a traceback the chain read as no rows). It asks for 1000 and says when a full page may have more behind it
+  (2026-11-18 10:38 ET; `test_bookkeepings_runs_are_asked_for_within_the_commands_own_maximum_and_a_full_page_is_said_to_be_possibly_cut`:
+  `RUNS_LIMIT` did not exist; live: 540 runs read, every step found except `prospectus`, which has not run)
 - [ ] `rules catalog check` (read-only) shows whether the target Pipelines exist; publish the catalog plan if not
 - [ ] `load_chain.py --catalog-status` catches the finished steps up; read each outcome
 - [ ] Learning → skill: openmetadata LOCAL-SERVER, the order of initialize, publish, status

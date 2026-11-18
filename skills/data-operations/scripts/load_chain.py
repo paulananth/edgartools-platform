@@ -863,6 +863,12 @@ def latest_run(rows: list[dict], source: str, target: str) -> str | None:
 
 
 _RUNS: list[dict] | None = None
+RUNS_LIMIT = 1000  # `bookkeeping runs` refuses a larger page
+
+
+def runs_may_be_cut(rows: list[dict]) -> bool:
+    """A full page may have more runs behind it (newest first): the oldest steps' runs could be missing."""
+    return len(rows) >= RUNS_LIMIT
 
 
 def bookkeeping_runs() -> list[dict]:
@@ -870,7 +876,7 @@ def bookkeeping_runs() -> list[dict]:
     where its logs name none (a step the lanes re-ran logged only `already loaded`)."""
     global _RUNS
     if _RUNS is None:
-        answer, _ = run_catalog_status([*ENGINE, "bookkeeping", "runs", "--limit", "5000"],
+        answer, _ = run_catalog_status([*ENGINE, "bookkeeping", "runs", "--limit", str(RUNS_LIMIT)],
                                        status_env(os.environ, load_env(STORES / "worker.env"), {}), timeout=300)
         try:
             _RUNS = json.JSONDecoder().raw_decode(answer[answer.index("["):])[0] if "[" in answer else []
