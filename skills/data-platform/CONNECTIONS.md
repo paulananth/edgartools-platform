@@ -84,7 +84,8 @@ Rules commands use the restricted `rules_agent` login; registering rules in
 MDM uses the MDM governance connection (`mdm grant-registration` gives that
 login its access). Silver landing
 uses its runtime connection and the MDM runtime connection to resolve master
-IDs. Each profile grants its worker duty to `bookkeeping_runtime`.
+IDs. Each profile grants its worker duty to `bookkeeping_runtime`. After `provision_hosted_store.py --loader --retire`, every load logs in as
+`edgar_loader`, and the runtime roles named here are NOLOGIN groups it holds by membership.
 For a hosted store, it is a member of `bookkeeping_control`, the group
 role passed to Bookkeeping initialization/migration.
 The application guard uses runtime role `mdm_runtime`.
