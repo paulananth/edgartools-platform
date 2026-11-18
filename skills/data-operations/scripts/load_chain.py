@@ -21,6 +21,7 @@ and LOGS name the captured files and the logs; RUN labels the capture runs. The 
 """
 import argparse
 import contextlib
+import hashlib
 import json
 import os
 import re
@@ -32,6 +33,7 @@ import sys
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 import yaml
@@ -596,6 +598,47 @@ def plan(step: dict, env: dict) -> str:
         return "no plan: " + (done.stderr.strip().splitlines() or ["?"])[-1][:140]
 
 
+def store_id(url: str) -> str:
+    """Eight hex digits naming a store by its instance's address, so a state file can tell which store its lines belong
+    to without showing the address. Any login and database of one instance give the same name."""
+    part = urlsplit(url.replace("postgresql+psycopg2", "postgresql"))
+    return hashlib.sha256(f"{part.hostname}:{part.port}".encode()).hexdigest()[:8]
+
+
+def ensure_store(state: Path, store: str) -> bool:
+    """Make the state file this store's: a file written for another store is set aside (`<file>.<its store>`), so its
+    `done` lines never satisfy a wait the new store has not earned. Returns whether it set a file aside."""
+    marker = re.compile(r"chain store (\w+)$", re.M)
+    stamp = f"{datetime.now(ZoneInfo('America/New_York')):%m-%d %H:%M:%S} ET chain store {store}\n"
+    text = state.read_text() if state.exists() else ""
+    found = marker.findall(text)
+    if found and found[-1] == store:
+        return False
+    aside = bool(text)
+    if aside:
+        state.rename(state.with_name(f"{state.name}.{found[-1] if found else 'unmarked'}"))
+    state.write_text(stamp)
+    return aside
+
+
+def retry_is_pointless(previous: str, current: str) -> bool:
+    """A failure that comes back unchanged, with only its numbers differing, is not one a retry can change. A window that
+    ran out (`deadline`) is not that: the next attempt resumes where this one stopped."""
+    if not previous or "deadline" in current:
+        return False
+    return re.sub(r"\d+", "N", previous) == re.sub(r"\d+", "N", current)
+
+
+def errors_since(path: Path, offset: int) -> str:
+    """What was written to the shared error log after `offset`, with every address hidden: the attempt's own errors,
+    kept with its step (the file is shared by every lane and every run)."""
+    if not path.exists() or path.stat().st_size <= offset:
+        return ""
+    with path.open("rb") as handle:
+        handle.seek(offset)
+        return re.sub(r"(postgres(ql)?(\+\w+)?|https?)://[^ \"'\s]+", "<addr>", handle.read().decode(errors="replace"))
+
+
 def done_steps(state: Path) -> set[str]:
     """The steps any lane has finished, read from the shared state file."""
     return set(re.findall(r" ET (\S+) done:", state.read_text())) if state.exists() else set()
@@ -619,8 +662,10 @@ def wait_for(step: dict, state: Path, poll: int = 30) -> None:
 def attempt_loop(step: dict, env: dict, state: Path) -> bool:
     name, log = step["name"], LOGS / f"chain-{RUN}-{step['name']}.log"
     wait_for(step, state)
+    errors, offset, previous = STORES / "load-errors.log", 0, ""
     for attempt in range(1, step["attempts"] + 1):
         note(f"{name} attempt {attempt} start", state)
+        offset = errors.stat().st_size if errors.exists() else 0
         code = run(["load", *arguments(step)], env, log)
         text = log.read_text()
         if code == 0 and "Load stopped" not in text:
@@ -631,6 +676,15 @@ def attempt_loop(step: dict, env: dict, state: Path) -> bool:
         note(f"{name} attempt {attempt} stopped rc={code}: "
              f"{re.sub(r'(postgres(ql)?|https?)://[^ ]+', '<addr>', why[-1])[:200] if why else ''}", state)
         log.rename(log.with_name(log.name + f".attempt-{attempt}"))
+        kept = errors_since(errors, offset)
+        if kept:
+            log.with_name(log.name + f".attempt-{attempt}.errors").write_text(kept)
+        current = why[-1] if why else ""
+        if retry_is_pointless(previous, current):
+            note(f"{name} stopped: the same failure came back, so a retry cannot change it (its errors: "
+                 f"{log.name}.attempt-{attempt}.errors)", state)
+            return False
+        previous = current
     note(f"{name} did not finish in {step['attempts']} attempts: the chain stops here", state)
     return False
 
@@ -688,6 +742,9 @@ def main() -> int:
         return 0
     env = {**os.environ, **load_env(STORES / "worker.env")}
     LOGS.mkdir(parents=True, exist_ok=True)
+    if not args.plan and env.get("MDM_DATABASE_URL"):
+        if ensure_store(state, store_id(env["MDM_DATABASE_URL"])):
+            print(f"{state.name} belonged to another store: set aside, this store starts a fresh chain state", flush=True)
     if args.plan:
         for step in steps:
             print(f"{step['name']:30} {plan(step, env)}", flush=True)

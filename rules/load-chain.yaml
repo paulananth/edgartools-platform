@@ -347,7 +347,7 @@ steps:
     capture: sec.submissions.company/all-76230
     facts:
       observed_at: "2026-09-30T02:20:28+00:00"
-    minutes: 60
+    minutes: 120
     attempts: 4
   - name: prospectus
     lane: D

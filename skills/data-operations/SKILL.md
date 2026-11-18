@@ -23,6 +23,8 @@ Read the verdict, not the word "running":
 - **progressing**: it wrote rows, its processes worked, or its log moved in the last ten minutes;
 - **unclear**: the step's own processes used no CPU and its log is silent, but its store is written by other running
   steps, so the rows may be theirs: check its log and its processes before calling it alive;
+- a step that **stopped**: read its own errors file (`chain-<RUN>-<step>.log.attempt-<n>.errors`), not the shared error log;
+  an unchanged failure stops the step at once, since a retry cannot change it;
 - **no sign of work**: no CPU, no rows written and a silent log: read its log and the stores folder's `load-errors.log`
   before saying anything else, since it may be stalled;
 - **waiting on database locks** (three or more sessions): the contention ladder of the daily-run runbook;

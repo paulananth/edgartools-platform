@@ -651,3 +651,51 @@ def test_every_run_mode_holds_a_steps_workers_to_the_capacity_not_only_the_sched
     assert [s["workers"] for s in chain.clamped(steps, (1, 4))] == [4, 2, 1]  # a medium task starts GLEIF at 4
     assert [s["workers"] for s in chain.clamped(steps, (2, 8))] == [8, 2, 2]  # a floor raises the lowest
     assert steps[0]["workers"] == 8  # the chain file's own steps are not changed
+
+
+def test_a_state_file_from_another_store_is_set_aside_so_its_done_lines_never_satisfy_a_wait(tmp_path):
+    state = tmp_path / "chain.log"
+    state.write_text("11-15 14:21:31 ET chain store aaaa1111\n11-15 14:21:31 ET company done: Done\n")
+    assert chain.ensure_store(state, "bbbb2222") is True  # a different store: the old lines are archived
+    assert chain.done_steps(state) == set()
+    assert state.read_text().endswith("chain store bbbb2222\n")
+    assert (tmp_path / "chain.log.aaaa1111").read_text().count("company done") == 1
+    state.write_text(state.read_text() + "11-18 06:40:00 ET company done: Done\n")
+    assert chain.ensure_store(state, "bbbb2222") is False  # the same store: nothing is touched
+    assert chain.done_steps(state) == {"company"}
+    fresh = tmp_path / "new.log"
+    assert chain.ensure_store(fresh, "bbbb2222") is False and fresh.read_text().endswith("chain store bbbb2222\n")
+
+
+def test_a_store_is_named_by_its_address_without_ever_showing_it():
+    one = chain.store_id("postgresql://a:secret@host-one.invalid:5432/mdm")
+    assert one == chain.store_id("postgresql+psycopg2://b:other@host-one.invalid:5432/silver")  # same instance, any login
+    assert one != chain.store_id("postgresql://a:secret@host-two.invalid:5432/mdm")
+    assert len(one) == 8 and "host-one" not in one and "secret" not in one
+
+
+def test_a_retry_is_pointless_when_the_same_error_comes_back_but_not_when_the_window_ran_out():
+    error = "ValueError: Step sec_tickers: no document of the bundle matches '*company_tickers_exchange*'"
+    assert chain.retry_is_pointless(error, error)
+    assert chain.retry_is_pointless("Blocked: silver.t: refused (SQLSTATE 42501)", "Blocked: silver.t: refused (SQLSTATE 42501)")
+    assert not chain.retry_is_pointless("", error)  # a first failure is always retried
+    assert not chain.retry_is_pointless(error, "ValueError: another failure")
+    late = "Load stopped: 2 of 149 did not finish: bundle 42 did not finish before the deadline"
+    assert not chain.retry_is_pointless(late, late)  # the window ran out; the next attempt resumes where it stopped
+    assert chain.retry_is_pointless("Error: bundle 3 failed after 12 retries", "Error: bundle 3 failed after 99 retries")  # digits are not the cause
+
+
+def test_the_errors_an_attempt_wrote_to_the_shared_error_log_are_kept_with_that_step(tmp_path):
+    log = tmp_path / "load-errors.log"
+    log.write_text("$ old command\nOldError: before this attempt\n")
+    offset = log.stat().st_size
+    log.write_text(log.read_text() + "$ rules run --source x\nValueError: postgresql://u:pw@h:5432/db failed\n")
+    kept = chain.errors_since(log, offset)
+    assert "ValueError" in kept and "OldError" not in kept
+    assert "pw" not in kept and "<addr>" in kept
+    assert chain.errors_since(tmp_path / "missing.log", 0) == ""
+
+
+def test_ipo_has_a_window_that_fits_its_bundles():
+    ipo = BY_NAME["ipo"]
+    assert ipo["minutes"] * ipo["attempts"] >= 300  # 149 bundles at about two minutes each, one at a time

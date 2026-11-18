@@ -148,6 +148,10 @@ A slow load has one saturated tier. Throttling hides which, so it comes last.
 
 ## Progress, failure and recovery
 
+A step that stops keeps the errors of that attempt in `chain-<RUN>-<step>.log.attempt-<n>.errors` (the stores folder's
+`load-errors.log` is shared by every lane and run), and a step whose same failure comes back unchanged stops at once: a
+retry cannot change it. Read the step's own errors file first.
+
 Report a running load from `load_chain.py --status` (progress, rate, processes, database sessions and a verdict for each
 step; see the data-operations skill), never as "running".
 
