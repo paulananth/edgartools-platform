@@ -131,7 +131,7 @@ def provision(conn, held: dict[str, tuple[str, set[str]]], admin: str, confirm: 
                 raise ValueError(f"{role} exists and cannot log in")
         for group, members in GROUPS.items():
             cur.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (group,))
-            if cur.fetchone() is None:
+            if cur.fetchone() is None and group not in held:  # a login made above serves as the group too
                 done.append(f"create group {group}")
                 if confirm:
                     cur.execute(sql.SQL("CREATE ROLE {} NOLOGIN").format(sql.Identifier(group)))

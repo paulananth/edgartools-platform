@@ -56,8 +56,15 @@ The stores folder is `~/.config/edgartools/hosted/`, one folder for the store: `
 `worker.env` (the runtime logins and the manifest root), `governance.env` (the registration login). `load --stores`
 takes it. A second copy of these files elsewhere goes stale, and a stale copy fails `doctor` with a login error.
 
-1. **Instance.** [aws-snowflake-operations](../aws-snowflake-operations/SKILL.md) creates it. Wait for `state` to read
-   `READY`. A rotation of a login's password needs the operator's word, and nothing below needs one.
+1. **Instance.** [aws-snowflake-operations](../aws-snowflake-operations/SKILL.md) creates it (snowflake-postgres skill,
+   `pg_connect.py --create`; its comment takes letters and spaces, a `;` is refused). Wait for `state` to read `READY`,
+   then for its hostname to resolve on this machine. A lookup made before the name existed can stay cached as "not
+   found" for up to an hour while a public resolver already answers (`dig +short @8.8.8.8 <host>`, count the lines,
+   never print them): the operator flushes the cache (`sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder`
+   on macOS). A rotation of a login's password needs the operator's word, and nothing below needs one.
+   Run every command below from a checkout of today's `main` with its environment built
+   (`uv sync --extra mdm --extra s3`, about two minutes) or a bundle installed from it: an older `edgar-warehouse`
+   creates older schemas.
 2. **Databases.** An instance that holds an old store keeps its logins and gets its databases made again: with the
    operator's word, list them, then drop and create them with the owner and the grants each had:
    ```bash

@@ -51,3 +51,30 @@ def test_every_url_moves_to_the_new_instance_and_only_the_administrator_takes_a_
     assert OLD not in text and "BOOKKEEPING_MANIFEST_ROOT=file:///invented/manifests" in text
     assert (folder / "connection.env").read_text().startswith("unset MDM_MIGRATION_DATABASE_URL\n")
     assert (folder / "worker.env").stat().st_mode & 0o777 == 0o600
+
+
+class _EmptyServer:
+    def cursor(self):
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def execute(self, *args):
+        pass
+
+    def fetchone(self):
+        return None
+
+
+def test_a_group_that_is_also_a_login_is_made_once_as_the_login():
+    from provision_hosted_store import provision
+
+    held = {"rules_agent": ("r-invented", {"rules"}), "rules_governance": ("g-invented", {"rules"}),
+            "bookkeeping_runtime": ("w-invented", {"bookkeeping"})}
+    steps = provision(_EmptyServer(), held, "admin", confirm=False)
+    assert "create login rules_agent" in steps and "create group rules_agent" not in steps
+    assert "create group bookkeeping_control" in steps and "put rules_governance in rules_agent" in steps

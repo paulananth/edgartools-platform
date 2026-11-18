@@ -151,8 +151,9 @@ front of it silently orders by the wrong one, so order by the alias instead.
   store it holds to the operator: `DROP POSTGRES INSTANCE` deletes them all, with no undrop and no backup unless one
   was taken first.
 - **A fresh instance** is created with the snowflake-postgres skill's `pg_connect.py --create` (it saves the
-  administrator's login privately, never shown). Its hostname can take several minutes to resolve after `READY`:
-  wait for it to resolve before connecting. Then give it its logins and databases with the data-platform skill's
+  administrator's login privately, never shown). Its hostname can take several minutes to resolve after `READY`, and a
+  machine that looked it up too early keeps "not found" cached: compare with a public resolver before waiting longer
+  (data-operations runbook, "Initialize a hosted store", step 1). Then give it its logins and databases with the data-platform skill's
   `scripts/provision_hosted_store.py`, and follow the data-operations runbook, "Initialize a hosted store".
 - **Reachability through a network policy** is decided by the policy's network rules of mode `POSTGRES_INGRESS`;
   `ALLOWED_IP_LIST` does not apply to an instance. A checker that reads only the IP list reports every rule-based
