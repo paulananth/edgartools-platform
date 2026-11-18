@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections import defaultdict
 from functools import partial
 
-from . import cascade, correction
+from . import correction, waterfall_passes
 from .activation import activated
 from .catalog import CATALOG, assert_current
 from .binding import bound, in_review, nothing, survivors
@@ -55,7 +55,7 @@ def candidate_paths(rule: dict) -> dict[str, tuple]:
     name_count = ("provenance", "matching", profile["name_count_field"])
     return {
         "identifier": ("identifiers", profile["identifier_namespace"]),
-        "cascade": (*name_count, profile["cascade_field"], profile["cascade_identifier_field"]),
+        "waterfall": (*name_count, profile["waterfall_field"], profile["waterfall_identifier_field"]),
     }
 
 
@@ -98,7 +98,7 @@ def compare_candidate_records(rule: dict, pairs: list[tuple[dict, dict]]) -> lis
         return compare_record_pairs({
             "rule": rule, "pairs": pairs,
             "normalizers": {kind.normalizer_name: kind.upper for kind in TYPES.values()},
-            "cascade_version": cascade.VERSION,
+            "waterfall_version": waterfall_passes.VERSION,
             "pair_comparison": profile,
             "jurisdictions": EDGAR_JURISDICTIONS,  # the pinned crosswalk, for a pass's `jurisdiction` part (ticket 250)
         })
@@ -113,7 +113,7 @@ def compare_pair_test(name: str, left: dict, right: dict, args: dict) -> bool:
 HELD_LEI_TEST = "holds_no_other_lei@1"
 PAIR_TESTS = {
     name: partial(compare_pair_test, name) for name in (
-        "gleif_entity_eligible@1", cascade.TEST,
+        "gleif_entity_eligible@1", waterfall_passes.TEST,
     )
 }
 
@@ -214,7 +214,7 @@ def propose(
         holders_here = [a for a in batch.values() if a["source_code"] == holder]
         paths = candidate_paths(rule)
         namespace = comparison_profile(rule)["identifier_namespace"]
-        lookup = paths["cascade"]
+        lookup = paths["waterfall"]
         def value_of(record):
             return candidate_value(record, lookup)
         # Each side of a pair: from this batch, or the latest stored version.

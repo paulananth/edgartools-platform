@@ -81,7 +81,7 @@ def _validate(body):
 
 
 def _validate_pair_comparison(pair, kinds):
-    text_fields = {"name_field", "identifier_namespace", "name_count_field", "cascade_field", "cascade_identifier_field",
+    text_fields = {"name_field", "identifier_namespace", "name_count_field", "waterfall_field", "waterfall_identifier_field",
                    "eligibility_kind", "status_field", "registration_status_field"}
     list_fields = {"eligibility_categories", "left_address_fields", "right_address_fields"}
     optional = {"left_jurisdiction_field", "right_jurisdiction_field"}  # the fields a `jurisdiction` part compares

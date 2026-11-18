@@ -1,4 +1,4 @@
-"""The cascade: SEC-to-GLEIF matching passes, strict to loose (ticket 21).
+"""The waterfall: SEC-to-GLEIF matching passes, strict to loose (ticket 21).
 
 Operator, 2026-09-27: "match on name and address first, if it matches merge
 it ... then reduce the fields gradually until you get more merging", with no
@@ -42,7 +42,7 @@ from .quality import withheld
 from .store import Conflict
 
 VERSION = "sec-gleif-cascade-v1"
-TEST = "cascade_pass@1"
+TEST = "waterfall_pass@1"
 CONFLICT = "incorporation conflicts"
 NOT_UNIQUE = "name held by another candidate"
 PARTS = ("street", "city", "postcode", "jurisdiction")
@@ -116,7 +116,7 @@ _value, _matching = field_value, matching_values
 
 
 def filer_of(record: dict) -> Filer:
-    """An SEC Company record, as the Stage holds it, as the cascade reads it:
+    """An SEC Company record, as the Stage holds it, as the waterfall reads it:
     its business address, never its mailing address."""
     return Filer(
         cik=record["record_key"],
@@ -128,7 +128,7 @@ def filer_of(record: dict) -> Filer:
 
 
 def entity_of(record: dict, keys: frozenset, *, eligible: bool) -> Entity:
-    """A GLEIF record, as the Stage holds it, as the cascade reads it. `keys`
+    """A GLEIF record, as the Stage holds it, as the waterfall reads it. `keys`
     are its legal and other names (the Stage record carries only the legal
     one); `eligible` is the rule's own eligibility test."""
     return Entity(
@@ -165,24 +165,24 @@ def spec(policy: dict, kind: str = "company") -> dict:
             continue
         args = tests[TEST]
         if not {"pass", "compare", "over_shared"} <= set(args):
-            raise Conflict(f"Cascade rule {rule.get('rule_id')} must state its pass, parts and threshold")
+            raise Conflict(f"Waterfall rule {rule.get('rule_id')} must state its pass, parts and threshold")
         passes.append({"pass": args["pass"], "compare": args["compare"], "rule_id": rule["rule_id"]})
         shared.add(args["over_shared"])
         found = tests.get("gleif_entity_eligible@1") or {}
         eligibility.add((tuple(found.get("entity_statuses") or ()),
                          tuple(found.get("refused_registration_statuses") or ())))
     if len({p["pass"] for p in passes}) != len(passes) or len(shared) > 1 or len(eligibility) > 1:
-        raise Conflict("Cascade passes must be unique and state one threshold and one eligibility")
+        raise Conflict("Waterfall passes must be unique and state one threshold and one eligibility")
     statuses, refused = next(iter(eligibility)) if eligibility else ((), ())
     return {"version": VERSION, "passes": passes, "over_shared": next(iter(shared)) if shared else None,
             "entity_statuses": list(statuses), "refused_registration_statuses": list(refused)}
 
 
-def eligible(values: dict, cascade: dict) -> bool:
+def eligible(values: dict, spec: dict) -> bool:
     """GLEIF's entity and registration status against the passes' test.
     Only a GENERAL record reaches here: no other category is a Company."""
-    return (values.get("gleif_entity_status") in cascade["entity_statuses"]
-            and values.get("gleif_registration_status") not in cascade["refused_registration_statuses"])
+    return (values.get("gleif_entity_status") in spec["entity_statuses"]
+            and values.get("gleif_registration_status") not in spec["refused_registration_statuses"])
 
 
 def count_addresses(places: Iterable[Place]) -> Counter:

@@ -62,9 +62,9 @@ def exact_namespaces(settings: "Settings") -> list[str]:
 def name_keys(record: dict, namespaces=(NAME_ID,)) -> list[tuple]:
     """The LEI the waterfall pass paired the record with, and its exact name ids, so a name match is a lookup."""
     found = ((record.get("provenance") or {}).get("matching") or {}).get("name_count") or {}
-    cascade = (found.get("cascade") or {}).get("lei")
+    paired = (found.get("cascade") or {}).get("lei")
     exact = [(role_of(ns), reference_of(record, ns)) for ns in namespaces]
-    return [(role, value, record["subject"]) for role, value in (("cascade", cascade), *exact)
+    return [(role, value, record["subject"]) for role, value in (("cascade", paired), *exact)
             if isinstance(value, str) and value]
 
 
@@ -86,7 +86,7 @@ def apply_pairs(store, settings: Settings, source_code: str, pairs: dict[str, di
             raise ValueError("A pair application uses only the selected source and identity kind")
         pair = pairs.get(record["record_key"])
         if pair:
-            expected = {"version": matching.cascade.VERSION, **pair}
+            expected = {"version": matching.waterfall_passes.VERSION, **pair}
             existing = (((record.get("provenance") or {}).get("matching") or {}).get("name_count") or {}).get("cascade")
             if (record["subject"], pair["lei"]) in held and existing == expected:
                 continue

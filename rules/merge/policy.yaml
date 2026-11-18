@@ -215,12 +215,12 @@ automatic_rules:
 - kind: company
   family: name_binding
   rule_id: sec-gleif-name-city-or-postcode
-  rule_version: 2026-11-03.named-by-what-it-compares
+  rule_version: 2026-11-17.name-and-city-or-postcode-waterfall-word
   verdict: bind
 - kind: company
   family: name_binding
   rule_id: sec-gleif-name-jurisdiction
-  rule_version: 2026-11-16.name-and-state-of-incorporation
+  rule_version: 2026-11-17.name-and-state-of-incorporation-waterfall-word
   verdict: bind
 - kind: company
   family: classification

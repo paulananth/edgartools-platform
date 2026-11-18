@@ -57,9 +57,9 @@ def check_policy(body: dict) -> None:
                 f"Rule {rule.get('rule_id')} has an unknown family: {family}"
             )
         RULE_CHECKS[family](kind, rule, kinds)
-    # The cascade's passes together: distinct, one threshold, one
+    # The waterfall's passes together: distinct, one threshold, one
     # eligibility (ticket 21); each pass alone is checked above.
-    from .cascade import spec
+    from .waterfall_passes import spec
 
     spec(body)
     active = set()
@@ -405,24 +405,24 @@ def check_name_binding_rule(kind: str, rule: dict, kinds: dict) -> None:
                 f"Name binding rule {rule_id} calls {test}, which is not a name "
                 "binding test"
             )
-    if "cascade_pass@1" in tests:
-        _check_cascade_pass(rule_id, rule, tests)
+    if "waterfall_pass@1" in tests:
+        _check_waterfall_pass(rule_id, rule, tests)
         return
-    raise Conflict(f"Name binding rule {rule_id} must be one waterfall pass (`cascade_pass@1`)")
+    raise Conflict(f"Name binding rule {rule_id} must be one waterfall pass (`waterfall_pass@1`)")
 
 
-def _check_cascade_pass(rule_id: str, rule: dict, tests: list) -> None:
-    """One pass of the cascade (ticket 21). It rests on the name count's answer,
+def _check_waterfall_pass(rule_id: str, rule: dict, tests: list) -> None:
+    """One pass of the waterfall (ticket 21). It rests on the name count's answer,
     one to one over both whole sources, not on a Stage's scope; the pass
     states which address parts it compares, down to the name alone, as the
     operator ruled (2026-09-27)."""
-    from .cascade import CONFLICT, NOT_UNIQUE, PARTS
+    from .waterfall_passes import CONFLICT, NOT_UNIQUE, PARTS
 
-    if tests.count("cascade_pass@1") != 1:
-        raise Conflict(f"Cascade rule {rule_id} is exactly one pass and no other name rule")
+    if tests.count("waterfall_pass@1") != 1:
+        raise Conflict(f"Waterfall rule {rule_id} is exactly one pass and no other name rule")
     if not {"gleif_entity_eligible@1", "holds_no_other_lei@1"} <= set(tests):
-        raise Conflict(f"Cascade rule {rule_id} must test eligibility and the one-LEI veto")
-    args = next(t.get("args") or {} for t in rule["when"] if t.get("primitive") == "cascade_pass@1")
+        raise Conflict(f"Waterfall rule {rule_id} must test eligibility and the one-LEI veto")
+    args = next(t.get("args") or {} for t in rule["when"] if t.get("primitive") == "waterfall_pass@1")
     compare = args.get("compare")
     if (
         not isinstance(args.get("pass"), str)
@@ -435,7 +435,7 @@ def _check_cascade_pass(rule_id: str, rule: dict, tests: list) -> None:
         or args.get("gleif_normalizer") not in NORMALIZERS
         or not set(args.get("refused_flags") or []) <= {CONFLICT, NOT_UNIQUE}
     ):
-        raise Conflict(f"Cascade rule {rule_id} has invalid pass arguments")
+        raise Conflict(f"Waterfall rule {rule_id} has invalid pass arguments")
 
 
 EXACT_NAME_KEYS = frozenset({"name_id@1", "name_place_id@1", "issuer_symbol_id@1"})

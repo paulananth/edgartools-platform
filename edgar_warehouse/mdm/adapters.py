@@ -290,7 +290,7 @@ def _refuse(row: dict, mapping: dict) -> None:
 def mapped_values(row: dict, contract: dict) -> tuple[dict, dict, dict | None]:
     """A row's mapped fields and matching values, after the feed's data
     quality rule: what `normalize` puts on a record, read by the same parts,
-    and what the cascade's name count reads for every filer and entity, a Company
+    and what the waterfall's name count reads for every filer and entity, a Company
     or not (ticket 21), so the two cannot differ."""
     _refuse(row, contract["adapter"])
     fields = _fields(row, contract["adapter"])

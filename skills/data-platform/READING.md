@@ -1215,7 +1215,7 @@ engine does not enforce execution pins.
 
 Read the captures through the source's main contract for it, then combine with
 its Name Matching combine contract as described in COMBINING.md. The file's version,
-normalizers, FULL publication and optional cascade version must match the
+normalizers, FULL publication and optional waterfall version must match the
 contract; unexpected reserved metadata collisions refuse. Constants are
 scalar values; use scalar assertions for metadata fields and `test`/`equal`
 for typed boolean conditions.
@@ -1254,7 +1254,7 @@ registration only for a wanted legal key. Preserve the caller's column order.
 Empty falsey containers yield no names; truthy non-object containers refuse.
 Skipped records must not evaluate name matching counts or registration. Qualification
 disables custom steps and includes paired faults that prove refusal order.
-Holder aggregation and cascade decisions may stay in a source's custom
+Holder aggregation and waterfall decisions may stay in a source's custom
 implementation. Remove it only after whole-source construction, complete source
 provenance and installed population qualification are proved.
 
@@ -1361,7 +1361,7 @@ projected to the names of the SEC Companies in the store, and `gleif/name-count-
 projects one record for bounded comparisons. Preserve the caller order: category, LEI, legal key,
 wanted-key timestamp, other names. Empty falsey containers yield no names; truthy non-object
 containers refuse. Skipped records must not evaluate names or registration. The passes and the fold of
-the reading are in `edgar_warehouse/mdm/waterfall.py` and `cascade.py`.
+the reading are in `edgar_warehouse/mdm/waterfall.py` and `waterfall_passes.py`.
 
 ## Bounded Parquet framing and sparse object entries
 

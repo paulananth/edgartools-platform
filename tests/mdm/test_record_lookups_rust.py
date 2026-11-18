@@ -99,7 +99,7 @@ def test_candidate_route_reads_only_nonempty_scalar_keys(value, expected):
     assert len(groups) == len(expected)
 
 
-def test_profile_routes_include_identifier_name_count_and_cascade_without_fixed_fields():
+def test_profile_routes_include_identifier_name_count_and_waterfall_without_fixed_fields():
     item = reading(provenance={"matching":{"invented/field'Ω":{"entries":[["target-one",1]],
         "assignment":{"target":"target-two"}}}})
     routes = {"reference":["identifiers","number"],

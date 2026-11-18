@@ -50,11 +50,11 @@ def _text(node):
     return value.strip() if isinstance(value, str) and value.strip() else None
 
 
-def cascade_entity(row, cascade_spec, wanted):
-    """One Level 1 record as the cascade reads it (ticket 21): through the GLEIF
+def waterfall_entity(row, waterfall_spec, wanted):
+    """One Level 1 record as the waterfall reads it (ticket 21): through the GLEIF
     contract and its quality rule, with its legal and other names; None when it
     is not GENERAL or the contract sets it aside."""
-    from edgar_warehouse.mdm import cascade
+    from edgar_warehouse.mdm import waterfall_passes
     from edgar_warehouse.mdm.adapters import UnsupportedRecord, mapped_values
     from edgar_warehouse.mdm.primitives import NORMALIZERS
     entity = row.get("Entity") or {}
@@ -62,7 +62,7 @@ def cascade_entity(row, cascade_spec, wanted):
     if not lei or _text(entity.get("EntityCategory")) != "GENERAL":
         return None
     try:
-        fields, matching, quality = mapped_values(row, cascade_spec["gleif_contract"])
+        fields, matching, quality = mapped_values(row, waterfall_spec["gleif_contract"])
     except UnsupportedRecord:
         return None
     names = [_text(entity.get("LegalName"))]
@@ -71,18 +71,18 @@ def cascade_entity(row, cascade_spec, wanted):
         found = (entity.get(container) or {}).get(item) or []
         names += [text for name in (found if isinstance(found, list) else [found]) if (text := _text(name))]
     key = NORMALIZERS["normalize_text@legal-form-kept-v1"]
-    return cascade.entity_of(cascade.record(lei, fields, matching, quality, {"lei": lei}),
+    return waterfall_passes.entity_of(waterfall_passes.record(lei, fields, matching, quality, {"lei": lei}),
                              frozenset(key(n) for n in names) & wanted,
-                             eligible=cascade.eligible(fields, cascade_spec["spec"]))
+                             eligible=waterfall_passes.eligible(fields, waterfall_spec["spec"]))
 
 
 @pytest.mark.parametrize("case", ["ordinary", "agent", "placeholder", "headquarters_agent",
     "cross_line_agent", "postcode", "unicode", "noncandidate", "ineligible", "missing_name",
     "bad_field", "bad_lines", "branch"])
-def test_complete_name_count_general_projection_matches_active_cascade_without_install(case):
+def test_complete_name_count_general_projection_matches_active_waterfall_without_install(case):
     """Bounded projection proof; no install or database population gate."""
     import copy
-    from edgar_warehouse.mdm import cascade, sec_company, quality
+    from edgar_warehouse.mdm import waterfall_passes, sec_company, quality
     from edgar_warehouse.mdm.gleif_publication import dataset_contract
     from edgar_warehouse.rules.source_engine import SourceEngine
     from tests.engine.test_gleif_configured_fields import raw
@@ -107,10 +107,10 @@ def test_complete_name_count_general_projection_matches_active_cascade_without_i
 
     body = sec_company.POLICY["kinds"]["company"]
     active = [r for r in body["rules"] if activated(sec_company.POLICY, "company", r, "bind")]
-    spec = cascade.spec({"kinds": {"company": {**body, "rules": active}}}, "company")
+    spec = waterfall_passes.spec({"kinds": {"company": {**body, "rules": active}}}, "company")
     assert [p["pass"] for p in spec["passes"]] == ["name and city or postcode", "name and jurisdiction"]
     contract = dataset_contract("level1")
-    expected = cascade_entity(row, {"spec": spec, "gleif_contract": contract}, {"EXAMPLE"})
+    expected = waterfall_entity(row, {"spec": spec, "gleif_contract": contract}, {"EXAMPLE"})
     recipe = files.load(files.ROOT / "sources/gleif/name-count-cascade-record.yaml")
     projected = SourceEngine(recipe).read(json.dumps(row, ensure_ascii=False).encode()).tables["mapped"][0]["observation"]
     if expected is None:
@@ -121,7 +121,7 @@ def test_complete_name_count_general_projection_matches_active_cascade_without_i
     assert projected["eligible"] == expected.eligible
     assert projected["last_update"] == expected.last_update
     assert projected["jurisdiction"] == expected.jurisdiction
-    assert cascade.place(projected["place"]) == expected.place
+    assert waterfall_passes.place(projected["place"]) == expected.place
     from edgar_warehouse.mdm.adapters import mapped_values
     _, _, original_quality = mapped_values(row, contract)
     record = {"provenance": {"quality": original_quality}}
@@ -219,8 +219,8 @@ profile.update(eligibility_kind="bundle-invented-kind", eligibility_categories=[
                name_field="invented_name", status_field="invented_status",
                registration_status_field="invented_registration",
                identifier_namespace="invented_namespace", name_count_field="invented_name_count",
-               cascade_field="invented_cascade",
-               cascade_identifier_field="invented_target")
+               waterfall_field="invented_waterfall",
+               waterfall_identifier_field="invented_target")
 body["pair_comparisons"]["bundle-invented"] = profile
 (folder / catalog.RELATIVE).write_text(files.dumps(body))
 env = {**os.environ, "EDGAR_RULES_ROOT": str(folder.resolve())}
@@ -235,7 +235,7 @@ right = {"kind": "bundle-invented-kind", "fields": {
 assert compare_candidate_records(rule, [({}, right)]) == [[True, False]]
 paths = candidate_paths(rule)
 assert paths["identifier"] == ("identifiers", "invented_namespace")
-assert paths["cascade"] == ("provenance", "matching", "invented_name_count", "invented_cascade", "invented_target")
+assert paths["waterfall"] == ("provenance", "matching", "invented_name_count", "invented_waterfall", "invented_target")
 assert candidate_value({"identifiers":{"invented_namespace":"invented-value"}}, paths["identifier"]) == "invented-value"
 from edgar_warehouse.mdm.matching import candidate_routes
 from edgar_warehouse.mdm.evidence import assertion
