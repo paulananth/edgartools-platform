@@ -250,7 +250,7 @@ It prints one line per bundle as it goes. At the end it prints a JSON
 summary: documents loaded, documents already loaded, and each run's id and
 counts.
 
-**Stopping is safe.** A deadline, a closed laptop or a failed unit leaves
+**Stopping is safe.** A session deadline, a closed laptop or a failed unit leaves
 the run resumable. Run the same command again. It finishes the open run
 first and never loads a document twice.
 

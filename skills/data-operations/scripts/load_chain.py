@@ -280,7 +280,7 @@ def rescale(workers: dict[str, int], priority: dict[str, int], level: str, bound
 
 def behind(elapsed: float, window: float, done: int, total: int) -> bool:
     """More of the window used than of the work done (by the steps' `minutes`), with a tenth of slack."""
-    return total > 0 and elapsed / window > done / total + 0.1
+    return total > 0 and (elapsed >= window or elapsed / window > done / total + 0.1)  # a window that has run out is behind
 
 
 def db_level(active: int, connections: int, max_connections: int, lock_waiters: int, longest_wait: float) -> str:
@@ -373,7 +373,7 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
                     failed.add(name)
         done = done_steps(state)
         if set(by_name) <= done:
-            if missed:
+            if deadline and clock() >= deadline:  # also when the deadline passed in this very cycle
                 note(f"all steps done {(clock() - deadline).total_seconds() / 60:.0f} min after the deadline", state)
             return 0
         if deadline and clock() >= deadline and not missed:

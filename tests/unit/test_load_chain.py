@@ -433,17 +433,29 @@ def test_a_run_that_finishes_after_its_deadline_says_by_how_much(monkeypatch, tm
     monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: "ok")
     notes = []
     monkeypatch.setattr(chain, "note", lambda message, path: notes.append(message))
-    finished = {"n": 0}
-    monkeypatch.setattr(chain, "done_steps", lambda path: {"a1"} if finished["n"] else set())
-    original = chain.time.sleep
+    deadline = now["t"] + chain.timedelta(minutes=90)
+    finished_at = deadline + chain.timedelta(minutes=60)  # a multiple of the 30-minute cycle
+    monkeypatch.setattr(chain, "done_steps", lambda path: {"a1"} if now["t"] >= finished_at else set())
+    assert _run_auto(steps, state, slots=2, deadline=deadline) == 0
+    assert any("60 min after the deadline" in m for m in notes) and killed == []
 
-    def sleeping(seconds):
-        finished["n"] += int(now["t"] > chain.datetime(2026, 11, 18, 10, 30, tzinfo=chain.ZoneInfo("America/New_York")))
-        original(seconds)
 
-    monkeypatch.setattr(chain.time, "sleep", sleeping)
-    assert _run_auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=90)) == 0
-    assert any("after the deadline" in m for m in notes) and killed == []
+def test_a_run_that_finishes_in_the_first_cycle_past_its_deadline_still_says_so(monkeypatch, tmp_path):
+    steps = [_step("a1", "A", minutes=60)]
+    state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=30, cycles=12)
+    monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: "ok")
+    notes = []
+    monkeypatch.setattr(chain, "note", lambda message, path: notes.append(message))
+    deadline = now["t"] + chain.timedelta(minutes=30)
+    monkeypatch.setattr(chain, "done_steps", lambda path: {"a1"} if now["t"] > deadline else set())  # done the cycle the deadline passes
+    assert _run_auto(steps, state, slots=2, deadline=deadline) == 0
+    assert any("after the deadline" in m for m in notes)
+
+
+def test_a_window_that_has_run_out_or_never_was_is_behind():
+    assert chain.behind(elapsed=7200, window=-3600, done=0, total=100)  # the deadline had passed at launch
+    assert chain.behind(elapsed=7200, window=0, done=100, total=100)
+    assert not chain.behind(elapsed=0, window=3600, done=0, total=100)
 
 
 def test_a_running_step_is_restarted_with_more_workers_when_the_machine_has_room(monkeypatch, tmp_path):
