@@ -674,14 +674,50 @@ def test_a_state_file_from_another_store_is_set_aside_so_its_done_lines_never_sa
     assert chain.ensure_store(fresh, "bbbb2222") == "fresh" and fresh.read_text().endswith("chain store bbbb2222\n")
 
 
-def test_a_state_file_with_lines_and_no_marker_asks_the_operator_and_is_adopted_only_on_their_word(tmp_path):
+def test_a_state_file_with_lines_and_no_marker_is_set_aside_and_kept_never_trusted_and_never_a_reason_to_stop(tmp_path):
+    """An old run's file under the same label (a hand-chosen name can repeat) must not stop a load or satisfy its waits."""
     state = tmp_path / "chain.log"
     state.write_text("11-15 14:21:31 ET company done: Done\n")
-    assert chain.ensure_store(state, "bbbb2222") == "unmarked"  # it may be another store's: stop and ask, touch nothing
-    assert state.read_text() == "11-15 14:21:31 ET company done: Done\n" and not [p for p in tmp_path.glob("chain.log.*") if p.suffix != ".lock"]
-    assert chain.ensure_store(state, "bbbb2222", adopt=True) == "adopted"  # the operator says it is this store's
-    assert chain.done_steps(state) == {"company"} and state.read_text().endswith("chain store bbbb2222\n")
-    assert chain.ensure_store(state, "bbbb2222") == "same"
+    assert chain.ensure_store(state, "bbbb2222") == "set aside"  # no marker: its done lines are not this store's to trust
+    assert chain.done_steps(state) == set() and state.read_text().endswith("chain store bbbb2222\n")
+    kept = [p for p in tmp_path.glob("chain.log.*") if p.suffix != ".lock"]
+    assert len(kept) == 1 and kept[0].read_text() == "11-15 14:21:31 ET company done: Done\n"  # archived, never deleted
+    state.write_text("11-15 14:21:31 ET company done: Done\n")  # a second old file under the same label: nothing is overwritten
+    assert chain.ensure_store(state, "bbbb2222") == "set aside"
+    assert len([p for p in tmp_path.glob("chain.log.*") if p.suffix != ".lock"]) == 2
+    adopted = tmp_path / "adopt.log"
+    adopted.write_text("11-15 14:21:31 ET company done: Done\n")
+    assert chain.ensure_store(adopted, "bbbb2222", adopt=True) == "adopted"  # the operator's word keeps it, as before
+    assert chain.done_steps(adopted) == {"company"} and chain.ensure_store(adopted, "bbbb2222") == "same"
+
+
+def test_a_reset_store_at_the_same_address_is_another_store_so_a_reused_label_skips_nothing(tmp_path):
+    """The address names the instance, and a reset keeps it: the database's creation identity says the data went."""
+    state = tmp_path / "chain.log"
+    assert chain.ensure_store(state, "bbbb2222", generation="1001") == "fresh"
+    assert state.read_text().endswith("chain store bbbb2222 generation 1001\n")
+    state.write_text(state.read_text() + "11-18 06:40:00 ET company done: Done\n")
+    assert chain.ensure_store(state, "bbbb2222", generation="1001") == "same"
+    assert chain.ensure_store(state, "bbbb2222", generation="") == "same"  # unreadable now: never archive a running load's file
+    assert chain.done_steps(state) == {"company"}
+    assert chain.ensure_store(state, "bbbb2222", generation="2002") == "set aside"  # the databases were made again
+    assert chain.done_steps(state) == set()
+    assert state.read_text().endswith("chain store bbbb2222 generation 2002\n")
+    assert (tmp_path / "chain.log.bbbb2222-1001").read_text().count("company done") == 1
+    older = tmp_path / "older.log"
+    older.write_text("11-15 14:21:31 ET chain store bbbb2222\n11-15 14:21:31 ET company done: Done\n")  # a marker with no generation
+    assert chain.ensure_store(older, "bbbb2222", generation="3003") == "same"  # nothing to compare: kept
+
+
+def test_the_database_generation_is_unreadable_as_an_empty_string_never_an_error_or_an_address(monkeypatch):
+    import psycopg2
+
+    def refuse(*args, **kwargs):
+        raise psycopg2.OperationalError("could not connect to server at an-address")
+
+    monkeypatch.setattr(psycopg2, "connect", refuse)
+    assert chain.database_generation("postgresql+psycopg2://u:p@h.invalid:5432/mdm") == ""
+
 
 
 def test_two_lanes_starting_at_once_against_another_stores_file_set_it_aside_once_and_lose_nothing(tmp_path):

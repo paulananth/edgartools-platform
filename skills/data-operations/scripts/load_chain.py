@@ -689,31 +689,54 @@ def store_id(url: str) -> str:
     return hashlib.sha256(f"{host.lower()}:{port or 5432}".encode()).hexdigest()[:8]
 
 
-def ensure_store(state: Path, store: str, adopt: bool = False) -> str:
-    """Make the state file this store's, under a lock so lanes starting together do it once.
-    - "same": already this store's; "fresh": there was no file;
-    - "set aside": it was marked for another store, so it is renamed `<file>.<its store>` and its `done` lines never
-      satisfy a wait this store has not earned;
-    - "unmarked": it holds lines and no marker, so it may be another store's: nothing is touched and the operator is
-      asked; with `adopt` (their word that it is this store's) it is marked and kept ("adopted")."""
+def database_generation(url: str) -> str:
+    """The creation identity of the database the URL names (its `pg_database` oid): a database made again after a reset has a
+    new one, while the instance's address, and so the store's name, stays the same. Empty when it cannot be read; nothing
+    about the connection is ever reported."""
+    try:
+        import psycopg2
+
+        with psycopg2.connect(url.replace("postgresql+psycopg2", "postgresql"), connect_timeout=5) as connection, connection.cursor() as cursor:
+            cursor.execute("select oid from pg_database where datname = current_database()")
+            return str(cursor.fetchone()[0])
+    except Exception:  # an unreadable store is no reason to touch a running load's file
+        return ""
+
+
+def ensure_store(state: Path, store: str, adopt: bool = False, generation: str = "") -> str:
+    """Make the state file this store's, under a lock so lanes starting together do it once. A store is its instance's name and,
+    when it can be read, its database's `generation`; a file is trusted only when it was written for both.
+    - "same": already this store's (a file that names no generation, or a generation not readable now, is not compared);
+      "fresh": there was no file;
+    - "set aside": it was marked for another store or another generation of this one, or held lines and no marker at all (an old
+      run's file under a label used again): it is renamed, never deleted, and its `done` lines never satisfy a wait this store
+      has not earned. With `adopt` (the operator's word that an unmarked file is this store's) it is marked and kept ("adopted")."""
     import fcntl
 
-    marker = re.compile(r"chain store (\w+)$", re.M)
-    stamp = f"{datetime.now(ZoneInfo('America/New_York')):%m-%d %H:%M:%S} ET chain store {store}\n"
+    marker = re.compile(r"chain store (\w+)(?: generation (\w+))?$", re.M)
+    stamp = (f"{datetime.now(ZoneInfo('America/New_York')):%m-%d %H:%M:%S} ET chain store {store}"
+             f"{f' generation {generation}' if generation else ''}\n")
     state.parent.mkdir(parents=True, exist_ok=True)
+
+    def keep(suffix: str) -> None:
+        target = state.with_name(f"{state.name}.{suffix}")
+        number = 1
+        while target.exists():  # a file set aside before is never overwritten
+            number += 1
+            target = state.with_name(f"{state.name}.{suffix}.{number}")
+        state.rename(target)
+
     with state.with_name(state.name + ".lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         text = state.read_text() if state.exists() else ""  # read again under the lock: another lane may have done it
         found = marker.findall(text)
-        if found and found[-1] == store:
+        if found and found[-1][0] == store and (not generation or not found[-1][1] or found[-1][1] == generation):
             return "same"
-        if text and not found:
-            if not adopt:
-                return "unmarked"
+        if text and not found and adopt:
             state.write_text(text + stamp)
             return "adopted"
         if text:
-            state.rename(state.with_name(f"{state.name}.{found[-1]}"))
+            keep("unmarked" if not found else f"{found[-1][0]}-{found[-1][1]}" if found[-1][0] == store and found[-1][1] else found[-1][0])
         state.write_text(stamp)
         return "set aside" if text else "fresh"
 
@@ -994,7 +1017,7 @@ def main() -> int:
     parser.add_argument("--only")
     parser.add_argument("--lane")
     parser.add_argument("--adopt-state", action="store_true",
-                        help="the chain state file has done lines and no store marker: it is this store's")
+                        help="keep a chain state file that has done lines and no store marker, as this store's (otherwise it is set aside)")
     parser.add_argument("--catalog-status", action="store_true",
                         help="publish the catalog status of every step already done (a catch-up); needs the catalog configured")
     parser.add_argument("--status", action="store_true",
@@ -1044,18 +1067,16 @@ def main() -> int:
         steps = [{**step, "workers": args.workers} if step["name"] == args.only else step for step in steps]
     if not args.plan and env.get("MDM_DATABASE_URL"):
         try:
-            outcome = ensure_store(state, store_id(env["MDM_DATABASE_URL"]), adopt=args.adopt_state)
+            outcome = ensure_store(state, store_id(env["MDM_DATABASE_URL"]), adopt=args.adopt_state,
+                                   generation=database_generation(env["MDM_DATABASE_URL"]))
         except ValueError as refused:
             print(refused, file=sys.stderr)
             return 2
         if outcome == "set aside":
-            print(f"{state.name} belonged to another store: set aside, this store starts a fresh chain state", flush=True)
+            print(f"{state.name} was not written for this store (another store, a database made again, or no marker): set aside "
+                  "and kept beside it, and this store starts a fresh chain state", flush=True)
         elif outcome == "adopted":
             print(f"{state.name} adopted as this store's, on your word", flush=True)
-        elif outcome == "unmarked":
-            print(f"{state.name} holds done lines and no store marker, so it may be another store's. If it is this store's, run "
-                  "again with --adopt-state; if not, move it aside. Nothing was changed.", file=sys.stderr)
-            return 2
     if args.plan:
         for step in steps:
             print(f"{step['name']:30} {plan(step, env)}", flush=True)

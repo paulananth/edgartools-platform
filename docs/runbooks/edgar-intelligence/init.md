@@ -108,10 +108,13 @@ at the deadline every step it started is stopped and it names what is left. A st
 rest carry on, and the scheduler stops, naming what cannot start, when nothing else can. Every step runs as
 `load_chain.py --only <step>`, so the attempts and the one-load-of-a-source-and-target rule are the same as by hand.
 
-**A fresh store starts a fresh state file.** The chain's `done` lines are read from `chain-<RUN>.log`, which names the store it belongs to (by its instance's address,
-never shown). A run against another store sets the old file aside as `chain-<RUN>.log.<store>` and starts a fresh one, so an
-earlier store's lines never satisfy a wait. A file with done lines and no marker (one that began before markers) may be any
-store's: the run stops and asks, changing nothing; `--adopt-state` says it is this store's, or move it aside.
+**A fresh store starts a fresh state file, and a run label can be used again.** The chain's `done` lines are read from
+`chain-<RUN>.log`, which names the store it belongs to: its instance (by the address, never shown) and its database's creation
+identity, so a store whose databases were made again is another store even at the same address. A run whose file was written for
+another store, another generation of this one, or no store at all (an old run's file, from before markers, under a label used
+again) sets it aside beside it (`chain-<RUN>.log.<store>`, `.unmarked`; never deleted, never overwritten) and starts a fresh one,
+so an earlier load's lines never satisfy a wait and never stop a run. A generation that cannot be read changes nothing.
+`--adopt-state` is for the operator who says an unmarked file is this store's and keeps it.
 
 Masters come first and each source's silver target last, so silver rows find their masters as they land; a silver step
 needs none before it (a row lands with its link key, and `--finish` fills the master ids). A source's later
