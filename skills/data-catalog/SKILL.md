@@ -1,6 +1,6 @@
 ---
 name: data-catalog
-description: Model, qualify and publish understandable business domains, glossaries, assets and lineage through a replaceable catalog or visualization destination. Use for OpenMetadata catalog work, catalog portability and missing semantic or lineage coverage.
+description: Model, qualify and publish understandable business domains, glossaries, assets and lineage through a replaceable catalog or visualization destination. Use for catalog work on any destination (a catalog's own mechanics are that catalog's skill, OpenMetadata's the openmetadata skill), catalog portability and missing semantic or lineage coverage.
 ---
 
 # Data catalog
@@ -19,7 +19,7 @@ already holds something.
 - `CONTEXT.md` holds the words.
 - [data-modeling](../data-modeling/SKILL.md) decides the class, the kind, the
   code set, the relationship, and which store each class lives in.
-- The rules catalog plan is the list of assets, fields, lineage, and pipelines
+- The catalog plan is the list of assets, fields, lineage, and pipelines
   that configuration actually emits.
 - The live catalog is what was stored. Read it back. A missing field is not
   proof a link is absent, and a successful write is not proof the read matches.
@@ -78,7 +78,8 @@ vocabulary, domains, datasets, glossary annotations or genuine dataset/pipeline
 lineage. Keep record values and private evidence references out of public
 artifacts.
 
-The configuration-only `rules catalog plan|publish` path publishes vocabulary
+The configuration-only plan and publish path (the destination's commands: for OpenMetadata,
+[openmetadata](../openmetadata/SKILL.md)) publishes vocabulary
 and metadata lineage, not relationship facts: it emits no domain-to-type or
 identity-to-type fact edges from permitted endpoints. It does not read live
 relationship evidence or prove that facts are absent. Publish that metadata
@@ -160,7 +161,7 @@ domains, and one domain can receive data from several sources.
    Bookkeeping steps that produce/register the output. Keep MDM masters,
    RDM reference data and Silver transaction/prepared data as distinct store
    paths; do not imply that every record passes through all three stores.
-5. Cross-check the rules catalog plan for emitted assets, pipeline definitions
+5. Cross-check the catalog plan for emitted assets, pipeline definitions
    and dataset/field lineage, then use read-only catalog check/readback for
    what the destination actually contains. The plan is configuration evidence;
    it is not run evidence.
@@ -179,6 +180,19 @@ actually connects. Include missing registrations, unsupported worker
 profiles, absent lineage and unverified execution as separate gaps. Do not
 call a catalog pipeline an operationally runnable or completed pipeline until
 its Bookkeeping registration, worker support and run evidence are verified.
+
+## Choose the catalog's own skill
+
+This skill is the top of the catalog work: the business meaning, the model and the publication outcomes, the same for every
+catalog. What it publishes to, and how, belongs to the destination's own skill, so more than one catalog can be supported:
+
+| Destination | Its skill (its API, native objects, publication, local server) |
+|---|---|
+| OpenMetadata | [openmetadata](../openmetadata/SKILL.md) |
+| Another catalog | a sibling skill of its own, `skills/<catalog>/SKILL.md`, laid out like [openmetadata](../openmetadata/SKILL.md) (mechanics, local server, readback) and qualified as [PORTABILITY.md](references/PORTABILITY.md) says |
+
+Keep a catalog's mechanics out of this skill and its meaning out of the catalog's skill. Two catalogs side by side each keep
+their own mapping from a logical key to their native identity (PORTABILITY.md): neither is the sole place a definition lives.
 
 ## Use the skill that owns the decision
 
@@ -248,13 +262,13 @@ preview and pending implementation. Keep this first proof small.
 
 Keep these stages distinct in every run report:
 
-1. **Plan:** what the selected configuration describes. `rules catalog plan` is
+1. **Plan:** what the selected configuration describes. The destination's plan command is
    side-effect free. Count configured domains, glossaries and terms, assets,
    quality definitions, products, pipelines and lineage from its output.
 2. **Publish:** what the publisher sent, including any removals inside the
-   catalog's owned scope. The `publish` command runs a readback after sending;
+   catalog's owned scope. The publish command runs a readback after sending;
    its structured result keeps the send and readback stages separate.
-3. **Readback:** what the native API confirms. `rules catalog check` repeats
+3. **Readback:** what the native API confirms. The destination's check command repeats
    the check independently and is read-only. Only a matching readback supports
    the status **confirmed** for the dimensions that check covers.
 
