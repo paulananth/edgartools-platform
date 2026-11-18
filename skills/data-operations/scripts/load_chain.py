@@ -11,7 +11,7 @@
     python load_chain.py --status             what each running step is doing: progress, rate, processes, a verdict
     python load_chain.py --auto [--slots N] [--hours H | --deadline HH:MM]
                                               watch the loads: start each step when its lane is free, move its
-                                              workers (2 to 8) with the machine, stop at the deadline (see `auto`)
+                                              workers (within --capacity) with the machine, stop at the deadline (see `auto`)
 
 Each step is the same resumable `load` command, run again until it finishes (a stopped attempt names why in its log and
 the next carries on from where it stopped). The chain stops at the first step that does not finish in its attempts.
@@ -169,7 +169,35 @@ def swap_fraction(text: str) -> float | None:
     return float(found.group(2)) / float(found.group(1)) if found and float(found.group(1)) else None
 
 
-MIN_WORKERS, MAX_WORKERS = 2, 8
+WORKER_GB = 0.5  # the memory a worker is sized for
+WORKERS_PER_VCPU = 4  # a worker waits on the database much of the time, so a vCPU carries several
+
+
+def workers_range(vcpu: float, memory_gb: float) -> tuple[int, int]:
+    """The workers a task can carry, from what it has: its memory in worker-sized shares, at most four to a vCPU, never
+    fewer than one. The range follows the compute (a 1 vCPU, 4 GB task carries up to 4; 2 vCPU, 8 GB up to 8), so it is
+    the configuration's, never a fixed two to eight."""
+    return 1, max(1, min(int(memory_gb // WORKER_GB), int(vcpu * WORKERS_PER_VCPU)))
+
+
+def capacity_profiles(path: Path = ROOT / "rules/load-chain.yaml") -> dict[str, dict]:
+    """The named compute sizes of the chain file (the AWS ECS task sizes the state machines run on)."""
+    return yaml.safe_load(path.read_text()).get("capacity") or {}
+
+
+def physical_gb() -> float:
+    return os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") / 2**30
+
+
+def bounds_for(name: str) -> tuple[int, int]:
+    """The workers range of a capacity: a profile of the chain file, or `local`, this machine measured (half its memory,
+    the rest being the operator's other work)."""
+    if name == "local":
+        return workers_range(os.cpu_count() or 1, physical_gb() / 2)
+    profiles = capacity_profiles()
+    if name not in profiles:
+        raise SystemExit(f"No capacity named {name}: local or {', '.join(sorted(profiles))}")
+    return workers_range(**profiles[name])
 
 
 def pressure(load: float, cores: int, swap_used: float | None, relaxed: bool = False) -> str:
@@ -192,14 +220,16 @@ def machine_pressure(relaxed: bool = False) -> str:
     return pressure(os.getloadavg()[0], os.cpu_count() or 1, swap_fraction(swap), relaxed)
 
 
-def rescale(workers: dict[str, int], priority: dict[str, int], level: str) -> tuple[str, int] | None:
-    """One change of workers: with room (`low`) the step with the longest chain behind it doubles, up to 8; when
-    pressed (`high`) the step with the shortest halves, down to 2. Anything else changes nothing."""
+def rescale(workers: dict[str, int], priority: dict[str, int], level: str, bounds: tuple[int, int]) -> tuple[str, int] | None:
+    """One change of workers within the capacity's `bounds`: with room (`low`) the step with the longest chain behind it
+    doubles, up to the top; when pressed (`high`) the step with the shortest halves, down to the floor. Anything else
+    changes nothing."""
+    low, top = bounds
     order = sorted(workers, key=lambda name: -priority[name])
     if level == "low":
-        return next(((name, min(MAX_WORKERS, workers[name] * 2)) for name in order if workers[name] < MAX_WORKERS), None)
+        return next(((name, min(top, workers[name] * 2)) for name in order if workers[name] < top), None)
     if level == "high":
-        return next(((name, max(MIN_WORKERS, workers[name] // 2)) for name in reversed(order) if workers[name] > MIN_WORKERS), None)
+        return next(((name, max(low, workers[name] // 2)) for name in reversed(order) if workers[name] > low), None)
     return None
 
 
@@ -260,16 +290,18 @@ def stop(child: subprocess.Popen) -> None:
 
 
 def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: datetime | None = None,
-         reader_url: str | None = None, connections: int = 250) -> int:
+         reader_url: str | None = None, connections: int = 250, bounds: tuple[int, int] | None = None) -> int:
     """Watch the loads and start the next ready step whenever a slot is free and the machine is not pressed. One start
     a cycle: the load average lags, so a started step is counted running before the next is judged. Each step runs as
-    `load_chain.py --only <step> --workers <n>` (the attempt loop). The workers follow the machine, 2 to 8: with room
+    `load_chain.py --only <step> --workers <n>` (the attempt loop). The workers follow the machine within the capacity's
+    range (`bounds`; the machine's own when not given): with room
     the step with the longest chain behind it doubles, when pressed the step with the shortest halves, one change a
     cycle, by stopping the step's load and starting it again (a load resumes where it stopped). With a `deadline`, a run
     behind its schedule (more of the window used than of the work done) is allowed twice the cores in load; at the
     deadline every step this started is stopped and the run ends, naming what is left. A step that uses up its attempts
     blocks what follows it and the rest carry on. Ends when every step is done (then the lookups and the links), when
     nothing more can start, or at the deadline."""
+    bounds = bounds or bounds_for("local")
     children: dict[str, subprocess.Popen] = {}
     workers: dict[str, int] = {}
     failed: set[str] = set()
@@ -322,10 +354,10 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
         free = slots - max(len(children), len(busy))
         starts = ready(steps, done, set(children), failed, 1, busy, estimate) if free > 0 and level != "high" else []
         for name in starts:
-            count = by_name[name].get("workers", MIN_WORKERS)
+            count = min(max(by_name[name].get("workers", bounds[0]), bounds[0]), bounds[1])
             note(f"scheduler starts {name} at {count} workers", state)
             spawn(name, count)
-        if not starts and (change := rescale(workers, {name: length[name] for name in workers}, level)):
+        if not starts and (change := rescale(workers, {name: length[name] for name in workers}, level, bounds)):
             name, count = change
             note(f"scheduler moves {name} from {workers[name]} to {count} workers ({level} load)", state)
             stop(children[name])
@@ -618,7 +650,9 @@ def main() -> int:
     parser.add_argument("--lane")
     parser.add_argument("--status", action="store_true",
                         help="one line a running step: progress, rate, processes, database writes and a verdict")
-    parser.add_argument("--workers", type=int, help="with --only: the step's workers, 2 to 8, instead of the chain file's")
+    parser.add_argument("--workers", type=int, help="with --only: the step's workers, within the capacity's range, instead of the chain file's")
+    parser.add_argument("--capacity", default="local",
+                        help="the compute: local (this machine, measured) or a profile of the chain file (aws-small, aws-medium, aws-large)")
     parser.add_argument("--connections", type=int, default=250,
                         help="with --auto: the database connections to aim for; workers rise until they are used")
     parser.add_argument("--deadline", help="with --auto: HH:MM ET today, when every step this started is stopped")
@@ -654,8 +688,9 @@ def main() -> int:
     if sys.platform == "darwin":
         subprocess.Popen(["caffeinate", "-dimsu", "-w", str(os.getpid())])
     if args.workers is not None:
-        if not args.only or not MIN_WORKERS <= args.workers <= MAX_WORKERS:
-            print(f"--workers goes with --only and is {MIN_WORKERS} to {MAX_WORKERS}", file=sys.stderr)
+        low, top = bounds_for(args.capacity)
+        if not args.only or not low <= args.workers <= top:
+            print(f"--workers goes with --only and is {low} to {top} on {args.capacity}", file=sys.stderr)
             return 2
         steps = [{**step, "workers": args.workers} if step["name"] == args.only else step for step in steps]
     if args.auto:
@@ -665,7 +700,7 @@ def main() -> int:
         elif args.deadline:
             hour, minute = map(int, args.deadline.split(":"))
             deadline = clock().replace(hour=hour, minute=minute, second=0, microsecond=0)
-        if auto(steps, state, args.slots, deadline=deadline, connections=args.connections,
+        if auto(steps, state, args.slots, deadline=deadline, connections=args.connections, bounds=bounds_for(args.capacity),
                 reader_url=load_env(STORES / "reader.env").get("DIAGNOSE_DATABASE_URL") if (STORES / "reader.env").exists() else None):
             return 1
         finish(env, state)
