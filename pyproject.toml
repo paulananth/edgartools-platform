@@ -18,6 +18,7 @@ authors = [
 # service and matching libraries are gone.
 dependencies = [
     "pyarrow>=17.0.0",
+    "pytz>=2024.1",
     "httpx>=0.25.0",
     "PyYAML>=6.0.2",
 ]

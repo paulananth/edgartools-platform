@@ -18,10 +18,15 @@ from pathlib import Path
 def runtime_files():
     """The files of the Parquet reader a run pins, found without importing it: pyarrow and numpy cost tens of megabytes
     in every worker, and only a source that reads Parquet needs them."""
-    root = Path(find_spec("pyarrow").origin).parent
+    spec = find_spec("pyarrow")
+    if spec is None or not spec.origin:
+        raise ImportError("pyarrow is not installed: a Parquet source needs it")
+    root = Path(spec.origin).parent
     reader = root / "parquet" / "__init__.py"
-    return [reader if reader.exists() else root / "parquet.py",
-            next(path for path in sorted(root.glob("_parquet.*")) if path.suffix in (".so", ".pyd", ".dylib"))]
+    codec = next((path for path in sorted(root.glob("_parquet.*")) if path.suffix in (".so", ".pyd", ".dylib")), None)
+    if codec is None:
+        raise ImportError("pyarrow has no compiled Parquet reader (_parquet): reinstall it")
+    return [reader if reader.exists() else root / "parquet.py", codec]
 
 
 def json_scalar(value):

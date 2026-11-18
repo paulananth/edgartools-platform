@@ -8,9 +8,10 @@ during the hosted fresh load (ticket 238).
 
 ## Findings
 
-- A bare interpreter is 16 MB; the modules a load imports took it to 72 MB. pyarrow with numpy under it were three
-  quarters of that, imported by every worker though only a Parquet source reads one. Now imported when a Parquet file is
-  read: 44 MB (28 MB, 39%, in each of the several processes of each load).
+- A bare interpreter is 16 MB; the modules a load imports took it to 69 to 72 MB (two measures, pyarrow 24.0.0 in the
+  lock). pyarrow with numpy under it were about half of that, imported by every worker though only a Parquet source
+  reads one. Now imported when a Parquet file is read: 44 to 48 MB, 24 to 28 MB less (35 to 39%) in each of the several
+  processes of each load.
 - sqlalchemy (23 MB) and yaml (3 MB) are needed; psycopg2 loads at connect (6 MB). `pytz` was declared and used nowhere.
 - The workers' data is larger than their libraries: of four running workers one held 1.2 GB (N-PORT silver), the others 58
   to 228 MB.
@@ -22,7 +23,11 @@ during the hosted fresh load (ticket 238).
   them (2026-11-18 08:27 ET; `test_a_load_that_reads_no_parquet_file_never_imports_pyarrow_or_numpy` failed first: `True True`;
   `test_the_parquet_files_a_run_pins_are_the_same_without_importing_pyarrow` holds the pinned files equal to what the
   imports name; 67 tests; load path import 72 to 44 MB)
-- [x] `pytz` leaves the dependencies: nothing in the repository imports it (2026-11-18 08:27 ET; `uv lock` drops two lines)
+- [ ] ~~`pytz` leaves the dependencies~~ deferred: it stays. Nothing imports it, but the aws-snowflake-operations skill and
+  the timing-report recipe tell scripts in the worker images to use it (they have no time zone database for `zoneinfo`);
+  it goes when those recipes move to `zoneinfo` with `tzdata` as a runtime dependency
+- [x] A pyarrow without its compiled reader fails with a named error, not a `StopIteration` (2026-11-18 08:40 ET;
+  `test_a_pyarrow_without_a_compiled_reader_fails_with_a_named_error_not_a_stop_iteration`)
 - [ ] The N-PORT silver worker holds 1.2 GB: find what it keeps (rows of a whole file) and stream it in bounded pieces
 - [ ] OrbStack's memory limit is the operator's to set (the local test stores are shared): lowering its 4.25 GB gives the
   loads room; say what the stores need first

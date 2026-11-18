@@ -27,7 +27,22 @@ def test_the_parquet_files_a_run_pins_are_the_same_without_importing_pyarrow():
     assert named[2] == "False"
 
 
-def test_a_parquet_document_still_reads_after_the_lazy_import():
+def test_a_pyarrow_without_a_compiled_reader_fails_with_a_named_error_not_a_stop_iteration(tmp_path, monkeypatch):
+    import importlib.util
+    import types
+
+    import pytest
+
     from edgar_warehouse.workers import source_parquet
 
-    assert callable(source_parquet.document) and source_parquet.runtime_files()
+    package = tmp_path / "pyarrow"
+    package.mkdir()
+    (package / "__init__.py").write_text("")
+    (package / "_parquet.pyx").write_text("")  # the source of the reader is there; the compiled reader is not
+    monkeypatch.setattr(source_parquet, "find_spec", lambda name: types.SimpleNamespace(origin=str(package / "__init__.py")))
+    with pytest.raises(ImportError, match="no compiled Parquet reader"):
+        source_parquet.runtime_files()
+    monkeypatch.setattr(source_parquet, "find_spec", lambda name: None)
+    with pytest.raises(ImportError, match="pyarrow is not installed"):
+        source_parquet.runtime_files()
+    assert importlib.util.find_spec("pyarrow") is not None  # the real one is untouched
