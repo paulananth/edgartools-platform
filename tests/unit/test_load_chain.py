@@ -651,3 +651,108 @@ def test_every_run_mode_holds_a_steps_workers_to_the_capacity_not_only_the_sched
     assert [s["workers"] for s in chain.clamped(steps, (1, 4))] == [4, 2, 1]  # a medium task starts GLEIF at 4
     assert [s["workers"] for s in chain.clamped(steps, (2, 8))] == [8, 2, 2]  # a floor raises the lowest
     assert steps[0]["workers"] == 8  # the chain file's own steps are not changed
+
+
+def test_a_state_file_from_another_store_is_set_aside_so_its_done_lines_never_satisfy_a_wait(tmp_path):
+    state = tmp_path / "chain.log"
+    state.write_text("11-15 14:21:31 ET chain store aaaa1111\n11-15 14:21:31 ET company done: Done\n")
+    assert chain.ensure_store(state, "bbbb2222") == "set aside"  # a different store: the old lines are archived
+    assert chain.done_steps(state) == set()
+    assert state.read_text().endswith("chain store bbbb2222\n")
+    assert (tmp_path / "chain.log.aaaa1111").read_text().count("company done") == 1
+    state.write_text(state.read_text() + "11-18 06:40:00 ET company done: Done\n")
+    assert chain.ensure_store(state, "bbbb2222") == "same"  # the same store: nothing is touched
+    assert chain.done_steps(state) == {"company"}
+    fresh = tmp_path / "new.log"
+    assert chain.ensure_store(fresh, "bbbb2222") == "fresh" and fresh.read_text().endswith("chain store bbbb2222\n")
+
+
+def test_a_state_file_with_lines_and_no_marker_asks_the_operator_and_is_adopted_only_on_their_word(tmp_path):
+    state = tmp_path / "chain.log"
+    state.write_text("11-15 14:21:31 ET company done: Done\n")
+    assert chain.ensure_store(state, "bbbb2222") == "unmarked"  # it may be another store's: stop and ask, touch nothing
+    assert state.read_text() == "11-15 14:21:31 ET company done: Done\n" and not [p for p in tmp_path.glob("chain.log.*") if p.suffix != ".lock"]
+    assert chain.ensure_store(state, "bbbb2222", adopt=True) == "adopted"  # the operator says it is this store's
+    assert chain.done_steps(state) == {"company"} and state.read_text().endswith("chain store bbbb2222\n")
+    assert chain.ensure_store(state, "bbbb2222") == "same"
+
+
+def test_two_lanes_starting_at_once_against_another_stores_file_set_it_aside_once_and_lose_nothing(tmp_path):
+    import threading
+
+    state = tmp_path / "chain.log"
+    state.write_text("11-15 14:21:31 ET chain store aaaa1111\n11-15 14:21:31 ET company done: Done\n")
+    results, start = [], threading.Barrier(2)
+
+    def lane():
+        start.wait()
+        results.append(chain.ensure_store(state, "bbbb2222"))
+
+    threads = [threading.Thread(target=lane) for _ in range(2)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert sorted(results) == ["same", "set aside"]
+    assert (tmp_path / "chain.log.aaaa1111").read_text().count("company done") == 1  # the archive kept its lines
+    assert state.read_text().count("chain store bbbb2222") == 1
+
+
+def test_a_store_is_named_by_its_address_without_ever_showing_it():
+    one = chain.store_id("postgresql://a:secret@host-one.invalid:5432/mdm")
+    assert one == chain.store_id("postgresql+psycopg2://b:other@HOST-ONE.invalid:5432/silver")  # any login, database or case
+    assert one == chain.store_id("postgresql://a:secret@host-one.invalid/mdm")  # the default port is 5432
+    assert one != chain.store_id("postgresql://a:secret@host-two.invalid:5432/mdm")
+    assert len(one) == 8 and "host-one" not in one and "secret" not in one
+    assert chain.store_id("postgresql://u:pa/ss@host-one.invalid:5432/mdm") == one  # an unescaped slash in a password
+
+
+def test_a_url_that_names_no_host_is_an_error_not_a_shared_name_and_a_socket_names_its_directory():
+    import pytest
+
+    for url in ("", "postgresql:///mdm", "not a url"):
+        with pytest.raises(ValueError, match="names no host"):
+            chain.store_id(url)
+    assert chain.store_id("postgresql:///mdm?host=/var/run/pg-a") != chain.store_id("postgresql:///mdm?host=/var/run/pg-b")
+
+
+def test_a_retry_is_pointless_only_when_the_same_error_comes_back_with_nothing_moved_and_not_a_lock_or_the_window():
+    error = "ValueError: Step sec_tickers: no document of the bundle matches '*company_tickers_exchange*'"
+    assert chain.retry_is_pointless(error, error)
+    assert chain.retry_is_pointless("Blocked: silver.t: refused (SQLSTATE 42501)", "Blocked: silver.t: refused (SQLSTATE 42501)")
+    assert not chain.retry_is_pointless("", error)  # a first failure is always retried
+    assert not chain.retry_is_pointless(error, "ValueError: another failure")
+    late = "Load stopped: 2 of 149 did not finish: bundle 42 did not finish before the deadline"
+    assert not chain.retry_is_pointless(late, late)  # the window ran out; the next attempt resumes where it stopped
+    moved = ("Load stopped: 1 of 149 did not finish: bundle 17: DeadlockDetected",
+             "Load stopped: 1 of 149 did not finish: bundle 230: DeadlockDetected")
+    assert not chain.retry_is_pointless(*moved)  # the bundle moved: it is making progress
+    for locked in ("DeadlockDetected: deadlock detected", "LockNotAvailable: canceling statement due to lock timeout",
+                   "OperationalError: could not connect to server", "connection timed out"):
+        assert not chain.retry_is_pointless(locked, locked), locked  # these clear when the other load ends
+
+
+def test_the_errors_an_attempt_wrote_to_the_shared_error_log_are_kept_with_that_step_and_not_another_lanes(tmp_path):
+    log = tmp_path / "load-errors.log"
+    log.write_text("$ old command\nOldError: before this attempt\n")
+    offset = log.stat().st_size
+    log.write_text(log.read_text()
+                   + "$ rules run --source sec.x --target mastering --work-run-id r\nValueError: postgresql://u:pw@h:5432/db failed\n"
+                   + "$ mdm prepare-capture --source openfigi --target mastering --capture /c\nKeyError: another lane's block\n")
+    kept = chain.errors_since(log, offset, "sec.x", "mastering")
+    assert "ValueError" in kept and "OldError" not in kept and "another lane" not in kept
+    assert "pw" not in kept and "<addr>" in kept
+    assert "another lane" in chain.errors_since(log, offset)  # with no step named, every block since the offset
+    assert chain.errors_since(tmp_path / "missing.log", 0, "sec.x", "mastering") == ""
+
+
+def test_ipo_has_a_window_that_fits_its_bundles():
+    ipo = BY_NAME["ipo"]
+    assert ipo["minutes"] * ipo["attempts"] >= 300  # 149 bundles at about two minutes each, one at a time
+
+
+def test_redaction_hides_every_address_form_and_every_value_named_like_a_secret():
+    text = ("ValueError: postgresql+psycopg2://u:pw1@h.invalid:5432/mdm and postgres://v:pw2@h2.invalid/x and https://a:b@c.invalid/p; "
+            "host=h.invalid password=pw3 dsn=postgresql://w:pw4@h3.invalid/y token: abc123 api_key='k-5' SECRET=s6 url=http://z.invalid")
+    hidden = chain.redact(text)
+    for leaked in ("pw1", "pw2", "pw3", "pw4", "abc123", "k-5", "s6", "h.invalid", "h2.invalid", "h3.invalid", "z.invalid", "u:", "b@c"):
+        assert leaked not in hidden, (leaked, hidden)
+    assert "ValueError" in hidden and "<addr>" in hidden and "<hidden>" in hidden
