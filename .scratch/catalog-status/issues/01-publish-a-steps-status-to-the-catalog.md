@@ -30,6 +30,17 @@ Operator, 2026-11-18: "Are you updating the status in open metadata? If not the 
   from the main checkout, which could recreate the stack another runtime started; it needs the operator's word
 - [ ] ~~Publish the catalog plan if the target Pipelines are absent, then run `--catalog-status` to catch the finished steps up~~ deferred to
   .scratch/catalog-status/issues/02-repoint-the-catalog-credentials-to-8587.md: needs the catalog reachable
+- [x] Spec review of the publication, five findings fixed (2026-11-18 10:21 ET; 97 tests, each failing first):
+  - `--catalog-status` ran before the store check, so it could read a state file marked for another store and append to it: it now runs after it;
+  - a step whose last attempt found everything already loaded ran no run, so it was never published: its newest earlier attempt's run is used
+    (`test_a_step_that_loaded_nothing_new_in_its_last_attempt_publishes_the_run_of_an_earlier_one`: `step_run_id` did not exist);
+  - `catalog_outcome` expected a `pipeline` field the command never emits and a stray brace turned a success into "no readable answer": it reads the
+    real report (`confirmed as Successful`) and the first whole object (`test_the_catalogs_answer_is_read_as_published_or_not_with_its_cause_and_never_raises`:
+    `assert 'not publishe...adable answer' == 'confirmed as Successful'`);
+  - a hung catalog held its lane up to 300 s and the timeout left the command's python child running: 60 s, and the whole process group is killed
+    (`test_a_catalog_that_hangs_is_cut_off_at_sixty_seconds_with_its_whole_process_group`: `run_catalog_status` did not exist);
+  - one odd line in the env file (`STUB_NOTE=it's`) made the pair unreadable: only the two keys are parsed
+    (`test_a_bad_line_in_the_env_file_never_hides_the_catalog_pair`: `ValueError`)
 - [x] Found while watching the live load: the status said `ipo` had "about 2 minutes left" at 122 of 149 bundles, but 27 bundles at
   about 1.5 minutes each is about 40. The earlier fix counted bundles an earlier attempt already loaded as done, and the rate then
   divided this attempt's minutes by all of them. The rate is now this attempt's minutes over the bundles it ran

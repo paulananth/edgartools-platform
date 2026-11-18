@@ -776,22 +776,54 @@ def catalog_env(path: Path) -> dict[str, str]:
     file holds (a login, a password) reaches the command, and no half-set pair does."""
     if not path.exists():
         return {}
-    found = load_env(path)
+    found = {}
+    for line in path.read_text().splitlines():  # only the two keys are read: another line, however odd, is never parsed
+        match = re.match(rf"^(?:export\s+)?({'|'.join(CATALOG_KEYS)})=(.*)$", line.strip())
+        if match:
+            try:
+                value = shlex.split(match.group(2))
+            except ValueError:
+                continue
+            found[match.group(1)] = value[0] if value else ""
     return {key: found[key] for key in CATALOG_KEYS} if all(found.get(key) for key in CATALOG_KEYS) else {}
 
 
 def catalog_outcome(answer: str) -> str:
-    """What `rules catalog status` answered, in a few words: published to a Pipeline, or not and why. Never raises."""
-    found = re.search(r"\{.*\}", answer, re.S)
+    """What `rules catalog status` answered (its JSON report on stdout), in a few words: confirmed as the status it read back,
+    or not published and why. Never raises."""
     try:
-        body = json.loads(found.group(0)) if found else None
+        body = json.JSONDecoder().raw_decode(answer[answer.index("{"):])[0] if "{" in answer else None  # the first whole object
     except ValueError:
         body = None
     if not isinstance(body, dict):
         return "not published: no readable answer"
     if body.get("ok"):
-        return f"published to {body.get('pipeline', 'its Pipeline')}"
+        return f"confirmed as {(body.get('pipeline_status') or {}).get('execution_status', 'its status')}"
     return f"not published: {redact(str(body.get('cause') or 'no cause given'))[:120]}"
+
+
+def step_run_id(step_name: str) -> str | None:
+    """The Bookkeeping run to publish for a step: its last completed run, from its log or, when its last attempt found
+    everything already loaded and ran none, from its newest earlier attempt's."""
+    log = LOGS / f"chain-{RUN}-{step_name}.log"
+    attempts = sorted(log.parent.glob(log.name + ".attempt-*"), key=lambda p: int(p.name.rsplit("-", 1)[1]), reverse=True)
+    for path in [log, *attempts]:
+        if path.exists() and (run := last_run_id(path.read_text())):
+            return run
+    return None
+
+
+def run_catalog_status(command: list[str], env: dict) -> str:
+    """Run the status command and return its stdout, cut off at sixty seconds with its whole process group: a catalog that
+    hangs must not stall the lane or leave a process calling it."""
+    child = subprocess.Popen(command, env=env, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+                             start_new_session=True)
+    try:
+        return child.communicate(timeout=60)[0]
+    except subprocess.TimeoutExpired:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(child.pid, signal.SIGKILL)
+        return ""
 
 
 SAFE_BASE = ("PATH", "HOME", "USER", "LANG", "LC_ALL", "TMPDIR", "UV_CACHE_DIR", "UV_PROJECT_ENVIRONMENT", "VIRTUAL_ENV")
@@ -806,50 +838,45 @@ def status_env(base: dict, worker: dict, catalog: dict) -> dict:
     return {**given, **catalog}
 
 
-def publish_catalog_status(text: str) -> str:
+def publish_catalog_status(step_name: str) -> str:
     """Publish a finished step's latest Bookkeeping run as its target Pipeline's status in the catalog
     (`rules catalog status --bookkeeping-run`), when the catalog's address and token are configured."""
-    run = last_run_id(text)
+    run = step_run_id(step_name)
     env = catalog_env(ROOT / ".env")
     if not run:
         return "not published: the step completed no run of its own"
     if not env:
         return "not published: no catalog address and token configured"
-    done = subprocess.run([*ENGINE, "rules", "catalog", "status", "--bookkeeping-run", run, "--root", str(ROOT / "rules")],
-                          env=status_env(os.environ, load_env(STORES / "worker.env"), env), cwd=ROOT, capture_output=True,
-                          text=True, check=False, timeout=300)
-    return catalog_outcome(done.stdout + done.stderr)
+    return catalog_outcome(run_catalog_status(
+        [*ENGINE, "rules", "catalog", "status", "--bookkeeping-run", run, "--root", str(ROOT / "rules")],
+        status_env(os.environ, load_env(STORES / "worker.env"), env)))
 
 
-def tell_catalog(step: dict, text: str, state: Path) -> str:
+def tell_catalog(step: dict, state: Path) -> str:
     """Publish a step's status and note the outcome. A status that cannot be published is a note, never a failed load: the
     catalog describes the load and never decides it."""
     try:
-        outcome = publish_catalog_status(text)
+        outcome = publish_catalog_status(step["name"])
     except Exception as error:  # noqa: BLE001  whatever went wrong, the step stays done
         outcome = f"not published: {type(error).__name__}"
     note(f"{step['name']} catalog status: {outcome}", state)
     return outcome
 
 
-def after_done(step: dict, text: str, state: Path) -> None:
+def after_done(step: dict, state: Path) -> None:
     """After a step is done: tell the catalog."""
-    tell_catalog(step, text, state)
+    tell_catalog(step, state)
 
 
 def catch_up(steps: list[dict], state: Path) -> dict[str, str | None]:
     """Publish the status of every step already done, from the step's own log (a step done before the catalog was configured,
-    or while it was unreachable). None for a step not done; a step whose log is gone is not published."""
+    or while it was unreachable). None for a step not done; a step with no run in any attempt's log is not published."""
     done, outcomes = done_steps(state), {}
     for step in steps:
         if step["name"] not in done:
             outcomes[step["name"]] = None
             continue
-        log = LOGS / f"chain-{RUN}-{step['name']}.log"
-        if not log.exists():
-            outcomes[step["name"]] = "not published: no log of this step"
-            continue
-        outcomes[step["name"]] = tell_catalog(step, log.read_text(), state)
+        outcomes[step["name"]] = tell_catalog(step, state)
     return outcomes
 
 
@@ -865,7 +892,7 @@ def attempt_loop(step: dict, env: dict, state: Path) -> bool:
         if code == 0 and "Load stopped" not in text:
             done = [line for line in text.splitlines() if line.startswith("Done: ")]
             note(f"{name} done: {done[-1][:200] if done else ''}", state)
-            after_done(step, text, state)
+            after_done(step, state)
             return True
         why = [line for line in text.splitlines() if re.search(r"stopped|did not finish|Error", line)]
         note(f"{name} attempt {attempt} stopped rc={code}: "
@@ -941,10 +968,6 @@ def main() -> int:
         return 0
     env = {**os.environ, **load_env(STORES / "worker.env")}
     LOGS.mkdir(parents=True, exist_ok=True)
-    if args.catalog_status:
-        for name, outcome in catch_up(steps, state).items():
-            print(f"{name:30} {outcome or 'not done'}")
-        return 0
     if sys.platform == "darwin":
         subprocess.Popen(["caffeinate", "-dimsu", "-w", str(os.getpid())])
     if args.workers is not None:
@@ -971,6 +994,10 @@ def main() -> int:
     if args.plan:
         for step in steps:
             print(f"{step['name']:30} {plan(step, env)}", flush=True)
+        return 0
+    if args.catalog_status:
+        for name, outcome in catch_up(steps, state).items():
+            print(f"{name:30} {outcome or 'not done'}")
         return 0
     if args.auto:
         deadline = None

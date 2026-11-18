@@ -876,26 +876,29 @@ def test_only_the_catalogs_address_and_token_reach_the_status_command_and_only_w
 
 
 def test_the_catalogs_answer_is_read_as_published_or_not_with_its_cause_and_never_raises():
-    assert chain.catalog_outcome('{"ok": true, "pipeline": "svc.target"}') == "published to svc.target"
-    assert chain.catalog_outcome('FAILED: x\n{"cause": "OpenMetadata endpoint did not answer", "ok": false}') == \
+    confirmed = '{"ok": true, "status": "confirmed", "pipeline_status": {"execution_status": "Successful", "failed_tasks": 0}}'
+    assert chain.catalog_outcome(confirmed) == "confirmed as Successful"
+    assert chain.catalog_outcome(confirmed.replace("Successful", "Pending")) == "confirmed as Pending"
+    assert chain.catalog_outcome('{"cause": "OpenMetadata endpoint did not answer", "ok": false, "status": "failed"}') == \
         "not published: OpenMetadata endpoint did not answer"
     assert chain.catalog_outcome("not json at all") == "not published: no readable answer"
     assert chain.catalog_outcome("") == "not published: no readable answer"
+    assert chain.catalog_outcome(confirmed + "\n}") == "confirmed as Successful"  # a stray brace after the answer
 
 
 def test_a_steps_catalog_status_is_published_after_it_finishes_and_a_failure_never_fails_the_step(monkeypatch, tmp_path):
     asked = []
-    monkeypatch.setattr(chain, "publish_catalog_status", lambda text: asked.append(chain.last_run_id(text)) or "published to svc.t")
+    monkeypatch.setattr(chain, "publish_catalog_status", lambda name: asked.append(name) or "published to svc.t")
     steps = [_step("a1", "A")]
     state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=10)
     log = tmp_path / "log"
     log.write_text(STEP_LOG)
     notes = []
     monkeypatch.setattr(chain, "note", lambda message, path: notes.append(message))
-    chain.after_done(steps[0], log.read_text(), state)
-    assert asked == ["22222222-2222-4222-8222-222222222222"] and any("catalog status" in n and "published to svc.t" in n for n in notes)
-    monkeypatch.setattr(chain, "publish_catalog_status", lambda text: (_ for _ in ()).throw(RuntimeError("boom")))
-    chain.after_done(steps[0], log.read_text(), state)  # raises nothing: the load is done whatever the catalog says
+    chain.after_done(steps[0], state)
+    assert asked == ["a1"] and any("catalog status" in n and "published to svc.t" in n for n in notes)
+    monkeypatch.setattr(chain, "publish_catalog_status", lambda name: (_ for _ in ()).throw(RuntimeError("boom")))
+    chain.after_done(steps[0], state)  # raises nothing: the load is done whatever the catalog says
     assert any("not published" in n for n in notes)
 
 
@@ -907,10 +910,10 @@ def test_a_catch_up_publishes_the_status_of_every_step_already_done_from_its_own
     monkeypatch.setattr(chain, "RUN", "fresh-v1")
     monkeypatch.setattr(chain, "note", lambda message, path: None)
     seen = []
-    monkeypatch.setattr(chain, "publish_catalog_status", lambda text: seen.append(chain.last_run_id(text)) or "published to svc.t")
+    monkeypatch.setattr(chain, "publish_catalog_status", lambda name: seen.append(name) or "published to svc.t")
     steps = [_step("a1", "A"), _step("b1", "B"), _step("c1", "C")]
-    assert chain.catch_up(steps, state) == {"a1": "published to svc.t", "b1": "not published: no log of this step", "c1": None}
-    assert seen == ["22222222-2222-4222-8222-222222222222"]  # c1 is not done: nothing to say
+    assert chain.catch_up(steps, state) == {"a1": "published to svc.t", "b1": "published to svc.t", "c1": None}
+    assert seen == ["a1", "b1"]  # c1 is not done: nothing to say
 
 
 def test_the_status_command_gets_a_short_environment_the_bookkeeping_login_and_the_catalog_and_nothing_else():
@@ -920,3 +923,36 @@ def test_the_status_command_gets_a_short_environment_the_bookkeeping_login_and_t
     given = chain.status_env(base, worker, catalog)
     assert set(given) == {"PATH", "HOME", "BOOKKEEPING_DATABASE_URL", "OPENMETADATA_URL", "OPENMETADATA_TOKEN"}
     assert "no" not in given.values()  # no other login, key or password reaches it
+
+
+def test_a_step_that_loaded_nothing_new_in_its_last_attempt_publishes_the_run_of_an_earlier_one(tmp_path, monkeypatch):
+    monkeypatch.setattr(chain, "LOGS", tmp_path)
+    monkeypatch.setattr(chain, "RUN", "fresh-v1")
+    (tmp_path / "chain-fresh-v1-a1.log").write_text("Bundle 1/1: all 5 documents already loaded\nDone: 0 documents loaded, 5 already loaded before\n")
+    (tmp_path / "chain-fresh-v1-a1.log.attempt-1").write_text(STEP_LOG.replace("22222222", "33333333"))
+    (tmp_path / "chain-fresh-v1-a1.log.attempt-2").write_text(STEP_LOG)
+    assert chain.step_run_id("a1") == "22222222-2222-4222-8222-222222222222"  # its newest attempt that ran one
+    assert chain.step_run_id("none") is None
+
+
+def test_a_bad_line_in_the_env_file_never_hides_the_catalog_pair(tmp_path):
+    env = tmp_path / ".env"
+    env.write_text("STUB_NOTE=it's\nOPENMETADATA_URL=http://127.0.0.1:8587/api\nOPENMETADATA_TOKEN='t-invented'\n")
+    assert chain.catalog_env(env) == {"OPENMETADATA_URL": "http://127.0.0.1:8587/api", "OPENMETADATA_TOKEN": "t-invented"}
+
+
+def test_a_catalog_that_hangs_is_cut_off_at_sixty_seconds_with_its_whole_process_group(monkeypatch):
+    killed = []
+
+    class Hung:
+        pid = 4242
+
+        def communicate(self, timeout=None):
+            if timeout == 60:
+                raise chain.subprocess.TimeoutExpired("x", 60)
+            return ("", "")
+
+    monkeypatch.setattr(chain.subprocess, "Popen", lambda *a, **k: Hung())
+    monkeypatch.setattr(chain.os, "killpg", lambda pid, sig: killed.append(pid))
+    assert chain.run_catalog_status(["x"], {}) == ""
+    assert killed == [4242]  # the group, so no orphan keeps calling the catalog
