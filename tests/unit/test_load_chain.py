@@ -846,3 +846,65 @@ def test_the_start_count_and_the_rescale_use_each_steps_own_measured_range(monke
     assert dict(started) == {"gleif": 10, "plain": 8}
     assert chain.rescale({"gleif": 5}, {"gleif": 1}, "low", {"gleif": (1, 10)}) == ("gleif", 10)
     assert chain.rescale({"gleif": 5}, {"gleif": 1}, "low", {"gleif": (1, 8)}) == ("gleif", 8)
+
+
+STEP_LOG = """Bundle 1/2: 512 of 512 documents to load
+  run 11111111-1111-4111-8111-111111111111 complete in 1.6 min
+Bundle 2/2: 512 of 512 documents to load
+  run 22222222-2222-4222-8222-222222222222 complete in 1.4 min
+Done: 1024 documents loaded, 0 already loaded before
+"""
+
+
+def test_the_run_to_publish_is_the_last_one_a_step_completed():
+    assert chain.last_run_id(STEP_LOG) == "22222222-2222-4222-8222-222222222222"
+    assert chain.last_run_id("Done: 1 documents loaded\n") is None  # a step that finished with no run of its own publishes nothing
+    assert chain.last_run_id("") is None
+
+
+def test_only_the_catalogs_address_and_token_reach_the_status_command_and_only_when_both_are_set(tmp_path):
+    env = tmp_path / ".env"
+    env.write_text("export OPENMETADATA_URL=http://127.0.0.1:8587/api\nOPENMETADATA_TOKEN='t-invented'\n"
+                   "OPENMETADATA_ADMIN_PASSWORD=never-passed\nSOMETHING_ELSE=x\n")
+    assert chain.catalog_env(env) == {"OPENMETADATA_URL": "http://127.0.0.1:8587/api", "OPENMETADATA_TOKEN": "t-invented"}
+    env.write_text("OPENMETADATA_URL=http://127.0.0.1:8587/api\n")
+    assert chain.catalog_env(env) == {}  # no token: nothing is published, and nothing is partly set
+    assert chain.catalog_env(tmp_path / "missing.env") == {}
+
+
+def test_the_catalogs_answer_is_read_as_published_or_not_with_its_cause_and_never_raises():
+    assert chain.catalog_outcome('{"ok": true, "pipeline": "svc.target"}') == "published to svc.target"
+    assert chain.catalog_outcome('FAILED: x\n{"cause": "OpenMetadata endpoint did not answer", "ok": false}') == \
+        "not published: OpenMetadata endpoint did not answer"
+    assert chain.catalog_outcome("not json at all") == "not published: no readable answer"
+    assert chain.catalog_outcome("") == "not published: no readable answer"
+
+
+def test_a_steps_catalog_status_is_published_after_it_finishes_and_a_failure_never_fails_the_step(monkeypatch, tmp_path):
+    asked = []
+    monkeypatch.setattr(chain, "publish_catalog_status", lambda step, text, state: asked.append(step["name"]) or "published to svc.t")
+    steps = [_step("a1", "A")]
+    state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=10)
+    log = tmp_path / "log"
+    log.write_text(STEP_LOG)
+    notes = []
+    monkeypatch.setattr(chain, "note", lambda message, path: notes.append(message))
+    chain.after_done(steps[0], log.read_text(), state)
+    assert asked == ["a1"] and any("catalog status" in n and "published to svc.t" in n for n in notes)
+    monkeypatch.setattr(chain, "publish_catalog_status", lambda *a: (_ for _ in ()).throw(RuntimeError("boom")))
+    chain.after_done(steps[0], log.read_text(), state)  # raises nothing: the load is done whatever the catalog says
+    assert any("not published" in n for n in notes)
+
+
+def test_a_catch_up_publishes_the_status_of_every_step_already_done_from_its_own_log(monkeypatch, tmp_path):
+    state = tmp_path / "chain.log"
+    state.write_text("11-18 06:40:00 ET a1 done: Done\n11-18 06:50:00 ET b1 done: Done\n")
+    (tmp_path / "chain-fresh-v1-a1.log").write_text(STEP_LOG)
+    monkeypatch.setattr(chain, "LOGS", tmp_path)
+    monkeypatch.setattr(chain, "RUN", "fresh-v1")
+    monkeypatch.setattr(chain, "note", lambda message, path: None)
+    seen = []
+    monkeypatch.setattr(chain, "publish_catalog_status", lambda step, text, st: seen.append((step["name"], chain.last_run_id(text))) or "published to svc.t")
+    steps = [_step("a1", "A"), _step("b1", "B"), _step("c1", "C")]
+    assert chain.catch_up(steps, state) == {"a1": "published to svc.t", "b1": "not published: no log of this step", "c1": None}
+    assert seen == [("a1", "22222222-2222-4222-8222-222222222222")]  # c1 is not done: nothing to say

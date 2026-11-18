@@ -8,6 +8,7 @@
     python load_chain.py --only <step>        one step
     python load_chain.py --lane <name>        the steps of one lane; run several lanes at once (see the chain file)
     python load_chain.py --finish             only what follows the loads, once every lane is done
+    python load_chain.py --catalog-status     publish the catalog status of every step already done (a catch-up)
     python load_chain.py --status             what each running step is doing: progress, rate, processes, a verdict
     python load_chain.py --auto [--slots N] [--hours H | --deadline HH:MM]
                                               watch the loads: start each step when its lane is free, move its
@@ -755,6 +756,83 @@ def wait_for(step: dict, state: Path, poll: int = 30) -> None:
             time.sleep(poll)
 
 
+CATALOG_KEYS = ("OPENMETADATA_URL", "OPENMETADATA_TOKEN")
+
+
+def last_run_id(text: str) -> str | None:
+    """The Bookkeeping run a step completed last, from its log: the catalog's status is that of the latest run."""
+    found = re.findall(r"^\s+run ([0-9a-f-]{36}) complete", text, re.M)
+    return found[-1] if found else None
+
+
+def catalog_env(path: Path) -> dict[str, str]:
+    """Only the catalog's address and token, from the private env file, and only when both are there: nothing else the
+    file holds (a login, a password) reaches the command, and no half-set pair does."""
+    if not path.exists():
+        return {}
+    found = load_env(path)
+    return {key: found[key] for key in CATALOG_KEYS} if all(found.get(key) for key in CATALOG_KEYS) else {}
+
+
+def catalog_outcome(answer: str) -> str:
+    """What `rules catalog status` answered, in a few words: published to a Pipeline, or not and why. Never raises."""
+    found = re.search(r"\{.*\}", answer, re.S)
+    try:
+        body = json.loads(found.group(0)) if found else None
+    except ValueError:
+        body = None
+    if not isinstance(body, dict):
+        return "not published: no readable answer"
+    if body.get("ok"):
+        return f"published to {body.get('pipeline', 'its Pipeline')}"
+    return f"not published: {redact(str(body.get('cause') or 'no cause given'))[:120]}"
+
+
+def publish_catalog_status(step: dict, text: str, state: Path) -> str:
+    """Publish a finished step's latest Bookkeeping run as its target Pipeline's status in the catalog
+    (`rules catalog status --bookkeeping-run`), when the catalog's address and token are configured."""
+    run = last_run_id(text)
+    env = catalog_env(ROOT / ".env")
+    if not run:
+        return "not published: the step completed no run of its own"
+    if not env:
+        return "not published: no catalog address and token configured"
+    done = subprocess.run([*ENGINE, "rules", "catalog", "status", "--bookkeeping-run", run, "--root", str(ROOT / "rules")],
+                          env={**os.environ, **load_env(STORES / "worker.env"), **env}, cwd=ROOT, capture_output=True,
+                          text=True, check=False, timeout=300)
+    return catalog_outcome(done.stdout + done.stderr)
+
+
+def after_done(step: dict, text: str, state: Path) -> None:
+    """After a step is done: tell the catalog. Whatever the catalog answers, the step stays done: the catalog describes
+    the load and never decides it."""
+    try:
+        outcome = publish_catalog_status(step, text, state)
+    except Exception as error:  # noqa: BLE001  a status that cannot be published is a note, never a failed load
+        outcome = f"not published: {type(error).__name__}"
+    note(f"{step['name']} catalog status: {outcome}", state)
+
+
+def catch_up(steps: list[dict], state: Path) -> dict[str, str | None]:
+    """Publish the status of every step already done, from the step's own log (a step done before the catalog was configured,
+    or while it was unreachable). None for a step not done; a step whose log is gone is not published."""
+    done, outcomes = done_steps(state), {}
+    for step in steps:
+        if step["name"] not in done:
+            outcomes[step["name"]] = None
+            continue
+        log = LOGS / f"chain-{RUN}-{step['name']}.log"
+        if not log.exists():
+            outcomes[step["name"]] = "not published: no log of this step"
+            continue
+        try:
+            outcomes[step["name"]] = publish_catalog_status(step, log.read_text(), state)
+        except Exception as error:  # noqa: BLE001  one step's failure never stops the rest
+            outcomes[step["name"]] = f"not published: {type(error).__name__}"
+        note(f"{step['name']} catalog status: {outcomes[step['name']]}", state)
+    return outcomes
+
+
 def attempt_loop(step: dict, env: dict, state: Path) -> bool:
     name, log = step["name"], LOGS / f"chain-{RUN}-{step['name']}.log"
     wait_for(step, state)
@@ -767,6 +845,7 @@ def attempt_loop(step: dict, env: dict, state: Path) -> bool:
         if code == 0 and "Load stopped" not in text:
             done = [line for line in text.splitlines() if line.startswith("Done: ")]
             note(f"{name} done: {done[-1][:200] if done else ''}", state)
+            after_done(step, text, state)
             return True
         why = [line for line in text.splitlines() if re.search(r"stopped|did not finish|Error", line)]
         note(f"{name} attempt {attempt} stopped rc={code}: "
@@ -807,6 +886,8 @@ def main() -> int:
     parser.add_argument("--lane")
     parser.add_argument("--adopt-state", action="store_true",
                         help="the chain state file has done lines and no store marker: it is this store's")
+    parser.add_argument("--catalog-status", action="store_true",
+                        help="publish the catalog status of every step already done (a catch-up); needs the catalog configured")
     parser.add_argument("--status", action="store_true",
                         help="one line a running step: progress, rate, processes, database writes and a verdict")
     parser.add_argument("--workers", type=int, help="with --only: the step's workers, within the capacity's range, instead of the chain file's")
@@ -840,6 +921,10 @@ def main() -> int:
         return 0
     env = {**os.environ, **load_env(STORES / "worker.env")}
     LOGS.mkdir(parents=True, exist_ok=True)
+    if args.catalog_status:
+        for name, outcome in catch_up(steps, state).items():
+            print(f"{name:30} {outcome or 'not done'}")
+        return 0
     if sys.platform == "darwin":
         subprocess.Popen(["caffeinate", "-dimsu", "-w", str(os.getpid())])
     if args.workers is not None:
