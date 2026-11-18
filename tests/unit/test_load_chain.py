@@ -123,11 +123,11 @@ def test_the_chain_has_eleven_lanes_and_company_facts_is_beside_the_other_silver
     assert {s["lane"] for s in STEPS if s["source"] == "sec.company-facts"} == {"F"}
 
 
-def test_every_steps_workers_fit_the_smallest_capacity_profile_that_can_run_it():
-    """No step asks for more workers than a medium task (the profile a load starts on) carries."""
-    top = chain.workers_range(**chain.capacity_profiles()["aws-medium"])[1]
+def test_no_step_asks_for_more_workers_than_the_largest_capacity_profile_carries():
+    """A smaller profile clamps a step's workers at start (a medium task starts GLEIF at 4); none may exceed the largest."""
+    largest = max(chain.workers_range(**profile)[1] for profile in chain.capacity_profiles().values())
     counts = {step["name"]: step["workers"] for step in STEPS}
-    assert min(counts.values()) >= 1 and max(counts.values()) <= max(top, 8), (counts, top)
+    assert min(counts.values()) >= 1 and max(counts.values()) <= largest, (counts, largest)
 
 
 def test_the_skill_names_eleven_lanes_and_the_capacity_profiles():
@@ -347,7 +347,7 @@ def test_compute_pressure_is_low_ok_or_high_and_relaxes_when_the_run_is_behind()
     assert chain.pressure(load=17.0, cores=8, swap_used=0.2, relaxed=True) == "high"
 
 
-def test_workers_rise_two_four_eight_on_the_longest_chain_first_and_fall_from_the_shortest():
+def test_workers_double_on_the_longest_chain_first_and_halve_on_the_shortest_within_the_profiles_range():
     priority = {"long": 900, "mid": 300, "short": 50}
     assert chain.rescale({"long": 2, "mid": 2, "short": 2}, priority, "low", (2, 8)) == ("long", 4)
     assert chain.rescale({"long": 8, "mid": 2, "short": 2}, priority, "low", (2, 8)) == ("mid", 4)
@@ -633,3 +633,10 @@ def test_a_started_step_is_held_to_the_profiles_range(monkeypatch, tmp_path):
     monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: "ok")
     chain.auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=20), bounds=(1, 2))
     assert started[0] == ("a1", 2)
+
+
+def test_every_run_mode_holds_a_steps_workers_to_the_capacity_not_only_the_scheduler():
+    steps = [{"name": "gleif", "workers": 8}, {"name": "small", "workers": 2}, {"name": "tiny", "workers": 1}]
+    assert [s["workers"] for s in chain.clamped(steps, (1, 4))] == [4, 2, 1]  # a medium task starts GLEIF at 4
+    assert [s["workers"] for s in chain.clamped(steps, (2, 8))] == [8, 2, 2]  # a floor raises the lowest
+    assert steps[0]["workers"] == 8  # the chain file's own steps are not changed

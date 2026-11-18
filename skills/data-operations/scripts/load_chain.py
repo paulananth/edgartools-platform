@@ -220,6 +220,12 @@ def machine_pressure(relaxed: bool = False) -> str:
     return pressure(os.getloadavg()[0], os.cpu_count() or 1, swap_fraction(swap), relaxed)
 
 
+def clamped(steps: list[dict], bounds: tuple[int, int]) -> list[dict]:
+    """The steps with each one's workers held to the capacity's range, whatever the run mode: the chain file asks for
+    what a step wants, the compute says what a task carries."""
+    return [{**step, "workers": min(max(step["workers"], bounds[0]), bounds[1])} for step in steps]
+
+
 def rescale(workers: dict[str, int], priority: dict[str, int], level: str, bounds: tuple[int, int]) -> tuple[str, int] | None:
     """One change of workers within the capacity's `bounds`: with room (`low`) the step with the longest chain behind it
     doubles, up to the top; when pressed (`high`) the step with the shortest halves, down to the floor. Anything else
@@ -661,7 +667,7 @@ def main() -> int:
     parser.add_argument("--slots", type=int, default=max(2, min(os.cpu_count() or 2, int(
         os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") / 2**30 // 2))), help="loads running at once")
     args = parser.parse_args()
-    steps = chain_steps()
+    steps = clamped(chain_steps(), bounds_for(args.capacity))
     names = [step["name"] for step in steps]
     for chosen in (args.start, args.only):
         if chosen and chosen not in names:
