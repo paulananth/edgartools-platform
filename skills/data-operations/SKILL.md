@@ -28,6 +28,13 @@ A status that cannot be published (no catalog configured, the endpoint down, the
 chain's state file, never a failed load. Report it with the step: published, or not and why. Initializing the catalog's
 credentials is the openmetadata skill's, never done in a load.
 
+After a store is reset and loaded again, the catalog still holds each step's status from the load before: it is history, and each
+step's new run supersedes it as the step finishes. Until then it says "Successful" for a step the store no longer holds, so read a
+status with its run's time, and never delete the old ones without the operator's word (`rules catalog status` publishes a run;
+it has no reset). Bring the catalog's own text up to the rules once the stores are initialized, before the load
+(the init runbook's catalog step in this repository's `docs/runbooks/edgar-intelligence/`, which owns the commands; a skill
+cannot link outside the installed bundle).
+
 ## Report a running load from its evidence
 
 Never report a load as "running". Run `load_chain.py --status` and report, for each running step, what it prints:
@@ -67,6 +74,10 @@ the stores folder's `reader.env` (`DIAGNOSE_DATABASE_URL`): it has `pg_monitor`,
 statistics and the catalogs of each store (who holds what), never a table. Never diagnose as the owner, the administrator or a
 runtime login: each can change or read data, and a diagnosis that needs more than the reader shows is a gap to name.
 `load_chain.py --auto` reads the database this way.
+
+The scheduler judges the machine by what is happening now: the load average against the cores, and memory free. Swap used presses
+only while memory is short, because the system keeps swap long after the load that filled it; reading swap alone holds every
+start back on a machine with memory to spare.
 
 ## Start with live state
 

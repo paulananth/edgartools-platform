@@ -57,8 +57,8 @@ Size at the execution boundary: a Mac host's CPU/RAM does not describe a
 container's allocation, and server connection limits do not describe its free
 budget. Read available resources and active runs before each new dispatch.
 
-Read the machine before adding a load: a load average above one and a half times the cores, or swap over three
-quarters used, means every running load slows (`load_chain.py --auto` checks both before each start). Memory is the
+Read the machine before adding a load: a load average above one and a half times the cores, or memory short (under a tenth free, or swap over three
+quarters used while under a quarter is free), means every running load slows (`load_chain.py --auto` checks both before each start). Memory is the
 limit on a small machine, not the cores.
 
 Record the ready backlog's file count and compressed/expanded byte estimates,
@@ -125,7 +125,7 @@ step opens its own database connections, and the hosted instance allows 500) and
 A slow load has one saturated tier. Throttling hides which, so it comes last.
 
 1. **Measure each tier** (`load_chain.py --auto` reads the first two every cycle and acts on them):
-   - the machine running the loads: load average against its cores, and swap;
+   - the machine running the loads: load average against its cores, and memory free (swap used only beside it);
    - the database, as the reader login: sessions active, sessions waiting on locks and the longest wait, connections
      against the limit;
    - the source: how fast one reader opens a file.

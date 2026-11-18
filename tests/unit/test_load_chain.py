@@ -251,14 +251,10 @@ def test_a_load_already_running_outside_the_scheduler_keeps_its_source_and_targe
     assert chain.ready(steps, set(), running=set(), failed=set(), free=5, busy={("one", "mastering")}) == ["y"]
 
 
-def test_the_machine_has_headroom_only_below_the_load_and_swap_limits():
+def test_swap_used_is_read_from_the_systems_report():
     swap = "total = 9216.00M  used = 5751.50M  free = 1416.50M  (encrypted)"
     assert chain.swap_fraction(swap) == 5751.5 / 9216
     assert chain.swap_fraction("not a reading") is None
-    assert chain.has_headroom(load=5.0, cores=8, swap_used=0.62)
-    assert not chain.has_headroom(load=13.0, cores=8, swap_used=0.2)  # more than 1.5 x the cores
-    assert not chain.has_headroom(load=2.0, cores=8, swap_used=0.8)  # swap over 75%
-    assert chain.has_headroom(load=2.0, cores=8, swap_used=None)  # no reading is no reason to wait
 
 
 
@@ -1116,3 +1112,25 @@ def test_the_verdict_on_a_state_file_is_the_same_pure_answer_status_and_the_run_
 
 def test_the_reader_reads_the_mdm_databases_generation_whatever_database_its_address_names():
     assert chain.mdm_url_of("postgresql+psycopg2://ops:pw@host.invalid:5432/bookkeeping") == "postgresql+psycopg2://ops:pw@host.invalid:5432/mdm"
+
+
+def test_full_swap_with_memory_to_spare_is_not_pressure_and_a_short_memory_is():
+    """Swap used is a stock: macOS keeps it long after the pages that filled it are gone, so it cannot say the machine is pressed
+    now. A scheduler that read it alone started nothing for a load it had just restarted (swap 85%, memory 56% free)."""
+    assert chain.pressure(load=2.0, cores=8, swap_used=0.85, memory_free=0.56) == "low"  # room, so the workers may rise
+    assert chain.pressure(load=2.0, cores=8, swap_used=0.85, memory_free=0.20) == "high"  # swap and little memory
+    assert chain.pressure(load=2.0, cores=8, swap_used=0.10, memory_free=0.05) == "high"  # almost no memory, whatever the swap
+    assert chain.pressure(load=2.0, cores=8, swap_used=0.85, memory_free=None) == "high"  # memory unreadable: the swap rule stands
+    assert chain.memory_free_fraction("System-wide memory free percentage: 56%\n") == 0.56
+    assert chain.memory_free_fraction("nothing here") is None
+
+
+def test_the_memory_edges_of_pressure():
+    assert chain.pressure(2.0, 8, 0.85, memory_free=0.25) == "ok"  # a quarter free: swap no longer presses, but there is no room to grow
+    assert chain.pressure(2.0, 8, 0.85, memory_free=0.24) == "high"
+    assert chain.pressure(2.0, 8, 0.10, memory_free=0.10) == "low"  # a tenth free is not yet short enough to press alone
+    assert chain.pressure(2.0, 8, 0.10, memory_free=0.09) == "high"
+    assert chain.pressure(2.0, 8, 0.60, memory_free=0.40) == "low"  # four tenths free is room whatever the swap
+    assert chain.pressure(2.0, 8, 0.60, memory_free=0.39) == "ok"
+    assert chain.pressure(2.0, 8, 0.76, memory_free=None) == "high"  # unreadable memory counts as short
+    assert chain.pressure(13.0, 8, 0.95, relaxed=True, memory_free=0.5) == "ok"  # behind: the relaxed load limit still holds
