@@ -193,7 +193,7 @@ the rules, not from a lane's habit:
 **`--plan` proves the documents, not the rest.** It counts what each step would read; it does not open a file a step reads
 beside its capture, and it does not write, so it cannot find a missing right. A fresh store's first minutes find them:
 a lane stops when its step uses up its attempts (the chain file sets them for each step) and names the step. Read its reason where the step's log points, the stores folder's
-`load-errors.log` (one file for every lane: find the step's own command and its last lines), fix the cause, and run the
+`load-errors.log` (one file for every lane, rotated at 10 MiB into `load-errors.log.1` and gzipped `.2.gz` to `.5.gz`: find the step's own command and its last lines), fix the cause, and run the
 lane again; a step that is done costs one call. A silver step that reports "a value is not its column's type or a storage
 constraint refused the delivery" now adds the database's SQLSTATE and the constraint or column it names; a SQLSTATE
 42501 is a missing right, not a value.

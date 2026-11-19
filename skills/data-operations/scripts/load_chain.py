@@ -810,15 +810,14 @@ def redact(text: str) -> str:
     return re.sub(r"\bhost=\S+", "host=<hidden>", text)
 
 
-def errors_since(path: Path, offset: int, source: str | None = None, target: str | None = None) -> str:
-    """What was written to the shared error log after `offset`, addresses hidden, and, given a source and target, only
+def errors_since(path: Path, start, source: str | None = None, target: str | None = None) -> str:
+    """What was written to the shared error log after `start` (a position taken before the attempt: the log is rotated by
+    size, and the position follows it across one rotation), addresses hidden, and, given a source and target, only
     the blocks of that step's own commands (a block opens with `$ <command> --source X --target Y`): the file is shared
     by every lane and every run, so another lane's errors in the same window are not this step's."""
-    if not path.exists() or path.stat().st_size <= offset:
-        return ""
-    with path.open("rb") as handle:
-        handle.seek(offset)
-        text = handle.read().decode(errors="replace")
+    from edgar_warehouse.rules import error_log
+
+    text = error_log.since(path, start)
     if source and target:
         wanted = re.compile(rf"--source {re.escape(source)} --target {re.escape(target)}( |$)")
         text = "".join(block for block in re.split(r"(?m)^(?=\$ )", text) if wanted.search(block.split("\n", 1)[0]))
@@ -1013,10 +1012,12 @@ def catch_up(steps: list[dict], state: Path) -> dict[str, str | None]:
 def attempt_loop(step: dict, env: dict, state: Path) -> bool:
     name, log = step["name"], LOGS / f"chain-{RUN}-{step['name']}.log"
     wait_for(step, state)
-    errors, offset, previous = STORES / "load-errors.log", 0, ""
+    from edgar_warehouse.rules import error_log
+
+    errors, offset, previous = STORES / "load-errors.log", (0, 0), ""
     for attempt in range(1, step["attempts"] + 1):
         note(f"{name} attempt {attempt} start", state)
-        offset = errors.stat().st_size if errors.exists() else 0
+        offset = error_log.position(errors)
         code = run(["load", *arguments(step)], env, log)
         text = log.read_text()
         if code == 0 and "Load stopped" not in text:
