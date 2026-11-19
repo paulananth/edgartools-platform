@@ -292,7 +292,7 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
             second.restore(restored, snapshot)
         assert first.contents(one) == expected
         assert second.contents(two)['rdm.rdm.code_set']['rows'] == 0
-        assert (first.folder(one) / "connection.env").stat().st_mode & 0o777 == 0o600
+        assert (first.folder(one) / "owner.env").stat().st_mode & 0o777 == 0o600
     finally:
         # These are disposable targets created by this test, with these exact labels.
         for manager in (first, second):

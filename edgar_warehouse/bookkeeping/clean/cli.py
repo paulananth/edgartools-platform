@@ -83,7 +83,7 @@ TASK_COMMANDS = frozenset({"claim", "renew", "report", "fail"})
 
 
 def _handle(args):
-    from .database import get_engine, migrate
+    from .database import default_url, get_engine, migrate
     operation = args.bookkeeping_command
     if operation == "serve":
         book = configured_bookkeeping()
@@ -93,9 +93,7 @@ def _handle(args):
             book.close()
         return 0
     if operation == "init":
-        from edgar_warehouse.database_connections import owner_url
-
-        owner = get_engine(owner_url("bookkeeping"))
+        owner = get_engine(default_url())
         try:
             result = migrate(
                 owner,
@@ -105,10 +103,8 @@ def _handle(args):
         finally:
             owner.dispose()
     elif operation == "grant-profile":
-        from edgar_warehouse.database_connections import owner_url
-
         from .database import grant_profile
-        owner = get_engine(owner_url("bookkeeping"))
+        owner = get_engine(default_url())
         try:
             result = grant_profile(owner, profile=args.profile, worker=args.worker)
         finally:
