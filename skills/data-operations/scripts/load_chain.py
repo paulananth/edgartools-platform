@@ -413,6 +413,7 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
             spawn(name, count)
         # Raising a step waits for it to settle; a pressed machine sheds the step with the shortest chain at once, whenever it last moved
         settled = set(workers) if level == "high" else {name for name in workers if clock() - moved.get(name, began[name]) >= MOVE_EVERY}
+        settled = {name for name in settled if movable(step_log_text(name))}  # a move abandons the bundles in flight
         if not starts and (change := rescale({n: workers[n] for n in settled}, {n: length[n] for n in settled}, level,
                                              {n: range_of(n) for n in settled})):
             name, count = change
@@ -434,6 +435,19 @@ def bundle_progress(text: str) -> tuple[int, int] | None:
     found = re.findall(r"^Bundle \d+/(\d+):", text, re.M)
     finished = len(re.findall(r"^\s+run \S+ complete in", text, re.M)) + len(re.findall(r"^Bundle \d+/\d+: all \d+ documents already loaded", text, re.M))
     return (finished, int(found[-1])) if found else None
+
+
+def step_log_text(name: str) -> str:
+    log = LOGS / f"chain-{RUN}-{name}.log"
+    return log.read_text() if log.exists() else ""
+
+
+def movable(text: str) -> bool:
+    """A step may be moved (stopped and started again with another worker count) only when its log names more than one bundle: a
+    move abandons the bundles in flight, so a step of one bundle, or one that has named none yet, would lose everything it has done
+    and start over. Two such steps were moved ten times in two hours and never finished."""
+    progress = bundle_progress(text)
+    return progress is not None and progress[1] > 1
 
 
 def bundles_run(text: str) -> int:

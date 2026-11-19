@@ -37,6 +37,11 @@ disposable store is the next check to add.
   scheduler (`ps`) before starting one, and stop the scheduler before its steps.
 - **Read the database with the database-monitoring skill**: `summary` and `locks` every check,
   `logs` after any step that stops with a database error.
+- **A step of one bundle is never moved.** The scheduler resizes a running step by stopping it and starting it again, which
+  abandons the bundles in flight; a step whose log names one bundle (a single document), or none yet, would lose its whole attempt
+  each time. Only a log naming more than one bundle is moved. A step that shows `attempt 1 start` again and again with
+  `scheduler moves` lines between is losing its work: stop the scheduler (not the steps), let the step finish, then run what
+  follows with `--only` and `--finish`. More workers cannot speed a single bundle, and the machine's cores and memory bound them.
 - **A scheduler that "stopped" has usually finished everything it could**: it names the failed steps and what waits on them.
   Fix the cause (engine, memory, a login), then start it again; done steps cost one call each.
 

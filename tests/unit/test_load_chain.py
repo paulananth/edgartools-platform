@@ -460,6 +460,7 @@ def test_a_window_that_has_run_out_or_never_was_is_behind():
 
 
 def test_a_running_step_is_restarted_with_more_workers_when_the_machine_has_room(monkeypatch, tmp_path):
+    monkeypatch.setattr(chain, "step_log_text", lambda name: LOG)  # a step of 149 bundles: a move loses only those in flight
     steps = [_step("a1", "A", minutes=600)]
     steps[0]["workers"] = 2
     state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=10)
@@ -482,6 +483,7 @@ def test_the_database_is_pressed_by_lock_waits_or_by_connections_and_pressure_ta
 
 
 def test_workers_fall_while_the_database_is_locking_even_when_the_machine_has_room(monkeypatch, tmp_path):
+    monkeypatch.setattr(chain, "step_log_text", lambda name: LOG)  # many bundles: a move loses only those in flight
     steps = [_step("a1", "A", minutes=600), _step("b1", "B", minutes=60)]
     for step in steps:
         step["workers"] = 8
@@ -1192,6 +1194,7 @@ def test_the_memory_edges_of_pressure():
 def test_a_running_step_is_moved_at_most_once_in_ten_minutes_however_the_pressure_swings(monkeypatch, tmp_path):
     """Each move stops the step's load and starts it again, abandoning the bundles in flight and paying a start: the second
     hosted load moved IPO between 1 and 2 workers five times in twenty minutes as the load average crossed a line."""
+    monkeypatch.setattr(chain, "step_log_text", lambda name: LOG)  # many bundles: a move loses only those in flight
     steps = [_step("a1", "A", minutes=600)]
     steps[0]["workers"] = 1
     state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=1, cycles=25)
@@ -1203,6 +1206,7 @@ def test_a_running_step_is_moved_at_most_once_in_ten_minutes_however_the_pressur
 
 
 def test_a_pressed_machine_sheds_the_step_with_the_shortest_chain_even_when_it_moved_lately(monkeypatch, tmp_path):
+    monkeypatch.setattr(chain, "step_log_text", lambda name: LOG)  # many bundles: a move loses only those in flight
     steps = [_step("long", "A", minutes=600), _step("short", "B", minutes=60)]
     for step in steps:
         step["workers"] = 8
@@ -1273,3 +1277,24 @@ def test_a_file_set_aside_for_a_missing_generation_is_kept_and_its_done_steps_co
     assert chain.ensure_store(state, "bbbb2222", generation="9") == "set aside"
     assert chain.done_steps(state) == set()
     assert [p.name for p in tmp_path.glob("chain.log.*") if not p.name.endswith(".lock")] == ["chain.log.bbbb2222-"]
+
+
+def test_a_step_with_one_bundle_or_none_named_yet_is_never_moved(monkeypatch, tmp_path):
+    """Two single-document steps were stopped and started again ten times as the machine's load moved, each time losing the whole
+    attempt; they never finished."""
+    one = "gleif mastering: 1 documents in 1 bundles\nBundle 1/1: 1 of 1 documents to load\n"
+    for text in (one, ""):
+        monkeypatch.setattr(chain, "step_log_text", lambda name, text=text: text)
+        steps = [_step("a1", "A", minutes=600)]
+        steps[0]["workers"] = 2
+        state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=10)
+        levels = iter(["ok", "low", "low", "low", "high", "high", "low", "low", "high", "ok"])
+        monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: next(levels, "ok"))
+        _run_auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=90))
+        assert [workers for _, workers in started] == [2] and killed == []
+
+
+def test_only_a_log_naming_more_than_one_bundle_can_be_moved():
+    assert chain.movable(LOG)
+    assert not chain.movable("gleif mastering: 1 documents in 1 bundles\nBundle 1/1: 1 of 1 documents to load\n")
+    assert not chain.movable("")
