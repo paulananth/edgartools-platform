@@ -118,7 +118,8 @@ def merge_file(store, settings: Settings, records: list[dict], *, again: bool = 
     """Merge one file, or nothing if it is done. `again` delivers a finished file a second time. A file of new records
     first merges beside the other merges of its kind; one that would create or merge golden records, or meets another
     merge on a golden record or identifier, is rolled back and merged alone. A batch that holds more identifier values than one merge
-    may claim beside others is cut first (`_parts`). Every result names the files it wrote, `files`: one, or one a part."""
+    may claim beside others is cut first (`_parts`). Every result names the files it wrote, `files`: one, or one a part, and `alone`:
+    how many parts merged alone, by the reason (`Contended`'s message)."""
     shareable = store.can_share and records and not (again or record_updates or release_identifiers)
     if shareable:
         parts = _parts(records, stored.CLAIMS)
@@ -127,12 +128,14 @@ def merge_file(store, settings: Settings, records: list[dict], *, again: bool = 
         try:
             made = _merge_file(store, settings, records, again, deferred, quiet, record_updates, release_identifiers,
                                shared=True)
-        except Contended:
-            made = None
+        except Contended as exc:
+            made, alone = None, {str(exc): 1}  # the reason this part merges alone, counted for the worker's report
         if made is not None:
-            return {**made, "files": [{"file": made["file"], "records": len(records)}]}
+            return {**made, "alone": {}, "files": [{"file": made["file"], "records": len(records)}]}
+    else:
+        alone = {}
     made = _merge_file(store, settings, records, again, deferred, quiet, record_updates, release_identifiers, shared=False)
-    return {**made, "files": [{"file": made["file"], "records": len(records)}]}
+    return {**made, "alone": alone, "files": [{"file": made["file"], "records": len(records)}]}
 
 
 def _parts(records: list[dict], cap: int) -> list[list[dict]]:
@@ -162,10 +165,11 @@ def _merge_parts(store, settings: Settings, parts: list[list[dict]], deferred, q
     # is a part of its own, so the recursion ends at once.
     made = [merge_file(store, settings, part, deferred=deferred if number == 0 else (), quiet=quiet)
             for number, part in enumerate(parts)]
-    totals = Counter()
+    totals, alone = Counter(), Counter()
     for one in made:
         totals.update({key: value for key, value in one.items() if isinstance(value, int) and not isinstance(value, bool)})
-    return {"file": made[0]["file"], "skipped": all(one["skipped"] for one in made), **totals,
+        alone.update(one["alone"])
+    return {"file": made[0]["file"], "skipped": all(one["skipped"] for one in made), **totals, "alone": dict(alone),
             "files": [{"file": one["file"], "records": len(part)} for one, part in zip(made, parts)]}
 
 
