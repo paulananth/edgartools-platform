@@ -10,8 +10,9 @@ from __future__ import annotations
 import json
 import hashlib
 import os
+import sys
 import tempfile
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -166,6 +167,7 @@ def _merge_batches(envelope: dict, manifest: dict, folder: str, work: list[tuple
     settings: dict = {}
     journal = changed_files.journal()
     done: dict[int, dict] = {}
+    alone: Counter = Counter()  # the parts that merged alone, by reason: the cost of each reason is read from this
     try:
         for position, key in work:
             batch = manifest["batches"][position]
@@ -183,6 +185,7 @@ def _merge_batches(envelope: dict, manifest: dict, folder: str, work: list[tuple
                     settings[kind] = _settings(engine, manifest, kind)
                 made = merge.merge_file(db, settings[kind], records, deferred=deferred, quiet=quiet)
                 files.extend(made["files"])
+                alone.update(made["alone"])
                 deferred = ()
             if key is not None:
                 _record(journal, envelope, manifest, batch["input"], key, files)
@@ -190,6 +193,8 @@ def _merge_batches(envelope: dict, manifest: dict, folder: str, work: list[tuple
     finally:
         db.close()
         engine.dispose()
+        if alone:
+            print(json.dumps({"mastering_merge_alone": dict(alone)}, sort_keys=True), file=sys.stderr, flush=True)
     return done
 
 

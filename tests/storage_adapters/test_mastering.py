@@ -566,6 +566,20 @@ def test_a_batch_with_one_record_that_merges_golden_records_is_split_and_gives_t
         assert len(live(db)) == 7
 
 
+def test_a_part_that_merges_alone_is_counted_by_its_reason(database_factory, monkeypatch):
+    """The cost of each reason a merge goes alone is read from these counts (ticket mastering-locks/02): a part with no
+    reason counts nothing, and a part that merges golden records counts that reason once."""
+    with opened(database_factory) as db:
+        if db.dialect == "mysql":
+            pytest.skip("MySQL merges one kind at a time")
+        monkeypatch.setattr(stores, "CLAIMS", 4)
+        a, b = figi("00TSTW01"), figi("00TSTW02")
+        plain = merge.merge_file(db, SECURITY, [record(FIGI, "a", "security", figi=a), record(FIGI, "b", "security", figi=b)])
+        assert plain["alone"] == {}
+        joining = merge.merge_file(db, SECURITY, [record(FIGI, "c", "security", figi=[a, b])])
+        assert joining["alone"] == {"a merge of golden records": 1}
+
+
 @pytest.mark.parametrize("engine", ["postgresql", "mysql"])
 def test_every_integer_column_is_bigint(engine):
     schema = (Path(stores.__file__).parent / "schema" / f"{engine}.sql").read_text()
