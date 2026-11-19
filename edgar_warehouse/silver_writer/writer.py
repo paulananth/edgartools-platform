@@ -85,9 +85,10 @@ def land(sink: Sink, table: str, records: Iterable[dict], ids=None, results: Pat
 
 
 def refresh_ids(sink: Sink, table: str, ids) -> dict:
-    """Fill (or correct) every link's MDM id on rows already landed, from MDM as it
-    is now: a record mastered after its rows landed gets its id without its rows
-    being delivered again; an id whose entity was merged moves to the survivor."""
+    """Fill every link's empty MDM id on rows already landed, from MDM as it is now: a record
+    mastered after its rows landed gets its id without its rows being delivered again. A row
+    that has an id is never read or written; an id whose entity merged away still resolves
+    to the survivor (`mastering.reads.master`)."""
     spec = sink.spec(table)
     links = spec["links"] or []
     if not links:

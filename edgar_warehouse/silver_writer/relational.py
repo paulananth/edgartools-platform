@@ -151,8 +151,9 @@ class DatabaseSink:
         from sqlalchemy import cast, Text
         table = data_table(spec, self.engine.dialect.name)
         column = table.c[link["source_key"]]
+        empty = table.c[link["mdm_id_column"]].is_(None)  # a row that has an id is never read again
         with self.engine.connect() as conn:
-            return {str(value) for value in conn.scalars(select(cast(column, Text)).where(column.is_not(None)))}
+            return {str(value) for value in conn.scalars(select(cast(column, Text)).where(column.is_not(None), empty))}
 
     def set_ids(self, spec, link, found):
         # Refresh is coordinated with deliveries and commits as one operation.
@@ -161,12 +162,12 @@ class DatabaseSink:
         key, column = cast(table.c[link["source_key"]], Text), table.c[link["mdm_id_column"]]
         if self.engine.dialect.name == "mysql": key = key.collate("utf8mb4_0900_bin")
         changed = 0
-        pairs = list(found.items())
+        pairs = [(k, v) for k, v in found.items() if v is not None]
         with self.engine.begin() as conn:
             lock(conn, spec)
             for start in range(0, len(pairs), BATCH):
                 batch = dict(pairs[start:start+BATCH])
                 value = case(batch, value=key, else_=column)
-                changed += conn.execute(update(table).where(key.in_(batch), column.is_distinct_from(value)).values(
+                changed += conn.execute(update(table).where(key.in_(batch), column.is_(None)).values(
                     {column.name: value})).rowcount
         return changed

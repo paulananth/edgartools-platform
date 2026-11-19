@@ -15,10 +15,10 @@ class Sink(Protocol):
         spec's load mode says, all or nothing, and count what changed."""
 
     def link_keys(self, spec: dict, link: dict) -> set[str]:
-        """Every source key value a link's column holds in the table, as text."""
+        """Every source key value a link's column holds on rows whose MDM id is empty, as text."""
 
     def set_ids(self, spec: dict, link: dict, found: dict[str, str | None]) -> int:
-        """Set a link's MDM id on every row from `found` (source key to id, or empty); count rows changed."""
+        """Set a link's MDM id from `found` (source key to id) on rows whose id is empty, and only those; count rows changed."""
 
 
 # Compatibility import for existing callers. All selected destinations use the
