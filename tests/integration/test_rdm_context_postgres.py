@@ -49,7 +49,7 @@ def published(tmp_path_factory):
     with server() as engine:
         owner, runtime = engine("rdm"), engine("rdm", "rdm_runtime")
         store = RDM(runtime)
-        assert list(database.migrate(owner, runtime_role="rdm_runtime")) == ["schema.sql"]
+        assert sorted(database.migrate(owner, runtime_role="rdm_runtime")) == ["001-published-code.sql", "schema.sql"]
         if True:
             _import(store)
             store.approve("sec-place-codes", "1", **OPERATOR)
@@ -79,7 +79,7 @@ def published(tmp_path_factory):
             store.publish("test-retired", "1", out=out)
             before_retiring = _now(runtime)
             store.retire("test-retired", "1")
-        assert list(database.migrate(owner, runtime_role="rdm_runtime", existing_only=True)) == ["schema.sql"]
+        assert sorted(database.migrate(owner, runtime_role="rdm_runtime", existing_only=True)) == ["001-published-code.sql", "schema.sql"]
         yield runtime, first, between, before_retiring
 
 

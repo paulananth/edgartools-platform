@@ -129,10 +129,12 @@ mirror can take it, so the order is the load, then:
    those tables: explicit `postgres_tables`, `postgres_schemas => NULL`, `target_table_type => 'ICEBERG'`
    ([the single-database qualification](SINGLE-DATABASE-ICEBERG.md) pins the rest).
 
-**The source-consolidation gate comes first.** One mirror reads one source database and creates one target database, and the stores
-are separate databases. Until the listed tables share one source database, qualified and approved as the qualification requires,
-no mirror is created: never one mirror per store, never a target of several databases, and nothing consolidated as a side effect of
-a load. The create plan names the single source database and says so.
+**One mirror per source database** (operator: "1 do we not need rdm"; two mirrors, with RDM a third). One mirror reads one source
+database and creates one target database, and the stores are separate databases, so the listed tables get one mirror for each store that
+has any: the MDM store (`mdm` layer), the Silver store (`silver` layer) and the RDM store (`rdm` layer, `rdm.published_code`), each with
+its own target database. Never one mirror reading several stores, and nothing consolidated as a side effect of a load. Each create plan
+names its single source database, its tables, its target and its refresh interval, and is approved before it runs. RDM lists the
+published-only table, never the tables that hold drafts: a mirror carries tables, not views.
 
 A reset of the stores drops and recreates the databases a mirror reads, which breaks that mirror: plan its drop or restart, with its
 own approval, before the reset, and create it again from the list after the next load.
