@@ -102,7 +102,7 @@ resource "snowflake_account_role" "auditor" {
 }
 
 resource "snowflake_grant_database_role" "auditor_viewers" {
-  for_each           = toset(["SECURITY_VIEWER", "USAGE_VIEWER", "GOVERNANCE_VIEWER"])
+  for_each           = toset(["SECURITY_VIEWER", "USAGE_VIEWER", "GOVERNANCE_VIEWER", "ORGANIZATION_BILLING_VIEWER"]) # the last reads the rate sheet, so a plan is priced from the account's own rates
   database_role_name = "\"SNOWFLAKE\".\"${each.key}\""
   parent_role_name   = snowflake_account_role.auditor.name
 }
@@ -119,6 +119,60 @@ resource "snowflake_grant_privileges_to_account_role" "auditor_warehouse" {
   on_account_object {
     object_type = "WAREHOUSE"
     object_name = var.warehouse
+  }
+}
+
+# The Gold destination database: the auditor reads its metadata (schemas, objects, grants) to check what is there before a build, and
+# no data (REFERENCES shows a table to the role without reading a row).
+variable "gold_database" {
+  type    = string
+  default = "DB_EDGARTOOLS_GOLD"
+}
+
+resource "snowflake_grant_privileges_to_account_role" "auditor_gold_database" {
+  account_role_name = snowflake_account_role.auditor.name
+  privileges        = ["USAGE"]
+  on_account_object {
+    object_type = "DATABASE"
+    object_name = var.gold_database
+  }
+}
+
+resource "snowflake_grant_privileges_to_account_role" "auditor_gold_schemas" {
+  account_role_name = snowflake_account_role.auditor.name
+  privileges        = ["USAGE"]
+  on_schema {
+    all_schemas_in_database = var.gold_database
+  }
+}
+
+resource "snowflake_grant_privileges_to_account_role" "auditor_gold_future_schemas" {
+  account_role_name = snowflake_account_role.auditor.name
+  privileges        = ["USAGE"]
+  on_schema {
+    future_schemas_in_database = var.gold_database
+  }
+}
+
+resource "snowflake_grant_privileges_to_account_role" "auditor_gold_tables" {
+  account_role_name = snowflake_account_role.auditor.name
+  privileges        = ["REFERENCES"]
+  on_schema_object {
+    all {
+      object_type_plural = "TABLES"
+      in_database        = var.gold_database
+    }
+  }
+}
+
+resource "snowflake_grant_privileges_to_account_role" "auditor_gold_future_tables" {
+  account_role_name = snowflake_account_role.auditor.name
+  privileges        = ["REFERENCES"]
+  on_schema_object {
+    future {
+      object_type_plural = "TABLES"
+      in_database        = var.gold_database
+    }
   }
 }
 
