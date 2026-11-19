@@ -19,9 +19,11 @@ Stopping is safe: run the same command again and it carries on where it stopped.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import fnmatch
 import json
 import re
+import shutil
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -203,6 +205,7 @@ class Loader:
         entry = {"bundle": number, "documents": len(keys), "new": fresh, "run_id": None}
         if prepared["manifest"] is None:
             self.say(f"Bundle {number}/{total}: all {len(keys)} documents already loaded")
+            shutil.rmtree(where)
             return entry
         self.say(f"Bundle {number}/{total}: {fresh} of {len(keys)} documents to load")
         submitted = json.loads(self.commands(
@@ -210,6 +213,9 @@ class Loader:
             "--input-manifest", prepared["manifest"]["uri"], "--input-sha256", prepared["manifest"]["sha256"]))
         entry["run_id"] = str(submitted["run"]["run_id"])
         entry["counts"] = self.drive(entry["run_id"]).get("counts")
+        # Verified complete: Bookkeeping keeps the manifest's hash, the capture keeps the bytes, so the prepared files go.
+        # A run that stops raises above and keeps them, to resume.
+        shutil.rmtree(where)
         return entry
 
     def at_once(self, work: list[tuple[str, object]]) -> list:
@@ -342,6 +348,8 @@ class Loader:
                 number, len(cut), keys, folder=folder, capture=capture, capture_run=capture_run, as_of=as_of,
                 revision=revision, extra=extra))
             for number, keys in enumerate(cut, 1)])
+        with contextlib.suppress(OSError):
+            folder.rmdir()  # every bundle verified: nothing of this load is left on disk
         self.say(f"Done: {sum(b['new'] for b in result['bundles'])} documents loaded, "
                  f"{sum(b['documents'] - b['new'] for b in result['bundles'])} already loaded before")
         changed = result["finished_open_runs"] or any(b["new"] for b in result["bundles"])
