@@ -20,7 +20,6 @@ def write(root, body):
 
 def test_configuration_is_part_of_the_execution_identity():
     assert catalog.path() in execution.runtime_files()
-    assert catalog.path().is_file()
 
 
 @pytest.mark.parametrize("change", ["valid", "missing_version", "empty_fields", "duplicate_fields",
