@@ -1,0 +1,10 @@
+# The Gold views (data-modeling skill, GOLD.md). The models are not committed: `python -m edgar_warehouse.gold.views write infra/dbt/gold`
+# renders them from rules/gold/gold.yaml, so the configuration is the one place a view is defined.
+name: edgartools_gold
+version: "1.0"
+config-version: 2
+profile: edgartools_gold
+model-paths: ["models"]
+models:
+  edgartools_gold:
+    +materialized: view

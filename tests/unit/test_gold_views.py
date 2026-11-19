@@ -146,3 +146,12 @@ def test_the_dbt_sources_name_the_mirror_database_and_only_the_tables_the_views_
     found = {s["name"]: (s["database"], s["schema"], [t["name"] for t in s["tables"]]) for s in views.sources()["sources"]}
     assert found["silver"] == ("DB_EDGARTOOLS_MIRROR", "SILVER", ["thirteenf_filing", "thirteenf_holding"])
     assert found["mdm"] == ("DB_EDGARTOOLS_MIRROR", "MDM", ["mastering_identifier", "mastering_master"])
+
+
+def test_the_project_is_written_from_the_configuration_and_a_dropped_view_is_dropped(tmp_path):
+    (tmp_path / "models").mkdir()
+    (tmp_path / "models" / "old_view.sql").write_text("select 1")
+    written = views.write_project(tmp_path)
+    assert written == sorted(f"{item['name']}.sql" for item in views.load()["objects"])
+    assert not (tmp_path / "models" / "old_view.sql").exists()
+    assert "DB_EDGARTOOLS_MIRROR" in (tmp_path / "models" / "sources.yml").read_text()
