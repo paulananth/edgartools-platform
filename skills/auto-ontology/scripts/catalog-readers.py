@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Provision and verify restricted catalog readers; keep credentials in private files.
 
-Run with uv run --no-project --with 'psycopg[binary]' python.
+Run with uv run --no-project --with 'psycopg[binary]' --with pyyaml python.
+
+A reader holds SELECT on exactly the tables of the exposure list (rules/exposure.yaml) and nothing else: no schema-wide or future-table
+grant, so a table that is not on the list, such as a draft or a control table, is unreadable to it.
 """
 
 import argparse
@@ -16,6 +19,7 @@ from pathlib import Path
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 import psycopg
+import yaml
 from psycopg import sql
 
 
@@ -64,7 +68,19 @@ def pg_url(value):
     return urlunsplit(("postgresql", parsed.netloc, parsed.path, parsed.query, ""))
 
 
-def verify(url):
+EXPOSURE = Path(__file__).resolve().parents[3] / "rules" / "exposure.yaml"
+
+
+def exposed(path, layer):
+    """(schema, tables) of the exposure list's final tables of one store, in the store's own schema."""
+    document = yaml.safe_load(Path(path).read_text())
+    tables = sorted(item["table"] for item in document["tables"] if item["layer"] == layer)
+    if not tables:
+        raise ValueError("The exposure list names no table of this store")
+    return document["layers"][layer]["source_schema"], tables
+
+
+def verify(url, expected=None):
     with (
         psycopg.connect(
             url,
@@ -84,6 +100,13 @@ def verify(url):
             WHERE n.nspname NOT IN ('pg_catalog','information_schema')
             AND n.nspname NOT LIKE 'pg\\_%' AND c.relkind IN ('r','p','v','m','f')""")
         readable, writable = cur.fetchone()
+        if expected is not None:
+            cur.execute("""SELECT n.nspname || '.' || c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                WHERE n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg\\_%'
+                AND c.relkind IN ('r','p','v','m','f') AND has_table_privilege(c.oid,'SELECT')
+                AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid=c.oid AND d.deptype='e')""")  # an extension's own views are not the list's
+            if {row[0] for row in cur.fetchall()} != set(expected):
+                raise ValueError("Catalog reader can read tables other than the exposure list, or lacks one")
         cur.execute("SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()")
         if not cur.fetchone()[0] or writable or not readable:
             raise ValueError(
@@ -102,8 +125,10 @@ def owner_url(owner, store):
     return owner["DB_URL"] if parts.path.strip("/") else urlunsplit(parts._replace(path="/" + store))
 
 
-def provision(source, owner, reader_file):
+def provision(source, owner, reader_file, exposure=EXPOSURE):
     key = source["variable"]
+    schema, tables = exposed(exposure, source["store"])
+    expected = [f"{schema}.{table}" for table in tables]
     endpoint = pg_url(owner_url(owner, source["store"]))
     parsed = urlsplit(endpoint)
     saved = load_env(reader_file) if reader_file.exists() else {}
@@ -118,7 +143,7 @@ def provision(source, owner, reader_file):
         ) != (parsed.hostname, parsed.port, parsed.path, parsed.query, source["role"]):
             raise ValueError("Saved reader differs from the selected source or role")
         try:
-            return saved[key], verify(saved[key])
+            return saved[key], verify(saved[key], expected)
         except psycopg.OperationalError:
             # A previous transaction may have rolled back after the local save.
             pass
@@ -168,23 +193,11 @@ def provision(source, owner, reader_file):
                 sql.Identifier(role),
             )
         )
-        for schema in source["schemas"]:
-            cur.execute(
-                sql.SQL("GRANT USAGE ON SCHEMA {} TO {}").format(
-                    sql.Identifier(schema), sql.Identifier(role)
-                )
-            )
-            cur.execute(
-                sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA {} TO {}").format(
-                    sql.Identifier(schema), sql.Identifier(role)
-                )
-            )
-            cur.execute(
-                sql.SQL(
-                    "ALTER DEFAULT PRIVILEGES IN SCHEMA {} GRANT SELECT ON TABLES TO {}"
-                ).format(sql.Identifier(schema), sql.Identifier(role))
-            )
-    return new_url, verify(new_url)
+        cur.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO {}").format(sql.Identifier(schema), sql.Identifier(role)))
+        for table in tables:  # table by table: no schema-wide or future-table grant
+            cur.execute(sql.SQL("GRANT SELECT ON TABLE {}.{} TO {}").format(
+                sql.Identifier(schema), sql.Identifier(table), sql.Identifier(role)))
+    return new_url, verify(new_url, expected)
 
 
 def prepare_models(auto_env):

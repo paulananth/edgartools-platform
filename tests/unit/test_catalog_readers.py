@@ -7,6 +7,9 @@ from unittest.mock import Mock
 import pytest
 
 
+EXPOSURE_FILE = Path(__file__).parents[2] / "rules" / "exposure.yaml"
+
+
 @pytest.fixture
 def readers():
     path = Path(__file__).parents[2] / "skills/auto-ontology/scripts/catalog-readers.py"
@@ -41,16 +44,16 @@ def test_existing_verified_reader_is_reused_without_owner_connection(
     path = tmp_path / "reader.env"
     url = "postgresql://reader:invented@localhost/catalog?sslmode=require"
     readers.save_env(path, {"STORE_DATABASE_URL": url})
-    monkeypatch.setattr(readers, "verify", lambda value: {"writable_relations": 0})
+    monkeypatch.setattr(readers, "verify", lambda value, expected=None: {"writable_relations": 0})
     connect = Mock(side_effect=AssertionError("must reuse the qualified reader"))
     monkeypatch.setattr(readers.psycopg, "connect", connect)
     source = {
         "variable": "STORE_DATABASE_URL",
-        "store": "store",
+        "store": "rdm",
         "role": "reader",
     }
     actual, report = readers.provision(
-        source, {"DB_URL": url}, path
+        source, {"DB_URL": url}, path, exposure=EXPOSURE_FILE
     )
     assert actual == url
     assert report == {"writable_relations": 0}
@@ -138,7 +141,7 @@ def test_saved_reader_cannot_silently_select_a_different_source(readers, tmp_pat
     )
     source = {
         "variable": "STORE_DATABASE_URL",
-        "store": "store",
+        "store": "rdm",
         "role": "reader",
     }
     with pytest.raises(ValueError, match="Saved reader differs"):
@@ -148,4 +151,44 @@ def test_saved_reader_cannot_silently_select_a_different_source(readers, tmp_pat
                 "DB_URL": "postgresql://owner:invented@localhost/new?sslmode=require"
             },
             path,
+            exposure=EXPOSURE_FILE,
         )
+
+
+def test_a_reader_is_granted_select_on_each_exposed_table_and_nothing_wider(readers, monkeypatch, tmp_path):
+    """The reader holds the exposure list's tables by name: no schema-wide grant and no default privilege for a future table."""
+    statements = []
+
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def execute(self, query, params=None):
+            statements.append(query.as_string(None) if hasattr(query, "as_string") else query)
+
+        def fetchone(self):
+            return None
+
+    class Connection(Cursor):
+        def cursor(self):
+            return Cursor()
+
+    monkeypatch.setattr(readers.psycopg, "connect", lambda *a, **k: Connection())
+    monkeypatch.setattr(readers, "verify", lambda value, expected=None: {"expected": expected})
+    source = {"variable": "RDM_DATABASE_URL", "store": "rdm", "role": "discovery_reader_rdm"}
+    url, report = readers.provision(source, {"DB_URL": "postgresql://owner:x@h:5432"}, tmp_path / "reader.env", exposure=EXPOSURE_FILE)
+    joined = "\n".join(str(s) for s in statements)
+    assert report == {"expected": ["rdm.published_code"]}
+    assert 'GRANT SELECT ON TABLE "rdm"."published_code"' in joined
+    assert "ALL TABLES" not in joined and "DEFAULT PRIVILEGES" not in joined
+
+
+def test_the_exposure_list_gives_each_stores_schema_and_tables(readers):
+    assert readers.exposed(EXPOSURE_FILE, "mdm") == ("public", ["mastering_identifier", "mastering_master"])
+    schema, tables = readers.exposed(EXPOSURE_FILE, "silver")
+    assert schema == "silver" and "thirteenf_holding" in tables and len(tables) == 16
+    with pytest.raises(ValueError, match="names no table"):
+        readers.exposed(EXPOSURE_FILE, "rules")

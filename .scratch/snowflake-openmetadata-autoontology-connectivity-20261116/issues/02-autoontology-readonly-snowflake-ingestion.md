@@ -22,7 +22,8 @@ Blocked by: 01
 
 - [x] Moved unchanged to `skills/data-platform/scripts/exposure/autoontology.py` (2026-11-17 19:59 ET)
 - [ ] Read AutoOntology's contracts from the release in use (`~/projects/auto-ontology`, its commit named), never commit there
-- [ ] A `_READER` suffix proves no grants: prove the reader's effective SELECT-only, table-level grants against the manifest
+- [x] The PostgreSQL readers are proved on the exposure list: SELECT on exactly the listed tables by name, no schema-wide or default grant, zero write privileges, TLS; created live as `discovery_reader_mdm`, `_rdm` and `_silver` (readable: 2 + 1 + 16 listed tables, plus each database's extension views). 2026-11-19 12:40 ET
+- [ ] A `_READER` suffix proves no grants on Snowflake: prove the Snowflake reader's effective SELECT-only, table-level grants against the manifest (needs the mirror)
 - [ ] The upstream structured Snowflake factory drops `role`: enforce the role another way, or say it is not enforceable
 - [ ] Table selection by exact identity, not an unqualified regex across schemas (name collisions)
 - [ ] Scheduled ingestion may prefer `CONNECTION_STRINGS` over filtered UI connections: fail closed, and read the ingested identities back
