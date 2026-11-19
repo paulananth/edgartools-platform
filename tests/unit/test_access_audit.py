@@ -149,3 +149,62 @@ def test_exit_code_follows_failures_and_the_json_report_parses(monkeypatch, caps
     assert {r["id"] for r in json.loads(capsys.readouterr().out)} >= {"IND.postgres", "LOG.postgres"}
     state["ev"] = {**postgres_clean(), "superusers": ["loader"]}
     assert audit.main(["--platform", "postgres", "--json"]) == 1
+
+
+# --- remediation -------------------------------------------------------------------------------------------------
+import access_remediate as remediate  # noqa: E402
+
+
+def plan(*changes):
+    return {"resource_changes": [{"address": a, "change": {"actions": actions, "after": after}} for a, actions, after in changes]}
+
+
+def test_a_plan_is_summarised_and_a_destroy_is_refused_without_the_flag():
+    ok = plan(("snowflake_account_role.a", ["create"], {"name": "R"}), ("snowflake_service_user.b", ["update"], {"name": "U"}))
+    assert remediate.summarize(ok) == {"create": 1, "update": 1, "delete": 0}
+    with pytest.raises(SystemExit, match="destroy"):
+        remediate.summarize(plan(("snowflake_account_role.a", ["delete"], None)))
+    assert remediate.summarize(plan(("snowflake_account_role.a", ["delete"], None)), allow_destroy=True)["delete"] == 1
+
+
+def test_a_plan_that_touches_the_operators_admin_account_is_always_refused():
+    touching = plan(("snowflake_user.x", ["update"], {"name": "ananp11"}))
+    with pytest.raises(SystemExit, match="operator's own administrator"):
+        remediate.summarize(touching, allow_destroy=True)
+
+
+def test_the_bootstrap_sql_creates_a_non_administrator_with_a_public_key_only():
+    sql = remediate.bootstrap_sql("PUBLICKEY")
+    assert "PUBLICKEY" in sql and "ACCOUNTADMIN" not in sql.upper().replace("NOT AN ADMINISTRATOR", "") and "manage grants" in sql
+    assert "PRIVATE" not in sql.upper()
+
+
+def test_apply_needs_the_operators_words_and_records_them(tmp_path, monkeypatch):
+    for name in ("SNOWFLAKE_ORGANIZATION", "SNOWFLAKE_ACCOUNT_NAME", "ACCESS_ADMIN_USER", "ACCESS_ADMIN_ROLE", "ACCESS_ADMIN_PRIVATE_KEY_FILE"):
+        monkeypatch.setenv(name, "x")
+    shown = plan(("snowflake_account_role.a", ["create"], {"name": "R"}))
+
+    class Done:
+        def __init__(self, out=""):
+            self.returncode, self.stdout = 0, out
+
+    monkeypatch.setattr(remediate, "terraform", lambda *a, env=None: Done(json.dumps(shown)))
+    with pytest.raises(SystemExit, match="--words"):
+        remediate.main(["apply", "--approvals", str(tmp_path / "a.jsonl")])
+    remediate.main(["apply", "--words", "yes apply it", "--approvals", str(tmp_path / "a.jsonl")])
+    line = json.loads((tmp_path / "a.jsonl").read_text())
+    assert line["words"] == "yes apply it" and line["plan"]["create"] == 1 and line["at"].endswith("ET")
+
+
+def test_the_operators_admin_account_is_never_the_access_admin(monkeypatch):
+    for name in ("SNOWFLAKE_ORGANIZATION", "SNOWFLAKE_ACCOUNT_NAME", "ACCESS_ADMIN_ROLE", "ACCESS_ADMIN_PRIVATE_KEY_FILE"):
+        monkeypatch.setenv(name, "x")
+    monkeypatch.setenv("ACCESS_ADMIN_USER", "ANANP11")
+    with pytest.raises(SystemExit, match="never the access admin"):
+        remediate.tf_env()
+
+
+@pytest.mark.parametrize("connection", ["edgartools-prod", "snowconn"])
+def test_the_audit_refuses_the_connections_that_sign_in_as_the_operators_admin(connection):
+    with pytest.raises(SystemExit, match="overall administrator"):
+        snowflake.collect({"AUDIT_SNOWFLAKE_CONNECTION": connection}, as_admin=True)

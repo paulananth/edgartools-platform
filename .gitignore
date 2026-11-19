@@ -89,3 +89,4 @@ infra/.bronze-historic-delete-evidence/
 .lavish/
 .omp/ratchet/
 eval/
+infra/terraform/**/access.plan

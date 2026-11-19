@@ -14,6 +14,11 @@ MAX_TIMEOUT = 4 * 3600
 USAGE = "snowflake.account_usage"
 
 
+# The operator's overall administrator account and the connections that sign in as it: the audit never uses or changes them.
+PROTECTED_USERS = {"ANANP11"}
+FORBIDDEN_CONNECTIONS = {"edgartools-prod", "snowconn"}
+
+
 def configured(env) -> bool:
     return bool(env.get("AUDIT_SNOWFLAKE_CONNECTION"))
 
@@ -33,6 +38,8 @@ def lower(rows):
 
 def collect(env, as_admin: bool = False) -> dict:
     connection = env["AUDIT_SNOWFLAKE_CONNECTION"]
+    if connection in FORBIDDEN_CONNECTIONS:
+        sys.exit("that connection signs in as the operator's overall administrator account, which the audit never uses: use the auditor connection")
     role = snow(connection, "select current_role() as role")[0]["ROLE"].upper()
     if role in ADMIN and not as_admin:
         sys.exit("the Snowflake connection runs as an administrator role: use the read-only auditor role, or pass --as-admin to record the gap")

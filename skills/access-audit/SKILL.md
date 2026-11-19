@@ -11,13 +11,14 @@ The auditor tests whether access is **least-privilege, approved, recorded, monit
 data stack touches. The controls are 14 platform-neutral **objectives** mapped to SOX IT general controls (access, program
 change, operations), SOC 2 trust criteria (CC6 logical access, CC7 monitoring, CC8 change management, A1 capacity) and ITIL
 practices (service access, change enablement, monitoring, information security). Each platform is an **adapter** that reads
-its own evidence and grades the objectives it can. The auditor finds and reports; it never fixes.
+its own evidence and grades the objectives it can. The auditor finds and reports and never changes anything; remediation is a separate, approved, code-driven step.
 
 ## Hard stops
 
 | Never | Instead |
 |---|---|
-| Fix a finding while auditing it (grant, revoke, rotate, create a role) | Report it; the fix is its own change under data-operations or aws-snowflake-operations, with its own ticket |
+| Let the auditor change anything | The audit identity is read-only. Fixing is a separate step with its own identity (see Remediate): plan, the operator's recorded words, apply, then a fresh audit |
+| Use, change, disable or plan against the operator's overall administrator account (`ANANP11`) or a connection that signs in as it | The audit refuses those connections; the remediation refuses any plan that touches the account; a finding about it is reported and needs the operator's signed acceptance |
 | Audit as an administrator and call it independent | A read-only audit identity per platform; an administrator run needs `--as-admin` and fails that platform's IND |
 | Print a password, key, token, address or a value from the data | The adapters return counts and role names only; keep it that way |
 | Mark a control PASS from reading code or a document | Test it against the live system; no live test is NOT_TESTED, and an objective an adapter lacks is a gap (`-`) |
@@ -76,6 +77,25 @@ refuse an administrator identity), `principals(evidence)` (the roles and users t
 `controls(evidence)` returning `base.control(NAME, objective, ok, evidence, fix, tested=...)` for each objective it can
 test; list it in `PLATFORMS` in `access_audit.py`, then add its clean case and one weakness per objective to
 `tests/unit/test_access_audit.py`. Databricks, OpenMetadata and any further cloud follow this contract.
+
+## Remediate
+
+Findings are closed as code, by the skill, with no hand steps (`scripts/access_remediate.py`; the Terraform root is
+`infra/terraform/access/snowflake/accounts/prod`):
+
+1. `bootstrap` creates a key pair for a dedicated **access-admin** service identity (a role that creates roles, users and
+   policies and grants them; never `ACCOUNTADMIN`) and prints the one-time SQL that creates it, holding the public key only. An
+   account owner runs that SQL once; nothing else is ever run by hand.
+2. `plan` runs Terraform as that identity and summarises creates, updates and destroys. It refuses a plan that touches the
+   operator's own administrator account, and any destroy unless `--allow-destroy`.
+3. `apply --words "<the operator's exact words>"` records the words with the ET time and the plan counts
+   (`.scratch/access-audit/approvals.jsonl`), then applies the saved plan.
+4. Re-run `access_audit.py`; the finding is closed only by the re-run's PASS.
+
+Objects made before the root existed are imported once, so a plan shows no change for them. A permission error from the
+access-admin identity is reported as the missing privilege to grant it; it is never worked around with an administrator.
+A finding about a person's own account (their MFA, their password) has no code fix: it is reported, and closes by the
+operator's signed acceptance (owner, reason, expiry) or by moving the work to a service identity.
 
 ## Rating and report
 
