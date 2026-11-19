@@ -172,3 +172,25 @@ def sources(config: dict | None = None) -> dict:
     return {"version": 2, "sources": [
         {"name": layer, "database": mirror["database"], "schema": mirror["schemas"][layer],
          "tables": [{"name": table} for table in sorted(tables)]} for layer, tables in sorted(read.items())]}
+
+
+def write_project(folder: Path, config: dict | None = None) -> list[str]:
+    """Write the dbt models and sources into `folder/models`: the names written. The folder's dbt_project.yml and profiles.yml are committed."""
+    models = Path(folder) / "models"
+    models.mkdir(parents=True, exist_ok=True)
+    for stale in models.glob("*.sql"):  # a view dropped from the configuration is dropped from the project
+        stale.unlink()
+    written = []
+    for name, text in render_models(config).items():
+        (models / name).write_text(text)
+        written.append(name)
+    (models / "sources.yml").write_text(files.dumps(sources(config)))
+    return sorted(written)
+
+
+if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) != 3 or sys.argv[1] != "write":
+        sys.exit("usage: python -m edgar_warehouse.gold.views write <dbt project folder>")
+    print("\n".join(write_project(Path(sys.argv[2]))))
