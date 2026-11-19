@@ -53,7 +53,11 @@ The operator has authorized stored-value sampling and NVIDIA inference for
 these three stores. Apply that standing authorization on subsequent syncs.
 Keep generated concepts as proposals until reviewed.
 
-Use separate SELECT-only source accounts. A missing reader is provisioned by
+Use separate SELECT-only source accounts, one per store, each holding SELECT on exactly the exposure list's tables of that store
+(`rules/exposure.yaml`), granted table by table: never a schema-wide or future-table grant, since a draft or control table in the same
+schema would then be readable. The provisioning command proves the effective grants against the list (an extension's own views, such as
+the statement statistics, are not counted). A reader file left by an earlier deployment that names another instance is set aside, kept,
+not adopted. A missing reader is provisioned by
 the committed script through the original private migration-role file; it is
 not a reason to ask for sampling authorization again or give AutoOntology a
 worker/owner login. Existing application accounts and grants are preserved.
