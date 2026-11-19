@@ -23,6 +23,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from edgar_warehouse.bookkeeping.clean.engine import CONTENTION
+from edgar_warehouse.rules import error_log
 
 DUTIES = ("worker", "governance")
 # Seconds to wait after a pass that moved nothing: the units left are under another attempt's lease.
@@ -94,9 +95,7 @@ class Commands:
             raise RunStopped(f"{' '.join(args[:3])} did not finish before the deadline") from None
         if done.returncode not in (0, 3):
             # Its message can hold a login or an address: it goes to a private file, never the screen.
-            self.log.parent.mkdir(parents=True, exist_ok=True)
-            with os.fdopen(os.open(self.log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "a") as out:
-                out.write(f"$ {' '.join(args)}\n{done.stderr}\n")
+            error_log.write(self.log, f"$ {' '.join(args)}\n{done.stderr}\n")
             raise RunStopped(f"{' '.join(args[:3])} failed with status {done.returncode}; its message is in {self.log}")
         return done.stdout
 
@@ -120,9 +119,7 @@ class Commands:
             raise
         except Exception as exc:
             # Its message can hold a login or an address: it goes to a private file, never the screen.
-            self.log.parent.mkdir(parents=True, exist_ok=True)
-            with os.fdopen(os.open(self.log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "a") as out:
-                out.write(f"$ bookkeeping status {run_id}\n{exc}\n")
+            error_log.write(self.log, f"$ bookkeeping status {run_id}\n{exc}\n")
             raise RunStopped(f"bookkeeping status {run_id} failed ({type(exc).__name__}); its message is in {self.log}") from None
         return json.loads(json.dumps(found, default=str))  # as the command prints it: times and the like as text
 

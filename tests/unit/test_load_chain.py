@@ -824,7 +824,7 @@ def test_a_retry_is_pointless_only_when_the_same_error_comes_back_with_nothing_m
 def test_the_errors_an_attempt_wrote_to_the_shared_error_log_are_kept_with_that_step_and_not_another_lanes(tmp_path):
     log = tmp_path / "load-errors.log"
     log.write_text("$ old command\nOldError: before this attempt\n")
-    offset = log.stat().st_size
+    offset = (log.stat().st_ino, log.stat().st_size)
     log.write_text(log.read_text()
                    + "$ rules run --source sec.x --target mastering --work-run-id r\nValueError: postgresql://u:pw@h:5432/db failed\n"
                    + "$ mdm prepare-capture --source openfigi --target mastering --capture /c\nKeyError: another lane's block\n")
@@ -832,7 +832,7 @@ def test_the_errors_an_attempt_wrote_to_the_shared_error_log_are_kept_with_that_
     assert "ValueError" in kept and "OldError" not in kept and "another lane" not in kept
     assert "pw" not in kept and "<addr>" in kept
     assert "another lane" in chain.errors_since(log, offset)  # with no step named, every block since the offset
-    assert chain.errors_since(tmp_path / "missing.log", 0, "sec.x", "mastering") == ""
+    assert chain.errors_since(tmp_path / "missing.log", (0, 0), "sec.x", "mastering") == ""
 
 
 def test_ipo_has_a_window_that_fits_its_bundles_and_runs_several_at_once():

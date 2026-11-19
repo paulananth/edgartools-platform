@@ -45,7 +45,7 @@ Read the verdict, not the word "running":
   steps, so the rows may be theirs: check its log and its processes before calling it alive;
 - a step that **stopped**: read its own errors file (`chain-<RUN>-<step>.log.attempt-<n>.errors`), not the shared error log;
   an unchanged failure stops the step at once, since a retry cannot change it;
-- **no sign of work**: no CPU, no rows written and a silent log: read its log and the stores folder's `load-errors.log`
+- **no sign of work**: no CPU, no rows written and a silent log: read its log and the stores folder's `load-errors.log` (and `.1`, rotated at 10 MiB)
   before saying anything else, since it may be stalled;
 - **waiting on database locks** (three or more sessions): the contention ladder of the daily-run runbook;
 - a store note, **client-bound, not the database** (more than half its sessions waiting on the client): the machine
