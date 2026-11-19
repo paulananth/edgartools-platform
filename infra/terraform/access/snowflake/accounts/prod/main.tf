@@ -122,6 +122,60 @@ resource "snowflake_grant_privileges_to_account_role" "auditor_warehouse" {
   }
 }
 
+# The Gold destination database: the auditor reads its metadata (schemas, objects, grants) to check what is there before a build, and
+# no data (REFERENCES shows a table to the role without reading a row).
+variable "gold_database" {
+  type    = string
+  default = "DB_EDGARTOOLS_GOLD"
+}
+
+resource "snowflake_grant_privileges_to_account_role" "auditor_gold_database" {
+  account_role_name = snowflake_account_role.auditor.name
+  privileges        = ["USAGE"]
+  on_account_object {
+    object_type = "DATABASE"
+    object_name = var.gold_database
+  }
+}
+
+resource "snowflake_grant_privileges_to_account_role" "auditor_gold_schemas" {
+  account_role_name = snowflake_account_role.auditor.name
+  privileges        = ["USAGE"]
+  on_schema {
+    all_schemas_in_database = var.gold_database
+  }
+}
+
+resource "snowflake_grant_privileges_to_account_role" "auditor_gold_future_schemas" {
+  account_role_name = snowflake_account_role.auditor.name
+  privileges        = ["USAGE"]
+  on_schema {
+    future_schemas_in_database = var.gold_database
+  }
+}
+
+resource "snowflake_grant_privileges_to_account_role" "auditor_gold_tables" {
+  account_role_name = snowflake_account_role.auditor.name
+  privileges        = ["REFERENCES"]
+  on_schema_object {
+    all {
+      object_type_plural = "TABLES"
+      in_database        = var.gold_database
+    }
+  }
+}
+
+resource "snowflake_grant_privileges_to_account_role" "auditor_gold_future_tables" {
+  account_role_name = snowflake_account_role.auditor.name
+  privileges        = ["REFERENCES"]
+  on_schema_object {
+    future {
+      object_type_plural = "TABLES"
+      in_database        = var.gold_database
+    }
+  }
+}
+
 resource "snowflake_service_user" "auditor" {
   name                         = "EDGARTOOLS_PROD_AUDITOR"
   default_role                 = snowflake_account_role.auditor.name
