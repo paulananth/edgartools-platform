@@ -65,7 +65,7 @@ The top-level payload remains required and is unused for version-2 delivery.
 
 ## Governed owner installation
 
-Use the normal installed `mdm migrate --help` interface for the application's
+Use the normal installed `mdm init --help` interface for the application's
 registry. The owner connection selects PostgreSQL or MySQL; supply a separate,
 pre-provisioned runtime account and MySQL's intended application host. The
 MySQL installation requires an isolated database and its pinned catalog. It

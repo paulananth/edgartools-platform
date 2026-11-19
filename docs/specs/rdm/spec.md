@@ -140,8 +140,8 @@ Publishing and approval are the operator's. A version diff
 (`edgar-warehouse rdm diff <code_set> <from> <to>`, built in plan row 2) lists
 added, removed, relabelled and moved codes.
 
-Commands (`edgar-warehouse rdm`, JSON out): `init` and `migrate` (the schema
-owner, `RDM_MIGRATION_DATABASE_URL`); `list`, `describe`, `draft --file`,
+Commands (`edgar-warehouse rdm`, JSON out): `init` (the schema
+owner, `DB_URL` of the owner file); `list`, `describe`, `draft --file`,
 `import-reference`, `approve`, `publish --out`, `retire`, `verify` and `diff` (the runtime
 login, `RDM_DATABASE_URL`). Lookup and search of codes are
 `rdm.code_context` and `edgar-warehouse context` (agent-context spec, profiling

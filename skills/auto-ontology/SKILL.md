@@ -62,7 +62,7 @@ Reader URLs use the standard store variable names in
 credentials and service settings stay in private local files.
 
 ```bash
-CATALOG_OWNER_ENV="$HOME/.local/share/edgartools/hosted-prod/connection.env" \
+CATALOG_OWNER_ENV="$HOME/.local/share/edgartools/hosted-prod/owner.env" \
   bash infra/scripts/catalog-services.sh sync-auto
 uv run --no-project --with 'psycopg[binary]' python <SKILL_DIR>/scripts/catalog-auto-verify.py \
   --config <deployment-source-config> \

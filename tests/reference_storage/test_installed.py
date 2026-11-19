@@ -7,7 +7,7 @@ from tests.engine.test_data_skill_bundle_postgres import installed, _run  # noqa
 def test_installed_reference_lifecycle_and_search(installed, database_factory):
     python, root = installed
     with database_factory() as (owner, runtime, role):
-        environment = {"RDM_MIGRATION_DATABASE_URL": owner.url.render_as_string(hide_password=False),
+        environment = {"DB_URL": owner.url.render_as_string(hide_password=False),
                        "RDM_DATABASE_URL": runtime.url.render_as_string(hide_password=False)}
         name = "invented-installed-reference"
         body = {"code_set": {"code_set": name, "name": "Invented reference"}, "version": "1",
@@ -45,7 +45,7 @@ sys.exit(main(json.load(sys.stdin)))
         assert command(["rdm", "publish", name, "2", "--out", str(out)])["superseded"] == "1"
         historical = command(["context", name, "a", "--as-at", first_time])
         assert historical["trust"]["version"] == "1"
-        command(["rdm", "migrate", "--runtime-role", role])
+        command(["rdm", "init", "--runtime-role", role])
         assert command(["rdm", "verify", name, "1"])["matches"]
         assert command(["rdm", "verify", name, "2"])["matches"]
         command(["rdm", "retire", name, "2"])

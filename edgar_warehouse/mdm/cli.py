@@ -1,6 +1,6 @@
 """CLI subcommand: `edgar-warehouse mdm ...`, MDM only.
 
-Commands: migrate, check-connectivity,
+Commands: init, check-connectivity,
 prepare-capture, rebuild, rebuild-name-index and rebuild-detail-lookup.
 """
 from __future__ import annotations
@@ -14,15 +14,15 @@ from edgar_warehouse.mdm.observability import elapsed_ms, emit_mdm_event
 
 
 def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
-    mdm = subparsers.add_parser("mdm", help="MDM: migration, connectivity, counts, and preparation")
+    mdm = subparsers.add_parser("mdm", help="MDM: schema, connectivity, counts, and preparation")
     mdm_sub = mdm.add_subparsers(dest="mdm_command", required=True)
 
-    migrate = mdm_sub.add_parser("migrate", help="Create or upgrade the MDM schema")
+    migrate = mdm_sub.add_parser("init", help="Create the MDM schema, or bring it to current")
     migrate.add_argument("--application-role", default="application")
     migrate.add_argument("--application-host", default="%", help="MySQL runtime account host")
     migrate.add_argument("--prepared-store", action="store_true", default=True,
                          help="Install governed prepared storage on a fresh PostgreSQL or MySQL target")
-    migrate.set_defaults(handler=_logged_handler("migrate", _handle_migrate))
+    migrate.set_defaults(handler=_logged_handler("init", _handle_migrate))
 
     registrar = mdm_sub.add_parser("grant-registration", help="Owner: let a restricted login register rules in MDM "
                                    "(reads the stored records, writes the policy and dataset tables)")
@@ -96,10 +96,10 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
 
 
 def _handle_migrate(args: argparse.Namespace) -> int:
-    from edgar_warehouse.mdm.connections import engine_from_env
+    from edgar_warehouse.database_connections import owner_engine
     from edgar_warehouse.mdm.store import migrate
 
-    engine = engine_from_env("MDM_DATABASE_URL", restricted=False)
+    engine = owner_engine("mdm")
     try:
         payload = migrate(engine, application_role=args.application_role,
                           application_host=args.application_host,
@@ -111,10 +111,10 @@ def _handle_migrate(args: argparse.Namespace) -> int:
 
 
 def _handle_grant_registration(args: argparse.Namespace) -> int:
-    from edgar_warehouse.mdm.connections import engine_from_env
+    from edgar_warehouse.database_connections import owner_engine
     from edgar_warehouse.mdm.registration import grant_registrar
 
-    engine = engine_from_env("MDM_DATABASE_URL", restricted=False)
+    engine = owner_engine("mdm")
     try:
         grant_registrar(engine, args.role)
     finally:

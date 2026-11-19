@@ -13,6 +13,6 @@ fi
 : "${CHANGE_JOURNAL_RUNTIME_PASSWORD:?Set the journal runtime password}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 bash "$ROOT/infra/scripts/start-local-postgres.sh" >/dev/null
-export BOOKKEEPING_DATABASE_URL="${BOOKKEEPING_DATABASE_URL:-postgresql://postgres:test@127.0.0.1:5432/postgres}"
+export DB_URL="${DB_URL:-postgresql://postgres:test@127.0.0.1:5432}"
 cd "$ROOT"
 uv run --extra mdm infra/scripts/provision-clean-bookkeeping.py --rules --journal

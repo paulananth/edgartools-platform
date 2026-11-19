@@ -151,10 +151,10 @@ def test_bookkeeping_cli_init_and_migrate_use_owner_and_preserve_empty_control(m
                 conn.exec_driver_sql("CREATE DATABASE bookkeeping")
                 conn.exec_driver_sql("CREATE ROLE bk_control NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE")
             owner = create_engine(server.url("bookkeeping", driver="postgresql"))
-            monkeypatch.setenv("BOOKKEEPING_DATABASE_URL", owner.url.render_as_string(hide_password=False))
+            monkeypatch.setenv("DB_URL", owner.url.render_as_string(hide_password=False))
             assert main(["bookkeeping", "init", "--runtime-role", "bk_control"]) == 0
             assert "schema.sql" in capsys.readouterr().out
-            assert main(["bookkeeping", "migrate", "--runtime-role", "bk_control"]) == 0
+            assert main(["bookkeeping", "init", "--runtime-role", "bk_control"]) == 0
             assert "schema.sql" in capsys.readouterr().out
             with owner.connect() as conn:
                 assert conn.scalar(text("SELECT count(*) FROM bookkeeping.pipeline_run")) == 0

@@ -1,8 +1,8 @@
-"""`edgar-warehouse rdm`: migrate the RDM database, import a reference table as a
+"""`edgar-warehouse rdm`: make the RDM schema, import a reference table as a
 draft, record the operator's approval, publish, and compare two versions.
 
 Connections come from the environment and are never printed:
-RDM_MIGRATION_DATABASE_URL (the schema owner, for init and migrate) and
+DB_URL of the owner file (the schema owner, for init) and
 RDM_DATABASE_URL (the restricted runtime login, for everything else).
 """
 
@@ -13,16 +13,15 @@ from pathlib import Path
 
 
 def _handle(args):
-    from edgar_warehouse.database_connections import engine_from_env
+    from edgar_warehouse.database_connections import engine_from_env, owner_engine
 
     from .database import migrate
     from .store import RDM
 
-    if args.rdm_command in {"init", "migrate"}:
-        owner = engine_from_env("RDM_MIGRATION_DATABASE_URL")
+    if args.rdm_command == "init":
+        owner = owner_engine("rdm")
         try:
-            result = migrate(owner, runtime_role=args.runtime_role, existing_only=args.rdm_command == "migrate",
-                             database_name=owner.url.database)
+            result = migrate(owner, runtime_role=args.runtime_role, database_name=owner.url.database)
         finally:
             owner.dispose()
     else:
@@ -130,7 +129,7 @@ def import_reference(rdm, args) -> dict:
 
 def _commands(parser):
     commands = parser.add_subparsers(dest="rdm_command", required=True)
-    for name in ("init", "migrate"):
+    for name in ("init",):
         command = commands.add_parser(name)
         command.add_argument("--runtime-role", required=True)
         command.set_defaults(handler=_handle)

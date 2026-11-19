@@ -60,4 +60,4 @@ def test_clearing_a_source_previews_unless_confirmed_and_needs_the_source():
 
 
 def test_owner_migration_defaults_to_governed_storage():
-    assert build_parser().parse_args(["mdm", "migrate"]).prepared_store is True
+    assert build_parser().parse_args(["mdm", "init"]).prepared_store is True

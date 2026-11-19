@@ -1,7 +1,28 @@
 {
   "sources": [
-    {"variable": "MDM_DATABASE_URL", "owner_variable": "MDM_MIGRATION_DATABASE_URL", "role": "discovery_reader_mdm", "schemas": ["mdm"]},
-    {"variable": "RDM_DATABASE_URL", "owner_variable": "RDM_MIGRATION_DATABASE_URL", "role": "discovery_reader_rdm", "schemas": ["rdm"]},
-    {"variable": "SILVER_DATABASE_URL", "owner_variable": "SILVER_MIGRATION_DATABASE_URL", "role": "discovery_reader_silver", "schemas": ["silver"]}
+    {
+      "variable": "MDM_DATABASE_URL",
+      "role": "discovery_reader_mdm",
+      "schemas": [
+        "mdm"
+      ],
+      "store": "mdm"
+    },
+    {
+      "variable": "RDM_DATABASE_URL",
+      "role": "discovery_reader_rdm",
+      "schemas": [
+        "rdm"
+      ],
+      "store": "rdm"
+    },
+    {
+      "variable": "SILVER_DATABASE_URL",
+      "role": "discovery_reader_silver",
+      "schemas": [
+        "silver"
+      ],
+      "store": "silver"
+    }
   ]
 }

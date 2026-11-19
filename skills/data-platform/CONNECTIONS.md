@@ -56,29 +56,26 @@ environment's ownership checks; do not adopt another workstream's databases.
 Missing store configuration never falls back to a legacy store, another
 store's URL, or a guessed database name.
 
-| Store | Runtime variable | Migration/owner variable |
-|---|---|---|
-| MDM | `MDM_DATABASE_URL` | `MDM_MIGRATION_DATABASE_URL` |
-| RDM | `RDM_DATABASE_URL` | `RDM_MIGRATION_DATABASE_URL` |
-| Rules | `RULES_DATABASE_URL` | `RULES_MIGRATION_DATABASE_URL` |
-| Bookkeeping | `BOOKKEEPING_DATABASE_URL` | `BOOKKEEPING_MIGRATION_DATABASE_URL` |
-| Change Journal | `CHANGE_JOURNAL_DATABASE_URL` | `CHANGE_JOURNAL_MIGRATION_DATABASE_URL` |
-| Silver | `SILVER_DATABASE_URL` | `SILVER_MIGRATION_DATABASE_URL` |
+A store is one database with a fixed name (`mdm`, `rdm`, `rules`, `bookkeeping`, `change_journal`, `silver`). A duty is
+one login and one file in the stores folder, and the owner file names its login in `DB_URL`, with no database: each store
+command adds its own store's database. A `DB_URL` that already names a database keeps it (one database for one store, as a
+test uses). Nothing in the product is called a migration: a store has one `init`, which makes the schema or brings it to
+current, so there is no migrate command and no migration variable.
+
+| Duty | File | Variable | Used by |
+|---|---|---|---|
+| Owner (the schema owner) | `owner.env` | `DB_URL` | each store's `init`, silver `register`, `mdm grant-registration`, `bookkeeping grant-profile`, resetting databases, role guards |
+| Runtime | `worker.env` | `MDM_DATABASE_URL`, `RDM_DATABASE_URL`, `RULES_DATABASE_URL`, `BOOKKEEPING_DATABASE_URL`, `CHANGE_JOURNAL_DATABASE_URL`, `SILVER_DATABASE_URL` | `load` and the workers (all six name the one loader login) |
+| Governance | `governance.env` | the rules and registration logins | registering and activating rules |
+| Reader | `reader.env` | `DIAGNOSE_DATABASE_URL` | monitoring, the access audit |
 
 The selected stores folder is authoritative (a hosted store's is `~/.config/edgartools/hosted/`, the only copy of its
-files): use its `worker.env` for work,
-`connection.env` for owner or migration duties, and `governance.env` for
-registering rules in MDM. Source the appropriate
-trusted file in a command-scoped subshell with `set -a` and disable tracing.
-`load --stores` takes this folder and selects duties itself, not a single
-`.env` file. `infra/scripts/local-test-stores.py` creates local role files.
+files): use `worker.env` for work, `owner.env` for the owner's duties, and `governance.env` for registering rules in MDM.
+Source the appropriate trusted file in a command-scoped subshell with `set -a` and disable tracing. `load --stores` takes this
+folder and selects duties itself, not a single `.env` file. `infra/scripts/local-test-stores.py` creates local role files. Never
+leave the owner file sourced for work: an owner connection is never a runtime default.
 
-MDM and Bookkeeping migration commands consume their ordinary
-`*_DATABASE_URL` variable as the owner for that command only; other stores'
-migrations consume `*_MIGRATION_DATABASE_URL`. Never leave owner connections
-as runtime defaults. Registering rules in MDM additionally needs
-`MDM_REGISTRATION_DATABASE_URL` from the governance file; destination
-guard setup uses `DESTINATION_MIGRATION_DATABASE_URL` as its owner.
+Registering rules in MDM additionally needs `MDM_REGISTRATION_DATABASE_URL` from the governance file.
 `PROFILE_DATABASE_URL` is a separately authorized profiling login with access
 to database activity. Configure these only for their requested duty.
 For load profiling, `quality` reads MDM, `progress`, `failures` and `steps`

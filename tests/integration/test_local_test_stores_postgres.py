@@ -59,13 +59,12 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
         with admin.connect() as conn:
             assert not conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname='silver')"))
             assert not conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='silver_runtime')"))
-        for filename in ("connection.env", "worker.env", "governance.env"):
+        for filename in ("owner.env", "worker.env", "governance.env"):
             assert (stores.folder(name) / filename).stat().st_mode & 0o777 == 0o600
         assert not (stores.folder(name) / "verifier.env").exists()
         worker, governance = (environment(f + ".env") for f in ("worker", "governance"))
         assert "SILVER_DATABASE_URL" not in worker
-        assert "MDM_MIGRATION_DATABASE_URL" not in worker
-        assert "BOOKKEEPING_MIGRATION_DATABASE_URL" not in worker
+        assert "DB_URL" not in worker
         book = engine("bookkeeping", "postgres")
         with book.connect() as conn:
             for profile in PROFILES:

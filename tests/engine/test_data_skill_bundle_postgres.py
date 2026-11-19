@@ -555,11 +555,11 @@ def empty_rules_database():
 def test_the_rules_creator_runs_from_the_bundle_on_an_empty_rules_database(installed, empty_rules_database, tmp_path):
     python, root = installed
     url = empty_rules_database
-    env = {"RULES_MIGRATION_DATABASE_URL": url, "RULES_DATABASE_URL": url}
+    env = {"DB_URL": url, "RULES_DATABASE_URL": url}
     cli = lambda *a: _run(python, "-m", "edgar_warehouse.cli", *a, env=env, cwd=root)
     folder = tmp_path / "rules"
     assert cli("skill", "install", "--home", str(tmp_path / "home"), "--rules", str(folder)).returncode == 0
-    for command in (("rules", "init"), ("rules", "migrate")):
+    for command in (("rules", "init"), ("rules", "init")):
         done = cli(*command)
         assert done.returncode == 0, done.stderr
     checked = cli("rules", "check", "--root", str(folder))

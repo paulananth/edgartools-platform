@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Drop and create again the platform's databases on a hosted instance, with the owner and the grants each had.
 
-    set -a; . <stores folder>/connection.env; set +a
+    set -a; . <stores folder>/owner.env; set +a
     python infra/scripts/reset-hosted-databases.py            # lists what it would drop: sizes, no values
     python infra/scripts/reset-hosted-databases.py --confirm  # drops and creates them again, empty
 
-Uses the owner login's connection (MDM_MIGRATION_DATABASE_URL, the instance's administrator), which must be able to
+Uses the owner login's connection (DB_URL of owner.env, the instance's administrator), which must be able to
 create databases. The roles stay (they belong to the instance), so no password changes and no login is rotated.
 Each database's owner and CONNECT list are read before it is dropped and put back after, so the runtime, registration
 and any read-only logins reach it as before. Refuses while another session is connected to one of them.
@@ -38,9 +38,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--confirm", action="store_true", help="Drop and create them again (without it, only list them)")
     args = parser.parse_args()
-    url = os.environ.get("MDM_MIGRATION_DATABASE_URL")
+    url = os.environ.get("DB_URL")
     if not url:
-        print("Source the stores folder's connection.env first (MDM_MIGRATION_DATABASE_URL is the owner login).", file=sys.stderr)
+        print("Source the stores folder's owner.env first (its DB_URL is the owner login).", file=sys.stderr)
         return 2
     engine = sa.create_engine(make_url(url).set(database="postgres"), isolation_level="AUTOCOMMIT")
     quote = engine.dialect.identifier_preparer.quote

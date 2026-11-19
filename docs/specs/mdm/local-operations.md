@@ -31,7 +31,7 @@ acquisition history and immutable MDM event mirror. `BOOKKEEPING_DATABASE_URL`
 contains the existing root `pipeline_run`. One UUID identifies the root across
 all three. No transaction is claimed across databases.
 
-Owner migration command: `edgar-warehouse mdm migrate
+Owner migration command: `edgar-warehouse mdm init
 --application-role application`. Migrations 023 and 025–030 are checksummed.
 Migration 027 adds immutable deferred evidence. Migration 028 adds
 [candidate assessments](candidate-assessments.md), durable-before-application

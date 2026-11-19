@@ -13,7 +13,7 @@ from tests.storage_adapters.test_rules_runtime import pipeline
 def test_installed_rules_cli_records_and_reports_the_rules_a_run_used(installed, database_factory):
     python, root = installed
     with database_factory() as (owner, runtime, role):
-        environment = {"RULES_MIGRATION_DATABASE_URL": owner.url.set(drivername=owner.dialect.name).render_as_string(hide_password=False),
+        environment = {"DB_URL": owner.url.set(drivername=owner.dialect.name).render_as_string(hide_password=False),
                        "RULES_DATABASE_URL": runtime.url.set(drivername=runtime.dialect.name).render_as_string(hide_password=False)}
         program = '''
 import json, sys
@@ -27,7 +27,7 @@ try:
     rules = Rules(engine)
     export = frozen.of("pipeline", "invented.installed", body)
     rules.record(export)
-    assert main(["rules", "migrate", "--agent-role", role]) == 0
+    assert main(["rules", "init", "--agent-role", role]) == 0
     assert [row["digest"] for row in rules.history("pipeline", "invented.installed")] == [export["digest"]]
     assert main(["rules", "status", "--pipeline", "invented.installed"]) == 0
 finally:

@@ -92,20 +92,23 @@ def _handle(args):
         finally:
             book.close()
         return 0
-    if operation in {"init", "migrate"}:
-        owner = get_engine()
+    if operation == "init":
+        from edgar_warehouse.database_connections import owner_url
+
+        owner = get_engine(owner_url("bookkeeping"))
         try:
             result = migrate(
                 owner,
                 runtime_role=args.runtime_role,
-                existing_only=operation == "migrate",
                 database_name=args.database_name,
             )
         finally:
             owner.dispose()
     elif operation == "grant-profile":
+        from edgar_warehouse.database_connections import owner_url
+
         from .database import grant_profile
-        owner = get_engine()
+        owner = get_engine(owner_url("bookkeeping"))
         try:
             result = grant_profile(owner, profile=args.profile, worker=args.worker)
         finally:
@@ -123,7 +126,7 @@ def _handle(args):
 def register(subparsers):
     parser = subparsers.add_parser("bookkeeping", help="Runs, work units, leases and checkpoints")
     commands = parser.add_subparsers(dest="bookkeeping_command", required=True)
-    for name in ("init", "migrate"):
+    for name in ("init",):
         command = commands.add_parser(name)
         command.add_argument("--runtime-role", required=True)
         command.add_argument("--database-name", default="bookkeeping", help="The configured isolated control database")

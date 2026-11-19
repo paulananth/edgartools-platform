@@ -10,7 +10,7 @@ order, by skills and their own commands only. Use
 files, roles and credential handling. The commands below are the whole procedure; each prints names and checksums, never
 a connection value.
 
-The stores folder is `~/.config/edgartools/hosted/`, one folder for the store: `connection.env` (the owner logins),
+The stores folder is `~/.config/edgartools/hosted/`, one folder for the store: `owner.env` (the owner login, `DB_URL`),
 `worker.env` (the runtime logins and the manifest root), `governance.env` (the registration login). `load --stores`
 takes it. A second copy of these files elsewhere goes stale, and a stale copy fails `doctor` with a login error.
 
@@ -26,7 +26,7 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
 2. **Databases.** An instance that holds an old store keeps its logins and gets its databases made again: with the
    operator's word, list them, then drop and create them with the owner and the grants each had:
    ```bash
-   set -a; . ~/.config/edgartools/hosted/connection.env; set +a
+   set -a; . ~/.config/edgartools/hosted/owner.env; set +a
    python infra/scripts/reset-hosted-databases.py             # lists sizes; refuses while any session is connected
    python infra/scripts/reset-hosted-databases.py --confirm
    ```
@@ -50,38 +50,36 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    under them ends.
    The service is the one the instance's creation saved (snowflake-postgres skill, `pg_connect.py --create`). Wait for
    its hostname to resolve first. Done when the second run prints that every URL names the new instance.
-2b. **Role guards.** With `connection.env` sourced, `python infra/scripts/harden-hosted-roles.py` lists what each login lacks, and `--confirm` applies it:
+2b. **Role guards.** With `owner.env` sourced, `python infra/scripts/harden-hosted-roles.py` lists what each login lacks, and `--confirm` applies it:
    a connection limit per login, statement and idle-transaction timeouts, a `work_mem` ceiling for the loader and the audit classes
    for the logins that change schemas, policy or approvals. Done when it prints that every login role holds its guards. The guards belong to
    the roles, which a reset of the databases keeps, so the step is safe to run again. Read [HOSTED-LOADS.md](../../../skills/data-operations/HOSTED-LOADS.md) before a load.
-3. **Schemas** (data-platform's step, [STORES.md](../../../skills/data-platform/STORES.md)), each with its owner login, in one shell that holds `connection.env`. MDM and Bookkeeping read the owner
-   from their ordinary variable, for that command only; the others read their `*_MIGRATION_DATABASE_URL`:
+3. **Schemas** (data-platform's step, [STORES.md](../../../skills/data-platform/STORES.md)), each by the owner login, in one shell that holds `owner.env`. Each command adds its own store's database to `DB_URL`:
    ```bash
-   env MDM_DATABASE_URL="$MDM_MIGRATION_DATABASE_URL" edgar-warehouse mdm migrate --application-role mdm_runtime
+   edgar-warehouse mdm init --application-role mdm_runtime
    edgar-warehouse rdm init --runtime-role rdm_runtime
-   env BOOKKEEPING_DATABASE_URL="$BOOKKEEPING_MIGRATION_DATABASE_URL" edgar-warehouse bookkeeping init --runtime-role bookkeeping_control
+   edgar-warehouse bookkeeping init --runtime-role bookkeeping_control
    edgar-warehouse change-journal init --runtime-role change_journal_runtime
    edgar-warehouse silver init --runtime-role silver_runtime
    edgar-warehouse rules init --agent-role rules_agent
    ```
-   `init` is the whole step on a fresh store; `migrate` follows an `init` only when a later schema file arrives. Done when
+   `init` is the whole step, on a fresh store and again when a later schema file arrives. Done when
    each prints its schema file's checksum. RDM's `init` also creates `rdm.published_code`, the codes of every published version as a table
    for the mirror; `rdm.published_code` is filled each time a version is published (step 4 publishes them), never edited.
 4. **RDM codes.** With `worker.env` sourced, `python <data-operations skill>/scripts/rdm_restore_published.py`
    (no approval is asked: the operator's standing ruling, 2026-11-19, is in the approval record, under an approver other than the drafter, since the store refuses a self-approval).
    A half-restored RDM cannot be edited (published and approved versions are guarded): drop the `rdm` schema as its owner and run `rdm init` again. Done when every pin reads `pin ok` and
    `SELECT count(*) FROM rdm.published_code` equals the codes of the published versions.
-5. **Registration login.** With the owner connection, `env MDM_DATABASE_URL="$MDM_MIGRATION_DATABASE_URL" edgar-warehouse
-   mdm grant-registration --role mdm_governance`. It lets the restricted login read the stored records and write the
+5. **Registration login.** With the owner connection, `edgar-warehouse mdm grant-registration --role mdm_governance` with `owner.env` sourced. It lets the restricted login read the stored records and write the
    policy and dataset tables, and nothing else.
 6. **Source configurations.** `edgar-warehouse rules check` (every source, offline), then, with `governance.env`
    sourced, `edgar-warehouse rules register`. Done when it prints a digest for the merge rules and every Dataset Contract.
    Then the silver tables (data-platform's step; a load creates none and stops when one is missing):
-   `bash infra/scripts/deploy-silver.sh ~/.config/edgartools/hosted/connection.env`.
-7. **Worker grants**, with `connection.env` sourced, one per worker profile:
+   `bash infra/scripts/deploy-silver.sh ~/.config/edgartools/hosted/owner.env`.
+7. **Worker grants**, with `owner.env` sourced, one per worker profile:
    ```bash
    for p in $(python -c "from edgar_warehouse.workers import PROFILES; print(*PROFILES)"); do
-     env BOOKKEEPING_DATABASE_URL="$BOOKKEEPING_MIGRATION_DATABASE_URL" edgar-warehouse bookkeeping grant-profile --profile "$p" --worker bookkeeping_runtime
+     edgar-warehouse bookkeeping grant-profile --profile "$p" --worker bookkeeping_runtime
    done
    ```
    Done when `doctor` prints `"ok": true` under `worker.env` (it checks MDM, Rules, Bookkeeping and the Change Journal; steps

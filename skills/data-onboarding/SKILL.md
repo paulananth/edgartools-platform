@@ -284,7 +284,7 @@ edgar-warehouse rules init
 ### migrate: upgrade the Rules Database schema
 
 ```bash
-edgar-warehouse rules migrate
+edgar-warehouse rules init
 ```
 
 This is the same as **init**, run again after a schema change. Rerunning it changes nothing.

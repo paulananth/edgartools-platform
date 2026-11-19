@@ -242,7 +242,7 @@ envelope, summary and groups) and `check` (a retained summary back to the
 groups it wrote). Name search (`master_search.py`) and the configured detail
 lookup (`detail_lookups.py`) are two; a third adds an `Index` and its reader,
 never a copy of the coverage or rebuild. A changed engine catalog reaches a
-store only through the owner's `mdm migrate`, and a new lookup over stored
+store only through the owner's `mdm init`, and a new lookup over stored
 masters needs its rebuild before readers accept it.
 
 **A merge keeps an index only after the owner has built it.** An index with no
@@ -262,7 +262,7 @@ until the load ends.
 
 ## Migrations
 
-- `migrations/schema.sql` is the schema `mdm migrate` creates in an empty
+- `migrations/schema.sql` is the schema `mdm init` creates in an empty
   database. A schema change after go-live is a new numbered file beside it,
   added at the end of `store.MIGRATIONS`; never edit an applied file. A file
   left out of that list is never applied, and

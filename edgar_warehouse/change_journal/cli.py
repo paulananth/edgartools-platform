@@ -12,15 +12,26 @@ import os
 from pathlib import Path
 
 
+def _owner_url() -> str:
+    """The owner file's `DB_URL` with this store's database (the Journal imports nothing outside itself, so it reads it itself);
+    a `DB_URL` that already names a database keeps it."""
+    from sqlalchemy.engine import make_url
+
+    value = os.environ.get("DB_URL")
+    if not value:
+        raise KeyError("DB_URL is not set: source the owner file of the stores folder (its value is never printed)")
+    url = make_url(value)
+    return (url if url.database else url.set(database="change_journal")).render_as_string(hide_password=False)
+
+
 def _handle(args):
     from .database import migrate
     from .store import ChangeJournal, get_engine
 
-    if args.journal_command in {"init", "migrate"}:
-        owner = get_engine(os.environ["CHANGE_JOURNAL_MIGRATION_DATABASE_URL"])
+    if args.journal_command == "init":
+        owner = get_engine(_owner_url())
         try:
             result = migrate(owner, runtime_role=args.runtime_role,
-                             existing_only=args.journal_command == "migrate",
                              database_name=args.database_name)
         finally:
             owner.dispose()
@@ -45,7 +56,7 @@ def _handle(args):
 
 def _commands(parser):
     commands = parser.add_subparsers(dest="journal_command", required=True)
-    for name in ("init", "migrate"):
+    for name in ("init",):
         command = commands.add_parser(name)
         command.add_argument("--runtime-role", required=True)
         command.add_argument("--database-name", default="change_journal", help="The configured isolated Journal database")

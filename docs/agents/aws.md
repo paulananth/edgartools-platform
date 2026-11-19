@@ -143,7 +143,7 @@ MDM CLI commands (MDM only; the legacy MDM commands are deleted,
 platform validation slice 2a):
 
 ```bash
-edgar-warehouse mdm migrate --application-role <runtime-role>
+edgar-warehouse mdm init --application-role <runtime-role>
 edgar-warehouse mdm check-connectivity
 edgar-warehouse mdm prepare-capture --source <source> ...
 ```

@@ -75,11 +75,11 @@ def main(argv=None):
             # Save before provisioning, so interruption cannot strand a created login.
             private_write(credentials,"JOURNAL_RUNTIME_PASSWORD="+shlex.quote(password)+"\n"+
                 "CHANGE_JOURNAL_DATABASE_URL="+shlex.quote(runtime_url)+"\n"+
-                "CHANGE_JOURNAL_MIGRATION_DATABASE_URL="+shlex.quote(owner_values["CHANGE_JOURNAL_DATABASE_URL"])+"\n")
+                "DB_URL="+shlex.quote(owner_values["CHANGE_JOURNAL_DATABASE_URL"])+"\n")
         result=storage.provision_runtime(owner,runtime_role=role,password=password)
         environment={**os.environ,"CHANGE_JOURNAL_DATABASE_URL":runtime_url,
-            "CHANGE_JOURNAL_MIGRATION_DATABASE_URL":owner_values["CHANGE_JOURNAL_DATABASE_URL"]}
-        for mode in ("init","migrate"):
+            "DB_URL":owner_values["CHANGE_JOURNAL_DATABASE_URL"]}
+        for mode in ("init",):
             done=subprocess.run([str(args.journal_python),"-I","-m","edgar_warehouse.change_journal.cli",mode,"--runtime-role",role],
                 env=environment,capture_output=True,text=True,timeout=60,cwd=args.evidence_dir)
             private_write(args.evidence_dir/(mode+".log"),done.stdout+done.stderr)

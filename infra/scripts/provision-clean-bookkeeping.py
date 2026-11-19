@@ -2,7 +2,7 @@
 """Create the local control stores (Bookkeeping, and on request Rules and the Change Journal).
 
 Run with uv run --extra mdm infra/scripts/provision-clean-bookkeeping.py.
-BOOKKEEPING_DATABASE_URL names a server login; the script opens the
+DB_URL names the schema owner's server login; the script opens the
 postgres database to create stores. BOOKKEEPING_RUNTIME_PASSWORD supplies
 the new runtime login's password. Optional --rules uses RULES_AGENT_PASSWORD;
 --journal uses CHANGE_JOURNAL_RUNTIME_PASSWORD. No versions are activated.
@@ -80,7 +80,7 @@ def main():
     parser.add_argument("--rules", action="store_true", help="Also create the one-table Rules store, without activating any version")
     parser.add_argument("--journal", action="store_true", help="Also create the empty shared Change Journal")
     args = parser.parse_args()
-    url = str(make_url(os.environ["BOOKKEEPING_DATABASE_URL"]).set(database="postgres"))
+    url = str(make_url(os.environ["DB_URL"]).set(database="postgres"))
     result = provision(url, rules=args.rules, journal=args.journal)
     print(json.dumps(result, sort_keys=True))
 
