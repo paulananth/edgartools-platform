@@ -1,6 +1,6 @@
 # RDM tables that hold published versions only
 
-Status: open
+Status: resolved
 Type: task
 Owner: Claude
 
@@ -20,7 +20,7 @@ RDM tables (Recommended)".
 - [x] Prove on a disposable PG16: only published versions appear, a retired one keeps its rows, equals `rdm.code_context` both ways, update/delete/direct insert refused, an approved version writes nothing, the migration fills a populated store (`tests/integration/test_rdm_published_postgres.py`, 11 tests; with the RDM, context and reference-storage tests, 90 passed in 72 s) 2026-11-18 20:40 ET
 - [x] Add it to `rules/exposure.yaml` (new `rdm` layer; version `exposure-2026-11-18.silver-mdm-and-published-rdm-codes`); exposure unit and integration tests pass 2026-11-18 20:40 ET
 - [x] Update the runbook and skills: init.md steps 3, 4 and the mirror section (one mirror per store: MDM, Silver, RDM), HOSTED-MIRRORING.md gate, FINAL-TABLES.md 2026-11-18 20:40 ET
-- [ ] Apply the migration on the hosted store (`edgar-warehouse rdm init`/`migrate` with the owner login) and read back `published_code`'s row count against the published versions; needs the stores' loaders idle
-- [ ] Learning → skill: FINAL-TABLES.md and HOSTED-MIRRORING.md now say RDM's final output is `rdm.published_code` and a mirror is per store
+- [x] Apply the migration on the hosted store (`edgar-warehouse rdm migrate` with the owner login; both migration files now recorded): `published_code` holds 7,378 rows of 15 versions, the same codes as `rdm.code_context` in both directions, every column commented, and the loader login's update and insert are refused 2026-11-18 21:28 ET
+- [x] Learning → skill: FINAL-TABLES.md and HOSTED-MIRRORING.md now say RDM's final output is `rdm.published_code` and a mirror is per store 2026-11-18 21:28 ET
 
 Blocked by: 01
