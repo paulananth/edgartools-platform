@@ -27,6 +27,7 @@ copies them instead: `edgar-warehouse skill install`.
 | Journal events, receipts and delivery recovery | [change-journal](change-journal/SKILL.md) |
 | **Run it** | |
 | Make the stores operational, run and monitor loads | [data-operations](data-operations/SKILL.md) |
+| A load is slow, stuck or waiting on locks (connections, statements, table churn; read-only) | [database-monitoring](database-monitoring/SKILL.md) |
 | Timers, sequences and start or stop of a pipeline | [pipeline-orchestration](pipeline-orchestration/SKILL.md) |
 | A failed run, a telemetry gap, wasted resources | [production-support](production-support/SKILL.md) |
 | Any AWS, Snowflake, Terraform, image or deploy command | [aws-snowflake-operations](aws-snowflake-operations/SKILL.md) |

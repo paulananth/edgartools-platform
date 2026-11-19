@@ -70,7 +70,7 @@ Diagnosis (sessions, locks, waits, connections, what a load is doing) reads the 
 the stores folder's `reader.env` (`DIAGNOSE_DATABASE_URL`): it has `pg_monitor`, which shows sessions, locks and
 statistics and the catalogs of each store (who holds what), never a table. Never diagnose as the owner, the administrator or a
 runtime login: each can change or read data, and a diagnosis that needs more than the reader shows is a gap to name.
-`load_chain.py --auto` reads the database this way.
+`load_chain.py --auto` reads the database this way; [database-monitoring](../database-monitoring/SKILL.md) has the readings.
 
 The scheduler judges the machine by what is happening now: the load average against the cores, and memory free. Swap used presses
 only while memory is short, because the system keeps swap long after the load that filled it; reading swap alone holds every
