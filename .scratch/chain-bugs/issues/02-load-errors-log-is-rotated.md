@@ -33,7 +33,7 @@ This is the open part of ticket 01 ("`load-errors.log` is never rotated and mixe
 
 ## Parts
 
-- [ ] Consult the GoF reviewer (pre-code rule); its answer is recorded here when it arrives
+- [x] Consult the GoF reviewer: "leave it" for lack of a growth figure; not taken, since the operator asked for it and an unbounded shared file is the defect. Taken: one module with one `write` function, not a class; the reader compares the file's identity (inode), not its size, so a rotated file that grew past the old offset is not misread. Not a risk: a writer holding a file open across two whole rotations (20 MiB of other writes between its open and its one append) 2026-11-18 22:05 ET
 - [x] Failing tests first: `tests/unit/test_error_log.py` (7 tests; the module did not exist, so each failed on import): a write that would pass the limit renames the file; the second rotation gzips `.1` into `.2.gz` and the count is kept; rotated files past the age are removed; four processes writing across many rotations lose no block; a step finds its errors whether or not the file rotated during its attempt 2026-11-18 22:04 ET
 - [x] Build `edgar_warehouse/rules/error_log.py` (rename-based rotation under a lock file, 10 MiB, five kept, 30 days; `.1` plain, older gzip); the two writers in `driving.py` call it; the scheduler reads by `position` and `since`, which follow one rotation; `tests/unit/test_load_chain.py` updated for the position; 158 loader, driving and lint tests pass 2026-11-18 22:04 ET
 - [x] Runbooks (init, daily run) and the data-operations skill name `load-errors.log.1` and the gzipped files 2026-11-18 22:04 ET
