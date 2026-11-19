@@ -4,19 +4,25 @@ Status: open
 Type: task
 
 Operator: "audit the setup using sox soc itsm auditor before finalising all the skills and roles", then "create this as an audit skill".
-The audit skill tests 21 controls against the live Snowflake account, the PostgreSQL instance and this repository. The first run
-was as an administrator (no auditor role exists), so it also fails its own independence control.
+The audit skill tests 14 platform-neutral objectives through adapters for Snowflake, PostgreSQL, AWS, GitHub and the workstation, and
+prints a coverage matrix (operator: "dont build the audit only for snowflake we need to use it for other platform"). The Snowflake
+auditor role `EDGARTOOLS_PROD_AUDITOR` exists; AWS and GitHub ran with administrator identities because no read-only identity exists there.
 
-First run: 6 pass, 13 fail, 2 not tested. The skills and roles are not finalised while a high finding is open and unaccepted.
+First multi-platform run: 8 pass, 18 fail, 11 not tested. The skills and roles are not finalised while a high finding is open and unaccepted.
 
 ## Parts
 
 - [x] Skill `skills/access-audit/` with its hard stops, 21 controls mapped to SOX ITGC, SOC 2 and ITIL, the rating and the finalising gate; `scripts/access_audit.py` reads Snowflake, PostgreSQL and the repository read-only (tests/unit/test_access_audit.py and the skill lints: 48 passed with the monitoring tests; run live, 2026-11-19 06:34 ET)
-- [ ] AUD-00 (medium): create a read-only auditor role (security, usage and governance viewers, monitor) and a key-pair connection; re-run as it (an account change: needs the operator's word)
-- [ ] AC-01 (high): one administrator, no MFA; add a second break-glass administrator and enrol MFA for both
-- [ ] AC-02 (medium): the administrator's default role is ACCOUNTADMIN; default to a working role
-- [ ] AC-03 (high): 2,990 of 18,523 queries in 7 days ran as ACCOUNTADMIN; run loads and tools under named least-privilege roles
-- [ ] AC-04 (high): 206 password-only administrator logins in 7 days; key pair or MFA, and no tool connects as the administrator
+- [x] IND.snowflake: read-only auditor role `EDGARTOOLS_PROD_AUDITOR` (security, usage and governance viewers, monitor usage, warehouse usage) with a key-pair service user, created on the operator's word; the audit re-ran as it and passes IND (2026-11-19 06:42 ET)
+- [ ] IND.aws and IND.github (medium): create a read-only audit identity for AWS (SecurityAudit) and a read token for GitHub; both ran as administrators
+- [ ] ADM/OPS/AUT.aws and CST/LOG/POL/ROT.aws (high and medium): 1 console user without MFA, 1 user holding administrator access, 3 active keys older than 90 days, no CloudTrail trail, no account password policy; the S3 public-access block could not be read
+- [ ] CHG.github (medium): the default branch has no protection, no required review and no required checks (auto-merge on green CI is the operator's ruling: record it as an accepted exception with owner and expiry, or protect the branch)
+- [ ] Gaps in the matrix (`-`): PostgreSQL has no test for ADM, OPS, AUT, POL, CHG, SEC; GitHub none for LOG, CST, NET; extend the adapters or record why they do not apply
+- [ ] Add the Databricks and OpenMetadata adapters when those platforms hold data
+- [ ] ADM.snowflake (high): one administrator, no MFA; add a second break-glass administrator and enrol MFA for both
+- [ ] OPS.snowflake (high, with AC-02): the administrator's default role is ACCOUNTADMIN; default to a working role
+- [ ] OPS.snowflake (high): 2,990 of 18,523 queries in 7 days ran as ACCOUNTADMIN; run loads and tools under named least-privilege roles
+- [ ] AUT.snowflake (high): 206 password-only administrator logins in 7 days; key pair or MFA, and no tool connects as the administrator
 - [ ] NW-01 (medium): no account network policy; one exists for the Postgres instance only; add an account policy and one per service user
 - [ ] OP-01 (medium): 3 warehouses, 0 resource monitors; create monitors with a credit quota
 - [ ] OP-02 (medium): the account statement timeout is 172,800 s; set a bound on the account or on each service user

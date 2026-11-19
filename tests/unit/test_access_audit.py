@@ -1,90 +1,151 @@
-"""The access audit grades evidence: a clean setup passes, each weakness fails its own control, and it prints no secret."""
+"""The access audit grades platform-neutral objectives through adapters: a clean platform passes, each weakness fails its own objective."""
 
 from __future__ import annotations
 
-import importlib.util
+import json
+import sys
 from pathlib import Path
 
 import pytest
 
-SCRIPT = Path(__file__).resolve().parents[2] / "skills" / "access-audit" / "scripts" / "access_audit.py"
-spec = importlib.util.spec_from_file_location("access_audit", SCRIPT)
-audit = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(audit)
+SCRIPTS = Path(__file__).resolve().parents[2] / "skills" / "access-audit" / "scripts"
+sys.path.insert(0, str(SCRIPTS))
+
+import access_audit as audit  # noqa: E402
+from audit_platforms import aws, github, postgres, snowflake, workstation  # noqa: E402
+from audit_platforms.base import OBJECTIVES  # noqa: E402
 
 
-def clean():
-    sf = {
+def snowflake_clean():
+    return {
         "audit_role": "AUDITOR",
-        "users": [{"name": "ADMIN1", "type": "PERSON", "has_mfa": "true", "default_role": "WORK", "has_password": "true"},
-                  {"name": "ADMIN2", "type": "PERSON", "has_mfa": "true", "default_role": "WORK", "has_password": "true"},
+        "users": [{"name": "A1", "type": "PERSON", "has_mfa": "true", "default_role": "WORK", "has_password": "true"},
+                  {"name": "A2", "type": "PERSON", "has_mfa": "true", "default_role": "WORK", "has_password": "true"},
                   {"name": "SVC", "type": "SERVICE", "has_password": "false", "has_rsa_public_key": "true", "default_role": "SVC"}],
-        "admin_holders": ["ADMIN1", "ADMIN2"], "network_policies": 1, "account_network_policy": "POLICY", "monitors": 1,
+        "admin_holders": ["A1", "A2"], "network_policies": 1, "account_network_policy": "P", "monitors": 1,
         "warehouses": [{"name": "W", "resource_monitor": "M"}], "statement_timeout": 3600, "password_policies": 1,
-        "authentication_policies": 1, "risky_grants": [],
-        "queries": [{"role_name": "WORK", "n": 100}, {"role_name": "ACCOUNTADMIN", "n": 1}],
-        "logins": [{"user_name": "ADMIN1", "first_factor": "PASSWORD", "second_factor": "TOTP", "n": 5}],
+        "authentication_policies": 1, "risky_grants": [], "queries": [{"role_name": "WORK", "n": 100}, {"role_name": "ACCOUNTADMIN", "n": 1}],
+        "logins": [{"user_name": "A1", "first_factor": "PASSWORD", "second_factor": "TOTP", "n": 5}],
     }
-    pg = {"login": (False, False, False, False), "memberships": ["pg_monitor"], "writes": 0, "superusers": ["postgres"],
-          "logins": [("loader", 20)], "settings": {"log_connections": "on", "log_disconnections": "on", "log_statement": "ddl",
-                                                   "ssl": "on", "password_encryption": "scram-sha-256", "pgaudit.log": "write"}}
-    repo = {"named": 1, "ticketed": ["R"], "in_code": ["R"], "plaintext_passwords": 0, "loose_files": []}
-    return sf, pg, repo
 
 
-def results(sf, pg, repo):
-    return {r["id"]: r["result"] for r in audit.evaluate(sf, pg, repo)}
+def postgres_clean():
+    return {"login": (False, False, False, False), "memberships": ["pg_monitor"], "writes": 0, "superusers": ["postgres"], "logins": [("l", 20)],
+            "settings": {"log_connections": "on", "log_disconnections": "on", "log_statement": "ddl", "ssl": "on", "password_encryption": "scram-sha-256",
+                         "pgaudit.log": "write", "statement_timeout": "60000", "idle_in_transaction_session_timeout": "600000"}}
 
 
-def test_a_clean_setup_passes_every_tested_control():
-    found = results(*clean())
-    assert {k for k, v in found.items() if v == "FAIL"} == set()
-    assert found["KR-01"] == found["AR-01"] == "NOT_TESTED"
+def aws_clean():
+    return {"identity_kind": "role", "audit_named": True, "root_mfa": True, "root_keys": 0, "console_users": 2, "console_without_mfa": 0,
+            "keys_active": 1, "keys_old": 0, "admin_users": 0, "admin_roles": 1, "admin_visible": True, "password_policy": True,
+            "trail_logging": 1, "trails": 1, "public_block": True, "budgets": 1}
 
 
-@pytest.mark.parametrize("control, change", [
-    ("AUD-00", lambda sf, pg, repo: sf.update(audit_role="ACCOUNTADMIN")),
-    ("AC-01", lambda sf, pg, repo: sf.update(admin_holders=["ADMIN1"])),
-    ("AC-02", lambda sf, pg, repo: sf["users"][0].update(default_role="ACCOUNTADMIN")),
-    ("AC-03", lambda sf, pg, repo: sf.update(queries=[{"role_name": "ACCOUNTADMIN", "n": 50}, {"role_name": "WORK", "n": 50}])),
-    ("AC-04", lambda sf, pg, repo: sf.update(logins=[{"user_name": "ADMIN1", "first_factor": "PASSWORD", "second_factor": None, "n": 3}])),
-    ("AC-05", lambda sf, pg, repo: sf["users"][2].update(has_password="true")),
-    ("AC-06", lambda sf, pg, repo: sf.update(risky_grants=[{"grantee_name": "X", "privilege": "OWNERSHIP"}])),
-    ("NW-01", lambda sf, pg, repo: sf.update(account_network_policy="")),
-    ("OP-01", lambda sf, pg, repo: sf["warehouses"][0].update(resource_monitor="null")),
-    ("OP-02", lambda sf, pg, repo: sf.update(statement_timeout=172800)),
-    ("AU-01", lambda sf, pg, repo: sf.update(password_policies=0)),
-    ("DB-01", lambda sf, pg, repo: pg.update(memberships=["pg_monitor", "pg_write_all_data"])),
-    ("DB-02", lambda sf, pg, repo: pg["superusers"].append("loader")),
-    ("DB-03", lambda sf, pg, repo: pg["settings"].update(log_connections="off")),
-    ("DB-04", lambda sf, pg, repo: pg["settings"].update({"pgaudit.log": "none"})),
-    ("DB-05", lambda sf, pg, repo: pg["logins"].append(("x", -1))),
-    ("CM-01", lambda sf, pg, repo: repo.update(ticketed=[])),
-    ("CM-02", lambda sf, pg, repo: repo.update(in_code=[])),
-    ("SC-01", lambda sf, pg, repo: repo.update(plaintext_passwords=1)),
+def github_clean():
+    return {"protected": True, "reviews_required": 1, "status_checks": 2, "secret_scanning": True, "visibility": "public", "admin_permission": False}
+
+
+def workstation_clean():
+    return {"plaintext_passwords": 0, "loose_files": [], "files_held": 3}
+
+
+CLEAN = {"snowflake": (snowflake, snowflake_clean), "postgres": (postgres, postgres_clean), "aws": (aws, aws_clean),
+         "github": (github, github_clean), "workstation": (workstation, workstation_clean)}
+
+
+def graded(platform, change=None):
+    module, make = CLEAN[platform]
+    ev = make()
+    if change:
+        change(ev)
+    return {c["objective"]: c["result"] for c in module.controls(ev)}
+
+
+@pytest.mark.parametrize("platform", sorted(CLEAN))
+def test_a_clean_platform_has_no_failure(platform):
+    assert "FAIL" not in graded(platform).values()
+
+
+def test_every_control_names_a_known_objective_and_carries_severity_and_framework_references():
+    for platform, (module, make) in CLEAN.items():
+        for c in module.controls(make()):
+            assert c["objective"] in OBJECTIVES and c["id"] == f"{c['objective']}.{platform}" and c["severity"] and c["refs"]
+
+
+@pytest.mark.parametrize("platform, objective, change", [
+    ("snowflake", "IND", lambda e: e.update(audit_role="ACCOUNTADMIN")),
+    ("snowflake", "ADM", lambda e: e.update(admin_holders=["A1"])),
+    ("snowflake", "OPS", lambda e: e["users"][0].update(default_role="ACCOUNTADMIN") or e.update(admin_holders=["A1", "A2"], queries=[{"role_name": "ACCOUNTADMIN", "n": 50}, {"role_name": "W", "n": 50}])),
+    ("snowflake", "AUT", lambda e: e.update(logins=[{"user_name": "A1", "first_factor": "PASSWORD", "second_factor": None, "n": 3}])),
+    ("snowflake", "LPR", lambda e: e.update(risky_grants=[{"grantee_name": "X", "privilege": "OWNERSHIP"}])),
+    ("snowflake", "NET", lambda e: e.update(account_network_policy="")),
+    ("snowflake", "CST", lambda e: e["warehouses"][0].update(resource_monitor="null")),
+    ("snowflake", "TMO", lambda e: e.update(statement_timeout=172800)),
+    ("snowflake", "POL", lambda e: e.update(password_policies=0)),
+    ("postgres", "IND", lambda e: e.update(memberships=["pg_monitor", "pg_write_all_data"])),
+    ("postgres", "LPR", lambda e: e["superusers"].append("loader")),
+    ("postgres", "LOG", lambda e: e["settings"].update({"pgaudit.log": "none"})),
+    ("postgres", "CST", lambda e: e["logins"].append(("x", -1))),
+    ("postgres", "TMO", lambda e: e["settings"].update(statement_timeout="0", idle_in_transaction_session_timeout="0")),
+    ("aws", "IND", lambda e: e.update(identity_kind="root")),
+    ("aws", "ADM", lambda e: e.update(root_keys=1)),
+    ("aws", "AUT", lambda e: e.update(console_without_mfa=1)),
+    ("aws", "LPR", lambda e: e.update(admin_users=1)),
+    ("aws", "NET", lambda e: e.update(public_block=False)),
+    ("aws", "CST", lambda e: e.update(budgets=0)),
+    ("aws", "POL", lambda e: e.update(password_policy=False)),
+    ("aws", "LOG", lambda e: e.update(trail_logging=0)),
+    ("aws", "ROT", lambda e: e.update(keys_old=2)),
+    ("github", "CHG", lambda e: e.update(protected=False)),
+    ("github", "SEC", lambda e: e.update(secret_scanning=False)),
+    ("github", "IND", lambda e: e.update(admin_permission=True)),
+    ("workstation", "SEC", lambda e: e.update(plaintext_passwords=1)),
+    ("workstation", "SEC", lambda e: e.update(loose_files=["x"])),
 ])
-def test_each_weakness_fails_its_own_control_and_only_that_one(control, change):
-    sf, pg, repo = clean()
-    change(sf, pg, repo)
-    failed = {k for k, v in results(sf, pg, repo).items() if v == "FAIL"}
-    assert control in failed
+def test_each_weakness_fails_its_own_objective(platform, objective, change):
+    assert graded(platform, change)[objective] == "FAIL"
 
 
-def test_an_administrator_connection_is_refused_without_the_flag(monkeypatch):
-    monkeypatch.setattr(audit, "snow", lambda connection, sql: [{"ROLE": "ACCOUNTADMIN"}])
+def test_a_control_the_auditor_cannot_see_is_not_tested_never_passed():
+    assert graded("snowflake", lambda e: e.update(admin_holders=["HIDDEN"]))["ADM"] == "NOT_TESTED"
+    assert graded("snowflake", lambda e: e.update(authentication_policies=None))["POL"] == "NOT_TESTED"
+    assert graded("aws", lambda e: e.update(public_block=None))["NET"] == "NOT_TESTED"
+
+
+def test_the_coverage_matrix_marks_an_objective_an_adapter_does_not_test_as_a_gap():
+    results = audit.run_from_evidence({"postgres": postgres_clean()}, Path("."), [])
+    row = {line.split()[0]: line.split()[1:] for line in audit.matrix(results, ["postgres"])[1:]}
+    assert row["LPR"] == ["P"] and row["ADM"] == ["-"] and row["ROT"] == ["?"]
+
+
+def test_change_records_need_a_ticket_and_code_for_every_principal(tmp_path):
+    (tmp_path / ".scratch" / "t" / "issues").mkdir(parents=True)
+    (tmp_path / ".scratch" / "t" / "issues" / "1.md").write_text("role ROLE_A and ROLE_B")
+    (tmp_path / "infra" / "terraform").mkdir(parents=True)
+    (tmp_path / "infra" / "terraform" / "x.tf").write_text('resource "r" "a" { name = "role_a" }')
+    one = audit.change_records(tmp_path, "snowflake", ["ROLE_A"])[0]
+    two = audit.change_records(tmp_path, "snowflake", ["ROLE_A", "ROLE_B"])[0]
+    assert one["result"] == "PASS" and two["result"] == "FAIL" and two["evidence"] == {"principals": 2, "with_ticket": 2, "in_terraform": 1}
+
+
+@pytest.mark.parametrize("adapter_module, rows", [(snowflake, [{"ROLE": "ACCOUNTADMIN"}])])
+def test_an_administrator_snowflake_connection_is_refused_without_the_flag(monkeypatch, adapter_module, rows):
+    monkeypatch.setattr(snowflake, "snow", lambda connection, sql, soft=False: rows)
     with pytest.raises(SystemExit, match="administrator role"):
-        audit.snowflake_evidence("c", as_admin=False)
+        snowflake.collect({"AUDIT_SNOWFLAKE_CONNECTION": "c"}, as_admin=False)
+
+
+def test_a_non_audit_aws_identity_is_refused_without_the_flag(monkeypatch):
+    monkeypatch.setattr(aws, "aws", lambda env, *a, soft=False: {"Arn": "arn:aws:iam::1:user/deployer", "Account": "1"})
+    with pytest.raises(SystemExit, match="read-only audit identity"):
+        aws.collect({}, as_admin=False)
 
 
 def test_exit_code_follows_failures_and_the_json_report_parses(monkeypatch, capsys):
-    import json
-
-    sf, pg, repo = clean()
-    monkeypatch.setenv("AUDIT_SNOWFLAKE_CONNECTION", "c")
-    monkeypatch.setattr(audit, "snowflake_evidence", lambda c, a: sf)
-    monkeypatch.setattr(audit, "postgres_evidence", lambda: pg)
-    monkeypatch.setattr(audit, "repository_evidence", lambda r, n: dict(repo))
-    assert audit.main(["--json"]) == 0
-    assert {r["id"] for r in json.loads(capsys.readouterr().out)} >= {"AC-01", "DB-04", "CM-02"}
-    sf["admin_holders"] = ["ADMIN1"]
-    assert audit.main(["--json"]) == 1
+    monkeypatch.setenv("DIAGNOSE_DATABASE_URL", "postgresql://x")
+    state = {"ev": postgres_clean()}
+    monkeypatch.setattr(postgres, "collect", lambda env, as_admin=False: state["ev"])
+    assert audit.main(["--platform", "postgres", "--json"]) == 0
+    assert {r["id"] for r in json.loads(capsys.readouterr().out)} >= {"IND.postgres", "LOG.postgres"}
+    state["ev"] = {**postgres_clean(), "superusers": ["loader"]}
+    assert audit.main(["--platform", "postgres", "--json"]) == 1
