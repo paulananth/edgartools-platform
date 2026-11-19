@@ -1,85 +1,58 @@
-"""Rebuild four_companies_v1.json from retained bronze and the GLEIF golden copy.
+"""Write four_companies_v1.json and person_raw.jsonl: an invented cohort of four SEC filers (two operating companies,
+two other entity types) and two individual filers.
 
-Zero SEC requests: the SEC inputs are the platform's own bronze submissions
-objects, read from S3 (or a local copy of them). The GLEIF inputs are the four
-Level 1 records whose LegalName equals one of the four names exactly, streamed
-from the golden copy pinned in
-.scratch/gleif-company-augmentation/research/01-gleif-snapshot-manifest.json.
+Every name, identifier and figure here is invented (the repository is public): nothing is recorded from a provider.
+The two operating companies are the ones the offline mastering cohort reads (tests/support/fresh_mastering.py); the
+pinned hash of its records is in tests/mdm/test_fresh_mastering_cohort.py, so a change here changes that hash once.
 
-The four Companies were **picked by the operator**, and their GLEIF records by
-exact legal name. That is test selection, not matching evidence: nothing here
-says an SEC record and a GLEIF record are the same Company.
-
-Usage: python build.py <dir holding the bronze JSON files> <golden copy zip>
+Usage: python build.py
 """
 
 import hashlib
 import json
-import sys
-import zipfile
 from pathlib import Path
 
-import ijson
-
-# Each SEC Company column, from its submissions field, as filed.
-COLUMNS = {"entity_name": "name", "entity_type": "entityType", "sic": "sic", "sic_description": "sicDescription",
-           "state_of_incorporation": "stateOfIncorporation",
-           "state_of_incorporation_desc": "stateOfIncorporationDescription", "fiscal_year_end": "fiscalYearEnd",
-           "ein": "ein", "description": "description", "category": "category"}
-
-BRONZE = {
-    "0000320193": "cik=320193/main/2026/07/02/CIK0000320193.json",
-    "0000789019": "cik=789019/main/2026/07/02/CIK0000789019.json",
-    "0001306965": "cik=1306965/main/2026/07/02/CIK0001306965.json",
-    "0000937966": "cik=937966/main/2026/06/27/CIK0000937966.json",
-    # Controls: two individual filers, SEC entityType "other" like Shell and ASML.
-    "0001214156": "cik=1214156/main/2026/09/12/CIK0001214156.json",
-    "0001513142": "cik=1513142/main/2026/09/02/CIK0001513142.json",
-}
-PREFIX = "s3://edgartools-prod-bronze-690839588395/warehouse/bronze/submissions/sec/"
-NAMES = {"APPLE INC.", "MICROSOFT CORPORATION", "SHELL PLC", "ASML HOLDING N.V."}
+COMPANIES = [
+    # Operating companies: listed filers.
+    (9000001, "ORCHARD DATA SYSTEMS INC", "operating", "000000001", "7372", "Services-Prepackaged Software", "DE", "0630"),
+    (9000002, "BLUEFERN HARDWARE CORP", "operating", "000000002", "3571", "Electronic Computers", "CA", "0926"),
+    # Other entity types: a foreign issuer and a holding company, which the cohort does not master.
+    (9000003, "KESTREL ENERGY PLC", "other", "000000000", "1311", "Crude Petroleum & Natural Gas", "DC", "1231"),
+    (9000004, "QXLM MACHINERY HOLDING NV", "other", "000000000", "3559", "Special Industry Machinery, NEC", "", "1231"),
+]
+PERSONS = [(9000005, "DOE JANE Q"), (9000006, "ROE RICHARD")]
 
 
-def main(bronze_dir: str, golden_copy: str) -> None:
-    sec, sources = [], {}
-    for cik, key in BRONZE.items():
-        raw = (Path(bronze_dir) / key.rsplit("/", 1)[1]).read_bytes()
-        sha = hashlib.sha256(raw).hexdigest()
-        sources[PREFIX + key] = sha
-        payload = json.loads(raw)
-        sec.append({"cik": int(cik), **{column: payload.get(field) for column, field in COLUMNS.items()},
-                    "sync_run_id": "bronze-fixture", "raw_object_id": sha, "load_mode": "fixture",
-                    "last_sync_run_id": "bronze-fixture"})
-    gleif = []
-    with zipfile.ZipFile(golden_copy) as z, z.open(z.namelist()[0]) as f:
-        for record in ijson.items(f, "records.item", use_float=True):
-            if record["Entity"]["LegalName"]["$"].upper() in NAMES:
-                gleif.append(record)
-    if sorted(r["Entity"]["LegalName"]["$"].upper() for r in gleif) != sorted(NAMES):
-        raise SystemExit("Expected exactly one golden-copy record per name")
-    body = {
-        "version": 1,
-        "purpose": (
-            "operator-picked Companies (AAPL, MSFT, Shell, ASML) plus two individual "
-            "controls; test selection, not matching evidence"
-        ),
-        "sources": {
-            **sources,
-            "gleif_golden_copy": {
-                "file": Path(golden_copy).name,
-                "publication_utc": "2026-09-11 16:00:00",
-                "sha256": "1b6cd9cda3f94269fd406ee481842ea042b699e95eb5b8124b1496d4fda36a6a",
-                "selection": "LegalName equals one of four names exactly",
-            },
-        },
-        "sec": sec,
-        "gleif": sorted(gleif, key=lambda r: r["LEI"]["$"]),
-    }
-    out = Path(__file__).with_name("four_companies_v1.json")
-    out.write_text(
-        json.dumps(body, indent=1, sort_keys=True, ensure_ascii=False) + "\n"
-    )
+def main() -> None:
+    folder = Path(__file__).parent
+    sec = []
+    for cik, name, kind, ein, sic, sic_description, state, year_end in COMPANIES:
+        raw = hashlib.sha256(f"invented filer {cik}".encode()).hexdigest()
+        sec.append({
+            "category": "Large accelerated filer", "cik": cik, "description": "", "ein": ein, "entity_name": name,
+            "entity_type": kind, "fiscal_year_end": year_end, "sic": sic, "sic_description": sic_description,
+            "state_of_incorporation": state, "state_of_incorporation_desc": state,
+            "sync_run_id": "invented-fixture", "last_sync_run_id": "invented-fixture", "load_mode": "fixture",
+            "raw_object_id": raw,
+        })
+    for cik, name in PERSONS:
+        sec.append({
+            "category": "", "cik": cik, "description": "", "ein": None, "entity_name": name, "entity_type": "other",
+            "fiscal_year_end": None, "sic": "", "sic_description": "", "state_of_incorporation": "",
+            "state_of_incorporation_desc": "", "sync_run_id": "invented-fixture",
+            "last_sync_run_id": "invented-fixture", "load_mode": "fixture",
+            "raw_object_id": hashlib.sha256(f"invented filer {cik}".encode()).hexdigest(),
+        })
+    body = {"version": 1,
+            "purpose": "invented cohort: two operating companies, two other filers and two individual filers; "
+                       "test selection, not matching evidence",
+            "sec": sec}
+    (folder / "four_companies_v1.json").write_text(
+        json.dumps(body, indent=1, sort_keys=True, ensure_ascii=False) + "\n")
+    (folder / "person_raw.jsonl").write_text("".join(
+        json.dumps({"cik": cik, "ein": None, "entityType": "other", "fiscalYearEnd": None, "name": name, "sic": "",
+                    "stateOfIncorporation": ""}, sort_keys=True, separators=(",", ":")) + "\n" for cik, name in PERSONS))
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:])
+    main()

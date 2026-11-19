@@ -1,6 +1,6 @@
 """Small offline cohort under the repository's unchanged mastering rules.
 
-Company rows come from the pinned four-company fixture. Person controls
+Company rows come from the invented four-company fixture (tests/fixtures/clean_mdm/four_companies_v1/build.py). Person controls
 are separate raw JSON documents with their original field names; no runtime
 field-name conversion is used.
 """
@@ -15,9 +15,6 @@ from edgar_warehouse.rules import files
 ROOT = Path(__file__).resolve().parents[2]
 AS_OF = "2026-10-01T14:00:00+00:00"
 FIXTURE = ROOT / "tests/fixtures/clean_mdm/four_companies_v1/four_companies_v1.json"
-# Apple (child) and Microsoft (parent): both are in the fixture's SEC and GLEIF
-# rows. The link between them is synthetic.
-CHILD_LEI, PARENT_LEI = "HWUPKR0MPOU8FGXBT394", "INR2EJN1ERAN0W5ZP974"
 
 
 def cohort():
@@ -33,7 +30,7 @@ def cohort():
     readings = []
     # Phase 1 (ticket 204) masters listed operating filers only; the pinned fixture states no tickers, so the two
     # operating rows are read with the tickers they have, and keyed by the row as pinned.
-    listed = {320193: ["AAPL"], 789019: ["MSFT"]}
+    listed = {9000001: ["ORCH"], 9000002: ["BLUF"]}
     company = [("sec.company.v1", {**row, "tickers": listed[row["cik"]]}, row) for row in fixture["sec"]
                if row["entity_type"] == "operating"]
     person_file = FIXTURE.with_name("person_raw.jsonl")
