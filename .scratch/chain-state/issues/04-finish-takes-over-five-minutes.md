@@ -22,6 +22,11 @@ table, then each silver table's master ids) had run 31 minutes and was still on 
 - [x] Failing test first: `tests/silver_storage/test_delivery.py::test_a_refresh_asks_for_and_writes_only_rows_with_an_empty_id` failed with "assert [['invented-a', 'invented-b']] == [['invented-b']]" (it asked for the key of a row that had an id). 2026-11-19 16:17 ET
 - [x] Fix (KISS, operator: "Do not over engineer use kiss"): `link_keys` reads only rows whose id is empty and `set_ids` writes only those; 27 delivery tests pass on PostgreSQL and MySQL. 2026-11-19 16:17 ET
 - [x] Prove the refresh on the real stores: 15 tables in 48 s, 1,072 rows filled, no other row written. 2026-11-19 16:17 ET
-- [ ] The links build: 681 s warm (about 21 min cold) against a five-minute finish. The projection (one Rust call over 287,530 links) is 273 s of it; the operator decides whether links leave the finish budget or are made incremental
+- [x] Refresh part merged (PR #1930). 2026-11-19 16:59 ET
+- [x] Operator ruling on the links part ("Don't call them projections also optimize using 7 wastes"; "Can we just do it in the database?"): the calculation is a Rust call, so first find its cost by sampling the process. 2026-11-19 16:59 ET
+- [x] Root cause of the 265 s Rust call (the part the code calls a projection; the operator's word is links): `finish_relationships` compared every link of a one-parent or one-target type with every later link of its group (O(n^2), 60,000 links took 55.7 s); a pair needs one source, so only links of one source are compared now. `edges.shift_remove` one key at a time is one pass of `retain`. 2026-11-19 16:59 ET
+- [x] Failing test first: `relationships::conflict_tests::sixty_thousand_links_with_sixty_thousand_sources_take_a_moment_not_minutes` failed with "took 55.733198041s" (limit 10 s); an order test on a small group passes before and after. 2026-11-19 16:59 ET
+- [x] Real command (906 MB, 328,142 link statements, 287,530 stored links): 239 s before, 15 s after, output byte-identical (`cmp`, sha256 f248ee71d73f53c3...). 2026-11-19 16:59 ET
+- [ ] Links build after the fix is about 7 min warm: read 79, claims 14, bound ends 151, master states 102, Rust 15, write 42. Next: one database query for the three reads (operator: "Can we just do it in the database?"), measured against the same output
 - [ ] Merge the PR when CI is green
 - [ ] Learning → skill: data-operations `HOSTED-LOADS.md` (the finish budget and how it is met)

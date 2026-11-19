@@ -59,7 +59,9 @@ disposable store is the next check to add.
 a longer one is a defect, not a wait. `silver refresh-ids` reads and writes only rows whose id is empty: a row that has an id is never read
 or written again (an id whose master merged away still resolves to the survivor through `mastering.reads.master`). A refresh that looks up
 every key of every row, in batches, costs about one random disk read a row on the master store. Time each part of a slow finish by phase
-before changing it, and run the cheap check that can fail first.
+before changing it, and run the cheap check that can fail first. For a step that is one native call, sample the running process
+(`sample <pid> 30`) before reading its code: the links build spent 265 s in a pairwise comparison of every link with every later link,
+which no phase timing could name.
 
 ## Stopping loads
 - Stop the scheduler first (it would start the next step), then its step processes. The state file keeps every done step.
