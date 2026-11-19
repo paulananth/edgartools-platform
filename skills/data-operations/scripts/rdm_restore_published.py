@@ -52,10 +52,10 @@ def cli(*args: str) -> str:
     return done.stdout
 
 
-# Operator, 2026-11-19: "RDM codes should be auto loaded no approval needed". A published version is a file in git with its
+# Operator ruling: "RDM codes should be auto loaded no approval needed". A published version is a file in git with its
 # pin, so restoring it changes nothing the pin does not check; the approval record names this ruling.
 STANDING_BY = "operator standing ruling"  # not the drafter ("restore from git"): the store refuses a self-approval
-STANDING_WORDS = "RDM codes should be auto loaded no approval needed (operator, 2026-11-19)"
+STANDING_WORDS = "RDM codes should be auto loaded no approval needed (operator standing ruling)"
 
 
 def main() -> int:
