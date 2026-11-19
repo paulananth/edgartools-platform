@@ -228,6 +228,13 @@ notes is not the live one. The order:
   (`infra/terraform/access/snowflake`), applied by a dedicated access-admin service identity under the
   [access-audit](../access-audit/SKILL.md) skill, not by hand.
 - The server log quotes the data a failed statement held: read it only through the monitoring script, which drops those lines.
+- The Gold writer is the one identity that writes: a key-pair service user whose role reads the approved mirror databases and
+  creates views (never tables) in the Gold schema only. dbt reads its settings from the private file
+  `~/.config/edgartools/gold-writer/gold-writer.env` (account, user, role, warehouse and the private key's path; the key stays in that
+  folder, mode 0600). Prove a new writer by connecting with the key and checking that a view in its schema is created and dropped, and
+  that a table, a view in another schema and an account-usage read are refused.
+- An access change made by an account owner's SQL, before the access-admin identity exists, is the same objects as the Terraform
+  and is written there too; import them (`terraform import`) before the first apply, or the plan tries to create them again.
 
 ## Credentials on the command line
 
