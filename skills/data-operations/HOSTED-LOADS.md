@@ -3,13 +3,17 @@
 Read before starting or resuming a load on the hosted instance. Each item is a cause met on a real load and its rule.
 
 ## The gate: nothing loads until the infrastructure is ready and tested
-`scripts/readiness.py` reads nine facts and writes `readiness.json` in the stores folder only on a full pass; `load_chain.py`
+`scripts/readiness.py` reads twelve facts and writes `readiness.json` in the stores folder only on a full pass; `load_chain.py`
 refuses to start, resume or finish a load without it (the read-only `--plan`, `--list`, `--status` and `--catalog-status` still
 run). A pass belongs to one store generation (a reset of the databases closes the gate), one commit (any new commit closes it)
 and one day. The checks: the code is committed, contains `main` and its commit has green CI (tested means CI, never a local run
 alone); the compiled engine was built from this checkout's source (`readiness.py --build-engine` rebuilds it and records a hash of what it was built from); `doctor` is ready; the loader holds its connection limit, memory ceiling
 and timeouts; RDM holds its codes and silver a table per spec; every step has a capture; no load runs and the loader has no
-session; disk and load average have room; and the access audit of the database has no failing control. A fact that cannot be
+session; disk and load average have room; the access audit of the database has no failing control; every duty file's login connects to the databases of its duty (names only, a
+driver's text is never kept); the chain's state file is this store's, or is shown as one that will be set aside, with its count of done
+steps; and the catalog, when one is configured, matches the rules. The gate is not the init runbook: after a reset, walk every runbook step,
+say in the report which ran and which did not, and never write a step off without reading why (a catalog step was once called
+unconfigured when its file existed). A fact that cannot be
 read is a failure. Fix what it names and run it again; there is no switch to skip it. A rehearsal of the first lane on a
 disposable store is the next check to add.
 

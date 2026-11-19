@@ -41,7 +41,12 @@ CHECKS = {
     "QUIET": "No load is running and the loader has no session",
     "ROOM": "The machine has disk and the load average has room",
     "AUDIT": "The access audit of the database has no failing control",
+    "LOGINS": "Every duty file's login connects to the databases of its duty",
+    "STATE": "The chain's state file is this store's, or will be set aside, before any step runs",
+    "CATALOG": "The catalog, when configured, matches the rules",
 }
+DUTY_DATABASES = {"owner.env": ("postgres",), "worker.env": ("mdm", "rdm", "rules", "bookkeeping", "change_journal", "silver"),
+                  "governance.env": ("mdm", "rules"), "reader.env": ("mdm", "rdm", "rules", "bookkeeping", "change_journal", "silver")}
 
 
 def now() -> datetime:
@@ -79,7 +84,7 @@ def evaluate(facts: dict) -> list[dict]:
     def check(cid, ok, evidence):
         return {"id": cid, "title": CHECKS[cid], "ok": bool(ok), "evidence": evidence}
     g, e, loader, ref = facts["git"], facts["engine"], facts["loader"], facts["reference"]
-    audit = facts["audit"]
+    audit, logins, state, catalog = facts["audit"], facts["logins"], facts["state"], facts["catalog"]
     return [
         check("CODE", g["clean"] and g["contains_main"] and g["ci"] == "success", {k: g[k] for k in ("clean", "contains_main", "ci")}),
         check("ENGINE", e["applicable"] is False or (e["built"] is not None and e["built"] == e["source"]),
@@ -94,6 +99,9 @@ def evaluate(facts: dict) -> list[dict]:
         check("ROOM", facts["disk_gib"] >= MIN_DISK_GIB and facts["load1"] < facts["cores"],
               {"disk_free_gib": round(facts["disk_gib"]), "load_average": round(facts["load1"], 1), "cores": facts["cores"]}),
         check("AUDIT", audit is not None and not audit, {"failing_controls": audit if audit is not None else "audit not available"}),
+        check("LOGINS", bool(logins) and all(v == "answers" for v in logins.values()), logins),
+        check("STATE", state is not None and state["verdict"] in ("fresh", "set aside", "same"), state),
+        check("CATALOG", catalog in ("confirmed", "not configured"), {"catalog": catalog}),
     ]
 
 
@@ -221,6 +229,62 @@ def audit_failures(env: dict | None = None) -> list[str] | None:
         return None
 
 
+def login_facts(stores: Path) -> dict:
+    """Each duty file's login against each database of its duty: "answers", or the kind of failure. A driver's error text can hold
+    the address and the password, so only its class is kept."""
+    from urllib.parse import urlsplit, urlunsplit
+    sys.path.insert(0, str(HERE))
+    import load_chain
+    found = {}
+    for name, databases in DUTY_DATABASES.items():
+        try:
+            url = re.sub(r"^postgresql\+\w+", "postgresql", load_chain.load_env(stores / name)["DB_URL"])
+        except Exception as exc:  # noqa: BLE001
+            found[name] = f"unreadable ({type(exc).__name__})"
+            continue
+        state = "answers"
+        try:
+            import psycopg2
+            for database in databases:
+                psycopg2.connect(urlunsplit(urlsplit(url)._replace(path="/" + database)), connect_timeout=10).close()
+        except Exception as exc:  # noqa: BLE001
+            state = f"does not answer ({type(exc).__name__})"
+        found[name] = state
+    return found
+
+
+def state_facts(env: dict) -> dict | None:
+    """What the scheduler will do with the chain's state file: use it (same), start one (fresh) or set it aside, and how many done
+    steps it holds, so a surprise is seen before a step runs."""
+    import load_chain
+    try:
+        url = env["DB_URL"]
+        generation = load_chain.database_generation(load_chain.mdm_url_of(url))
+        path = load_chain.LOGS / f"chain-{load_chain.RUN}.log"
+        text = path.read_text() if path.exists() else ""
+        return {"verdict": load_chain.state_verdict(text, load_chain.store_id(url), generation),
+                "done_steps": len(load_chain.done_steps(path)) if path.exists() else 0}
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def catalog_state(repo: Path) -> str:
+    """"confirmed" when the catalog's text matches the rules, "not configured" when no catalog file is set, else what it said."""
+    env_file = Path(os.environ.get("OPENMETADATA_ENV_FILE") or Path.home() / ".config/edgartools/openmetadata.env")
+    if not env_file.exists():
+        return "not configured"
+    sys.path.insert(0, str(HERE))
+    import load_chain
+    env = {**os.environ, **load_chain.load_env(env_file)}
+    exe = env.get("EDGAR_WAREHOUSE") or "edgar-warehouse"
+    try:
+        done = subprocess.run([exe, "rules", "catalog", "--root", str(repo / "rules"), "check"], capture_output=True, text=True, env=env,
+                              check=False, timeout=600)
+        return json.loads(done.stdout[done.stdout.index("{"):]).get("status", "unknown")
+    except Exception:  # noqa: BLE001
+        return "unreadable"
+
+
 def gather(stores: Path, repo: Path = REPO) -> dict:
     sys.path.insert(0, str(HERE))
     import load_chain
@@ -230,7 +294,8 @@ def gather(stores: Path, repo: Path = REPO) -> dict:
     usage = shutil.disk_usage(Path.home())
     return {"git": git_facts(repo), "engine": engine_facts(repo), "doctor": doctor_ok(stores, env), "loader": loader, "reference": reference,
             "plan_missing": plan_missing(env), "loads_running": loads_running(), "loader_sessions": sessions,
-            "disk_gib": usage.free / 2**30, "load1": os.getloadavg()[0], "cores": os.cpu_count() or 1, "audit": audit_failures(reader)}
+            "disk_gib": usage.free / 2**30, "load1": os.getloadavg()[0], "cores": os.cpu_count() or 1, "audit": audit_failures(reader),
+            "logins": login_facts(stores), "state": state_facts(env), "catalog": catalog_state(repo)}
 
 
 def main(argv: list[str] | None = None) -> int:
