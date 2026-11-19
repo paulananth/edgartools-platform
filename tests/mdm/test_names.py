@@ -21,12 +21,12 @@ class TestTheLegalFormIsKept:
     @pytest.mark.parametrize(
         ("sec", "gleif"),
         [
-            ("VISTEON CORP", "VISTEON CORPORATION"),
-            ("COCA COLA CO", "THE COCA-COLA COMPANY"),
-            ("APPLE INC", "Apple Inc."),
-            ("ASML HOLDING NV", "ASML Holding N.V."),
-            ("Shell plc", "Shell plc"),
-            ("MCCORMICK & CO INC", "McCormick & Company, Incorporated"),
+            ("ZORVEX CORP", "ZORVEX CORPORATION"),
+            ("EXAMPLE COLA CO", "THE EXAMPLE-COLA COMPANY"),
+            ("PLUMTREE INC", "Plumtree Inc."),
+            ("QXLM HOLDING NV", "QXLM Holding N.V."),
+            ("Kestrel plc", "Kestrel plc"),
+            ("MCZEPH & CO INC", "McZeph & Company, Incorporated"),
             ("ACME L.L.C.", "ACME LLC"),
         ],
     )
@@ -36,11 +36,11 @@ class TestTheLegalFormIsKept:
     @pytest.mark.parametrize(
         ("sec", "gleif"),
         [
-            ("Wayfair Inc.", "WAYFAIR LLC"),
-            ("ADT Inc.", "ADT LLC"),
-            ("COUSINS PROPERTIES INC", "COUSINS PROPERTIES LP"),
-            ("REGENCY CENTERS LP", "REGENCY CENTERS CORPORATION"),
-            ("Drilling Tools International Corp", "Drilling Tools International, Inc."),
+            ("Wayvane Inc.", "WAYVANE LLC"),
+            ("QZT Inc.", "QZT LLC"),
+            ("KINDRED EXAMPLE PROPERTIES INC", "KINDRED EXAMPLE PROPERTIES LP"),
+            ("SAMPLE CENTERS LP", "SAMPLE CENTERS CORPORATION"),
+            ("Invented Drilling Tools Corp", "Invented Drilling Tools, Inc."),
         ],
     )
     def test_a_parent_and_its_subsidiary_keep_two_keys(self, sec, gleif):
@@ -48,8 +48,8 @@ class TestTheLegalFormIsKept:
 
     def test_sec_drops_its_state_tag_and_gleif_keeps_its_name(self):
         assert (
-            sec_legal_form_key("BERKSHIRE HATHAWAY INC /DE/")
-            == "BERKSHIRE HATHAWAY INC"
+            sec_legal_form_key("ZEPHYR QUILL INC /DE/")
+            == "ZEPHYR QUILL INC"
         )
         # A GLEIF legal name is never a SEC conformed name, so a slash stays text.
         assert legal_form_key("X /DE/") == "X DE"

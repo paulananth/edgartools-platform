@@ -59,11 +59,11 @@ class TestTheSecQualityRule:
         assert fixes["state_from_name_tag"]["original"] is None
 
     def test_dc_without_a_tag_is_unknown_and_the_original_is_kept(self):
-        found = read(sec(name="SHELL PLC"))
+        found = read(sec(name="KESTREL PLC"))
         assert found["fields"]["state_of_incorporation"] == {"op": "unknown"}
         assert found["provenance"]["quality"]["fixes"]["dc_state_is_empty"]["original"] == "DC"
 
-    @pytest.mark.parametrize("name", ["TOYOTA MOTOR CORP /ADR/", "MERCK & CO INC /NEW/"])
+    @pytest.mark.parametrize("name", ["KAIZEN EXAMPLE MOTOR CORP /ADR/", "MCZEPH & CO INC /NEW/"])
     def test_a_tag_that_is_not_a_us_state_fills_nothing(self, name):
         found = read(sec(name=name, state=None))
         assert found["fields"]["state_of_incorporation"] == {"op": "unknown"}

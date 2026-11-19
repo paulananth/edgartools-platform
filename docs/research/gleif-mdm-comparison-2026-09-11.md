@@ -193,7 +193,7 @@ values. The provisional classes were:
 
 These are generator outcomes, not identity adjudications. The page-size limit
 means “exactly one” only describes the first ten returned candidates, not every
-result for a broad query. For example, `Mercantile Bank` had 49 API results and
+result for a broad query. For example, a common bank name had 49 API results and
 `Legacy` had 1,282. No class from this exploratory pass is eligible for an MDM
 write or an accepted-link precision claim.
 
@@ -206,7 +206,7 @@ Representative outcomes show why the evidence tiers matter:
 | --- | --- | --- | --- |
 | `Hrt Financial Lp` | `HRT FINANCIAL LP` | exact name plus jurisdiction, city, and ZIP | Strong review candidate; still not accepted without adjudication |
 | `Knights Of Columbus Asset Advisors` | `KNIGHTS OF COLUMBUS ASSET ADVISORS LLC` | 0.9444 name similarity plus jurisdiction, city, and ZIP | Legal-suffix normalization can improve recall when address evidence is retained |
-| `Mercantile Bank` | exact-name/address candidate among 49 API results | provisional high-confidence within the first page | A broad result set cannot be declared unique without exhausting or narrowing candidates |
+| a common bank name | exact-name/address candidate among 49 API results | provisional high-confidence within the first page | A broad result set cannot be declared unique without exhausting or narrowing candidates |
 | `Legacy` | exact-name candidate among 1,282 API results, without address/jurisdiction agreement | ambiguous exact name | Exact name alone is unsafe |
 
 ### Primary company cohort

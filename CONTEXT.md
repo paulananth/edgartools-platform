@@ -50,7 +50,7 @@ _Avoid_: Inheriting another class of the same Company, the most common filed spe
 
 **ISSUED_BY**:
 The relationship from a Security to the one mastered issuer. For an operating company that issuer is the Company. For an ETF share it is the Fund Company, the trust that files, not the investment adviser. Filed spellings of that issuer, including an old name, are the same issuer. Each filing keeps the issuer name its manager wrote.
-_Avoid_: BlackRock, Vanguard, or SSGA as the issuer of an iShares, Vanguard, or SPDR share; a security attribute of the Company; a second issuer for a new spelling; a Person as the issuer; a holding
+_Avoid_: the sponsor or adviser as the issuer of an ETF share; a security attribute of the Company; a second issuer for a new spelling; a Person as the issuer; a holding
 
 **Relationship Capacity**:
 The kind of relationship a natural person holds at a company — director, officer, employee, ten percent owner, owner, control person — and part of that relationship's identity.
@@ -103,15 +103,15 @@ A non-company fund arrangement with an evidence-backed structural level and a go
 _Avoid_: "Fund kind"; treating every fund as a Company; a business development company, which is a Company with a fund registration; treating a fund share as the fund itself
 
 **Fund Company**:
-The SEC registrant that files for a fund family, keyed by its CIK. iShares Trust, Vanguard Index Funds, and SPDR S&P 500 ETF Trust are Fund Companies. The adviser that manages them is not.
-_Avoid_: BlackRock, Vanguard, or SSGA as that registrant; a 13F issuer spelling as a new Company
+The SEC registrant that files for a fund family, keyed by its CIK. A trust that files for an index fund or ETF family is a Fund Company. The adviser that manages it is not.
+_Avoid_: the sponsor or adviser as that registrant; a 13F issuer spelling as a new Company
 
 **Fund Series**:
 One fund product under a Fund Company, identified by its SEC series id. It holds Securities. An ETF series is still a Fund Series.
 _Avoid_: The traded share, the investment adviser
 
 **INVESTMENT_ADVISER_TO**:
-The relationship from an investment adviser to a fund it advises, as Form ADV and N-CEN name the role, with its discretion: discretionary (the adviser decides) or non-discretionary (the client decides). BlackRock, Vanguard, and SSGA are advisers.
+The relationship from an investment adviser to a fund it advises, as Form ADV and N-CEN name the role, with its discretion: discretionary (the adviser decides) or non-discretionary (the client decides). A fund sponsor's investment arm is an adviser.
 _Avoid_: IS_FUND-MANAGED_BY (the fund's manager), ownership, ISSUED_BY, the ETF share
 
 **Discretion**:

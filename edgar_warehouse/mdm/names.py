@@ -6,8 +6,8 @@ never an edit (`primitives.py`).
 
 **The legal form is kept.** The earlier comparison cut INC, LLC and LP off
 both names before comparing, and so matched parents to their subsidiaries:
-"Wayfair Inc." to "WAYFAIR LLC", "COUSINS PROPERTIES INC" to "COUSINS
-PROPERTIES LP". Here only the *spelling* of a legal form is unified
+"Wayvane Inc." to "WAYVANE LLC", "KINDRED EXAMPLE PROPERTIES INC" to "KINDRED
+EXAMPLE PROPERTIES LP" (invented names). Here only the *spelling* of a legal form is unified
 (CORPORATION is CORP, L.L.C. is LLC), never its presence. Measured on the 883
 reviewed development pairs: `.scratch/company-mastering/research/08-draft-rule.md`.
 """
