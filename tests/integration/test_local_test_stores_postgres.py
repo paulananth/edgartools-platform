@@ -63,7 +63,10 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
             assert (stores.folder(name) / filename).stat().st_mode & 0o777 == 0o600
         assert not (stores.folder(name) / "verifier.env").exists()
         worker, governance = (environment(f + ".env") for f in ("worker", "governance"))
-        assert "DB_URL" not in worker
+        from sqlalchemy.engine import make_url
+
+        assert make_url(worker["DB_URL"]).username == "edgar_loader" and make_url(worker["DB_URL"]).database is None
+        assert make_url(governance["DB_URL"]).username == "governance" and make_url(governance["DB_URL"]).database is None
         book = engine("bookkeeping", "postgres")
         with book.connect() as conn:
             for profile in PROFILES:

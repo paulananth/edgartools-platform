@@ -80,7 +80,7 @@ def databases():
             migrate_journal(ledger_admin, runtime_role="ledger_runtime")
             from sqlalchemy.engine import make_url
 
-            loader = make_url(server.url("postgres", "loader", driver="postgresql")).set(database=None).render_as_string(hide_password=False)
+            loader = make_url(server.url("postgres", "loader", driver="postgresql"))._replace(database=None).render_as_string(hide_password=False)
             yield Databases(admin, runtime, Rules(engine("rules", "rules_agent")),
                             ChangeJournal(engine("change_journal", "ledger_runtime")), ledger_admin, loader)
         finally:

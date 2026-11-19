@@ -36,7 +36,7 @@ assert not names & set({DOMAIN!r})
                                            capture_output=True, text=True, timeout=60)
                     assert added.returncode == 0, "Declared MySQL control extra failed to install"
                 def url(engine):  # a duty file's DB_URL names no database: each store is its own name behind DB_PREFIX
-                    return engine.url.set(drivername=engine.dialect.name, database=None).render_as_string(hide_password=False)
+                    return engine.url.set(drivername=engine.dialect.name)._replace(database=None).render_as_string(hide_password=False)
                 environment = {**os.environ, "DB_PREFIX": prefix}
                 journal_owner, journal_runtime, journal_role = stores["change_journal"], worker, role
                 reader_url = url(reader)

@@ -21,7 +21,7 @@ def test_installed_rules_and_real_workers_complete_and_resume_one_run(installed,
         owner, worker, role = stack.enter_context(database_factory())
         # Each store is its own database, named for the store behind this test's prefix; one runtime login reaches them all.
         prefix, stores = stack.enter_context(store_databases(owner, "bookkeeping", "change_journal", "rules"))
-        none = lambda engine: engine.url.set(database=None).render_as_string(hide_password=False)
+        none = lambda engine: engine.url._replace(database=None).render_as_string(hide_password=False)
         owner_url, worker_url = none(owner), none(worker)
         env = {"BOOKKEEPING_MANIFEST_ROOT": (root / "runs").as_uri(), "DB_PREFIX": prefix}
         def command(*args, verifier=False, report=True):
