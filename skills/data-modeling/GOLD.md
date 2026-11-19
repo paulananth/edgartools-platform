@@ -101,10 +101,18 @@ Read from the techniques' own published material; a claim a source does not make
   them load in parallel. It is an integration layer, with a business vault or information mart (usually dimensional)
   built on top for presentation. No official Snowflake source read prescribes a hub-to-mart pattern: that is
   unconfirmed. A vault here would master and historize a second time.
-- **Anchor modeling.** Its published constructs are anchors, attributes, ties and knots, with temporal variants
-  ("what we knew when" and "what was in effect") and extension without touching existing tables. The page read does not
-  define the constructs or sixth normal form, so those definitions are unconfirmed here. Attribute history already
-  lives on master and code-set versions.
+- **Anchor modeling.** An anchor holds only the identity of a thing that persists while its properties change; an
+  attribute is one property in its own table (static, or historized with a start time); a knot is a small shared closed
+  list of values; a tie is a relationship between two or more anchors, one role each; a nexus is an event-like entity
+  with its own identity, properties and roles. Each property and relationship gets its own table (sixth normal form),
+  except a tie or nexus with several non-identifier roles, kept whole. History is only added, never updated in place,
+  and only where needed; a historized tie cannot delete an ended relationship, so the end becomes a new state. The
+  generator emits views over the narrow tables (latest, point-in-time, difference, now); the latest view is the usual
+  query surface. Stated benefits: extension adds tables, so old queries keep working; no nulls; narrow reads. Limits: many
+  narrow tables that depend on the views and join elimination to reassemble; closed intervals add query complexity;
+  target support varies and some generators were never run on a live server; it is called an advanced technique, and the
+  page comparing it with a vault comes from one of its creators. Here attribute history already lives on master and
+  code-set versions, so the model would historize a second time.
 - **Activity schema.** One time-ordered stream per entity type: an activity id, a UTC timestamp, the entity's global
   identifier (or an anonymous one until resolved), the activity name, a semi-structured feature object with the same
   keys for every row of one activity, an optional revenue amount and a link to the source record. Activities join to
