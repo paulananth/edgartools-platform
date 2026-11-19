@@ -733,7 +733,8 @@ def mdm_url_of(url: str) -> str:
     return in_database(url, "mdm")
 
 
-STORE_MARKER = re.compile(r"chain store (\w+)(?: generation (\w+))?$", re.M)
+STORE_MARKER = re.compile(r"chain store (\w+)(?: generation (\w+|\?))?$", re.M)
+UNREAD = "?"  # a marker written while the generation could not be read; the next readable start learns it
 
 
 def state_verdict(text: str, store: str, generation: str = "", adopt: bool = False) -> str:
@@ -742,7 +743,9 @@ def state_verdict(text: str, store: str, generation: str = "", adopt: bool = Fal
     (no marker, and the operator says it is this store's) or "set aside" (another store, another generation of this one, or lines
     and no marker)."""
     found = STORE_MARKER.findall(text)
-    if found and found[-1][0] == store and (not generation or not found[-1][1] or found[-1][1] == generation):
+    # A marker with no generation at all is a file from before generations were recorded: it cannot show that this store was not
+    # made again since, so it is trusted only while the generation cannot be read now. One marked UNREAD was written by a blip.
+    if found and found[-1][0] == store and (not generation or found[-1][1] in (UNREAD, generation)):
         return "same"
     if not text:
         return "fresh"
@@ -758,7 +761,7 @@ def ensure_store(state: Path, store: str, adopt: bool = False, generation: str =
     import fcntl
 
     stamp = (f"{datetime.now(ZoneInfo('America/New_York')):%m-%d %H:%M:%S} ET chain store {store}"
-             f"{f' generation {generation}' if generation else ''}\n")
+             f" generation {generation or UNREAD}\n")
     state.parent.mkdir(parents=True, exist_ok=True)
 
     def keep(suffix: str) -> None:
@@ -775,7 +778,7 @@ def ensure_store(state: Path, store: str, adopt: bool = False, generation: str =
         found = STORE_MARKER.findall(text)
         verdict = state_verdict(text, store, generation, adopt)
         if verdict == "same":
-            if generation and not found[-1][1]:
+            if generation and found[-1][1] == UNREAD:
                 with state.open("a") as handle:  # appended, as the chain's own lines are
                     handle.write(stamp)
             return "same"
