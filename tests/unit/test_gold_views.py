@@ -1,0 +1,148 @@
+"""The Gold views, rendered from rules/gold/gold.yaml and run on an invented fixture (data-modeling skill, GOLD.md).
+
+The fixture has four companies (one merged into another), two securities, a joint filing and a holding whose
+security was never mastered. Each test is one of the skill's proofs; the rendered Snowflake text is checked apart.
+"""
+import json
+import sqlite3
+from datetime import date
+
+import pytest
+
+from edgar_warehouse.gold import views
+
+
+def body(entity, kind, name, canonical=None, status="active"):
+    return json.dumps({"entity_id": entity, "canonical_id": canonical or entity, "kind": kind, "status": status,
+                       "fields": {"name": {"value": name}}})
+
+
+@pytest.fixture()
+def db():
+    conn = sqlite3.connect(":memory:")
+    conn.executescript("""
+        create table mastering_master (entity_id text, body text);
+        create table mastering_identifier (namespace text, value text, entity_id text);
+        create table thirteenf_filing (accession_number text, cik text, form text, filing_date text, report_date text,
+                                       primary_document text, manager_mdm_id text);
+        create table thirteenf_holding (accession_number text, holding_index integer, cusip text, shares_held real,
+                                        share_type text, market_value real, put_call text, discretion_type text,
+                                        voting_auth_sole real, voting_auth_shared real, voting_auth_none real,
+                                        security_mdm_id text);
+    """)
+    masters = [("c1", body("c1", "company", "Alpha Capital")), ("c2", body("c2", "company", "Beta Partners")),
+               ("c3", body("c3", "company", "Alpha Cap Old", canonical="c1", status="alias")),
+               ("c4", body("c4", "company", "Delta Fund")),
+               ("s1", body("s1", "security", "Alpha Common")), ("s2", body("s2", "security", "Beta Notes"))]
+    conn.executemany("insert into mastering_master values (?, ?)", masters)
+    conn.executemany("insert into mastering_identifier values (?, ?, ?)",
+                     [("cik", "0000000001", "c1"), ("cik", "0000000002", "c2"), ("cusip", "AAA111", "s1")])
+    conn.executemany("insert into thirteenf_filing values (?,?,?,?,?,?,?)", [
+        ("f1", "1", "13F-HR", "2026-02-10", "2025-12-31", "a.xml", "c1"),
+        ("f2", "1", "13F-HR", "2026-02-11", "2025-12-31", "b.xml", "c1"),  # a joint filing: two managers
+        ("f2", "2", "13F-HR", "2026-02-11", "2025-12-31", "b.xml", "c2"),
+        ("f3", "9", "13F-NT", "2026-02-12", "2025-12-31", "c.xml", None),   # a manager that was never mastered
+        ("f4", "3", "13F-HR", "2026-02-13", "2025-12-31", "d.xml", "c3")])  # a merged-away manager id
+    conn.executemany("insert into thirteenf_holding values (?,?,?,?,?,?,?,?,?,?,?,?)", [
+        ("f1", 1, "AAA111", 100, "SH", 1000.5, None, "SOLE", 100, 0, 0, "s1"),
+        ("f1", 2, "BBB222", 50, "SH", 250.25, None, "SOLE", 50, 0, 0, "s2"),
+        ("f2", 1, "AAA111", 10, "SH", 99.0, "Call", "SOLE", 10, 0, 0, "s1"),
+        ("f3", 1, "ZZZ999", 5, "PRN", 5.0, None, "SOLE", 5, 0, 0, None),   # no master security
+        ("f4", 1, "AAA111", 7, "SH", 70.0, None, "SOLE", 7, 0, 0, "s1")])
+    for statement in views.render(dialect="sqlite", qualify=False).values():
+        conn.execute(statement)
+    return conn
+
+
+def rows(conn, sql):
+    return conn.execute(sql).fetchall()
+
+
+def test_every_object_names_its_requirement_and_every_link_names_a_dimension_that_exists():
+    config = views.load()
+    names = {item["name"] for item in config["objects"]}
+    for item in config["objects"]:
+        assert item["requirement"] and item["grain"], item["name"]
+        for link in item.get("links", []) + ([item["parent"]["single_link"]] if "parent" in item else []):
+            assert link["dimension"] in names
+
+
+def test_a_fact_key_is_unique_and_never_null(db):
+    for fact, key in (("fact_thirteenf_holding", "accession_number, holding_index"),
+                      ("fact_thirteenf_filing", "accession_number, cik")):
+        joined = "||'|'||".join(key.split(", "))
+        assert rows(db, f"select count(*) - count(distinct {joined}), count(*) - count({key.split(', ')[0]}) from {fact}") == [(0, 0)]
+
+
+def test_a_join_to_a_dimension_changes_no_row_count(db):
+    assert rows(db, "select count(*) from fact_thirteenf_holding") == rows(db, "select count(*) from thirteenf_holding")
+    assert rows(db, "select count(*) from fact_thirteenf_filing") == rows(db, "select count(*) from thirteenf_filing")
+
+
+def test_every_dimension_key_resolves_including_the_two_reserved_members(db):
+    for fact, key, dim in (("fact_thirteenf_holding", "held_key", "dim_security"),
+                           ("fact_thirteenf_holding", "manager_key", "dim_company"),
+                           ("fact_thirteenf_filing", "manager_key", "dim_company")):
+        assert rows(db, f"select count(*) from {fact} f left join {dim} d on d.entity_id = f.{key} "
+                        f"where d.entity_id is null") == [(0,)], (fact, key)
+
+
+def test_a_dimension_has_one_row_per_canonical_master_and_never_an_alias(db):
+    assert rows(db, "select entity_id from dim_company order by 1") == [("c1",), ("c2",), ("c4",), ("not-applicable",), ("unknown",)]
+    assert rows(db, "select entity_id from dim_security order by 1") == [("not-applicable",), ("s1",), ("s2",), ("unknown",)]
+    assert rows(db, "select cik from dim_company where entity_id = 'c1'") == [("0000000001",)]
+
+
+def test_a_merged_away_id_finds_the_master_it_became(db):
+    assert rows(db, "select manager_key from fact_thirteenf_filing where accession_number = 'f4'") == [("c1",)]
+
+
+def test_an_unmastered_id_is_the_unknown_member_and_is_never_dropped(db):
+    assert rows(db, "select manager_key from fact_thirteenf_filing where accession_number = 'f3'") == [("unknown",)]
+    assert rows(db, "select held_key from fact_thirteenf_holding where accession_number = 'f3'") == [("unknown",)]
+
+
+def test_a_holding_takes_its_manager_from_a_filing_with_one_and_not_applicable_from_a_joint_filing(db):
+    got = dict(rows(db, "select accession_number, manager_key from fact_thirteenf_holding"))
+    assert got["f1"] == "c1" and got["f2"] == "not-applicable" and got["f4"] == "c1"
+
+
+def test_a_holding_takes_its_dates_from_the_filing_once(db):
+    assert rows(db, "select business_date, recorded_date from fact_thirteenf_holding where accession_number = 'f2'") \
+        == [("2025-12-31", "2026-02-11")]
+
+
+def test_a_total_over_the_fact_equals_the_total_over_silver(db):
+    for column in ("market_value", "shares_held"):
+        assert rows(db, f"select sum({column}) from fact_thirteenf_holding") == rows(db, f"select sum({column}) from thirteenf_holding")
+
+
+def test_the_calendar_has_one_row_per_day(db):
+    days = (date(2035, 12, 31) - date(1994, 1, 1)).days + 1
+    assert rows(db, "select count(*), min(date_key), max(date_key) from dim_date") == [(days, "1994-01-01", "2035-12-31")]
+    assert rows(db, "select year, month from dim_date where date_key = '2026-02-10'") == [(2026, 2)]
+
+
+def test_the_snowflake_text_is_qualified_reads_the_mirror_and_replaces_a_view():
+    text = views.render()
+    assert text["master"].startswith("CREATE OR REPLACE VIEW DB_EDGARTOOLS_GOLD.GOLD.master AS")
+    assert "FROM DB_EDGARTOOLS_MIRROR.MDM.mastering_master" in text["master"]
+    assert "PARSE_JSON(body):canonical_id::VARCHAR" in text["master"]
+    assert "DB_EDGARTOOLS_MIRROR.SILVER.thirteenf_holding s" in text["fact_thirteenf_holding"]
+    assert list(text)[0] == "master"
+    assert "DATEADD(day, 1, day)" in text["dim_date"]
+
+
+def test_each_object_is_one_dbt_view_that_reads_the_mirror_through_source_and_gold_through_ref():
+    models = views.render_models()
+    assert set(models) == {f"{item['name']}.sql" for item in views.load()["objects"]}
+    assert models["master.sql"].startswith("{{ config(materialized='view') }}")
+    assert "{{ source('mdm', 'mastering_master') }}" in models["master.sql"]
+    assert "{{ ref('master') }}" in models["dim_company.sql"] and "CREATE" not in models["dim_company.sql"]
+    assert "{{ source('silver', 'thirteenf_filing') }}" in models["fact_thirteenf_holding.sql"]
+
+
+def test_the_dbt_sources_name_the_mirror_database_and_only_the_tables_the_views_read():
+    found = {s["name"]: (s["database"], s["schema"], [t["name"] for t in s["tables"]]) for s in views.sources()["sources"]}
+    assert found["silver"] == ("DB_EDGARTOOLS_MIRROR", "SILVER", ["thirteenf_filing", "thirteenf_holding"])
+    assert found["mdm"] == ("DB_EDGARTOOLS_MIRROR", "MDM", ["mastering_identifier", "mastering_master"])

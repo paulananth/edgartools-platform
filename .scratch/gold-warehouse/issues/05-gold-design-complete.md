@@ -17,8 +17,12 @@ The operator asked for the whole design, not one slice, made lean by the seven w
 - [x] Operator answered the decision list: "Approved", 2026-11-19 09:30 ET, for all eight recommendations as written (section 7). Evidence: the design above and the 16 silver specs.
 - [x] First requirement named by that approval: a manager's holdings by security and quarter. First build: `master`, `dim_company`, `dim_security`, `dim_date`, `thirteenf_filing` and `thirteenf_holding` facts (six views).
 - [ ] Check what `DB_EDGARTOOLS_GOLD` holds today with a read-only identity (the operator's rule forbids the admin account and the `edgartools-prod` and `snowconn` connections: ask for a read-only connection)
-- [ ] Write the Gold configuration for the six views (one file; grain, key, links, roles, members, requirement) and the shared dbt template that reads it; consult the GoF reviewer first
-- [ ] Prove each view on the smallest sample (seven proofs, DIMENSIONAL.md) on an invented four-company fixture before any hosted run
+- [x] GoF consult: verdict "leave it" (a dict of renderers by object kind; dialect differences kept to four small expressions, no pattern). 2026-11-19 09:39 ET
+- [x] Write the Gold configuration for the six views (`rules/gold/gold.yaml`) and the renderer (`edgar_warehouse/gold/views.py`: plain SQL, dbt models and dbt sources from one place). 2026-11-19 09:39 ET
+- [x] Prove the views on an invented fixture (four companies, one merged away, a joint filing, an unmastered security): `tests/unit/test_gold_views.py`, 14 passed; two mutations (no alias resolution, no joint-filing rule) each failed the tests before being reverted. Architecture tests: two unrelated failures that also fail without this change (modules `edgar_control` and `source_contract` are not built here). 2026-11-19 09:39 ET
+- [ ] Verify against one real mirrored master: the body's name path (`fields.<field>.value` is assumed) and whether the mirror carries `body` as text or a variant (`rules/gold/gold.yaml`, marked UNVERIFIED)
+- [ ] Operator decision: a holding of a joint 13F filing has the manager *not applicable* (its manager is answered by the filing fact); confirm, or name a rule
+- [ ] Write the dbt project around the models (`dbt_project.yml`, profile by private file, the write role) and a `gold build` command; run `dbt parse` and `dbt compile` against no data
 - [ ] Build in the approved destination after the mirror exists and the load has finished
 - [ ] Count, on the loaded stores, the rows each join would multiply or drop (needs the load)
 - [ ] ~~dbt generator and views~~ deferred: no named requirement, no approved writable destination
