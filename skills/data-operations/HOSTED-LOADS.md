@@ -21,6 +21,10 @@ disposable store is the next check to add.
 - **The engine must match the code.** A Rust change reaches a load only after the engine is rebuilt into the environment that
   runs it: `readiness.py --build-engine`. A step that fails with a missing method or an unknown normalizer on today's `main` is
   a stale engine, not a data fault: rebuild, then run the gate again.
+- **A chain that ends at once after a reset has read a stale state file.** The state file's `chain store` line names the store and
+  the database's generation; a line with no generation comes from before generations were recorded and cannot show the store was not
+  made again, so it is set aside (kept, renamed). A chain that ran no step and printed `chain done` is the sign: look at the file's
+  marker, set a file with an old marker aside, and start again. Done steps cost one call each, so setting a file aside loses little.
 - **`EDGAR_WAREHOUSE` names the executable** (`.venv/bin/edgar-warehouse`), never its folder: a folder fails with
   "Permission denied" on every step.
 

@@ -714,13 +714,13 @@ def test_a_state_file_from_another_store_is_set_aside_so_its_done_lines_never_sa
     state.write_text("11-15 14:21:31 ET chain store aaaa1111\n11-15 14:21:31 ET company done: Done\n")
     assert chain.ensure_store(state, "bbbb2222") == "set aside"  # a different store: the old lines are archived
     assert chain.done_steps(state) == set()
-    assert state.read_text().endswith("chain store bbbb2222\n")
+    assert state.read_text().endswith("chain store bbbb2222 generation ?\n")
     assert (tmp_path / "chain.log.aaaa1111").read_text().count("company done") == 1
     state.write_text(state.read_text() + "11-18 06:40:00 ET company done: Done\n")
     assert chain.ensure_store(state, "bbbb2222") == "same"  # the same store: nothing is touched
     assert chain.done_steps(state) == {"company"}
     fresh = tmp_path / "new.log"
-    assert chain.ensure_store(fresh, "bbbb2222") == "fresh" and fresh.read_text().endswith("chain store bbbb2222\n")
+    assert chain.ensure_store(fresh, "bbbb2222") == "fresh" and fresh.read_text().endswith("chain store bbbb2222 generation ?\n")
 
 
 def test_a_state_file_with_lines_and_no_marker_is_set_aside_and_kept_never_trusted_and_never_a_reason_to_stop(tmp_path):
@@ -728,7 +728,7 @@ def test_a_state_file_with_lines_and_no_marker_is_set_aside_and_kept_never_trust
     state = tmp_path / "chain.log"
     state.write_text("11-15 14:21:31 ET company done: Done\n")
     assert chain.ensure_store(state, "bbbb2222") == "set aside"  # no marker: its done lines are not this store's to trust
-    assert chain.done_steps(state) == set() and state.read_text().endswith("chain store bbbb2222\n")
+    assert chain.done_steps(state) == set() and state.read_text().endswith("chain store bbbb2222 generation ?\n")
     kept = [p for p in tmp_path.glob("chain.log.*") if p.suffix != ".lock"]
     assert [p.name for p in kept] == ["chain.log.unmarked"] and kept[0].read_text() == "11-15 14:21:31 ET company done: Done\n"  # kept
     state.write_text("11-15 14:21:31 ET company done: Done\n")  # a second old file under the same label: nothing is overwritten
@@ -755,7 +755,7 @@ def test_a_reset_store_at_the_same_address_is_another_store_so_a_reused_label_sk
     assert (tmp_path / "chain.log.bbbb2222-1001").read_text().count("company done") == 1
     older = tmp_path / "older.log"
     older.write_text("11-15 14:21:31 ET chain store bbbb2222\n11-15 14:21:31 ET company done: Done\n")  # a marker with no generation
-    assert chain.ensure_store(older, "bbbb2222", generation="3003") == "same"  # nothing to compare: kept
+    assert chain.ensure_store(older, "bbbb2222", generation="3003") == "set aside"  # it cannot show the store was not made again
 
 
 def test_the_database_generation_is_unreadable_as_an_empty_string_never_an_error_or_an_address(monkeypatch):
@@ -1256,3 +1256,20 @@ def test_the_runbook_names_exactly_the_steps_the_chain_file_gives_priority_one_a
             listed[int(row.group(1))] = set(re.findall(r"`([a-z0-9-]+)`", row.group(2)))
     assert listed == {tier: {s["name"] for s in STEPS if s["priority"] == tier} for tier in (1, 2)}
     assert "Every other step is priority 3" in section
+
+
+def test_a_marker_with_no_generation_is_from_before_generations_and_does_not_survive_a_reset():
+    """A store made again inherited 59 done steps from a file whose marker named no generation, and the chain ended at once."""
+    legacy = "11-18 06:00:00 ET chain store aaaa1111\n11-18 06:40:00 ET company done: Done\n"
+    assert chain.state_verdict(legacy, "aaaa1111", "7") == "set aside"
+    assert chain.state_verdict(legacy, "aaaa1111", "") == "same"  # nothing readable to compare: nothing is thrown away
+    marked_unread = "11-18 06:00:00 ET chain store aaaa1111 generation ?\n11-18 06:40:00 ET company done: Done\n"
+    assert chain.state_verdict(marked_unread, "aaaa1111", "7") == "same"  # a blip at creation still learns it
+
+
+def test_a_file_set_aside_for_a_missing_generation_is_kept_and_its_done_steps_count_for_nothing(tmp_path):
+    state = tmp_path / "chain.log"
+    state.write_text("11-18 06:00:00 ET chain store bbbb2222\n11-18 06:40:00 ET company done: Done\n")
+    assert chain.ensure_store(state, "bbbb2222", generation="9") == "set aside"
+    assert chain.done_steps(state) == set()
+    assert [p.name for p in tmp_path.glob("chain.log.*") if not p.name.endswith(".lock")] == ["chain.log.bbbb2222-"]
