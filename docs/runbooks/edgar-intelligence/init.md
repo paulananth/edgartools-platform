@@ -50,6 +50,10 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    under them ends.
    The service is the one the instance's creation saved (snowflake-postgres skill, `pg_connect.py --create`). Wait for
    its hostname to resolve first. Done when the second run prints that every URL names the new instance.
+2b. **Role guards.** With `connection.env` sourced, `python infra/scripts/harden-hosted-roles.py` lists what each login lacks, and `--confirm` applies it:
+   a connection limit per login, statement and idle-transaction timeouts, a `work_mem` ceiling for the loader and the audit classes
+   for the logins that change schemas, policy or approvals. Done when it prints that every login role holds its guards. The guards belong to
+   the roles, which a reset of the databases keeps, so the step is safe to run again. Read [HOSTED-LOADS.md](../../../skills/data-operations/HOSTED-LOADS.md) before a load.
 3. **Schemas** (data-platform's step, [STORES.md](../../../skills/data-platform/STORES.md)), each with its owner login, in one shell that holds `connection.env`. MDM and Bookkeeping read the owner
    from their ordinary variable, for that command only; the others read their `*_MIGRATION_DATABASE_URL`:
    ```bash
