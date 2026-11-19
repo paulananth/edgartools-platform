@@ -21,6 +21,11 @@ Keep existing explicit process values unless deliberately selecting a new
 environment. Missing configuration means ask the operator to set it in their
 own terminal, never paste it into chat. Examples contain placeholders only.
 
+A driver's own error can print the whole address, password included (`psycopg2` does when it rejects a URL, such as the
+`+psycopg2` driver suffix a SQLAlchemy URL carries). A one-off check that connects directly catches the exception and
+prints only its type, or runs through the engine's own command, and filters the output of any command that may fail on a
+connection (`sed -E 's#postgres[a-z0-9+]*://[^ "]*#<url>#g'`).
+
 The shared `.env` keeps one standard URL variable per store and one per
 catalog service. Use the variable names below directly; keep role-specific
 owner, migration and governance connections in their original private role

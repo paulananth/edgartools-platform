@@ -21,6 +21,6 @@ RDM tables (Recommended)".
 - [x] Add it to `rules/exposure.yaml` (new `rdm` layer; version `exposure-2026-11-18.silver-mdm-and-published-rdm-codes`); exposure unit and integration tests pass 2026-11-18 20:40 ET
 - [x] Update the runbook and skills: init.md steps 3, 4 and the mirror section (one mirror per store: MDM, Silver, RDM), HOSTED-MIRRORING.md gate, FINAL-TABLES.md 2026-11-18 20:40 ET
 - [x] Apply the migration on the hosted store (`edgar-warehouse rdm migrate` with the owner login; both migration files now recorded): `published_code` holds 7,378 rows of 15 versions, the same codes as `rdm.code_context` in both directions, every column commented, and the loader login's update and insert are refused 2026-11-18 21:28 ET
-- [x] Learning → skill: FINAL-TABLES.md and HOSTED-MIRRORING.md now say RDM's final output is `rdm.published_code` and a mirror is per store 2026-11-18 21:28 ET
+- [x] Learning → skill: `FINAL-TABLES.md` and `HOSTED-MIRRORING.md` say RDM's final output is `rdm.published_code` and a mirror is per store (PR 1901); `CONNECTIONS.md` says a driver's connection error can print the address and password, so a direct check prints only the exception type and any command that may fail on a connection is filtered (this ticket's apply-step check printed the loader login's address) 2026-11-18 21:41 ET
 
 Blocked by: 01
