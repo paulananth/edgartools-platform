@@ -162,7 +162,7 @@ def test_the_owner_file_holds_one_DB_URL_without_a_database_and_the_worker_file_
     stores.identity("one", create=True)
 
     class Address:
-        def set(self, **kwargs):
+        def _replace(self, **kwargs):
             return self
 
         def render_as_string(self, hide_password=False):
