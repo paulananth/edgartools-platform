@@ -63,7 +63,7 @@ def databases():
                 conn.exec_driver_sql("CREATE ROLE bk_control NOLOGIN")
                 conn.exec_driver_sql("GRANT bk_control TO bk_runtime")
                 conn.exec_driver_sql("GRANT bk_runtime, rules_agent, ledger_runtime, clean_application TO loader")
-                for db in ("bookkeeping", "rules", "change_journal"):
+                for db in ("bookkeeping", "rules", "change_journal", "mdm"):
                     conn.exec_driver_sql(f"CREATE DATABASE {db}")
             admin = engine("bookkeeping")
             runtime = engine("bookkeeping", "bk_runtime")
