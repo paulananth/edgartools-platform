@@ -13,7 +13,8 @@ No credential, connection or Snowflake object was given or created.
 
 - [x] Record the operator's word and what it covers. 2026-11-19 12:37 ET
 - [x] Draft the plan below from `rules/exposure.yaml` (19 tables, three stores) and the guide's one-mirror-per-source-database rule. 2026-11-19 12:37 ET
-- [ ] A read-only Snowflake connection for the pre-flight (instance family `STANDARD_*` or `HIGHMEM_*`, version, the mirror grants) and the current credit rates; the operator names it, never the admin account, `edgartools-prod` or `snowconn`
+- [x] Read-only connection and pre-flight facts. Operator, 2026-11-19 14:07 ET: "You may use ANANP11 once" (answering which admin to use for the read-only bootstrap; the rule against ANANP11 stands otherwise and the permission is spent). In that one session: grants to the existing audit role `EDGARTOOLS_PROD_AUDITOR` (USAGE on `DB_EDGARTOOLS_GOLD` and its schemas, REFERENCES on its tables: metadata, no rows; also in Terraform, validated), and one read of the instance: `EDGARTOOLS_PROD_MDM`, `STANDARD_M`, 75 GB, PostgreSQL 16, READY, no HA, not burstable, so the pre-flight's family check passes. No new user or key; no secret printed.
+- [ ] The mirror's grant sequence (the mirror sub-skill) checked against the instance, and the current credit rates: the rate sheet is organization-level and the audit role cannot read it, so the operator gives the rates
 - [ ] The load has finished and its counts are read (table sizes decide the snapshot cost)
 - [ ] Present the three create plans with their costs for the operator's approval of each
 - [ ] Create each mirror, read it back (`LIST_MIRRORED_TABLES`, `SHOW ICEBERG TABLES`, types, keys, exact decimals) and set `rules/exposure.yaml` `target.verified`
