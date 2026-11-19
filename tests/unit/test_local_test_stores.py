@@ -157,7 +157,7 @@ def test_a_failure_shows_its_text_only_when_the_text_is_this_scripts_own_or_the_
     assert local.error_text(KeyError("password=invented")) == "KeyError"
 
 
-def test_the_owner_file_holds_one_DB_URL_without_a_database_and_the_worker_file_the_runtime_urls(tmp_path, monkeypatch):
+def test_every_duty_file_holds_one_DB_URL_without_a_database(tmp_path, monkeypatch):
     stores = local.LocalStores(tmp_path, tmp_path)
     stores.identity("one", create=True)
 
@@ -175,8 +175,8 @@ def test_the_owner_file_holds_one_DB_URL_without_a_database_and_the_worker_file_
         return [line.split("=", 1)[0][7:] for line in (stores.folder("one") / path).read_text().splitlines() if line.startswith("export ")]
 
     assert exported("owner.env") == ["DB_URL"]
-    assert "BOOKKEEPING_DATABASE_URL" in exported("worker.env") and "DB_URL" not in exported("worker.env")
-    assert "BOOKKEEPING_MANIFEST_ROOT" in exported("worker.env")
+    assert exported("worker.env") == ["DB_URL", "MDM_APPLICATION_ROLE", "BOOKKEEPING_MANIFEST_ROOT"]
+    assert exported("governance.env") == ["DB_URL"]
     assert not (stores.folder("one") / "connection.env").exists()
 
 

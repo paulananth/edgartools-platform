@@ -165,11 +165,17 @@ def doctor_ok(stores: Path, env: dict) -> bool:
     return '"ok": true' in done.stdout
 
 
-def sql_facts(env: dict) -> tuple[dict | None, dict | None, int]:
-    """(the loader's guards, the reference counts, the loader's sessions), read with the loader's and the reader's logins."""
+def sql_facts(reader_env: dict, env: dict) -> tuple[dict | None, dict | None, int]:
+    """(the loader's guards, the reference counts, the loader's sessions), read with the reader's and the loader's logins
+    (each file's `DB_URL`, a database added per read)."""
+    from urllib.parse import urlsplit, urlunsplit
+
+    def url(value: str, database: str) -> str:
+        return urlunsplit(urlsplit(re.sub(r"^postgresql\+\w+", "postgresql", value))._replace(path="/" + database))
+
     try:
         import psycopg2
-        reader = re.sub(r"^postgresql\+\w+", "postgresql", env["DIAGNOSE_DATABASE_URL"])
+        reader = url(reader_env["DB_URL"], "postgres")
         with psycopg2.connect(reader, connect_timeout=10) as conn, conn.cursor() as cur:
             cur.execute("select rolconnlimit from pg_roles where rolname = %s", (LOADER,))
             limit = cur.fetchone()[0]
@@ -181,13 +187,13 @@ def sql_facts(env: dict) -> tuple[dict | None, dict | None, int]:
     except Exception:  # noqa: BLE001  a driver error can quote the address
         return None, None, 1
     try:
-        def count(variable: str, sql: str) -> int:
-            with psycopg2.connect(re.sub(r"^postgresql\+\w+", "postgresql", env[variable]), connect_timeout=10) as conn, conn.cursor() as cur:
+        def count(database: str, sql: str) -> int:
+            with psycopg2.connect(url(env["DB_URL"], database), connect_timeout=10) as conn, conn.cursor() as cur:
                 cur.execute(sql)
                 return cur.fetchone()[0]
         specs = len(list((REPO / "rules" / "sources").glob("*/silver-*.yaml")))
-        reference = {"codes": count("RDM_DATABASE_URL", "select count(*) from rdm.published_code"), "specs": specs,
-                     "silver_tables": count("SILVER_DATABASE_URL", "select count(*) from information_schema.tables where table_schema = 'silver'")}
+        reference = {"codes": count("rdm", "select count(*) from rdm.published_code"), "specs": specs,
+                     "silver_tables": count("silver", "select count(*) from information_schema.tables where table_schema = 'silver'")}
     except Exception:  # noqa: BLE001
         reference = None
     return loader, reference, sessions
@@ -218,10 +224,8 @@ def gather(stores: Path, repo: Path = REPO) -> dict:
     sys.path.insert(0, str(HERE))
     import load_chain
     env = {**os.environ, **load_chain.load_env(stores / "worker.env")}
-    reader = stores / "reader.env"
-    if reader.exists():
-        env.update(load_chain.load_env(reader))
-    loader, reference, sessions = sql_facts(env)
+    reader = load_chain.load_env(stores / "reader.env") if (stores / "reader.env").exists() else {}
+    loader, reference, sessions = sql_facts(reader, env)
     usage = shutil.disk_usage(Path.home())
     return {"git": git_facts(repo), "engine": engine_facts(repo), "doctor": doctor_ok(stores, env), "loader": loader, "reference": reference,
             "plan_missing": plan_missing(env), "loads_running": loads_running(), "loader_sessions": sessions,
@@ -247,7 +251,7 @@ def main(argv: list[str] | None = None) -> int:
     for r in results:
         print(f"{'PASS' if r['ok'] else 'FAIL':5} {r['id']:10} {r['title']}\n      evidence: {r['evidence']}")
     env = load_chain.load_env(stores / "worker.env")
-    generation = load_chain.database_generation(load_chain.mdm_url_of(env["MDM_DATABASE_URL"])) if env.get("MDM_DATABASE_URL") else ""
+    generation = load_chain.database_generation(load_chain.mdm_url_of(env["DB_URL"])) if env.get("DB_URL") else ""
     passed = all(r["ok"] for r in results) and bool(generation)
     (stores / READY).write_text(json.dumps({"passed": passed, "at": now().isoformat(), "generation": generation, "sha": current_sha(),
                                             "checks": {r["id"]: r["ok"] for r in results}}))

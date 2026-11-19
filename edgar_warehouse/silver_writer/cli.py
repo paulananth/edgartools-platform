@@ -3,8 +3,7 @@ spec as a table, land a part's rows into it, and describe a table for an agent.
 
 Connections come from the environment and are never printed:
 DB_URL of the owner file (the schema owner, for init and register),
-SILVER_DATABASE_URL (the restricted runtime login, for created, land and describe) and
-MDM_DATABASE_URL (read, for the MDM ids of a table that links to masters, and the
+DB_URL of the loader file (the restricted runtime login, for created, land and describe; its MDM database is read, for the MDM ids of a table that links to masters, and the
 statement format and country the measures read from each Company).
 """
 
@@ -16,7 +15,7 @@ from pathlib import Path
 
 
 def _handle(args):
-    from edgar_warehouse.database_connections import engine_from_env
+    from edgar_warehouse.database_connections import store_engine
 
     from . import database
     from .rows import records
@@ -26,7 +25,7 @@ def _handle(args):
     engines = []
 
     def engine(variable):
-        value = engine_from_env(variable)
+        value = store_engine(variable)
         engines.append(value)
         return value
 
@@ -44,12 +43,12 @@ def _handle(args):
             result = database.register(owned("silver"), spec_file(args.spec, args.part),
                                        runtime_role=args.runtime_role)
         elif args.silver_command == "created":
-            result = database.created(engine("SILVER_DATABASE_URL"), spec_file(args.spec, args.part))
+            result = database.created(engine("silver"), spec_file(args.spec, args.part))
         elif args.silver_command == "line-items":
             from edgar_warehouse.financials import line_items
 
-            ids = MdmIds(engine("MDM_DATABASE_URL")) if os.environ.get("MDM_DATABASE_URL") else None
-            silver_engine = engine("SILVER_DATABASE_URL")
+            ids = MdmIds(engine("mdm")) if os.environ.get("DB_URL") else None
+            silver_engine = engine("silver")
             result = line_items.build(silver_engine, DatabaseSink(silver_engine), ids)
         elif args.silver_command == "links":
             from datetime import datetime, timezone
@@ -58,24 +57,24 @@ def _handle(args):
             from edgar_warehouse.mastering import links
             from edgar_warehouse.rules import files
 
-            result = links.build(engine("SILVER_DATABASE_URL"), engine("MDM_DATABASE_URL"), digest(files.policy()),
+            result = links.build(engine("silver"), engine("mdm"), digest(files.policy()),
                                  datetime.now(timezone.utc).isoformat())
         elif args.silver_command == "measures":
             from edgar_warehouse.financials import measures
 
-            mdm_engine = engine("MDM_DATABASE_URL")  # each filer's statement format, from its Company master
-            silver_engine = engine("SILVER_DATABASE_URL")
+            mdm_engine = engine("mdm")  # each filer's statement format, from its Company master
+            silver_engine = engine("silver")
             result = measures.build(silver_engine, DatabaseSink(silver_engine), MdmIds(mdm_engine),
                                     lambda keys: measures.from_company(mdm_engine, keys))
         elif args.silver_command in {"land", "refresh-ids"}:
-            ids = MdmIds(engine("MDM_DATABASE_URL")) if os.environ.get("MDM_DATABASE_URL") else None
-            sink = DatabaseSink(engine("SILVER_DATABASE_URL"))
+            ids = MdmIds(engine("mdm")) if os.environ.get("DB_URL") else None
+            sink = DatabaseSink(engine("silver"))
             result = (land(sink, args.table, records(args.rows), ids) if args.silver_command == "land"
                       else refresh_ids(sink, args.table, ids))
         else:
             from .context import TableContext
 
-            result = TableContext(engine("SILVER_DATABASE_URL")).table(args.table)
+            result = TableContext(engine("silver")).table(args.table)
     finally:
         for value in engines:
             value.dispose()

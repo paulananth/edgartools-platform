@@ -28,8 +28,7 @@ from tests.integration.test_configured_bookkeeping_postgres import databases, ex
 @pytest.fixture
 def setup(databases, tmp_path, monkeypatch, request):
     grant_profile(databases.admin, profile=capture.PRODUCER, worker='bk_runtime')
-    monkeypatch.setenv('BOOKKEEPING_DATABASE_URL', databases.runtime.url.render_as_string(hide_password=False))
-    monkeypatch.setenv('CHANGE_JOURNAL_DATABASE_URL', databases.ledger.engine.url.render_as_string(hide_password=False))
+    monkeypatch.setenv('DB_URL', databases.loader)
     monkeypatch.setenv('EDGAR_IDENTITY', 'Offline fixture test@example.com')
     book = Bookkeeping(databases.runtime)
     body = config(resource='output:{destination}')

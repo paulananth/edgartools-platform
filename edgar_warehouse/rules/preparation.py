@@ -27,12 +27,12 @@ from .driving import RunStopped
 def registered_store(policy_digest, environment):
     from edgar_warehouse.database_connections import storage_adapter
     from edgar_warehouse.mastering.store import open_store
-    from edgar_warehouse.mdm.connections import engine_from_environment
+    from edgar_warehouse.mdm.connections import mdm_engine_from
 
-    value = environment.get("MDM_DATABASE_URL")
+    value = environment.get("DB_URL")
     if not value:
         raise RunStopped("Automatic preparation needs the selected stores' worker MDM login")
-    engine = engine_from_environment("MDM_DATABASE_URL", environment, restricted=True)
+    engine = mdm_engine_from(environment, restricted=True)
     store = None
     try:
         with engine.connect() as conn:

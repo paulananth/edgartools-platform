@@ -29,9 +29,7 @@ def test_rules_submitted_13f_work_is_completed_by_its_worker(
     manifest = store.put(tmp_path.as_uri(), {"version": 1, "units": [{
         "keys": {"batch_id": "sample"}, "input": input_ref, "output": output, "cursor": {"offset": 0}}]})
     env = {**os.environ,
-           "BOOKKEEPING_DATABASE_URL": databases.runtime.url.render_as_string(hide_password=False),
-           "RULES_DATABASE_URL": databases.rules.engine.url.render_as_string(hide_password=False),
-           "CHANGE_JOURNAL_DATABASE_URL": databases.ledger.engine.url.render_as_string(hide_password=False),
+           "DB_URL": databases.loader,
            "BOOKKEEPING_MANIFEST_ROOT": (tmp_path / "control").as_uri()}
     for name, value in env.items():
         monkeypatch.setenv(name, value)

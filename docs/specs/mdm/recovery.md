@@ -53,7 +53,7 @@ effect and checkpoint advancement. A rejected/conflicting record may commit a
 terminal evidence disposition without a master change; this does not satisfy
 mandatory publication completeness when that consumer requires a resolution.
 
-Bookkeeping currently uses `BOOKKEEPING_DATABASE_URL` and independent sessions;
+Bookkeeping currently uses its own database (under `DB_URL`) and independent sessions;
 do not claim its status update is in the MDM transaction across databases. It
 observes durable committed batches and receipts and can repair a stale status.
 The local environment may colocate databases for convenience, but must test a

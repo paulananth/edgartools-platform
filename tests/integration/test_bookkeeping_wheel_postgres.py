@@ -59,13 +59,12 @@ def test_installed_control_runs_a_whole_run(control_python, databases, tmp_path)
     def control(url, *arguments, document=None):
         done = subprocess.run([str(control_python), "-I", "-m", "edgar_warehouse.bookkeeping", *arguments],
                               input=None if document is None else json.dumps(document), capture_output=True, text=True,
-                              env={**os.environ, "BOOKKEEPING_DATABASE_URL": url, "DB_URL": url,
-                                   "CHANGE_JOURNAL_DATABASE_URL": journal}, cwd=tmp_path)
+                              env={**os.environ, "DB_URL": url}, cwd=tmp_path)
         assert done.returncode == 0, done.stderr
         return json.loads(done.stdout)
 
-    url = lambda engine: engine.url.render_as_string(hide_password=False)
-    owner, worker, journal = url(databases.admin), url(databases.runtime), url(databases.ledger.engine)
+    owner = databases.admin.url._replace(database=None).render_as_string(hide_password=False)  # the owner file's DB_URL: no database
+    worker = databases.loader  # the loader file's DB_URL: one login that holds each store's runtime privileges
     assert "schema.sql" in control(owner, "init", "--runtime-role", "bk_control")
     control(owner, "grant-profile", "--profile", "artifact.copy", "--worker", "bk_runtime")
     # Submission is Rules' job; the run is frozen in this process.

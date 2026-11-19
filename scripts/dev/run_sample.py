@@ -1,7 +1,7 @@
 """Two minutes on a running PostgreSQL job: what limits it, before trusting its speed or letting it run on.
 
     source <the store's worker.env>
-    python scripts/dev/run_sample.py --database MDM_DATABASE_URL --count "select sum(records) from mastering_file"
+    python scripts/dev/run_sample.py --database mdm --count "select sum(records) from mastering_file"
 
 Prints counts, statement openings and table names only. A long-open transaction keeps deleted rows
 from being cleaned, so it is reported first. Swap and an emulated interpreter make any figure unreliable.
@@ -34,11 +34,13 @@ def label(query: str, state: str) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--database", default="MDM_DATABASE_URL", help="The environment variable holding the address")
+    parser.add_argument("--database", default="mdm", help="The store whose database is watched (its DB_URL is read)")
     parser.add_argument("--count", required=True, help="SQL returning one number that grows as the job works")
     parser.add_argument("--seconds", type=int, default=120)
     args = parser.parse_args()
-    engine = create_engine(os.environ[args.database], hide_parameters=True, isolation_level="AUTOCOMMIT")
+    from edgar_warehouse.database_connections import owner_url
+
+    engine = create_engine(owner_url(args.database), hide_parameters=True, isolation_level="AUTOCOMMIT")
     every = 0.25
     seen = collections.Counter()
     with engine.connect() as conn:

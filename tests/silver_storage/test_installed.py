@@ -20,9 +20,8 @@ def test_installed_normal_silver_caller(installed, database_factory, mode):
         rows.write_text('{"visit_id":1,"member_id":"invented","amount":12345678901234567890.12345678,'
                         '"visited_on":"2026-10-01","duration":"2 days 01:02:03.123456",'
                         '"tags":{"fraction":0.123456789012345678901234567890123,"tiny":1e-600}}\n')
-        environment = {"DB_URL": owner.url.render_as_string(hide_password=False),
-                       "SILVER_DATABASE_URL": runtime.url.render_as_string(hide_password=False),
-                       "MDM_DATABASE_URL": ""}
+        owner_env = {"DB_URL": owner.url.render_as_string(hide_password=False)}
+        environment = {"DB_URL": runtime.url.render_as_string(hide_password=False)}
         program = '''
 import json, sys
 from edgar_warehouse.cli import main
@@ -36,7 +35,7 @@ sys.exit(main(command))
                     ["silver", "describe", config["table"]]]
         reports = []
         for command in commands:
-            result = _run(python, "-c", program, env=environment, cwd=root, document=command)
+            result = _run(python, "-c", program, env=owner_env if command[1] in ("init", "register") else environment, cwd=root, document=command)
             assert result.returncode == 0, "Installed Silver caller failed; connection details withheld"
             reports.append(json.loads(result.stdout))
         assert reports[1]["created"]
@@ -48,10 +47,10 @@ import json, sys
 from datetime import timedelta
 from decimal import Decimal
 from sqlalchemy import inspect, select
-from edgar_warehouse.database_connections import engine_from_env
+from edgar_warehouse.database_connections import store_engine
 from edgar_warehouse.silver_writer.relational import DatabaseSink
 from edgar_warehouse.silver_writer.tables import data_table
-engine = engine_from_env("SILVER_DATABASE_URL")
+engine = store_engine("silver")
 try:
     spec = DatabaseSink(engine).spec("invented_installed_rows")
     table = data_table(spec, engine.dialect.name)

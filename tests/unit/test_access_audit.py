@@ -143,7 +143,7 @@ def test_a_non_audit_aws_identity_is_refused_without_the_flag(monkeypatch):
 
 
 def test_exit_code_follows_failures_and_the_json_report_parses(monkeypatch, capsys):
-    monkeypatch.setenv("DIAGNOSE_DATABASE_URL", "postgresql://x")
+    monkeypatch.setenv("DB_URL", "postgresql://x")
     state = {"ev": postgres_clean()}
     monkeypatch.setattr(postgres, "collect", lambda env, as_admin=False: state["ev"])
     assert audit.main(["--platform", "postgres", "--json"]) == 0

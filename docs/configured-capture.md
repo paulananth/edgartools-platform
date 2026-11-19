@@ -55,8 +55,8 @@ existing commands:
 edgar-warehouse workers work provider.capture "$RUN_ID" --reports "$REPORTS_URI" --limit 1
 ```
 
-Set `BOOKKEEPING_DATABASE_URL` to the appropriate login and
-`CHANGE_JOURNAL_DATABASE_URL` to the restricted Journal login. These commands
+Set `DB_URL` (the loader file) to the appropriate login: Bookkeeping and the
+Journal add their own databases. These commands
 do not author, qualify, approve or activate a Source version.
 
 ## A POST with a key (ticket 92)

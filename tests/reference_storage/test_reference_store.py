@@ -239,7 +239,7 @@ def test_normal_cli_and_read_only_context_use_the_selected_connection(reference,
     name = draft(store)
     approve(store, name)
     store.publish(name, "1", out=tmp_path)
-    monkeypatch.setenv("RDM_DATABASE_URL", store.engine.url.render_as_string(hide_password=False))
+    monkeypatch.setenv("DB_URL", store.engine.url.render_as_string(hide_password=False))
     assert cli._handle(Namespace(rdm_command="list")) == 0
     listed = json.loads(capsys.readouterr().out)
     assert name in {row["code_set"] for row in listed}

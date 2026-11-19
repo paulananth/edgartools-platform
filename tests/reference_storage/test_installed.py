@@ -7,8 +7,8 @@ from tests.engine.test_data_skill_bundle_postgres import installed, _run  # noqa
 def test_installed_reference_lifecycle_and_search(installed, database_factory):
     python, root = installed
     with database_factory() as (owner, runtime, role):
-        environment = {"DB_URL": owner.url.render_as_string(hide_password=False),
-                       "RDM_DATABASE_URL": runtime.url.render_as_string(hide_password=False)}
+        owner_env = {"DB_URL": owner.url.render_as_string(hide_password=False)}
+        runtime_env = {"DB_URL": runtime.url.render_as_string(hide_password=False)}
         name = "invented-installed-reference"
         body = {"code_set": {"code_set": name, "name": "Invented reference"}, "version": "1",
                 "created_by": "drafter", "codes": [{"code": "a", "label": "AI the well-known reference"}],
@@ -22,7 +22,7 @@ from edgar_warehouse.cli import main
 sys.exit(main(json.load(sys.stdin)))
 '''
         def command(parts):
-            result = _run(python, "-c", program, env=environment, cwd=root, document=parts)
+            result = _run(python, "-c", program, env=owner_env if parts[:2] == ["rdm", "init"] else runtime_env, cwd=root, document=parts)
             assert result.returncode == 0, "Installed RDM command failed; connection details withheld"
             return json.loads(result.stdout)
         assert command(["rdm", "init", "--runtime-role", role])

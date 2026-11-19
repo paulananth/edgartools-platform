@@ -71,7 +71,7 @@ def land(sink: Sink, table: str, records: Iterable[dict], ids=None, results: Pat
         quality_results.record(Path(results), table, quality)
     links = spec["links"] or []
     if links and ids is None:
-        raise Blocked(f"silver.{table} links to masters: MDM ids need the MDM database (MDM_DATABASE_URL)")
+        raise Blocked(f"silver.{table} links to masters: MDM ids need the MDM database (DB_URL)")
     known = 0
     for link in links:
         column = link["source_key"]
@@ -93,7 +93,7 @@ def refresh_ids(sink: Sink, table: str, ids) -> dict:
     if not links:
         return {"table": table, "rows_updated": 0}
     if ids is None:
-        raise Blocked(f"silver.{table} links to masters: MDM ids need the MDM database (MDM_DATABASE_URL)")
+        raise Blocked(f"silver.{table} links to masters: MDM ids need the MDM database (DB_URL)")
     updated = {}
     for link in links:
         keys = sink.link_keys(spec, link)

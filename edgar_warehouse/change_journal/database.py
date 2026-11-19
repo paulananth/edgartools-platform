@@ -77,6 +77,9 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False, database_
         ):
             raise Blocked("Journal database must hold only the journal")
         checksums = json.loads(saved) if saved else {}
+        if saved and not conn.scalar(text("SELECT to_regclass('journal.event') IS NOT NULL")):
+            # `init` makes a store and brings a tracked one to current; it never makes history again where history was lost
+            raise Blocked("Installed journal event storage is missing; restore it before init")
         if checksums and "schema.sql" not in checksums:
             raise Blocked("This Change Journal store does not hold this build's schema; rebuild the store")
         if set(checksums) - ({p.name for p in paths} | {"003_native_storage"}):

@@ -32,16 +32,16 @@ def test_a_statement_shows_no_literal_and_is_cut():
 
 
 def test_without_the_login_variable_it_stops_and_prints_no_address(monkeypatch, capsys):
-    monkeypatch.delenv("DIAGNOSE_DATABASE_URL", raising=False)
+    monkeypatch.delenv("DB_URL", raising=False)
     with pytest.raises(SystemExit) as stop:
         monitor.main(["summary"])
-    assert "DIAGNOSE_DATABASE_URL" in str(stop.value) and "postgresql" not in str(stop.value)
+    assert "DB_URL" in str(stop.value) and "postgresql" not in str(stop.value)
 
 
 def test_the_database_name_replaces_the_one_in_the_url(monkeypatch):
-    monkeypatch.setenv("DIAGNOSE_DATABASE_URL", "postgresql+psycopg2://reader:x@host:5432/mdm?sslmode=require")
+    monkeypatch.setenv("DB_URL", "postgresql+psycopg2://reader:x@host:5432?sslmode=require")
     assert monitor.url("silver") == "postgresql://reader:x@host:5432/silver?sslmode=require"
-    assert monitor.url(None) == "postgresql://reader:x@host:5432/mdm?sslmode=require"
+    assert monitor.url(None) == "postgresql://reader:x@host:5432/postgres?sslmode=require"
 
 
 class Cursor:
@@ -75,7 +75,7 @@ class Connection:
 def test_the_connection_is_a_read_only_session_and_a_superuser_is_refused(monkeypatch):
     import psycopg2
 
-    monkeypatch.setenv("DIAGNOSE_DATABASE_URL", "postgresql://reader:x@host:5432/mdm")
+    monkeypatch.setenv("DB_URL", "postgresql://reader:x@host:5432/mdm")
     ordinary = Connection(False)
     monkeypatch.setattr(psycopg2, "connect", lambda *a, **k: ordinary)
     assert monitor.connect() is ordinary and ordinary.session == {"readonly": True, "autocommit": True}
@@ -100,7 +100,7 @@ def test_the_log_reading_selects_only_and_names_every_memory_phrase():
 
 
 def test_the_instance_id_is_the_first_part_of_the_host(monkeypatch):
-    monkeypatch.setenv("DIAGNOSE_DATABASE_URL", "postgresql://reader:x@abc123def.region.example:5432/mdm")
+    monkeypatch.setenv("DB_URL", "postgresql://reader:x@abc123def.region.example:5432/mdm")
     assert monitor.instance_id() == "abc123def"
 
 
@@ -120,7 +120,7 @@ def test_the_log_reading_needs_its_connection_named(monkeypatch):
 
 def test_a_read_only_role_reads_the_log_and_the_messages_are_scrubbed(monkeypatch):
     monkeypatch.setenv("MONITOR_SNOWFLAKE_CONNECTION", "c")
-    monkeypatch.setenv("DIAGNOSE_DATABASE_URL", "postgresql://reader:x@abc123.region.example:5432/mdm")
+    monkeypatch.setenv("DB_URL", "postgresql://reader:x@abc123.region.example:5432/mdm")
     answers = [[{"ROLE": "LOG_READER"}],
                [{"KIND": "memory", "MESSAGE": "ERROR:  out of memory", "N": 2, "FIRST_AT": "a", "LAST_AT": "b"},
                 {"KIND": "fatal", "MESSAGE": "FATAL:  rejected host 1.2.3.4", "N": 1, "FIRST_AT": "a", "LAST_AT": "b"}]]

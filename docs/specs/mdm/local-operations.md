@@ -25,9 +25,9 @@ data, not an approved production source manifest or matching calibration set.
 
 ## Database and command boundaries
 
-`MDM_DATABASE_URL` contains the master projection, immutable evidence, decisions,
-attempt events and publication outbox. `CHANGE_LEDGER_DATABASE_URL` contains the
-acquisition history and immutable MDM event mirror. `BOOKKEEPING_DATABASE_URL`
+The MDM database contains the master projection, immutable evidence, decisions,
+attempt events and publication outbox. The change-ledger database contains the
+acquisition history and immutable MDM event mirror. The bookkeeping database
 contains the existing root `pipeline_run`. One UUID identifies the root across
 all three. No transaction is claimed across databases.
 

@@ -202,6 +202,34 @@ def _isolated_database(server_connection):
             owner.dispose()
 
 
+@contextmanager
+def _store_databases(owner, *stores):
+    """One database per store, each named for its store behind a unique prefix (what `DB_PREFIX` selects), owned as the owner
+    login owns the factory's. Yields the prefix and an admin engine per store; every database is dropped on exit."""
+    prefix = "t" + uuid4().hex[:8] + "_"
+    quote = owner.dialect.identifier_preparer.quote
+    made, engines = [], {}
+    try:
+        with owner.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            for store in stores:
+                conn.exec_driver_sql(f"CREATE DATABASE {quote(prefix + store)}")
+                made.append(prefix + store)
+        for store in stores:
+            engines[store] = create_engine(owner.url.set(database=prefix + store), hide_parameters=True)
+        yield prefix, engines
+    finally:
+        for engine in engines.values():
+            engine.dispose()
+        with owner.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            for name in made:
+                conn.exec_driver_sql(f"DROP DATABASE {quote(name)}")
+
+
+@pytest.fixture(scope="session")
+def store_databases():
+    return _store_databases
+
+
 @pytest.fixture(scope="session")
 def database_factory(server_connection):
     """Create an isolated store with its own restricted principal and cleanup."""

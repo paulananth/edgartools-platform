@@ -26,13 +26,13 @@ from sqlalchemy.engine import URL
 
 
 STORES = {
-    "mdm": ("MDM_DATABASE_URL", "mdm"),
-    "rdm": ("RDM_DATABASE_URL", "rdm"),
-    "rules": ("RULES_DATABASE_URL", "rules"),
-    "bookkeeping": ("BOOKKEEPING_DATABASE_URL", "bookkeeping"),
-    "change_journal": ("CHANGE_JOURNAL_DATABASE_URL", "journal"),
+    "mdm": ("DB_URL", "mdm"),
+    "rdm": ("DB_URL", "rdm"),
+    "rules": ("DB_URL", "rules"),
+    "bookkeeping": ("DB_URL", "bookkeeping"),
+    "change_journal": ("DB_URL", "journal"),
 }
-ALL_STORES = {**STORES, "silver": ("SILVER_DATABASE_URL", "silver")}
+ALL_STORES = {**STORES, "silver": ("DB_URL", "silver")}
 
 
 def runtime_login(store: str) -> str:
@@ -42,6 +42,7 @@ def runtime_login(store: str) -> str:
 def owner_login(store: str) -> str:
     return store + "_owner"
 EXTRA_LOGINS = ("mdm_governance", "rules_governance")
+LOADER, GOVERNANCE = "edgar_loader", "governance"  # the duty logins: one each, a member of the roles that hold the privileges
 IMAGE = "postgres:16-alpine"
 LABEL = "org.edgartools.local-tests.owner"
 # Server settings for a full load (ticket 194): the default 4 MB of work memory sends each merge statement's
@@ -198,20 +199,15 @@ class LocalStores:
         self.connections(name, include_silver=include_silver)
 
     def connections(self, name: str, *, include_silver=False):
-        selected = ALL_STORES if include_silver else STORES
-        common = {variable: self.url(name, database, database + "_runtime").render_as_string(hide_password=False)
-                  for database, (variable, _) in selected.items()}
-        common.update(MDM_APPLICATION_ROLE="mdm_runtime",
-                      BOOKKEEPING_MANIFEST_ROOT=(self.folder(name) / "manifests").as_uri())
-        owner = self.url(name, next(iter(selected)))._replace(database=None).render_as_string(hide_password=False)
-        governance = {"RULES_DATABASE_URL": self.url(name, "rules", "rules_governance").render_as_string(hide_password=False),
-                      "MDM_REGISTRATION_DATABASE_URL": self.url(name, "mdm", "mdm_governance").render_as_string(hide_password=False)}
-        for filename, values in (("owner.env", {"DB_URL": owner}), ("worker.env", common), ("governance.env", {**common, **governance})):
+        def duty(user: str) -> str:
+            return self.url(name, "postgres", user)._replace(database=None).render_as_string(hide_password=False)
+
+        owner = duty("postgres")
+        worker = {"DB_URL": duty(LOADER), "MDM_APPLICATION_ROLE": "mdm_runtime",
+                  "BOOKKEEPING_MANIFEST_ROOT": (self.folder(name) / "manifests").as_uri()}
+        for filename, values in (("owner.env", {"DB_URL": owner}), ("worker.env", worker), ("governance.env", {"DB_URL": duty(GOVERNANCE)})):
             # Clear a previous shell's settings before choosing a duty.
-            unset = ["DB_URL", "BOOKKEEPING_ADMIN_DATABASE_URL", "MDM_REGISTRATION_DATABASE_URL"]
-            if not include_silver:
-                unset += ["SILVER_DATABASE_URL"]
-            lines = ["unset " + " ".join(unset)]
+            lines = ["unset DB_URL BOOKKEEPING_ADMIN_DATABASE_URL MDM_REGISTRATION_DATABASE_URL"]
             lines += [f"export {key}={shlex.quote(value)}" for key, value in values.items()]
             private_write(self.folder(name) / filename, "\n".join(lines) + "\n")
 
@@ -229,7 +225,7 @@ class LocalStores:
             with admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
                 roles = {owner_login(store): False for store in selected}
                 roles.update({runtime_login(store): True for store in selected})
-                roles.update({role: True for role in EXTRA_LOGINS})
+                roles.update({role: True for role in (*EXTRA_LOGINS, LOADER, GOVERNANCE)})
                 roles.update(bookkeeping_control=False)
                 for role, login in roles.items():
                     held = conn.execute(text("SELECT rolsuper,rolcreatedb,rolcreaterole,rolcanlogin,rolbypassrls FROM pg_roles WHERE rolname=:r"), {"r": role}).first()
@@ -250,8 +246,10 @@ class LocalStores:
                     conn.exec_driver_sql(f"GRANT CONNECT ON DATABASE {quote(database)} TO {quote(runtime_login(store))}")
                 for database, login in (("mdm", "mdm_governance"), ("rules", "rules_governance")):
                     conn.exec_driver_sql(f"GRANT CONNECT ON DATABASE {quote(database)} TO {quote(login)}")
+                members = [(parent, LOADER) for parent in {runtime_login(store) for store in selected}] + [
+                    (parent, GOVERNANCE) for parent in EXTRA_LOGINS]
                 for parent, member in (("bookkeeping_control", "bookkeeping_runtime"),
-                                       ("rules_runtime", "rules_governance")):
+                                       ("rules_runtime", "rules_governance"), *members):
                     if not conn.scalar(text("SELECT pg_has_role(:m,:p,'MEMBER')"), {"m": member, "p": parent}):
                         conn.exec_driver_sql(f"GRANT {quote(parent)} TO {quote(member)}")
             if migrate:

@@ -278,7 +278,7 @@ def test_an_agent_reads_a_table_spec_through_context(stores):
 
     owner, runtime, _, _ = stores
     silver.register(owner, visit_spec(), runtime_role=RUNTIME)
-    assert store_for("silver").variable == "SILVER_DATABASE_URL"
+    assert store_for("silver").variable == "silver"
     answer = TableContext(runtime).answer(entity_context.args("silver", "visit"))
     assert len(json.dumps(answer).encode()) <= LIMIT_BYTES
     assert answer["kind"] == "silver table" and answer["key"] == ["visit_id"] and answer["load_mode"] == "append"

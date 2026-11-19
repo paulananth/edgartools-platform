@@ -25,12 +25,7 @@ from edgar_warehouse.rules import files
 SKILLS = files.BUNDLE_DATA / "skills" if files.BUNDLED.is_dir() else Path(__file__).resolve().parents[1] / "skills"
 # The approved rules the bundle was built with: a folder to start from.
 RULES = files.BUNDLED if files.BUNDLED.is_dir() else Path(__file__).resolve().parents[1] / "rules"
-STORES = (
-    "RULES_DATABASE_URL",
-    "BOOKKEEPING_DATABASE_URL",
-    "CHANGE_JOURNAL_DATABASE_URL",
-    "MDM_DATABASE_URL",
-)
+STORES = ("rules", "bookkeeping", "change_journal", "mdm")
 MARKER = ".installed-by-edgar-warehouse"
 # A fenced line or a code span may wrap onto the next line. A shell pipe
 # (` | `) ends the command: what follows is another program's. `a|b`, with no
@@ -102,11 +97,14 @@ def unresolved(parser: argparse.ArgumentParser, root: Path = SKILLS) -> list[str
     return sorted(set(missing))
 
 
-def _store(variable: str) -> str:
-    url = os.environ.get(variable)
-    if not url:
+def _store(store: str) -> str:
+    if not os.environ.get("DB_URL"):
         return "not set"
     from sqlalchemy import create_engine, text
+
+    from edgar_warehouse.database_connections import owner_url
+
+    url = owner_url(store)
 
     engine = None
     try:

@@ -36,7 +36,9 @@ def _handle(args):
                   for code, found in sorted(files.entity_types(files.load_source(path)).items())]
     elif args.rules_command == "register":
         # The store owner's connection: the runtime login cannot add to MDM's registry.
-        owner = get_engine(os.environ["MDM_REGISTRATION_DATABASE_URL"])
+        from edgar_warehouse.database_connections import owner_url
+
+        owner = get_engine(owner_url("mdm"))  # the governance file's DB_URL: the registration login reads MDM's registry
         try:
             with owner.begin() as conn:
                 result = frozen.register(conn, args.source or None, Path(args.root))
@@ -370,7 +372,7 @@ def _catalog(args):
                   "plan": {"status": "ready", "counts": counts},
                   "publish": {"status": "not_run"}, "readback": {"status": "not_run"},
                   "cause": "Bookkeeping could not be read",
-                  "next_action": "Check BOOKKEEPING_DATABASE_URL access, then retry with --bookkeeping-run."}
+                  "next_action": "Check the DB_URL login's access to Bookkeeping, then retry with --bookkeeping-run."}
         report["summary"] = "FAILED: cannot read Bookkeeping quality evidence. Check Bookkeeping access and retry."
         return _catalog_output(report)
 

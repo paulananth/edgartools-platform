@@ -106,10 +106,11 @@ class Commands:
             from edgar_warehouse.bookkeeping.clean.database import get_engine
             from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
 
-            url = self.env["worker"].get("BOOKKEEPING_DATABASE_URL")
-            if not url:
-                raise RunStopped("The worker.env of these stores names no BOOKKEEPING_DATABASE_URL")
-            self._book = Bookkeeping(get_engine(url))
+            from edgar_warehouse.database_connections import owner_url
+
+            if not self.env["worker"].get("DB_URL"):
+                raise RunStopped("The worker.env of these stores names no DB_URL")
+            self._book = Bookkeeping(get_engine(owner_url("bookkeeping", self.env["worker"])))
         return self._book
 
     def status(self, run_id: str, step: str | None = None) -> dict:

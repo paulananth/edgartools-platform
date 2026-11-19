@@ -24,17 +24,17 @@ target:
 # Snowflake schema the mirror gives it, and who owns the meaning.
 layers:
   silver:
-    connection: SILVER_DATABASE_URL
+    connection: DB_URL
     source_schema: silver
     target_schema: SILVER
     authority: silver
   mdm:
-    connection: MDM_DATABASE_URL
+    connection: DB_URL
     source_schema: public
     target_schema: MDM
     authority: mdm
   rdm:
-    connection: RDM_DATABASE_URL
+    connection: DB_URL
     source_schema: rdm
     target_schema: RDM
     authority: rdm

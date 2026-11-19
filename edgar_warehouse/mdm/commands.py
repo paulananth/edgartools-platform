@@ -9,7 +9,7 @@ from pathlib import Path
 
 from sqlalchemy import text
 
-from .connections import engine_from_env
+from .connections import mdm_engine
 
 
 def prepare_capture(args) -> int:
@@ -42,7 +42,7 @@ def steward_split(args) -> int:
     from edgar_warehouse.workers.mastering_merge import _settings
 
     at = datetime.now(timezone.utc).isoformat()
-    engine = engine_from_env("MDM_DATABASE_URL", restricted=True)
+    engine = mdm_engine(restricted=True)
     db = open_store(engine)
     manifest = {"policy_digest": args.policy_digest, "as_of": at}
     try:
@@ -64,7 +64,7 @@ def steward_resolve(args) -> int:
     from edgar_warehouse.workers.mastering_merge import _settings
 
     at = datetime.now(timezone.utc).isoformat()
-    engine = engine_from_env("MDM_DATABASE_URL", restricted=True)
+    engine = mdm_engine(restricted=True)
     db = open_store(engine)
     manifest = {"policy_digest": args.policy_digest, "as_of": at}
     try:
@@ -101,7 +101,7 @@ def clear_source(args) -> int:
 
 def _print_mdm_report(read) -> int:
     """Run one read on the MDM database as the application role and print it."""
-    mdm = engine_from_env("MDM_DATABASE_URL")
+    mdm = mdm_engine()
     try:
         with mdm.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
             report = read(conn)
@@ -137,7 +137,7 @@ def _inspection_adapter(conn):
 def rebuild_name_index(args) -> int:
     from .master_search import rebuild
 
-    engine = engine_from_env("MDM_DATABASE_URL", restricted=False)
+    engine = mdm_engine(restricted=False)
     try:
         report = rebuild(engine, limit=args.limit, page_size=args.page_size, restart=args.restart)
     finally:
@@ -150,7 +150,7 @@ def build_lookups(args) -> int:
     from edgar_warehouse.mastering import lookups
     from edgar_warehouse.mastering.store import open_store
 
-    engine = engine_from_env("MDM_DATABASE_URL", restricted=True)
+    engine = mdm_engine(restricted=True)
     db = open_store(engine)
     try:
         report = lookups.build(db, lambda built: print(json.dumps({"masters": built}), file=sys.stderr, flush=True))
@@ -168,7 +168,7 @@ def rebuild(args) -> int:
     from edgar_warehouse.mastering.store import open_store
     from edgar_warehouse.workers.mastering_merge import _quiet, _settings
 
-    engine = engine_from_env("MDM_DATABASE_URL", restricted=True)
+    engine = mdm_engine(restricted=True)
     db = open_store(engine)
     manifest = {"policy_digest": args.policy_digest, "as_of": datetime.now(timezone.utc).isoformat()}
     settings_of = cache(lambda kind: _settings(engine, manifest, kind))
@@ -186,7 +186,7 @@ def rebuild(args) -> int:
 def rebuild_detail_lookup(args) -> int:
     from .detail_lookups import rebuild
 
-    engine = engine_from_env("MDM_DATABASE_URL", restricted=False)
+    engine = mdm_engine(restricted=False)
     try:
         report = rebuild(engine, limit=args.limit, page_size=args.page_size, restart=args.restart)
     finally:

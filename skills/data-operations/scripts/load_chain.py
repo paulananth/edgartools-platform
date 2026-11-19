@@ -35,7 +35,7 @@ import sys
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
 import yaml
@@ -509,7 +509,7 @@ def database_writes(reader_url: str) -> dict[str, int]:
 
     totals = {}
     for name in STORE_DATABASES:
-        url = re.sub(r"/[^/?]+((?:\?.*)?)$", rf"/{name}\1", reader_url.replace("postgresql+psycopg2", "postgresql"))
+        url = in_database(reader_url.replace("postgresql+psycopg2", "postgresql"), name)
         try:
             with psycopg2.connect(url, connect_timeout=10) as conn, conn.cursor() as cur:
                 cur.execute("SELECT coalesce(sum(n_tup_ins + n_tup_upd + n_tup_del), 0) FROM pg_stat_user_tables")
@@ -721,10 +721,16 @@ def database_generation(url: str) -> str:
         return ""
 
 
+def in_database(url: str, database: str) -> str:
+    """The URL naming `database`: a `DB_URL` names none, and a monitor reads each store's database in turn."""
+    part = urlsplit(url)
+    return urlunsplit(part._replace(path="/" + database))
+
+
 def mdm_url_of(url: str) -> str:
     """The same login and instance with the `mdm` database: the one whose generation names a store in the state file, read
     through the diagnostic login, which may name another database."""
-    return re.sub(r"/[^/?]+(\?|$)", r"/mdm\1", url, count=1)
+    return in_database(url, "mdm")
 
 
 STORE_MARKER = re.compile(r"chain store (\w+)(?: generation (\w+))?$", re.M)
@@ -926,8 +932,8 @@ def status_env(base: dict, worker: dict, catalog: dict) -> dict:
     """The environment of `rules catalog status`: a short allowlist of the process's own (a path, a home), the Bookkeeping
     login it reads the run with, and the catalog's address and token. No other login, key or password reaches it."""
     given = {key: base[key] for key in SAFE_BASE if key in base}
-    if worker.get("BOOKKEEPING_DATABASE_URL"):
-        given["BOOKKEEPING_DATABASE_URL"] = worker["BOOKKEEPING_DATABASE_URL"]
+    if worker.get("DB_URL"):
+        given["DB_URL"] = worker["DB_URL"]
     return {**given, **catalog}
 
 
@@ -1100,7 +1106,7 @@ def main() -> int:
     state = LOGS / f"chain-{RUN}.log"
     if args.status:  # read-only: the reader login only, no loader login, no wake lock, nothing written
         reader = STORES / "reader.env"
-        reader_url = load_env(reader).get("DIAGNOSE_DATABASE_URL") if reader.exists() else None
+        reader_url = load_env(reader).get("DB_URL") if reader.exists() else None
         counted = state
         if reader_url and state.exists():  # the file the next run would set aside is no evidence about this store
             try:
@@ -1117,7 +1123,7 @@ def main() -> int:
         # Every other path starts a load, resumes one or writes the finish: the infrastructure must have passed its checks.
         import readiness
 
-        refused = readiness.gate(STORES, database_generation(env["MDM_DATABASE_URL"]) if env.get("MDM_DATABASE_URL") else "",
+        refused = readiness.gate(STORES, database_generation(mdm_url_of(env["DB_URL"])) if env.get("DB_URL") else "",
                                  readiness.current_sha())
         if refused:
             print(f"Not started: {refused}", file=sys.stderr)
@@ -1132,10 +1138,10 @@ def main() -> int:
             print(f"--workers goes with --only and is {low} to {top} on {args.capacity}", file=sys.stderr)
             return 2
         steps = [{**step, "workers": args.workers} if step["name"] == args.only else step for step in steps]
-    if not args.plan and env.get("MDM_DATABASE_URL"):
+    if not args.plan and env.get("DB_URL"):
         try:
-            outcome = ensure_store(state, store_id(env["MDM_DATABASE_URL"]), adopt=args.adopt_state,
-                                   generation=database_generation(env["MDM_DATABASE_URL"]))
+            outcome = ensure_store(state, store_id(env["DB_URL"]), adopt=args.adopt_state,
+                                   generation=database_generation(mdm_url_of(env["DB_URL"])))
         except ValueError as refused:
             print(refused, file=sys.stderr)
             return 2
@@ -1160,7 +1166,7 @@ def main() -> int:
             hour, minute = map(int, args.deadline.split(":"))
             deadline = clock().replace(hour=hour, minute=minute, second=0, microsecond=0)
         if auto(steps, state, args.slots, deadline=deadline, connections=args.connections, capacity=args.capacity,
-                reader_url=load_env(STORES / "reader.env").get("DIAGNOSE_DATABASE_URL") if (STORES / "reader.env").exists() else None):
+                reader_url=load_env(STORES / "reader.env").get("DB_URL") if (STORES / "reader.env").exists() else None):
             return 1
         finish(env, state, args.lookups)
         return 0
