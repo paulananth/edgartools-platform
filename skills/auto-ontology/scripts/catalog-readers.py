@@ -125,6 +125,15 @@ def owner_url(owner, store):
     return owner["DB_URL"] if parts.path.strip("/") else urlunsplit(parts._replace(path="/" + store))
 
 
+def shared_password(saved, role):
+    """The password saved for `role` in any source's URL, or None: one reader login serves every store, so its second source reuses it."""
+    for value in saved.values():
+        found = urlsplit(value)
+        if found.password and unquote(found.username or "") == role:
+            return unquote(found.password)
+    return None
+
+
 def provision(source, owner, reader_file, exposure=EXPOSURE):
     key = source["variable"]
     schema, tables = exposed(exposure, source["store"])
@@ -148,11 +157,8 @@ def provision(source, owner, reader_file, exposure=EXPOSURE):
             # A previous transaction may have rolled back after the local save.
             pass
     role = source["role"]
-    password = (
-        unquote(urlsplit(saved[key]).password)
-        if key in saved
-        else secrets.token_urlsafe(36)
-    )
+    known = shared_password(saved, role)  # one login serves every store: its password is the one already saved for it
+    password = known or secrets.token_urlsafe(36)
     new_url = urlunsplit(
         (
             "postgresql",
@@ -173,20 +179,22 @@ def provision(source, owner, reader_file, exposure=EXPOSURE):
         connection.cursor() as cur,
     ):
         cur.execute("SELECT 1 FROM pg_roles WHERE rolname=%s", (role,))
-        if cur.fetchone():
+        exists = bool(cur.fetchone())
+        if exists and not known:
             raise ValueError(
                 "Reader role already exists without saved credentials; refusing to adopt it"
             )
-        cur.execute(
-            sql.SQL(
-                "CREATE ROLE {} LOGIN PASSWORD {} NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
-            ).format(sql.Identifier(role), sql.Literal(password))
-        )
-        cur.execute(
-            sql.SQL("ALTER ROLE {} SET default_transaction_read_only=on").format(
-                sql.Identifier(role)
+        if not exists:  # a login made for an earlier store of this run is reused, not made again
+            cur.execute(
+                sql.SQL(
+                    "CREATE ROLE {} LOGIN PASSWORD {} NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
+                ).format(sql.Identifier(role), sql.Literal(password))
             )
-        )
+            cur.execute(
+                sql.SQL("ALTER ROLE {} SET default_transaction_read_only=on").format(
+                    sql.Identifier(role)
+                )
+            )
         cur.execute(
             sql.SQL("GRANT CONNECT ON DATABASE {} TO {}").format(
                 sql.Identifier(unquote(parsed.path.lstrip("/"))),
