@@ -26,7 +26,7 @@ def expected(key, outcome):
 
 def row(source):
     if source.endswith('person'):
-        return {'cik':1214156,'name':'COOK TIMOTHY D','entityType':'other','ein':None,'sic':'',
+        return {'cik':9000005,'name':'DOE JANE Q','entityType':'other','ein':None,'sic':'',
                 'fiscalYearEnd':None,'stateOfIncorporation':''}
     return {'cik':320193,'entity_name':'Apple Inc.','entity_type':'operating','sic':'3571',
             'tickers':['AAPL'],'forms':['10-K'],'state_of_incorporation':'CA','fiscal_year_end':'0930',

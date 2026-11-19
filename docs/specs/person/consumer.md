@@ -126,9 +126,9 @@ and measured in research 18 (5,743 owner rows, 4,831 CIKs, 1,220 labelled):
 
 Measured: person arm **841/841** (Wilson LCB 0.9955); entity arm 507/507
 pooled under the post-hoc guard (LCB 0.9925); **~1.1%** of owners deferred.
-Silver `owner_name` is edgartools' display reversal ("Timothy D Cook") and is
+Silver `owner_name` is edgartools' display reversal ("Jane Q Doe") and is
 not classification evidence; rule C-J and the Person normalizer read
-`owner_name_raw`, the registry form EDGAR disseminated ("COOK TIMOTHY D").
+`owner_name_raw`, the registry form EDGAR disseminated ("DOE JANE Q").
 Flags, `entityType = 'other'` and deputization text are **evidence, never
 deciders** — `other` is 71% person and "10%-only" is 72% entity, so neither may
 decide. Category, asserted legal form and inferred kind are recorded separately
