@@ -15,7 +15,7 @@ import json
 from datetime import date
 from pathlib import Path
 
-from sqlalchemy import case, select
+from sqlalchemy import case, select, text
 
 from edgar_warehouse.control_contract import Blocked
 from .storage import clock, lock_code_set, public_columns, scope, tables, transaction
@@ -268,6 +268,8 @@ class RDM:
                 conn.execute(table.update().where(scope(conn, table, code_set=code_set, version=current)).values(valid_to=now))
             conn.execute(table.update().where(scope(conn, table, code_set=code_set, version=version)).values(
                 status="published", sha256=digest, valid_from=now))
+            if conn.dialect.name == "postgresql":
+                conn.execute(text("SELECT rdm.write_published_codes(:s, :v)"), {"s": code_set, "v": version})
             published = self._version(conn, code_set, version)
             self._write(Path(out) / code_set / version, codes, levels, found, published)
         return {"code_set": code_set, "version": version, "sha256": digest, "codes": len(codes),

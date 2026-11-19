@@ -43,6 +43,7 @@ reads it, why it exists).
 | `code_label` | (`code_set`, `version`, `code`, `language`, `label`) | `kind` (`preferred`, `synonym`), `source` (steward, profiling, agent draft) |
 | `level` | (`code_set`, `version`, `depth`) | `name`, `definition` (stewards name the levels) |
 | `code_path` | (`code_set`, `version`, `code`) | `path` (text, delimiter-escaped codes, root first), `label_path` ("Finance > Depository > State banks"), `level`, `depth`. **Written once at publish**; never edited |
+| `published_code` | (`code_set`, `version`, `code`) | One row per code of every published version, with the columns of the `code_context` view that never change (the code's label, definition, synonyms, path, crosswalk, the version's `sha256`, `valid_from` and approval). **Written once at publish**, so a draft never appears; a retired version keeps its rows. It is the published-only table the Snowflake mirror carries, since a mirror carries tables and not views |
 | `crosswalk_row` | (`from_set`, `from_version`, `from_code`, `to_set`, `to_version`, `to_code`) | `match_type` (`exact`, `close`, `broad`, `narrow`; SKOS mapping), `evidence`. `to_version` is `outside` for a code set RDM does not hold (an outside standard) |
 | `code_set_usage` | (`code_set`, `version`, `store`, `object`, `field`) | `store` (`mdm`, `silver`, `source`, `other`), `match` (`exact`, `upper_trimmed`), `note`: where the codes' values live and how to compare them |
 | `code_set_hint` | (`code_set`, `version`, `kind`, `ordinal`) | `kind` (`meaning`, `use_when`, `avoid_when`, `example_question`), `text`: hints for an agent in plain words |
@@ -86,7 +87,7 @@ Integrity:
 | draft | an agent (profiling, data-quality, refining-rules) or a steward | creates a `draft` version: codes, labels, levels, crosswalks, invalid-row fixes, with `evidence` and `created_by` |
 | review | the operator or a steward | reads the draft through `edgar-warehouse context` and the version diff (§5) |
 | approve | the operator only | records exact words and time (`approved_by`, `approved_words`, `approved_at`). Agents never approve |
-| publish | a command, after approval | computes `code_path` and `sha256`, sets `published`, closes the previous version's `valid_to`, writes the silver copy (§6) |
+| publish | a command, after approval | computes `code_path` and `sha256`, writes `published_code`, sets `published`, closes the previous version's `valid_to`, writes the silver copy (§6) |
 | retire | the operator | sets `retired` and closes `valid_to`; nothing deletes a published version |
 | verify | anyone | `rdm verify` recomputes a version's sha256 from its rows and compares it with the stored one |
 

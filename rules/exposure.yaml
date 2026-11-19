@@ -5,8 +5,8 @@
 #
 # Operator, 2026-11-17, asked which tables AutoOntology and OpenMetadata may see: "Silver, MDM and RDM";
 # then, told RDM's tables hold draft versions beside published ones: "Published-only RDM tables
-# (Recommended)". RDM joins this list once those tables exist (connectivity ticket 06).
-version: exposure-2026-11-17.silver-and-mdm-golden-records
+# (Recommended)". RDM's published-only table is rdm.published_code (written once when a version is published).
+version: exposure-2026-11-18.silver-mdm-and-published-rdm-codes
 approval:
   date: "2026-11-17"
   words:
@@ -33,6 +33,11 @@ layers:
     source_schema: public
     target_schema: MDM
     authority: mdm
+  rdm:
+    connection: RDM_DATABASE_URL
+    source_schema: rdm
+    target_schema: RDM
+    authority: rdm
 
 # Silver: every registered table. Its spec is its requirement (approved when its source was onboarded);
 # the writer puts the spec's definitions on the table and its columns, which the manifest reads back.
@@ -164,3 +169,11 @@ tables:
     namespace: The identifier's type, as the kind's Identifier Contract names it (cik, lei, cusip).
     value: The identifier as the golden record holds it.
     entity_id: The MDM id of the golden record that holds it.
+# RDM: the codes of every published version, one row per code. The other RDM tables hold drafts beside
+# published versions, so none of them is a final output. The table's comments are its definitions. What is
+# current stays on rdm.code_set_version (published, with no valid_to); a retired version keeps its rows here.
+- layer: rdm
+  table: published_code
+  scope: history
+  grain: one row per code of every published version (current, superseded or retired)
+  requirement: docs/specs/rdm/spec.md

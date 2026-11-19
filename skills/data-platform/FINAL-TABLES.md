@@ -12,6 +12,8 @@ silver tables may be selected. Layer membership, a data-class tag or a store
 certification alone is insufficient. Identify the actual physical relation
 and its consumer contract; a logical catalog asset is not proof that relation
 exists. A table whose name includes master is not automatically eligible.
+RDM's tables hold draft versions beside published ones, so none of them is final: its final output is `rdm.published_code`, written once when
+a version is published (the published-only form of the `rdm.code_context` view, which a mirror cannot carry).
 
 For every selected table, configuration must state its store connection key,
 database/schema/table identity, final-output role and exposure eligibility.

@@ -61,9 +61,11 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    edgar-warehouse rules init --agent-role rules_agent
    ```
    `init` is the whole step on a fresh store; `migrate` follows an `init` only when a later schema file arrives. Done when
-   each prints its schema file's checksum.
+   each prints its schema file's checksum. RDM's `init` also creates `rdm.published_code`, the codes of every published version as a table
+   for the mirror; `rdm.published_code` is filled each time a version is published (step 4 publishes them), never edited.
 4. **RDM codes.** With `worker.env` sourced, `python <data-operations skill>/scripts/rdm_restore_published.py --by <name>
-   --words "<their exact words>"` (the operator's words go in the approval record). Done when every pin reads `pin ok`.
+   --words "<their exact words>"` (the operator's words go in the approval record). Done when every pin reads `pin ok` and
+   `SELECT count(*) FROM rdm.published_code` equals the codes of the published versions.
 5. **Registration login.** With the owner connection, `env MDM_DATABASE_URL="$MDM_MIGRATION_DATABASE_URL" edgar-warehouse
    mdm grant-registration --role mdm_governance`. It lets the restricted login read the stored records and write the
    policy and dataset tables, and nothing else.
@@ -236,10 +238,11 @@ critical path (`load_chain.py --status` shows each step's progress and `chain-<R
 
 ## Mirror the final tables
 
-After the load (and `--finish`), the Snowflake mirror of the final tables is created from the repository's exposure list
-(`rules/exposure.yaml`), for those tables only, and only once the guide's source-consolidation gate is passed: the stores here are
-separate databases and one mirror reads one. The procedure, its read-only checks and its approvals are
+After the load (and `--finish`), the Snowflake mirrors of the final tables are created from the repository's exposure list
+(`rules/exposure.yaml`), for those tables only. One mirror reads one source database, so there is one for each store that has listed
+tables: MDM, Silver and RDM (`rdm.published_code`), each with its own target database. The procedure, its read-only checks and its approvals
+(one create plan per mirror) are
 [the data-platform skill's hosted mirroring guide](../../../skills/data-platform/HOSTED-MIRRORING.md#after-the-first-load-mirror-only-the-exposed-subset).
-Done when the mirror lists exactly the configured tables, each replicating, with none missing or unexpected.
+Done when each mirror lists exactly its configured tables, each replicating, with none missing or unexpected.
 
 A store **reset** (step 2) breaks a mirror: the guide says what to plan first.
