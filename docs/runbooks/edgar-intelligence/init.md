@@ -63,8 +63,9 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    `init` is the whole step on a fresh store; `migrate` follows an `init` only when a later schema file arrives. Done when
    each prints its schema file's checksum. RDM's `init` also creates `rdm.published_code`, the codes of every published version as a table
    for the mirror; `rdm.published_code` is filled each time a version is published (step 4 publishes them), never edited.
-4. **RDM codes.** With `worker.env` sourced, `python <data-operations skill>/scripts/rdm_restore_published.py --by <name>
-   --words "<their exact words>"` (the operator's words go in the approval record). Done when every pin reads `pin ok` and
+4. **RDM codes.** With `worker.env` sourced, `python <data-operations skill>/scripts/rdm_restore_published.py`
+   (no approval is asked: the operator's standing ruling, 2026-11-19, is in the approval record, under an approver other than the drafter, since the store refuses a self-approval).
+   A half-restored RDM cannot be edited (published and approved versions are guarded): drop the `rdm` schema as its owner and run `rdm init` again. Done when every pin reads `pin ok` and
    `SELECT count(*) FROM rdm.published_code` equals the codes of the published versions.
 5. **Registration login.** With the owner connection, `env MDM_DATABASE_URL="$MDM_MIGRATION_DATABASE_URL" edgar-warehouse
    mdm grant-registration --role mdm_governance`. It lets the restricted login read the stored records and write the
@@ -245,4 +246,12 @@ tables: MDM, Silver and RDM (`rdm.published_code`), each with its own target dat
 [the data-platform skill's hosted mirroring guide](../../../skills/data-platform/HOSTED-MIRRORING.md#after-the-first-load-mirror-only-the-exposed-subset).
 Done when each mirror lists exactly its configured tables, each replicating, with none missing or unexpected.
 
-A store **reset** (step 2) breaks a mirror: the guide says what to plan first.
+The mirrors are rebuilt as a step of every load, after `--finish`, in this order: (1) `exposure_manifest.py generate`, then `check` (read-only: 19 tables
+today, 16 silver, 2 mdm, 1 rdm); (2) the guide's read-only pre-flight on each store (instance `STANDARD_*` or `HIGHMEM_*`, target database absent, a key and a
+supported type on every column); (3) one create plan for the three mirrors, approved by the operator before any `CREATE_MIRROR` (billable). The plan the operator
+approved on 2026-11-19: targets `DB_EDGARTOOLS_MIRROR_MDM`, `DB_EDGARTOOLS_MIRROR_SILVER` and `DB_EDGARTOOLS_MIRROR_RDM`, Iceberg on Snowflake-managed storage,
+serverless apply, a refresh every 10 minutes, created after the load ends so the first snapshot copies the loaded rows once (created while the tables were empty
+would also work and replicate as the load runs). A target name cannot be reused, so a mirror that is dropped and made again takes a new name (add a suffix).
+The reset of 2026-11-19 found no mirror in the account, so none had to be dropped first.
+
+A store **reset** (step 2) breaks a mirror: the guide says what to plan first. Before a reset, list the mirrors (`SHOW DATABASES LIKE '%MIRROR%'`, read-only).

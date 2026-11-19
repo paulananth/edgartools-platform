@@ -117,9 +117,9 @@ the whole list.
    stays blocked. Record the refusal and go on to the next domain. Loading
    entities waits until that version is the active proven one.
 3. **RDM, per domain.** A new store's RDM is empty: restore every published code set from git with
-   `scripts/rdm_restore_published.py --by <name> --words "<their exact words>"` in this skill
+   `scripts/rdm_restore_published.py` in this skill
    (with the runtime connection from [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment);
-   it drafts, approves in those words, publishes and checks each version's sha256
+   it drafts, approves under the operator's standing ruling (no approval is asked), publishes and checks each version's sha256
    against its `pin.json`, and exits 1 naming any that differs). Then `edgar-warehouse rdm list`, then
    `edgar-warehouse rdm describe <code set>` for every code set that domain
    pins. A published version is operational. A missing or draft code set is a
