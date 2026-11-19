@@ -37,11 +37,20 @@ disposable store is the next check to add.
   scheduler (`ps`) before starting one, and stop the scheduler before its steps.
 - **Read the database with the database-monitoring skill**: `summary` and `locks` every check,
   `logs` after any step that stops with a database error.
-- **A step of one bundle is never moved.** The scheduler resizes a running step by stopping it and starting it again, which
-  abandons the bundles in flight; a step whose log names one bundle (a single document), or none yet, would lose its whole attempt
-  each time. Only a log naming more than one bundle is moved. A step that shows `attempt 1 start` again and again with
-  `scheduler moves` lines between is losing its work: stop the scheduler (not the steps), let the step finish, then run what
-  follows with `--only` and `--finish`. More workers cannot speed a single bundle, and the machine's cores and memory bound them.
+- **Resizing a step is a decision with a price, never a reflex.** The scheduler resizes a running step by stopping it and starting it
+  again, which abandons the bundle in flight, so each move is checked against the seven wastes:
+
+  | Waste | The check before a move |
+  |---|---|
+  | Over-processing (work thrown away) | Only a step whose log names more than one bundle is moved, and only within a minute after one of its bundles completed, so next to nothing is abandoned. A step of one bundle, or one that has named none yet, keeps its workers |
+  | Over-production (workers nothing uses) | A raise needs the last raise measured and its bundles a minute up by a fifth; otherwise the step waits on the same bottleneck and is held. More workers never speed a single bundle |
+  | Motion (restarts for no gain) | Shedding needs the pressure to last four cycles; a spike moves nothing. One move a cycle, a step at most every ten minutes |
+  | Waiting | A step with under thirty minutes left is left alone: its restart costs more than it saves |
+  | Defects | The capacity's range, from the memory a worker is sized for, bounds every count; the machine's cores and memory are the limit, not the request |
+  | Inventory, Transport | Start each step at its declared workers within the range so it needs no resizing to find its size |
+
+  A step that shows `attempt 1 start` again and again with `scheduler moves` lines between is losing its work: stop the scheduler (not
+  the steps), let the step finish, then run what follows with `--only` and `--finish`.
 - **A scheduler that "stopped" has usually finished everything it could**: it names the failed steps and what waits on them.
   Fix the cause (engine, memory, a login), then start it again; done steps cost one call each.
 

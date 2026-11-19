@@ -459,16 +459,85 @@ def test_a_window_that_has_run_out_or_never_was_is_behind():
     assert not chain.behind(elapsed=0, window=3600, done=0, total=100)
 
 
-def test_a_running_step_is_restarted_with_more_workers_when_the_machine_has_room(monkeypatch, tmp_path):
-    monkeypatch.setattr(chain, "step_log_text", lambda name: LOG)  # a step of 149 bundles: a move loses only those in flight
+def _paced(monkeypatch, started, now, per_worker=None, flat=None, total=149):
+    """Each step's log as its bundles complete: a minute's rate from its latest worker count (`per_worker` for each worker) or a flat
+    rate, counted from its latest start (an attempt's own bundles, as a real log shows them)."""
+    mark = {"len": 0, "at": now["t"]}
+
+    def text(name):
+        if len(started) != mark["len"]:
+            mark.update(len=len(started), at=now["t"])
+        minutes = (now["t"] - mark["at"]).total_seconds() / 60
+        rate = flat if flat is not None else per_worker * started[-1][1]
+        done = int(minutes * rate)
+        lines = [f"x silver: {total} documents in {total} bundles"]
+        for i in range(1, done + 1):
+            lines += [f"Bundle {i}/{total}: 512 of 512 documents to load", f"  run b{i} complete in 1.0 min"]
+        lines.append(f"Bundle {done + 1}/{total}: 512 of 512 documents to load")
+        return "\n".join(lines) + "\n"
+    monkeypatch.setattr(chain, "step_log_text", text)
+
+
+def test_a_running_step_is_restarted_with_more_workers_when_the_machine_has_room_and_each_raise_pays(monkeypatch, tmp_path):
     steps = [_step("a1", "A", minutes=600)]
     steps[0]["workers"] = 2
-    state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=10)
-    levels = iter(["ok", "low", "low", "low", "ok", "ok", "ok", "ok", "ok", "ok"])
-    monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: next(levels, "ok"))
-    _run_auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=90))
+    state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=5, cycles=40)
+    _paced(monkeypatch, started, now, per_worker=0.1)  # the rate doubles with the workers: every raise pays
+    monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: "low")
+    _run_auto(steps, state, slots=2)
     assert [workers for _, workers in started][:3] == [2, 4, 8]  # doubled while there was room, stopping at 8
     assert len(killed) >= 2
+
+
+def test_a_step_is_not_raised_again_when_the_last_raise_did_not_raise_its_rate(monkeypatch, tmp_path):
+    """The restart is waste if the extra workers wait on the same bottleneck."""
+    steps = [_step("a1", "A", minutes=600)]
+    steps[0]["workers"] = 2
+    state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=5, cycles=60)
+    _paced(monkeypatch, started, now, flat=0.2)  # the same bundles a minute at any count
+    monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: "low")
+    _run_auto(steps, state, slots=2)
+    assert [workers for _, workers in started] == [2, 4]  # one try; it gained nothing, so it is held at 4
+
+
+def test_a_short_spike_of_pressure_sheds_nothing_and_lasting_pressure_does(monkeypatch, tmp_path):
+    steps = [_step("a1", "A", minutes=600)]
+    steps[0]["workers"] = 8
+    state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=2, cycles=12)
+    _paced(monkeypatch, started, now, per_worker=0.05)
+    spike = iter(["ok", "high", "high", "ok"] + ["ok"] * 20)
+    monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: next(spike, "ok"))
+    _run_auto(steps, state, slots=2)
+    assert [workers for _, workers in started] == [8]  # two pressed cycles are a spike, not a reason to restart
+    steps2 = [_step("a1", "A", minutes=600)]
+    steps2[0]["workers"] = 8
+    state2, started2, killed2, now2 = _timed(monkeypatch, tmp_path, steps2, ticks=2, cycles=12)
+    _paced(monkeypatch, started2, now2, per_worker=0.05)
+    pressed = iter(["ok"] + ["high"] * 30)  # it starts at `ok` (nothing starts while pressed), then the pressure lasts
+    monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: next(pressed, "high"))
+    _run_auto(steps2, state2, slots=2)
+    assert started2[1] == ("a1", 4)  # pressure that lasted sheds
+
+
+@pytest.mark.parametrize("level, kwargs, reason", [
+    ("low", {"left": 10.0, "abandoned": 0.0}, "too little left"),
+    ("low", {"left": None, "abandoned": 0.0}, "too little left"),
+    ("low", {"left": 300.0, "abandoned": 3.0}, "bundle is in flight"),
+    ("high", {"left": 300.0, "abandoned": 0.0, "pressed": 1}, "has not lasted"),
+])
+def test_a_move_that_would_not_repay_its_restart_names_why(level, kwargs, reason):
+    base = {"left": 300.0, "abandoned": 0.0, "pressed": 0, "rates": {}, "workers": 4}
+    assert reason in chain.worth_moving(level, **{**base, **kwargs})
+    assert chain.worth_moving("low", **base) is None  # plenty left, a bundle just completed, nothing measured against it
+    assert chain.worth_moving("high", **{**base, "pressed": 4}) is None
+
+
+def test_a_raise_pays_only_when_the_last_one_raised_the_measured_rate_by_a_fifth():
+    assert chain.raise_pays({}, 4) and chain.raise_pays({4: 0.2}, 4)  # never raised: tried
+    assert not chain.raise_pays({2: 0.2}, 4)  # raised to 4 but not measured there yet: wait
+    assert chain.raise_pays({2: 0.2, 4: 0.4}, 4) and chain.raise_pays({2: 0.2, 4: 0.25}, 4)
+    assert not chain.raise_pays({2: 0.2, 4: 0.21}, 4)
+
 
 
 def test_the_database_is_pressed_by_lock_waits_or_by_connections_and_pressure_takes_the_worse():
@@ -1194,15 +1263,14 @@ def test_the_memory_edges_of_pressure():
 def test_a_running_step_is_moved_at_most_once_in_ten_minutes_however_the_pressure_swings(monkeypatch, tmp_path):
     """Each move stops the step's load and starts it again, abandoning the bundles in flight and paying a start: the second
     hosted load moved IPO between 1 and 2 workers five times in twenty minutes as the load average crossed a line."""
-    monkeypatch.setattr(chain, "step_log_text", lambda name: LOG)  # many bundles: a move loses only those in flight
     steps = [_step("a1", "A", minutes=600)]
     steps[0]["workers"] = 1
     state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=1, cycles=25)
+    _paced(monkeypatch, started, now, per_worker=0.5)
     swings = iter(["low", "high"] * 40)
     monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: next(swings))
     _run_auto(steps, state, slots=2)
-    assert len(started) - 1 <= 4  # a raise, its shedding the next minute, and the same again ten minutes later: not a move a minute
-    assert len(started) - 1 >= 1  # and a step is still moved when the machine says so
+    assert len(started) - 1 <= 2  # a swing that does not last sheds nothing; a raise waits for a bundle boundary and ten minutes
 
 
 def test_a_pressed_machine_sheds_the_step_with_the_shortest_chain_even_when_it_moved_lately(monkeypatch, tmp_path):
