@@ -132,6 +132,18 @@ rows the key would drop or multiply (zero, or the operator decides).
   custodian) is a second join to the same dimension view, not a second copy of
   it. Expose each kind as a separate Gold view over approved mirror inputs;
   the view is a consumer projection and does not master the entity again.
+- **A key no master has joins an unknown member.** A fact whose silver link found no master keeps its source key, and in
+  Gold its dimension key is the dimension's one "unknown" member, never null and never dropped. The build reports
+  the count of rows on it; a rise is a finding about mastering, not a Gold fix.
+- **A measure with a unit column adds only within one unit.** Where the row's unit changes the meaning of the amount
+  (shares against a principal amount), or a flag marks a derivative of the subject (an option on a security), a sum
+  across them is wrong: the question groups by the unit, or the fact carries one measure column per unit.
+- **A fact takes a date from a sibling silver table only through that table's whole key.** If the sibling has
+  several rows per the join key (a record listed by two parties), reduce it to one row per the fact's key first, and
+  count the rows before and after.
+- **A dimension view unpacks the master's declared fields.** The master keeps its fields in one structured body for
+  every kind; the view filters one kind, drops rows that are aliases of another record, and takes its typed columns
+  from the kind's declared fields, so a new field is a declaration.
 - **The fact holds its own measures and the master-id links.** Master
   attributes stay on the dimension. The row's own unit stays beside the
   amount it measures (one system of record, in the skill).
