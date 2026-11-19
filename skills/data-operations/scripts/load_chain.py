@@ -1113,6 +1113,15 @@ def main() -> int:
         print("\n".join(status(steps, counted, reader_url)))
         return 0
     env = {**os.environ, **load_env(STORES / "worker.env")}
+    if not (args.plan or args.catalog_status):
+        # Every other path starts a load, resumes one or writes the finish: the infrastructure must have passed its checks.
+        import readiness
+
+        refused = readiness.gate(STORES, database_generation(env["MDM_DATABASE_URL"]) if env.get("MDM_DATABASE_URL") else "",
+                                 readiness.current_sha())
+        if refused:
+            print(f"Not started: {refused}", file=sys.stderr)
+            return 2
     LOGS.mkdir(parents=True, exist_ok=True)
     if sys.platform == "darwin":
         subprocess.Popen(["caffeinate", "-dimsu", "-w", str(os.getpid())])
