@@ -194,6 +194,10 @@ def swap_fraction(text: str) -> float | None:
 
 
 MOVE_EVERY = timedelta(minutes=10)  # a step is raised (stopped and started again) at most this often: each move abandons its bundles in flight
+BOUNDARY_MINUTES = 1.0  # a step is moved this soon after one of its bundles completes, so next to nothing is abandoned
+MIN_LEFT_MINUTES = 30  # a step with less than this to go is left alone: a move costs a restart and the bundle in flight
+SHED_AFTER = 4  # consecutive pressed cycles before a step is shed: a spike that passes costs a restart for nothing
+RAISE_GAIN = 1.2  # a step is raised again only if the last raise raised its measured rate by this factor
 WORKER_GB = 0.5  # the memory a worker is sized for
 WORKERS_PER_VCPU = 4  # a worker waits on the database much of the time, so a vCPU carries several
 
@@ -360,6 +364,9 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
     failed: set[str] = set()
     by_name = {step["name"]: step for step in steps}
     started, cycle, began, moved, missed = clock(), 0, {}, {}, False
+    finished: dict[str, tuple[int, datetime]] = {}  # a step's bundles done, and when that count last changed
+    rates: dict[str, dict[int, float]] = {}  # a step's measured bundles a minute at each worker count
+    pressed = 0
     total = sum(step["minutes"] for step in steps)
 
     def spawn(name: str, count: int) -> None:
@@ -413,6 +420,23 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
             spawn(name, count)
         # Raising a step waits for it to settle; a pressed machine sheds the step with the shortest chain at once, whenever it last moved
         settled = set(workers) if level == "high" else {name for name in workers if clock() - moved.get(name, began[name]) >= MOVE_EVERY}
+        pressed = pressed + 1 if level == "high" else 0
+        left_of: dict[str, float | None] = {}
+        for name in workers:  # what a move would cost and gain, read from each step's own log
+            text = step_log_text(name)
+            progress = bundle_progress(text)
+            if progress is None:
+                continue
+            if finished.get(name, (None, None))[0] != progress[0]:
+                finished[name] = (progress[0], clock())
+            attempt = (clock() - moved.get(name, began[name])).total_seconds() / 60
+            ran = bundles_run(text)
+            if ran >= 2 and attempt >= 3:
+                rates.setdefault(name, {})[workers[name]] = ran / attempt
+            left_of[name] = minutes_left(progress[0], progress[1], attempt, ran)
+        settled = {name for name in settled if movable(step_log_text(name)) and worth_moving(
+            level, left=left_of.get(name), abandoned=(clock() - finished.get(name, (0, clock()))[1]).total_seconds() / 60, pressed=pressed,
+            rates=rates.get(name, {}), workers=workers[name]) is None}  # a move abandons the bundle in flight
         if not starts and (change := rescale({n: workers[n] for n in settled}, {n: length[n] for n in settled}, level,
                                              {n: range_of(n) for n in settled})):
             name, count = change
@@ -420,6 +444,7 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
             stop(children[name])
             spawn(name, count)
             moved[name] = clock()
+            finished.pop(name, None)
         if not children and not busy and not ready(steps, done, set(), failed, len(steps)):
             left = sorted(set(by_name) - done)
             blockers = f"{', '.join(sorted(failed))} failed, so " if failed else "no step can follow what it waits for, so "
@@ -434,6 +459,46 @@ def bundle_progress(text: str) -> tuple[int, int] | None:
     found = re.findall(r"^Bundle \d+/(\d+):", text, re.M)
     finished = len(re.findall(r"^\s+run \S+ complete in", text, re.M)) + len(re.findall(r"^Bundle \d+/\d+: all \d+ documents already loaded", text, re.M))
     return (finished, int(found[-1])) if found else None
+
+
+def raise_pays(rates: dict[int, float], workers: int) -> bool:
+    """Whether raising a step again is worth a restart: the last raise must have raised its measured rate (bundles a minute) by
+    RAISE_GAIN. A step never raised before is tried; one whose last raise is not measured yet, or gained nothing, is held."""
+    lower = [w for w in rates if w < workers]
+    if not lower:
+        return True  # the first raise is tried
+    if workers not in rates:
+        return False  # the last raise is not measured yet: wait for its rate before judging another
+    return rates[workers] >= RAISE_GAIN * rates[max(lower)]
+
+
+def worth_moving(level: str, *, left: float | None, abandoned: float, pressed: int, rates: dict[int, float], workers: int) -> str | None:
+    """None when moving a step (a restart that abandons the bundle in flight) pays; otherwise why not, in a sentence.
+    Shedding needs pressure that has lasted. Raising needs enough left to repay the restart, a moment just after a bundle completed
+    (so nothing is abandoned), and a measured gain from the last raise."""
+    if level == "high":
+        return None if pressed >= SHED_AFTER else "the pressure has not lasted"
+    if level == "low":
+        if left is None or left < MIN_LEFT_MINUTES:
+            return "too little left to repay a restart"
+        if abandoned > BOUNDARY_MINUTES:
+            return "a bundle is in flight"
+        if not raise_pays(rates, workers):
+            return "the last raise did not raise the rate"
+    return None
+
+
+def step_log_text(name: str) -> str:
+    log = LOGS / f"chain-{RUN}-{name}.log"
+    return log.read_text() if log.exists() else ""
+
+
+def movable(text: str) -> bool:
+    """A step may be moved (stopped and started again with another worker count) only when its log names more than one bundle: a
+    move abandons the bundles in flight, so a step of one bundle, or one that has named none yet, would lose everything it has done
+    and start over. Two such steps were moved ten times in two hours and never finished."""
+    progress = bundle_progress(text)
+    return progress is not None and progress[1] > 1
 
 
 def bundles_run(text: str) -> int:
