@@ -8,8 +8,8 @@ from pathlib import Path
 from .base import control
 
 NAME = "workstation"
-FILES = [Path(".snowflake/connections.toml"), Path(".aws/credentials"), Path(".config/edgartools/edgar.env"), Path(".config/edgartools/openfigi.env")]
-FOLDERS = [Path(".snowflake/keys"), Path(".config/edgartools/hosted")]
+FILES = [Path(".snowflake/connections.toml"), Path(".aws/credentials")]
+FOLDERS = [Path(".snowflake/keys"), Path(".config/edgartools"), Path(".config/edgartools/hosted")]  # every private file in them
 
 
 def configured(env) -> bool:
@@ -40,6 +40,6 @@ def principals(ev: dict) -> list[str]:
 
 
 def controls(ev: dict) -> list[dict]:
-    return [control(NAME, "SEC", ev["plaintext_passwords"] == 0 and not ev["loose_files"],
+    return [control(NAME, "SCR", ev["plaintext_passwords"] == 0 and not ev["loose_files"],
                     {"credential_files_read": ev["files_held"], "plaintext_passwords": ev["plaintext_passwords"], "files_readable_by_others": len(ev["loose_files"])},
                     "Key pair, role or keychain instead of a password in a file; chmod 600")]

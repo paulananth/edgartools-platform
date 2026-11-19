@@ -63,7 +63,7 @@ platform's usage views have not shown yet (they lag). The workstation adapter al
 | POL | Credential policies exist | Standards enforced, not hoped for |
 | LOG | Access and changes logged; transport and storage encrypted | Who did what, when |
 | CHG | Every access principal has a ticket and is defined in code; protected branch with a review | Change enablement: approver, reason, back-out |
-| SEC | No plain-text secret; secret files private; secret scanning on | Credential hygiene |
+| SCR | No plain-text secret; secret files private; secret scanning on | Credential hygiene |
 | ROT | Credentials rotate on a dated, owned schedule | AWS keys are tested; elsewhere read the ticket |
 | REV | Access is reviewed on a schedule with a signed record | A person reads it: NOT_TESTED until a record exists |
 
@@ -100,7 +100,7 @@ operator's signed acceptance (owner, reason, expiry) or by moving the work to a 
 ## Rating and report
 
 A failing control carries the objective's severity: **high** where one credential can change or read everything or leave no
-trail (ADM, OPS, AUT, LPR, LOG, SEC), **medium** where a guard is weak (IND, NET, CST, TMO, POL, CHG, ROT, REV). Report, in
+trail (ADM, OPS, AUT, LPR, LOG, SCR), **medium** where a guard is weak (IND, NET, CST, TMO, POL, CHG, ROT, REV). Report, in
 order: scope and evidence date; counts (pass, fail, not tested) and the matrix; each finding as control, evidence numbers,
 risk in plain words and the fix; what was not tested and why. Evidence is counts, never values.
 

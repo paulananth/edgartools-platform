@@ -98,10 +98,10 @@ def test_every_control_names_a_known_objective_and_carries_severity_and_framewor
     ("aws", "LOG", lambda e: e.update(trail_logging=0)),
     ("aws", "ROT", lambda e: e.update(keys_old=2)),
     ("github", "CHG", lambda e: e.update(protected=False)),
-    ("github", "SEC", lambda e: e.update(secret_scanning=False)),
+    ("github", "SCR", lambda e: e.update(secret_scanning=False)),
     ("github", "IND", lambda e: e.update(admin_permission=True)),
-    ("workstation", "SEC", lambda e: e.update(plaintext_passwords=1)),
-    ("workstation", "SEC", lambda e: e.update(loose_files=["x"])),
+    ("workstation", "SCR", lambda e: e.update(plaintext_passwords=1)),
+    ("workstation", "SCR", lambda e: e.update(loose_files=["x"])),
 ])
 def test_each_weakness_fails_its_own_objective(platform, objective, change):
     assert graded(platform, change)[objective] == "FAIL"

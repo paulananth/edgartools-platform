@@ -45,6 +45,6 @@ def controls(ev: dict) -> list[dict]:
         c("CHG", ev["protected"] and ev["reviews_required"] >= 1, {"default_branch_protected": ev["protected"], "required_reviews": ev["reviews_required"], "required_status_checks": ev["status_checks"]},
           "Protect the default branch: a pull request, a review and the CI checks before a merge (or record the accepted exception)",
           title="The default branch needs a pull request and a review before a change merges"),
-        c("SEC", ev["secret_scanning"], {"secret_scanning": ev["secret_scanning"], "visibility": ev["visibility"]}, "Turn on secret scanning and push protection", title="Secret scanning is on for the repository"),
+        c("SCR", ev["secret_scanning"], {"secret_scanning": ev["secret_scanning"], "visibility": ev["visibility"]}, "Turn on secret scanning and push protection", title="Secret scanning is on for the repository"),
         c("IND", not ev["admin_permission"], {"audit_identity_is_repo_admin": ev["admin_permission"]}, "Audit with a read-only token", title="The audit identity cannot administer the repository"),
     ]
