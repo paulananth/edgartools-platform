@@ -46,6 +46,7 @@ object per reading.
 | Can the memory settings overrun the machine? | `memory` | `work_mem` is per sort or hash step, per session: `work_mem_if_each_active_sorts_once_mb` is a floor, since one query can hold several steps; compare it with the instance size, `shared_buffers` included |
 | Which store spills or rolls back? | `databases` | `temp_mb` and `temp_files` are sorts and hashes that did not fit `work_mem`; `deadlocks` and a high `rollbacks` against `commits` name the store to look at |
 | What did the server log? | `logs --minutes 60` | See Postgres logs |
+| Is it costing more than it should? | `budget` | See Cost watch |
 | All of it | `all` | Every reading above (the log only when its connection is set) |
 
 ## Postgres logs
@@ -76,6 +77,24 @@ python scripts/db_monitor.py logs --minutes 120
   report the count and the times to the operator, never the address.
 - The log can hold what a failed statement quoted; the script drops those lines, so never read the table by hand to
   "see more".
+
+## Cost watch (no Snowflake resource monitor)
+
+A resource monitor needs an account role this skill never holds, and it does not govern a hosted Postgres instance. `budget`
+is the cheap stand-in, using only the diagnostic login: one reading of pressure and size, one line appended to a local
+history file (`--history`, mode 0600), and each limit given that the reading has reached.
+
+```bash
+python scripts/db_monitor.py budget --rate <cost per hour of the instance> --limit-budget <spend to stop at> \
+  --limit-connections-pct 80 --limit-longest-transaction-s 3600 --limit-size-mb <cap> --limit-temp-mb <cap>
+```
+
+- Run it at the run's 30-minute check (or from a `/loop`); it exits 1 and prints `OVER: ...` when a limit is reached, and
+  prints nothing else of note when all is well, so a quiet check sends no message.
+- Spend is estimated: hours since the history's first line times `--rate`. Delete the history to start a new clock.
+  A reading never stops or changes anything; the operator decides (a stopped instance is their call).
+- A limit left out is not checked. Sensible first limits: connections 80%, a transaction over an hour, the stores' size at
+  the disk you are willing to pay for, and spilled MB growing run over run.
 
 ## Reading a stuck or slow step
 
