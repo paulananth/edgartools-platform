@@ -129,7 +129,7 @@ mirror can take it, so the order is the load, then:
    those tables: explicit `postgres_tables`, `postgres_schemas => NULL`, `target_table_type => 'ICEBERG'`
    ([the single-database qualification](SINGLE-DATABASE-ICEBERG.md) pins the rest).
 
-**One mirror per source database** (operator: "1 do we not need rdm"; two mirrors, with RDM a third). One mirror reads one source
+**One mirror per source database.** One mirror reads one source
 database and creates one target database, and the stores are separate databases, so the listed tables get one mirror for each store that
 has any: the MDM store (`mdm` layer), the Silver store (`silver` layer) and the RDM store (`rdm` layer, `rdm.published_code`), each with
 its own target database. Never one mirror reading several stores, and nothing consolidated as a side effect of a load. Each create plan

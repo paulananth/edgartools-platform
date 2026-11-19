@@ -1,8 +1,8 @@
 """Real PG16: `rdm.published_code`, the published-only table the managed mirror carries (connectivity ticket 06).
 
 A draft or approved version never appears; a version appears once, when it is published, with the rows
-`rdm.code_context` gives; a retired version keeps its rows; no row is changed or removed afterwards; a store
-that held published versions before the table existed gets them from the same writer.
+`rdm.code_context` gives; a retired version keeps its rows; no row is changed or removed afterwards; a
+populated store gets its rows from the same writer.
 """
 
 from __future__ import annotations
@@ -89,7 +89,7 @@ def test_an_approved_version_writes_nothing(stores):
     assert versions(runtime) == {"one 1": 2, "one 2": 2}
 
 
-def test_a_store_published_before_the_table_gets_its_rows_from_the_same_writer(stores):
+def test_a_populated_store_gets_its_rows_from_the_same_writer(stores):
     owner, runtime = stores
     with owner.begin() as conn:
         conn.execute(text("ALTER TABLE rdm.published_code DISABLE TRIGGER published_code_guard"))

@@ -15,7 +15,7 @@ CREATE TABLE rdm.published_code (
     path text NOT NULL,
     label_path text NOT NULL,
     level text,
-    depth integer NOT NULL,
+    depth bigint NOT NULL,
     parent_code text,
     crosswalk jsonb NOT NULL,
     sha256 text NOT NULL,
@@ -51,7 +51,7 @@ CREATE FUNCTION rdm.write_published_codes(wanted_set text, wanted_version text) 
   SELECT count(*) FROM written;
 $$;
 
--- Versions published before this table existed.
+-- Every published or retired version already in the store.
 SELECT rdm.write_published_codes(code_set, version) FROM rdm.code_set_version WHERE status IN ('published', 'retired');
 
 CREATE FUNCTION rdm.guard_published() RETURNS trigger
