@@ -12,6 +12,15 @@ variable "auditor_public_key" {
   type        = string
   description = "Public key (no header lines) of the auditor's key pair"
 }
+variable "gold_writer_public_key" {
+  type        = string
+  description = "Public key (no header lines) of the Gold writer's key pair (dbt)"
+}
+variable "mirror_databases" {
+  type        = list(string)
+  default     = []
+  description = "The mirror target databases, once approved and created: the Gold writer reads them and nothing else outside its own schema"
+}
 variable "warehouse" {
   type    = string
   default = "COMPUTE_WH"

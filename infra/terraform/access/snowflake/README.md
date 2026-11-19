@@ -1,7 +1,8 @@
 # Snowflake access controls as code
 
 `accounts/prod` holds the read-only roles and key-pair service users the access audit relies on (`EDGARTOOLS_PROD_LOG_READER`,
-`EDGARTOOLS_PROD_AUDITOR`), the monthly credit monitor, the account statement timeout, and the password and authentication
+`EDGARTOOLS_PROD_AUDITOR`), the Gold writer for dbt (`EDGARTOOLS_GOLD_WRITER`: reads the approved mirror databases, creates views only in
+`DB_EDGARTOOLS_GOLD.GOLD`), the monthly credit monitor, the account statement timeout, and the password and authentication
 policies. It is applied by the access-admin service identity, never by a person's administrator account.
 
 ```bash

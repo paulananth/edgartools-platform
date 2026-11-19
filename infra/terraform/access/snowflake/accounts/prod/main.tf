@@ -194,3 +194,85 @@ resource "snowflake_user_authentication_policy_attachment" "auditor" {
   user_name                  = snowflake_service_user.auditor.name
   authentication_policy_name = snowflake_authentication_policy.service_keypair_only.fully_qualified_name
 }
+
+# --- The Gold writer (dbt): reads the mirror databases and writes only the GOLD schema of the Gold database ------------------
+resource "snowflake_account_role" "gold_writer" {
+  name    = "EDGARTOOLS_GOLD_WRITER"
+  comment = "dbt: reads the approved mirror databases and creates views only in DB_EDGARTOOLS_GOLD.GOLD"
+}
+
+resource "snowflake_grant_privileges_to_account_role" "gold_writer_warehouse" {
+  account_role_name = snowflake_account_role.gold_writer.name
+  privileges        = ["USAGE"]
+  on_account_object {
+    object_type = "WAREHOUSE"
+    object_name = var.warehouse
+  }
+}
+
+resource "snowflake_grant_privileges_to_account_role" "gold_writer_database" {
+  account_role_name = snowflake_account_role.gold_writer.name
+  privileges        = ["USAGE"]
+  on_account_object {
+    object_type = "DATABASE"
+    object_name = var.gold_database
+  }
+}
+
+resource "snowflake_grant_privileges_to_account_role" "gold_writer_schema" {
+  account_role_name = snowflake_account_role.gold_writer.name
+  privileges        = ["USAGE", "CREATE VIEW"]
+  on_schema {
+    schema_name = "\"${var.gold_database}\".\"GOLD\""
+  }
+}
+
+resource "snowflake_grant_privileges_to_account_role" "gold_writer_mirror_database" {
+  for_each          = toset(var.mirror_databases)
+  account_role_name = snowflake_account_role.gold_writer.name
+  privileges        = ["USAGE"]
+  on_account_object {
+    object_type = "DATABASE"
+    object_name = each.key
+  }
+}
+
+resource "snowflake_grant_privileges_to_account_role" "gold_writer_mirror_schemas" {
+  for_each          = toset(var.mirror_databases)
+  account_role_name = snowflake_account_role.gold_writer.name
+  privileges        = ["USAGE"]
+  on_schema {
+    all_schemas_in_database = each.key
+  }
+}
+
+resource "snowflake_grant_privileges_to_account_role" "gold_writer_mirror_tables" {
+  for_each          = toset(var.mirror_databases)
+  account_role_name = snowflake_account_role.gold_writer.name
+  privileges        = ["SELECT"]
+  on_schema_object {
+    all {
+      object_type_plural = "TABLES"
+      in_database        = each.key
+    }
+  }
+}
+
+resource "snowflake_service_user" "gold_writer" {
+  name                         = "EDGARTOOLS_GOLD_WRITER"
+  default_role                 = snowflake_account_role.gold_writer.name
+  default_warehouse            = var.warehouse
+  rsa_public_key               = var.gold_writer_public_key
+  statement_timeout_in_seconds = var.service_statement_timeout_seconds
+  comment                      = "dbt Gold views"
+}
+
+resource "snowflake_grant_account_role" "gold_writer" {
+  role_name = snowflake_account_role.gold_writer.name
+  user_name = snowflake_service_user.gold_writer.name
+}
+
+resource "snowflake_user_authentication_policy_attachment" "gold_writer" {
+  user_name                  = snowflake_service_user.gold_writer.name
+  authentication_policy_name = snowflake_authentication_policy.service_keypair_only.fully_qualified_name
+}
