@@ -126,6 +126,28 @@ mirror replication and access:
 6. One invented record per rule in a small test proves the unit, the role and the unknown-member behaviour.
 7. A dimension has one row per master id in scope (type 1) and none for an alias of another record.
 
+## Snowflake and dbt practice
+
+- **Constraints are declared, not enforced.** A standard Snowflake table does not enforce unique, primary-key or
+  foreign-key constraints. Declared with `RELY`, they let the optimizer drop a join it need not run: a left outer join
+  whose right key is unique or primary, or an inner join between a primary key and a foreign key, when the query reads
+  no other column of the dropped table. If the data breaks the constraint, results differ from the same query without
+  `RELY`. So **set `RELY` only on keys whose uniqueness and relationships tests (Proving, above) pass**, and keep the
+  unknown member so every foreign key resolves.
+- **Clustering is for very large, read-mostly tables.** Snowflake's guidance: consider a key only on a table of many
+  terabytes, with selective filters or sorts on a few of the same columns, little DML, and when the speed-up outweighs
+  the credits to keep it clustered. At most three or four columns, filter columns first (a date), neither booleans nor
+  nanosecond timestamps (cast a timestamp to a date), lowest cardinality first. A dimension, or a fact that has not
+  measured slow, is not clustered.
+- **dbt's dimensional build.** Process, grain, dimensions, fact; dimensions as tables or views, facts as tables and
+  incremental once they reach millions of rows; a unique and a not-null test on each key; an entity-relationship
+  diagram for consumers. The published guide hashes natural keys into surrogate keys so a fact computes its foreign keys
+  without joining the dimension; here a dimension's key is the master id, so the fact already holds it. The guide does
+  not cover snapshots or type 2 history, and treats a wide table as the fallback when a reporting tool cannot read
+  relationships.
+- **Late-arriving facts.** Kimball's rule: look up the dimension key that was in effect when the event happened, not the
+  current one. It matters only for a type 2 dimension; for type 1 the current master is the answer.
+
 ## Smells and their fix
 
 | Smell | Meaning | Fix |

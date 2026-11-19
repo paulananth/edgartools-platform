@@ -87,6 +87,34 @@ mirror of that store.
 | Activity schema | One stream of timestamp, entity and activity. | A published mart of one fact's events, after that fact exists, and only when the requirement asks for a stream. |
 | Wide table | One denormalized table per question. | A published mart of one star, after that star exists. The star stays the model of record. |
 
+### What the sources establish, and their limits
+
+Read from the techniques' own published material; a claim a source does not make is marked.
+
+- **Conformed bus against a normalized core (Kimball, Inmon).** The bus integrates dimensional marts through shared
+  conformed dimensions with no central normalized store; the Inmon design keeps a normalized enterprise store and
+  builds dependent marts from it. The bus is delivered faster and in increments but needs strict governance of
+  dimension definitions, or the marts fragment into silos; the normalized core is simpler to load and harder to query.
+  One published survey of practitioners found no clear winner, independent marts the worst, and the hub-and-spoke build
+  the slowest to deliver. On this platform the normalized core already exists (MDM, RDM, silver), so Gold takes the bus.
+- **Data Vault.** Hubs hold business keys, links hold relationships, satellites hold described history; hash keys let
+  them load in parallel. It is an integration layer, with a business vault or information mart (usually dimensional)
+  built on top for presentation. No official Snowflake source read prescribes a hub-to-mart pattern: that is
+  unconfirmed. A vault here would master and historize a second time.
+- **Anchor modeling.** Its published constructs are anchors, attributes, ties and knots, with temporal variants
+  ("what we knew when" and "what was in effect") and extension without touching existing tables. The page read does not
+  define the constructs or sixth normal form, so those definitions are unconfirmed here. Attribute history already
+  lives on master and code-set versions.
+- **Activity schema.** One time-ordered stream per entity type: an activity id, a UTC timestamp, the entity's global
+  identifier (or an anonymous one until resolved), the activity name, a semi-structured feature object with the same
+  keys for every row of one activity, an optional revenue amount and a link to the source record. Activities join to
+  each other on entity and time, never by foreign key (first, last, before, after or between a cohort row). Limits it
+  states: activities are immutable, so a changing status is a new activity; one identifier type per entity; only
+  top-level features are read; dimension data is joined at query time; performance tuning is left to the warehouse.
+  It suits one fact's events after that fact exists, not the model of record.
+- **Wide table (one big table).** A fallback consumption shape when a reporting tool cannot declare relationships:
+  the fact joined to every dimension. It is a mart of the star, never the model.
+
 **Completion:** name the conformed dimensional bus, or name another row and
 the requirement that asks for it. A wide table or an activity stream is a
 mart of a fact that is already on the bus.
