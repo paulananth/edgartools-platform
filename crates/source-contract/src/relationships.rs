@@ -5,7 +5,7 @@ use crate::record_values::{self as values, Document, Object};
 use indexmap::IndexMap;
 use crate::relationship_types::{self, TypeRules, UltimateParent};
 use serde::Deserialize;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 const FIRST_TIME: i64 = -62_135_596_800_000_000;
 const LAST_TIME: i64 = 253_402_300_799_999_999;
@@ -396,9 +396,9 @@ fn finish_at_succession(
             empty.push(key.clone());
         }
     }
-    for key in empty {
-        edges.shift_remove(&key);
-    }
+    // One pass, in order: `shift_remove` one key at a time moves every later entry each call.
+    let empty: HashSet<String> = empty.into_iter().collect();
+    edges.retain(|key, _| !empty.contains(key));
     Ok(())
 }
 
@@ -723,11 +723,35 @@ pub fn prepare_relationships(raw: &str) -> Result<String, String> {
             }
         }
     }
-    for key in empty {
-        edges.shift_remove(&key);
-    }
+    // One pass, in order: `shift_remove` one key at a time moves every later entry each call.
+    let empty: HashSet<String> = empty.into_iter().collect();
+    edges.retain(|key, _| !empty.contains(key));
     finish_at_succession(&mut edges, &command.rules, &mut reviews)?;
     finish_relationships(edges, &command, reviews)
+}
+
+/// The pairs of links, as positions in `group` in first-then-second order, that start at one source, end at two
+/// different targets and overlap in time.
+fn conflicting_pairs(group: &[LinkPeriod]) -> Vec<(usize, usize)> {
+    // A pair needs one source, so each link is compared only with the links of its own source, not with the whole group.
+    let mut by_source: HashMap<&str, Vec<usize>> = HashMap::new();
+    for (index, link) in group.iter().enumerate() {
+        by_source.entry(link.source.as_str()).or_default().push(index);
+    }
+    let mut found = Vec::new();
+    for same in by_source.values() {
+        for (at, &index) in same.iter().enumerate() {
+            let link = &group[index];
+            for &other_index in &same[at + 1..] {
+                let other = &group[other_index];
+                if link.target != other.target && link.start.max(other.start) < link.stop.min(other.stop) {
+                    found.push((index, other_index));
+                }
+            }
+        }
+    }
+    found.sort_unstable(); // the order the whole-group comparison gave
+    found
 }
 
 fn derive_current_parents(
@@ -936,30 +960,24 @@ fn finish_relationships(
         let rules = command.rules.get(kind).cloned().unwrap_or_default();
         if rules.is_one_parent() || rules.is_one_target() {
             let reason = if rules.is_one_parent() { "conflicting_accounting_parents" } else { "conflicting_targets" };
-            for (index, link) in group.iter().enumerate() {
-                for other in &group[index + 1..] {
-                    if link.source == other.source
-                        && link.target != other.target
-                        && link.start.max(other.start) < link.stop.min(other.stop)
-                    {
-                        invalid.extend([link.key.clone(), other.key.clone()]);
-                        let mut keys = vec![link.key.clone(), other.key.clone()];
-                        keys.sort();
-                        let ends = BTreeSet::from([
-                            link.source.clone(),
-                            link.target.clone(),
-                            other.target.clone(),
-                        ]);
-                        add_review(
-                            &mut reviews,
-                            reason,
-                            Object::from([
-                                ("edges".into(), values::write_value(&keys)?),
-                                ("entities".into(), values::write_value(&ends)?),
-                            ]),
-                        )?;
-                    }
-                }
+            for (index, other_index) in conflicting_pairs(group) {
+                let (link, other) = (&group[index], &group[other_index]);
+                invalid.extend([link.key.clone(), other.key.clone()]);
+                let mut keys = vec![link.key.clone(), other.key.clone()];
+                keys.sort();
+                let ends = BTreeSet::from([
+                    link.source.clone(),
+                    link.target.clone(),
+                    other.target.clone(),
+                ]);
+                add_review(
+                    &mut reviews,
+                    reason,
+                    Object::from([
+                        ("edges".into(), values::write_value(&keys)?),
+                        ("entities".into(), values::write_value(&ends)?),
+                    ]),
+                )?;
             }
         }
         if !rules.is_hierarchy() {
@@ -1123,5 +1141,42 @@ mod review_tests {
         let start = std::time::Instant::now();
         assert_eq!(distinct_reviews(many).unwrap().len(), 300_000);
         assert!(start.elapsed().as_secs() < 20);
+    }
+}
+
+#[cfg(test)]
+mod conflict_tests {
+    use super::*;
+
+    fn link(key: usize, source: usize, target: usize, start: i64, stop: i64) -> LinkPeriod {
+        LinkPeriod {
+            key: key.to_string(),
+            source: source.to_string(),
+            target: target.to_string(),
+            start,
+            stop,
+            body: Object::new(),
+        }
+    }
+
+    #[test]
+    fn links_of_one_source_to_two_targets_that_overlap_are_paired_in_order() {
+        let group = vec![
+            link(0, 1, 10, 0, 10),
+            link(1, 2, 20, 0, 10),
+            link(2, 1, 11, 5, 15),
+            link(3, 1, 10, 5, 15), // the same target as the first: no pair
+            link(4, 1, 12, 20, 30), // no overlap
+            link(5, 2, 21, 9, 12),
+        ];
+        assert_eq!(conflicting_pairs(&group), vec![(0, 2), (1, 5), (2, 3)]);
+    }
+
+    #[test]
+    fn sixty_thousand_links_with_sixty_thousand_sources_take_a_moment_not_minutes() {
+        let group: Vec<LinkPeriod> = (0..60_000).map(|n| link(n, n, n + 1, 0, 10)).collect();
+        let start = std::time::Instant::now();
+        assert!(conflicting_pairs(&group).is_empty());
+        assert!(start.elapsed().as_secs() < 10, "took {:?}", start.elapsed());
     }
 }
