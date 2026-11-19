@@ -123,11 +123,29 @@ def test_quality_and_configured_master_links(silver):
     assert seen == [("invented-source", "invented-kind")]
     before = stored(runtime, config)
     assert [r["quality"] for r in before] == [None, ["allowed"]]
-    changed = refresh_ids(sink, config["table"], lambda *args: {"invented-a": "identity-two"})
-    assert changed["rows_updated"] == {"linked_id": 2}
+    changed = refresh_ids(sink, config["table"], lambda *args: pytest.fail("a row with an id is never looked up"))
+    assert changed["rows_updated"] == {"linked_id": 0}
     after = stored(runtime, config)
     assert [r["loaded_at"] for r in after] == [r["loaded_at"] for r in before]
-    assert [r["linked_id"] for r in after] == ["identity-two", None]
+    assert [r["linked_id"] for r in after] == ["identity-one", "identity-one"]
+
+
+def test_a_refresh_asks_for_and_writes_only_rows_with_an_empty_id(silver):
+    owner, runtime, role = silver
+    link = {"columns": ["member_id"], "kind": "invented-kind", "source_code": "invented-source",
+            "source_key": "member_id", "mdm_id_column": "linked_id"}
+    config = a_spec(table="linked_" + uuid4().hex[:10], links=[link])
+    register(owner, config, runtime_role=role)
+    sink = DatabaseSink(runtime)
+    land(sink, config["table"], rows(), lambda link, keys: {"invented-a": "identity-one"})  # b is not mastered yet
+    asked = []
+    def later(link, keys):
+        asked.append(sorted(keys))
+        return {"invented-a": "identity-two", "invented-b": "identity-three"}
+    changed = refresh_ids(sink, config["table"], later)
+    assert asked == [["invented-b"]]
+    assert changed["rows_updated"] == {"linked_id": 1}
+    assert [r["linked_id"] for r in stored(runtime, config)] == ["identity-one", "identity-three"]
 
 
 def test_exact_types_and_structural_json_replay(silver):
@@ -164,7 +182,8 @@ def test_exact_types_and_structural_json_replay(silver):
 def test_long_exact_text_keys_and_derived_refresh_do_not_alias(silver):
     owner, runtime, role = silver
     config = spec(columns=[{"name": "visit_id", "type": "VARCHAR", "nullable": False},
-                           {"name": "member_id", "type": "VARCHAR", "nullable": True}], partition=[],
+                           {"name": "member_id", "type": "VARCHAR", "nullable": True},
+                           {"name": "member_mdm_id", "type": "VARCHAR", "nullable": True}], partition=[],
                   time={"as_of": None, "as_at": "loaded_at", "event_time": None})
     register(owner, config, runtime_role=role)
     keys = ["prefix" * 1000 + suffix for suffix in ("a", "b", "A", "a ")]
@@ -172,7 +191,7 @@ def test_long_exact_text_keys_and_derived_refresh_do_not_alias(silver):
     values = [{"visit_id": key, "member_id": key} for key in keys]
     assert land(sink, config["table"], values)["inserted"] == 4
     assert land(sink, config["table"], values)["changed"] == 0
-    assert sink.link_keys(config, {"source_key": "member_id"}) == set(keys)
+    assert sink.link_keys(config, {"source_key": "member_id", "mdm_id_column": "member_mdm_id"}) == set(keys)
 
 
 def test_concurrent_deliveries_serialize_and_replay(silver):

@@ -228,7 +228,7 @@ def test_a_flagged_row_lands_with_its_failed_checks_and_a_refused_row_does_not(s
     assert table(runtime, "daily_visit")[1]["quality"] is None
 
 
-def test_refresh_fills_ids_of_rows_already_landed_and_follows_a_merge(stores, database):
+def test_refresh_fills_ids_of_rows_already_landed_and_leaves_a_merged_ids_row_to_resolve(stores, database):
     owner, runtime, ids, mastered = stores
     silver.register(owner, visit_spec(), runtime_role=RUNTIME)
     sink = PostgresSink(runtime)
@@ -248,9 +248,16 @@ def test_refresh_fills_ids_of_rows_already_landed_and_follows_a_merge(stores, da
     assert str(table(runtime)[4]["member_id_mdm_id"]) == left and str(table(runtime)[5]["member_id_mdm_id"]) == right
     loaded = {k: r["loaded_at"] for k, r in table(runtime).items()}
     survivor = masters.seed(database.application, [member("r", *p_["identifiers"]["figi"], *q_["identifiers"]["figi"])])["r"]
-    assert refresh_ids(sink, "visit", ids)["rows_updated"] == {"member_id_mdm_id": 1}
+    assert refresh_ids(sink, "visit", ids)["rows_updated"] == {"member_id_mdm_id": 0}  # a row with an id is not rewritten
     rows = table(runtime)
-    assert str(rows[4]["member_id_mdm_id"]) == str(rows[5]["member_id_mdm_id"]) == survivor
+    assert (str(rows[4]["member_id_mdm_id"]), str(rows[5]["member_id_mdm_id"])) == (left, right)
+    from edgar_warehouse.mastering import reads
+    from edgar_warehouse.mastering.store import open_store
+    store = open_store(database.application)
+    try:
+        assert {reads.master(store, left)["canonical_id"], reads.master(store, right)["canonical_id"]} == {survivor}
+    finally:
+        store.rollback(); store.close()
     assert rows[1]["member_id_mdm_id"] == mastered["a"]  # unmerged rows keep their id
     assert {k: r["loaded_at"] for k, r in rows.items()} == loaded  # an id is not a delivered value
 
