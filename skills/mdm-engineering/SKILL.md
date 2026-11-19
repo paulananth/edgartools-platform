@@ -128,6 +128,10 @@ authoritative content before approval freezes it.
 - **No table scans.** Every read is by key, through an index, except a
   table that stays a handful of rows. A test shows it.
 
+Before changing or defending a mastering step, read [MASTERING-STANDARD.md](MASTERING-STANDARD.md): the industry pipeline and
+terms, matching order and outcomes, what a duplicate identifier means, the three separate decisions and what is code against
+configuration.
+
 ## Cross-reference completion
 
 **Retain computed matching evidence with its lookup keys.** A later source arrival must find both the key and

@@ -1,0 +1,87 @@
+# The Gold views (data-modeling skill, GOLD.md). Every object names the requirement that needs it; an object with no
+# requirement is not here. All are views over the approved mirror; none is persisted.
+# Design of record: .scratch/gold-warehouse/issues/05-gold-design-complete.md (approved by the operator, section 7).
+version: gold-first-build.holdings-by-manager-security-quarter
+
+# The writable destination the operator approved, and the mirror it reads. The destination's existing contents are
+# not yet checked (ticket 05): nothing is created until they are.
+destination:
+  database: DB_EDGARTOOLS_GOLD
+  schema: GOLD
+mirror:
+  database: DB_EDGARTOOLS_MIRROR
+  schemas: {mdm: MDM, silver: SILVER, rdm: RDM}
+  body_type: text            # UNVERIFIED: whether the mirror carries mastering_master.body as text or as a variant
+
+# A fact's dimension key is never null: two reserved members, kept apart (GOLD.md).
+members:
+  unknown: unknown                  # the lookup found no master
+  not_applicable: not-applicable    # the role does not apply to this row
+
+# How a master's structured body is read, once (the "master" view). UNVERIFIED against a mirrored master:
+# the name's path inside body.fields is assumed to be fields.<field>.value until one is read.
+master:
+  source: mdm.mastering_master
+  name_fields: [name, legal_name, display_name, name_of_issuer]
+  name_value_path: "fields.{field}.value"
+
+# The questions that justify an object. An object names one here; an object with none is not built.
+requirements:
+  holdings: "A manager's holdings by security and quarter (operator, Approved, ticket 05 section 7)"
+
+objects:
+- name: master
+  kind: base
+  requirement: holdings
+  grain: one row per MDM id (an alias row names the master it became)
+
+- name: dim_company
+  kind: dimension
+  master_kind: company
+  identifiers: [cik]
+  requirement: holdings
+  grain: one row per canonical company master, plus the unknown and not-applicable members
+
+- name: dim_security
+  kind: dimension
+  master_kind: security
+  identifiers: [cusip]
+  requirement: holdings
+  grain: one row per canonical security master, plus the unknown and not-applicable members
+
+- name: dim_date
+  kind: calendar
+  from: "1994-01-01"
+  to: "2035-12-31"
+  requirement: holdings
+  grain: one row per calendar day; joined twice, as business time and as recorded time
+
+- name: fact_thirteenf_filing
+  kind: fact
+  source: silver.thirteenf_filing
+  key: [accession_number, cik]
+  links:
+  - {column: manager_mdm_id, dimension: dim_company, role: manager}
+  times: {business: report_date, recorded: filing_date}
+  carry: [form, primary_document]
+  requirement: holdings
+  grain: one row per accession number and manager
+
+- name: fact_thirteenf_holding
+  kind: fact
+  source: silver.thirteenf_holding
+  key: [accession_number, holding_index]
+  links:
+  - {column: security_mdm_id, dimension: dim_security, role: held}
+  # The holding states neither manager nor date. They come from its filing, reduced first to one row per accession
+  # (a filing listed by two managers has two rows). With one manager the holding has that manager; with several the
+  # manager is not applicable and the filing fact answers by manager.
+  parent:
+    source: silver.thirteenf_filing
+    by: [accession_number]
+    times: {business: report_date, recorded: filing_date}
+    single_link: {column: manager_mdm_id, dimension: dim_company, role: manager}
+  measures: [shares_held, market_value, voting_auth_sole, voting_auth_shared, voting_auth_none]
+  carry: [cusip, share_type, put_call, discretion_type]
+  requirement: holdings
+  grain: one row per accession number and holding index

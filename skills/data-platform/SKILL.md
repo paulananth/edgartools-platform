@@ -33,7 +33,7 @@ it against the seven, and drop what adds no value:
 | Motion | Searching code for what a skill should say; rebuilding inputs a run already made | Write the answer into the skill once; keep a run's inputs with its report |
 | Waiting | Runs that stop on a deadline too short; questions a ruling already answers | Size the deadline from the measured time; decide what follows from a ruling |
 | Over-processing | The rest of a delivery after its tests, a slice, and each new case are already proved | The cheapest proof (`mdm-engineering`); [a sample chosen by kind](../data-profiling/SKILL.md#choose-a-proof-sample-by-kind); carry a proof forward |
-| Over-production | Building a feature, a target or a check before a source needs it | Build only what the step in hand needs |
+| Over-production | Building a feature, a target, a check or a Gold table before a source or question needs it | Build only what the step in hand needs |
 | Defects | Guessed times, unchecked limits, a skill word CI refuses: rework | Read the clock; check bounds first; run the checks the change can affect |
 
 **Find the root cause** of every surprise, failure and disagreement of two readings by the [five whys](ROOT-CAUSE.md), silently.

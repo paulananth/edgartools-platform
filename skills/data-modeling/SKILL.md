@@ -33,6 +33,7 @@ check (data-quality), or approve anything.
 | Write rules, contracts, quality files, or a code set version | Hand off; drafts in RDM go through data-profiling's RDM steps |
 | Request anything from a provider's live service | Use the captured files and this repo |
 | Propose a domain rule (a key, an order of precedence, a definition) from the captured data alone | First find how a public standard or the main vendors do it. Write it in a research note the next decision reads, mark what is unverified, and follow the standard unless the operator rules otherwise |
+| Design one Gold fact alone, or build a Gold object no named requirement needs | Design the whole bus first and build the least: [GOLD.md](GOLD.md), "Design the whole bus first" |
 | Write a table spec, or start a build, from its own ticket alone | Review every ticket it builds on and every build ticket that cites it: each ruling since it was written, each dependency it leaves out, each stale "or" a ruling closed, each hard case its test lacks. Record the findings on the spec's ticket and fix the stale tickets in the same change (operator: "Check the tickets related to financial review work") |
 
 ## What the platform already says
@@ -109,7 +110,7 @@ billable mirror creation retain their own gates.
 
 ### Gold warehouse
 
-Read [GOLD.md](GOLD.md) when the question is how approved final tables become Gold facts and conformed dimensions.
+Read [GOLD.md](GOLD.md) when the question is how approved final tables become Gold facts and conformed dimensions. The fact and dimension techniques, additivity and history types are [DIMENSIONAL.md](DIMENSIONAL.md). History, as-of joins, corrections and keys are [TEMPORAL.md](TEMPORAL.md).
 Apply it to any business domain: approved configuration supplies the entity
 list, each entity's dimension view, and facts at their own grains. Reuse one
 modeling path; concrete entity examples do not restrict the supported domains.

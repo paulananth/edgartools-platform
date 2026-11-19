@@ -87,9 +87,88 @@ mirror of that store.
 | Activity schema | One stream of timestamp, entity and activity. | A published mart of one fact's events, after that fact exists, and only when the requirement asks for a stream. |
 | Wide table | One denormalized table per question. | A published mart of one star, after that star exists. The star stays the model of record. |
 
+### What the sources establish, and their limits
+
+Read from the techniques' own published material; a claim a source does not make is marked.
+
+- **Conformed bus against a normalized core (Kimball, Inmon).** The Inmon
+  wording of a data warehouse (subject-oriented, integrated, time-variant, nonvolatile) and of the dependent mart is from
+  secondary descriptions only: his books were not reachable, so quote nothing from him as his. The bus integrates dimensional marts through shared
+  conformed dimensions with no central normalized store; the Inmon design keeps a normalized enterprise store and
+  builds dependent marts from it. The bus is delivered faster and in increments but needs strict governance of
+  dimension definitions, or the marts fragment into silos; the normalized core is simpler to load and harder to query.
+  One published survey of practitioners found no clear winner, independent marts the worst, and the hub-and-spoke build
+  the slowest to deliver. On this platform the normalized core already exists (MDM, RDM, silver), so Gold takes the bus.
+- **Data Vault.** A hub is a unique list of source-agnostic business keys (never a source system's surrogate id) with a
+  hash key, a load time and the record source that first supplied it. A link is an intersection of at least two hubs,
+  many-to-many by design so a cardinality change needs no redesign. A satellite holds descriptive attributes and their
+  history, keyed by the parent hub or link and a load time, with a hash of all its descriptive columns so change
+  detection is one comparison; it only ever inserts. The raw vault loads source data exactly as it arrived, with no
+  cleansing or business rules ("a source of facts, not of truth"); business rules and cleansing come downstream in a
+  business vault or information marts, usually dimensional. Stated limits: hubs carry no foreign keys, the business keys
+  must be right, and the hash comparison can be overkill for a small table. The Data Vault Alliance and Linstedt's own
+  specification were not reachable: these points are from practitioner and vendor descriptions, and no official
+  Snowflake source prescribes a hub-to-mart pattern. A vault here would master and historize a second time, and the
+  platform already keeps the source's own values, key and record source in silver and the Cross-reference.
+- **Anchor modeling.** An anchor holds only the identity of a thing that persists while its properties change; an
+  attribute is one property in its own table (static, or historized with a start time); a knot is a small shared closed
+  list of values; a tie is a relationship between two or more anchors, one role each; a nexus is an event-like entity
+  with its own identity, properties and roles. Each property and relationship gets its own table (sixth normal form),
+  except a tie or nexus with several non-identifier roles, kept whole. History is only added, never updated in place,
+  and only where needed; a historized tie cannot delete an ended relationship, so the end becomes a new state. The
+  generator emits views over the narrow tables (latest, point-in-time, difference, now); the latest view is the usual
+  query surface. Stated benefits: extension adds tables, so old queries keep working; no nulls; narrow reads. Limits: many
+  narrow tables that depend on the views and join elimination to reassemble; closed intervals add query complexity;
+  target support varies and some generators were never run on a live server; it is called an advanced technique, and the
+  page comparing it with a vault comes from one of its creators. Its author's published practice (history, as-of joins, identity, layers) is in [TEMPORAL.md](TEMPORAL.md). Here
+  attribute history already lives on master and code-set versions, so the model would historize a second time.
+- **Activity schema.** One time-ordered stream per entity type: an activity id, a UTC timestamp, the entity's global
+  identifier (or an anonymous one until resolved), the activity name, a semi-structured feature object with the same
+  keys for every row of one activity, an optional revenue amount and a link to the source record. Activities join to
+  each other on entity and time, never by foreign key (first, last, before, after or between a cohort row). Limits it
+  states: activities are immutable, so a changing status is a new activity; one identifier type per entity; only
+  top-level features are read; dimension data is joined at query time; performance tuning is left to the warehouse.
+  It suits one fact's events after that fact exists, not the model of record.
+- **Wide table (one big table).** A fallback consumption shape when a reporting tool cannot declare relationships:
+  the fact joined to every dimension. It is a mart of the star, never the model.
+
 **Completion:** name the conformed dimensional bus, or name another row and
 the requirement that asks for it. A wide table or an activity stream is a
 mart of a fact that is already on the bus.
+
+## Design the whole bus first, then build the least
+
+A fact designed alone cannot be conformed. Before any one Gold object is built, write **one design for every approved
+final table**: the bus matrix (DIMENSIONAL.md), each fact's grain, the dimension set, the roles each dimension plays, the
+missing-key members, and what is deliberately not built. A later slice cites that design and changes it only by changing
+the whole. The design is cheap (a document); the build is not, so the two are kept apart.
+
+**Lean by the seven wastes** ([data-platform](../data-platform/SKILL.md#the-seven-wastes)) **and KISS.** Apply them to every
+Gold object, in this order; an object that fails one is dropped or deferred, not built and tuned.
+
+| Waste | In a Gold design | Rule |
+|---|---|---|
+| Over-production | A table, column, dimension or aggregate no question needs | **Every object names the requirement that needs it.** A fact with none stays on the bus as "planned" and is not built |
+| Transport | A copy of mirror rows in Gold | **A Gold fact or dimension is a view over the mirror by default.** Persist only a view measured too slow, naming the time and the cost |
+| Over-processing | A rebuild, a proof or a layer after the input is proved | Prove once on the smallest sample that holds each case; carry the proof forward while input and rules are unchanged; no layer that only passes rows through |
+| Motion | Writing the same logic per source or per fact | Dimension unpacking, the unknown members and each fact's key checks are one shared template driven by configuration |
+| Inventory | Objects whose requirement ended | Each object lists its requirement; an object with none left is removed in the same change |
+| Waiting | Questions a ruling already answers; a build held for a decision the design could take | Decide what follows from a ruling; ask the remaining decisions as one list with a recommendation each |
+| Defects | A join that multiplies rows, a unit summed wrongly, a key that does not resolve | Run the proofs (DIMENSIONAL.md) on bounds first: row counts before and after each join |
+
+**KISS in shapes:** the fewest objects that answer the questions. One fact view per silver grain; one base view of the
+masters with a thin view per kind on it; one view of the published codes; one date dimension. No surrogate keys (the
+master id is the key), no history dimension until a named business date needs it, no bridge until its rows are counted
+and a question needs it, no junk or outrigger dimension, no wide table, no aggregate, no snapshot copy. A new object is a
+decision recorded against a requirement, never a default.
+
+**Two kinds of absent dimension key** are two members: *unknown* (the lookup failed, a mastering finding) and *not
+applicable* (the role does not apply to this row, such as a person owner on a row whose owner is an organization).
+Never one member for both.
+
+**A relationship joins masters of any kind.** Its two ends are master ids, not one kind, so it joins a base view of
+all masters (id, kind, canonical, name, status) and each kind view is a thin filter on that base: the unpacking of the
+master's structured body is written once.
 
 ## One grain
 
@@ -132,6 +211,18 @@ rows the key would drop or multiply (zero, or the operator decides).
   custodian) is a second join to the same dimension view, not a second copy of
   it. Expose each kind as a separate Gold view over approved mirror inputs;
   the view is a consumer projection and does not master the entity again.
+- **A key no master has joins an unknown member.** A fact whose silver link found no master keeps its source key, and in
+  Gold its dimension key is the dimension's one "unknown" member, never null and never dropped. The build reports
+  the count of rows on it; a rise is a finding about mastering, not a Gold fix.
+- **A measure with a unit column adds only within one unit.** Where the row's unit changes the meaning of the amount
+  (shares against a principal amount), or a flag marks a derivative of the subject (an option on a security), a sum
+  across them is wrong: the question groups by the unit, or the fact carries one measure column per unit.
+- **A fact takes a date from a sibling silver table only through that table's whole key.** If the sibling has
+  several rows per the join key (a record listed by two parties), reduce it to one row per the fact's key first, and
+  count the rows before and after.
+- **A dimension view unpacks the master's declared fields.** The master keeps its fields in one structured body for
+  every kind; the view filters one kind, drops rows that are aliases of another record, and takes its typed columns
+  from the kind's declared fields, so a new field is a declaration.
 - **The fact holds its own measures and the master-id links.** Master
   attributes stay on the dimension. The row's own unit stays beside the
   amount it measures (one system of record, in the skill).
@@ -170,6 +261,11 @@ marked approved or proposed.
 - Whether direct mirror reads suffice; otherwise the required transformation
   and the approved writable destination, or an explicit pending naming decision.
 - The row count the key would drop or multiply.
+
+## More techniques
+
+[TEMPORAL.md](TEMPORAL.md) holds history, as-of joins, corrections and identity. [DIMENSIONAL.md](DIMENSIONAL.md) holds the rest of the toolkit: the bus matrix, fact and dimension types, additivity,
+slowly changing history, late and missing keys, drilling across, and the proofs a Gold model needs.
 
 ## Hand off
 
