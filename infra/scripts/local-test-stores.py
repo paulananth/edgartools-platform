@@ -203,7 +203,7 @@ class LocalStores:
                   for database, (variable, _) in selected.items()}
         common.update(MDM_APPLICATION_ROLE="mdm_runtime",
                       BOOKKEEPING_MANIFEST_ROOT=(self.folder(name) / "manifests").as_uri())
-        owner = self.url(name, next(iter(selected))).set(database=None).render_as_string(hide_password=False)
+        owner = self.url(name, next(iter(selected)))._replace(database=None).render_as_string(hide_password=False)
         governance = {"RULES_DATABASE_URL": self.url(name, "rules", "rules_governance").render_as_string(hide_password=False),
                       "MDM_REGISTRATION_DATABASE_URL": self.url(name, "mdm", "mdm_governance").render_as_string(hide_password=False)}
         for filename, values in (("owner.env", {"DB_URL": owner}), ("worker.env", common), ("governance.env", {**common, **governance})):
