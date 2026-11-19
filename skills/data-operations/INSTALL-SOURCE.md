@@ -30,7 +30,7 @@ submits one source.
    edgar-warehouse rules register --source <name>
    ```
    It registers the merge rules and the source's Dataset Contracts in MDM with the store owner's connection
-   (`MDM_REGISTRATION_DATABASE_URL`, [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment)).
+   (the governance file's `DB_URL`, [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment)).
    A source that lands silver, or masters records, needs the silver tables created first
    (data-platform or data-onboarding; `infra/scripts/deploy-silver.sh <name>`): a load creates no table and stops before it submits anything when one
    it writes is missing, or when an env file has no silver login.

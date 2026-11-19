@@ -2,14 +2,14 @@
 """How far is a load, and where did its time go? Read-only views, for any source, with no knowledge of the source.
 
 progress  Units per step and state of the running runs (or one run), and how long they have run
-          (BOOKKEEPING_DATABASE_URL).
+          (`DB_URL` of worker.env).
 failures  Units that hold an error, grouped by step, state and error shape, with counts
-          (BOOKKEEPING_DATABASE_URL).
+          (`DB_URL` of worker.env).
 quality   The data quality counts each merge run retained: records, records set aside by a failed check,
-          open reviews and the fields that have empty values (MDM_DATABASE_URL).
-steps   Time per step of one Bookkeeping run, from its journal (BOOKKEEPING_DATABASE_URL).
+          open reviews and the fields that have empty values (`DB_URL` of worker.env).
+steps   Time per step of one Bookkeeping run, from its journal (`DB_URL` of worker.env).
 sample  What the database was running, once a second: statements ranked by seconds seen, so the
-        dominating statement shows (PROFILE_DATABASE_URL, a login that may read pg_stat_activity).
+        dominating statement shows (`DB_URL` of reader.env, a login that may read pg_stat_activity).
 
 Counts, times and normalized statement shapes only: no value from the data is printed.
 """
@@ -178,6 +178,13 @@ def sample(url: str, seconds: int, top: int) -> None:
         print(f"{count:>5} s  {database:<14} {statement}")
 
 
+def in_database(database: str) -> str:
+    """The sourced duty file's `DB_URL` with a database: it names none."""
+    from urllib.parse import urlsplit, urlunsplit
+
+    return urlunsplit(urlsplit(os.environ["DB_URL"])._replace(path="/" + database))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="view", required=True)
@@ -195,15 +202,15 @@ def main() -> None:
     two.add_argument("--top", type=int, default=10)
     args = parser.parse_args()
     if args.view == "progress":
-        progress(os.environ["BOOKKEEPING_DATABASE_URL"], args.run)
+        progress(in_database("bookkeeping"), args.run)
     elif args.view == "quality":
-        quality(os.environ["MDM_DATABASE_URL"], args.limit)
+        quality(in_database("mdm"), args.limit)
     elif args.view == "failures":
-        failures(os.environ["BOOKKEEPING_DATABASE_URL"], args.run)
+        failures(in_database("bookkeeping"), args.run)
     elif args.view == "steps":
-        steps(os.environ["BOOKKEEPING_DATABASE_URL"], args.run, args.size)
+        steps(in_database("bookkeeping"), args.run, args.size)
     else:
-        sample(os.environ["PROFILE_DATABASE_URL"], args.seconds, args.top)
+        sample(in_database("postgres"), args.seconds, args.top)
 
 
 if __name__ == "__main__":

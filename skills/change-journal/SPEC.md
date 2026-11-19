@@ -211,7 +211,7 @@ historical roots. Do not import historical decisions, checkpoints or pending
 delivery. Fresh provisioning never creates legacy source/mirror tables.
 Local fresh-store provisioning is described in the central connection section;
 it imports nothing and removes nothing. Original acquisition connection helpers
-reject a runtime with `CHANGE_JOURNAL_DATABASE_URL` configured.
+reject a runtime with `DB_URL` configured.
 That marker also restricts the CLI to `rules`, `bookkeeping` and
 `change-journal`, and refuses ungated provider transport. Legacy scheduled commands
 cannot be run with the fresh connections; keep their original task revisions

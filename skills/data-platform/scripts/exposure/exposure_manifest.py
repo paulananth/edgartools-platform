@@ -8,7 +8,7 @@ database is written here. The list is the approval (data-platform FINAL-TABLES.m
     approval: {date: YYYY-MM-DD, words: [<the operator's words>]}
     target: {database: <Snowflake database>, verified: <false until the mirror is read back>}
     layers:
-      <layer>: {connection: <environment variable naming the store>, source_schema: <PostgreSQL schema>,
+      <layer>: {connection: <environment variable naming the store; DB_URL adds the layer's name as the database>, source_schema: <PostgreSQL schema>,
                 target_schema: <Snowflake schema>, authority: <who owns the meaning>}
     tables:
     - layer: <layer>
@@ -327,6 +327,11 @@ def generate(config_path: Path, env: dict[str, str], root: Path | None = None) -
         if not wanted["tables"]:
             continue
         url = env.get(wanted["connection"])
+        if url and wanted["connection"] == "DB_URL":  # a duty file's DB_URL names no database: the layer is the store
+            from urllib.parse import urlsplit, urlunsplit
+
+            part = urlsplit(url)
+            url = url if part.path.strip("/") else urlunsplit(part._replace(path="/" + layer))
         if url and "://" in url and "+" in url.split("://", 1)[0]:
             url = "postgresql://" + url.split("://", 1)[1]  # an SQLAlchemy address names its driver; libpq does not
         if not url:

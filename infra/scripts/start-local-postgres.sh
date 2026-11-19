@@ -17,11 +17,8 @@
 #   bash infra/scripts/start-local-postgres.sh --stop    # stop, keep data
 #   bash infra/scripts/start-local-postgres.sh --reset   # destroy container+volume
 #
-# After start, databases on the same instance:
-#   export MDM_DATABASE_URL="postgresql://postgres:test@127.0.0.1:5432/mdm"
-#   export BOOKKEEPING_DATABASE_URL="postgresql://bookkeeping_runtime:<password>@127.0.0.1:5432/bookkeeping"
-#   export CHANGE_JOURNAL_DATABASE_URL="postgresql://change_journal_runtime:<password>@127.0.0.1:5432/change_journal"
-#   export SILVER_DATABASE_URL="postgresql://postgres:test@127.0.0.1:5432/silver"
+# After start, one login for the instance and one database per store:
+#   export DB_URL="postgresql://postgres:test@127.0.0.1:5432"   # each store command adds its own database
 #
 # Creating the container only creates `mdm`. Provision the others with:
 #   bash infra/scripts/provision-local-postgres-stores.sh

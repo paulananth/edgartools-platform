@@ -56,28 +56,24 @@ environment's ownership checks; do not adopt another workstream's databases.
 Missing store configuration never falls back to a legacy store, another
 store's URL, or a guessed database name.
 
-A store is one database with a fixed name (`mdm`, `rdm`, `rules`, `bookkeeping`, `change_journal`, `silver`). A duty is
-one login and one file in the stores folder, and the owner file names its login in `DB_URL`, with no database: each store
-command adds its own store's database. A `DB_URL` that already names a database keeps it (one database for one store, as a
-test uses). Nothing in the product is called a migration: a store has one `init`, which makes the schema or brings it to
-current, so there is no migrate command and no migration variable.
+A store is one database with a fixed name (`mdm`, `rdm`, `rules`, `bookkeeping`, `change_journal`, `silver`). A duty is one
+login and one file in the stores folder, and every file holds one variable, `DB_URL`, with no database: the file you source is the
+duty, and each store command adds its own store's database. A `DB_URL` that already names a database keeps it (one database for one
+store, as a test uses); `DB_PREFIX` (optional) puts a prefix on every store's name for an isolated copy. Nothing in the product is
+called a migration: a store has one `init`, which makes the schema or brings it to current.
 
-| Duty | File | Variable | Used by |
+| Duty | File | Login | Used by |
 |---|---|---|---|
-| Owner (the schema owner) | `owner.env` | `DB_URL` | each store's `init`, silver `register`, `mdm grant-registration`, `bookkeeping grant-profile`, resetting databases, role guards |
-| Runtime | `worker.env` | `MDM_DATABASE_URL`, `RDM_DATABASE_URL`, `RULES_DATABASE_URL`, `BOOKKEEPING_DATABASE_URL`, `CHANGE_JOURNAL_DATABASE_URL`, `SILVER_DATABASE_URL` | `load` and the workers (all six name the one loader login) |
-| Governance | `governance.env` | the rules and registration logins | registering and activating rules |
-| Reader | `reader.env` | `DIAGNOSE_DATABASE_URL` | monitoring, the access audit |
+| Owner | `owner.env` | the instance's administrator | each store's `init`, silver `register`, `mdm grant-registration`, `bookkeeping grant-profile`, resetting databases, role guards |
+| Loader | `worker.env` | `edgar_loader`, a member of every store's runtime role | `load` and the workers; it can create nothing |
+| Governance | `governance.env` | `governance`, a member of the MDM and Rules governance roles | registering and activating rules |
+| Reader | `reader.env` | `ops_reader` (`pg_monitor`, no store) | monitoring, profiling, the access audit |
 
-The selected stores folder is authoritative (a hosted store's is `~/.config/edgartools/hosted/`, the only copy of its
-files): use `worker.env` for work, `owner.env` for the owner's duties, and `governance.env` for registering rules in MDM.
-Source the appropriate trusted file in a command-scoped subshell with `set -a` and disable tracing. `load --stores` takes this
-folder and selects duties itself, not a single `.env` file. `infra/scripts/local-test-stores.py` creates local role files. Never
-leave the owner file sourced for work: an owner connection is never a runtime default.
-
-Registering rules in MDM additionally needs `MDM_REGISTRATION_DATABASE_URL` from the governance file.
-`PROFILE_DATABASE_URL` is a separately authorized profiling login with access
-to database activity. Configure these only for their requested duty.
+The selected stores folder is authoritative (a hosted store's is `~/.config/edgartools/hosted/`, the only copy of its files).
+Source the duty's file in a command-scoped subshell with `set -a` and disable tracing; a command that needs a second duty reads
+that file from `--stores` by path, never from the environment. `infra/scripts/local-test-stores.py` makes the local files and
+`provision_hosted_store.py` the hosted ones. Never leave the owner file sourced for work: an owner connection is never a runtime
+default. Configure each duty only for its requested work.
 For load profiling, `quality` reads MDM, `progress`, `failures` and `steps`
 read Bookkeeping, and `sample` uses the profiling login's `pg_stat_activity`
 access.

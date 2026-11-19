@@ -273,7 +273,7 @@ Learned the hard way; each is a standing operator rule.
   together"); a run's env files carry the silver login. Start, inspect, back up
   and copy the server with `infra/scripts/local-test-stores.py`.
 - Source its private `worker.env` before work; it lives outside Git, and its values are never printed.
-  `worker.env` holds `RULES_DATABASE_URL` too; it is never missing, so never ask for it
+  `worker.env` holds the one `DB_URL` (the loader login, every store's database) too; it is never missing, so never ask for it
   (operator, 2026-11-02: "This must be documented, you cannot keep on asking").
 - To try a source, `load` it into a disposable stores folder (`local-test-stores.py up <name>`; `stop` it
   after): [data-onboarding](skills/data-onboarding/LOAD.md).
