@@ -128,3 +128,8 @@ def test_a_read_only_role_reads_the_log_and_the_messages_are_scrubbed(monkeypatc
     found = monitor.logs(60)
     assert [(r["kind"], r["n"]) for r in found] == [("memory", 2), ("fatal", 1)]
     assert found[1]["message"] == "FATAL: rejected host <ip>"
+
+
+def test_a_half_cut_address_is_replaced_too():
+    assert monitor.scrub("authentication failed (user: u database: d remote host: 73.89.1") == "authentication failed (user: u database: d remote host: <ip>"
+    assert "106.13" not in monitor.scrub("rejected for host 106.13.180.")

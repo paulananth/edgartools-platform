@@ -50,7 +50,7 @@ object per reading.
 
 ## Postgres logs
 
-The hosted server writes its log to the account's event table (`SNOWFLAKE.TELEMETRY.EVENTS`, log type
+The hosted server writes its log to the account's event table (read through `SNOWFLAKE.TELEMETRY.EVENTS_VIEW`, log type
 `postgres-otelcol-vm-agent`, one row per log line, keyed by the instance id, a few minutes late). The diagnostic Postgres
 login cannot read it; `logs` reads it through a SnowCLI connection:
 
@@ -60,7 +60,7 @@ python scripts/db_monitor.py logs --minutes 120
 ```
 
 - **A read-only role.** The connection's role holds `USAGE` on a warehouse and `SELECT` on the event table, nothing else
-  (grant Snowflake's event-viewer application role to it where the account has one). The script reads `current_role()`
+  (the role holds Snowflake's `EVENTS_VIEWER` application role, which grants `SELECT` on that view and not on the table itself; its user is a key-pair service user, so no password exists). The script reads `current_role()`
   first and refuses `ACCOUNTADMIN`, `SECURITYADMIN`, `SYSADMIN`, `USERADMIN` and `ORGADMIN`. Creating that role is an
   account change: the operator says so first (aws-snowflake-operations).
 - **What it keeps.** Lines that carry a level (`PANIC`, `FATAL`, `ERROR`, `WARNING`) and the memory and kill lines, grouped by

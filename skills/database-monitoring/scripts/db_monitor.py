@@ -134,7 +134,7 @@ MEMORY = ("out of memory", "could not resize shared memory", "terminated by sign
           "cannot allocate memory", "could not fork new process", "remaining connection slots are reserved",
           "too many clients")
 LOG_SQL = """
-    with l as (select timestamp as t, value:MESSAGE::string as m from SNOWFLAKE.TELEMETRY.EVENTS
+    with l as (select timestamp as t, value:MESSAGE::string as m from SNOWFLAKE.TELEMETRY.EVENTS_VIEW
                where resource_attributes['snowflake.o11y.logtype'] = 'postgres-otelcol-vm-agent'
                  and resource_attributes['instance.id'] = '{instance}' and record_type = 'LOG'
                  and timestamp > current_timestamp() - interval '{minutes} minutes'
@@ -147,7 +147,8 @@ LOG_SQL = """
 
 def scrub(text: str | None) -> str:
     """A log message without addresses, quoted literals or the values of a key."""
-    text = re.sub(r"\b\d{1,3}(?:\.\d{1,3}){3}\b", "<ip>", text or "")
+    text = re.sub(r"remote host: \S*", "remote host: <ip>", text or "")  # a line cut short can leave half an address
+    text = re.sub(r"\b\d{1,3}(?:\.\d{0,3}){1,3}\b", "<ip>", text)
     text = re.sub(r"'(?:[^']|'')*'", "?", text)
     text = re.sub(r"\(([^()]*)\)=\(([^()]*)\)", "(?)=(?)", text)
     return " ".join(text.split())

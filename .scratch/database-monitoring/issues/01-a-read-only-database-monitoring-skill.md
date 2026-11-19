@@ -18,5 +18,6 @@ Postgres login cannot read, so `logs` reads it through a SnowCLI connection whos
 - [x] data-operations points at it from its diagnosis paragraph, and the skills README lists it (the file stays under the 500-line cap)
 - [x] Learning → skill: this ticket is the skill; data-operations' diagnosis paragraph names it
 - [x] `logs`, `memory` and `databases` readings; `logs` refuses an administrator role, keeps level-marked and memory lines, drops DETAIL/STATEMENT/CONTEXT, and replaces addresses and literals (tests/unit/test_db_monitor.py; the log query run once on the hosted instance returned grouped errors and the out-of-memory lines, 2026-11-19 06:21 ET)
-- [ ] Create the read-only log role (USAGE on a warehouse, SELECT on the event table only) and a SnowCLI connection for it: an account change, waits for the operator's word
-- [ ] Run `logs` live as that role (today's connection is `ACCOUNTADMIN`, which the script refuses)
+- [x] Create the read-only log role: `EDGARTOOLS_PROD_LOG_READER` (role and key-pair service user; the `EVENTS_VIEWER` application role, which gives `SELECT` on the events view only, and `USAGE` on `COMPUTE_WH`), created on the operator's word, with the SnowCLI connection `edgartools-logs`; no password exists (2026-11-19 06:28 ET)
+- [x] Run `logs` live as that role: grouped error, fatal and out-of-memory lines returned, addresses replaced (2026-11-19 06:28 ET)
+- [ ] Harden the role as an access change: its own small warehouse with auto-suspend, a network policy and a statement timeout on the user, a key rotation date, an owner, and the role in Terraform (`infra/terraform/access/snowflake`), since a role made by hand does not survive an account rebuild
