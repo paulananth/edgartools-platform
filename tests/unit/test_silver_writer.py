@@ -389,3 +389,15 @@ def test_a_refusal_names_the_sqlstate_and_constraint_never_a_value():
         constraint_name=None, column_name="invented_column", table_name="invented_table")))
     assert refusal(error) == " (SQLSTATE 42501, column invented_column, table invented_table)"
     assert refusal(ValueError("a secret value 123")) == " (ValueError)"
+
+
+def test_a_deadlock_or_serialization_failure_tells_the_delivery_to_run_again():
+    from edgar_warehouse.silver_writer.relational import delivery_refusal
+
+    class Failed(Exception):
+        def __init__(self, pgcode):
+            self.orig = type("Orig", (), {"pgcode": pgcode, "diag": None})()
+
+    for pgcode in ("40P01", "40001"):
+        assert delivery_refusal("visit", Failed(pgcode)) == "silver.visit: another delivery changed the same rows at once; deliver again"
+    assert "SQLSTATE 23505" in delivery_refusal("visit", Failed("23505"))
