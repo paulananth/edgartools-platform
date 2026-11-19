@@ -71,7 +71,7 @@ def main(argv: list[str] | None = None) -> int:
     url = os.environ.get("DB_URL")
     if not url:
         sys.exit("DB_URL is not set: source the stores folder's owner.env (it is never printed)")
-    engine = sa.create_engine(make_url(url), isolation_level="AUTOCOMMIT")
+    engine = sa.create_engine(make_url(url).set(database="postgres"), isolation_level="AUTOCOMMIT")
     failed = 0
     with engine.connect() as conn:
         steps = plan(*read(conn))
