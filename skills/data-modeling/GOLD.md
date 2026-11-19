@@ -91,16 +91,25 @@ mirror of that store.
 
 Read from the techniques' own published material; a claim a source does not make is marked.
 
-- **Conformed bus against a normalized core (Kimball, Inmon).** The bus integrates dimensional marts through shared
+- **Conformed bus against a normalized core (Kimball, Inmon).** The Inmon
+  wording of a data warehouse (subject-oriented, integrated, time-variant, nonvolatile) and of the dependent mart is from
+  secondary descriptions only: his books were not reachable, so quote nothing from him as his. The bus integrates dimensional marts through shared
   conformed dimensions with no central normalized store; the Inmon design keeps a normalized enterprise store and
   builds dependent marts from it. The bus is delivered faster and in increments but needs strict governance of
   dimension definitions, or the marts fragment into silos; the normalized core is simpler to load and harder to query.
   One published survey of practitioners found no clear winner, independent marts the worst, and the hub-and-spoke build
   the slowest to deliver. On this platform the normalized core already exists (MDM, RDM, silver), so Gold takes the bus.
-- **Data Vault.** Hubs hold business keys, links hold relationships, satellites hold described history; hash keys let
-  them load in parallel. It is an integration layer, with a business vault or information mart (usually dimensional)
-  built on top for presentation. No official Snowflake source read prescribes a hub-to-mart pattern: that is
-  unconfirmed. A vault here would master and historize a second time.
+- **Data Vault.** A hub is a unique list of source-agnostic business keys (never a source system's surrogate id) with a
+  hash key, a load time and the record source that first supplied it. A link is an intersection of at least two hubs,
+  many-to-many by design so a cardinality change needs no redesign. A satellite holds descriptive attributes and their
+  history, keyed by the parent hub or link and a load time, with a hash of all its descriptive columns so change
+  detection is one comparison; it only ever inserts. The raw vault loads source data exactly as it arrived, with no
+  cleansing or business rules ("a source of facts, not of truth"); business rules and cleansing come downstream in a
+  business vault or information marts, usually dimensional. Stated limits: hubs carry no foreign keys, the business keys
+  must be right, and the hash comparison can be overkill for a small table. The Data Vault Alliance and Linstedt's own
+  specification were not reachable: these points are from practitioner and vendor descriptions, and no official
+  Snowflake source prescribes a hub-to-mart pattern. A vault here would master and historize a second time, and the
+  platform already keeps the source's own values, key and record source in silver and the Cross-reference.
 - **Anchor modeling.** An anchor holds only the identity of a thing that persists while its properties change; an
   attribute is one property in its own table (static, or historized with a start time); a knot is a small shared closed
   list of values; a tie is a relationship between two or more anchors, one role each; a nexus is an event-like entity

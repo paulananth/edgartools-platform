@@ -87,7 +87,7 @@ source named. A year-to-date measure is a query over the period fact, not a stor
 |---|---|---|
 | 0 Retain original | Never changes | An identifier as first issued; a first-seen date |
 | 1 Overwrite | History lost | **The default.** The dimension is the current master; MDM keeps the history |
-| 2 New row | Effective-dated rows | Only when a requirement names a business date at which the attribute must be the one then true; built from master versions, never from Gold's own diff |
+| 2 New row (Kimball: a new row with the updated values, and at least an effective date, an expiration date and a current-row indicator; each row has its own key, which facts use from the change until the next one) | Effective-dated rows | Only when a requirement names a business date at which the attribute must be the one then true; built from master versions, never from Gold's own diff |
 | 3 Prior-value column | One step of history | Only for a named "before and after" requirement on one attribute |
 | 4 Mini-dimension | Fast-changing attributes apart | See the table above |
 | 5 to 7 | Hybrids of 1, 2 and 4 | Only when one question needs both the historical and the current value; type 7 (the fact holds the master id and the version key) is the one to try first |
