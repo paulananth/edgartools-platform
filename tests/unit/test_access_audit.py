@@ -85,6 +85,7 @@ def test_every_control_names_a_known_objective_and_carries_severity_and_framewor
     ("postgres", "IND", lambda e: e.update(memberships=["pg_monitor", "pg_write_all_data"])),
     ("postgres", "LPR", lambda e: e["superusers"].append("loader")),
     ("postgres", "LOG", lambda e: e["settings"].update({"pgaudit.log": "none"})),
+    ("postgres", "LOG", lambda e: e["settings"].update({"pgaudit.log": "none"}) or e.update(role_settings=[("l", ["pgaudit.log=none"])])),
     ("postgres", "CST", lambda e: e["logins"].append(("x", -1))),
     ("postgres", "TMO", lambda e: e["settings"].update(statement_timeout="0", idle_in_transaction_session_timeout="0")),
     ("aws", "IND", lambda e: e.update(identity_kind="root")),
@@ -208,3 +209,7 @@ def test_the_operators_admin_account_is_never_the_access_admin(monkeypatch):
 def test_the_audit_refuses_the_connections_that_sign_in_as_the_operators_admin(connection):
     with pytest.raises(SystemExit, match="overall administrator"):
         snowflake.collect({"AUDIT_SNOWFLAKE_CONNECTION": connection}, as_admin=True)
+
+
+def test_audit_classes_set_on_a_role_count_when_the_instance_default_is_none():
+    assert graded("postgres", lambda e: e["settings"].update({"pgaudit.log": "none"}) or e.update(role_settings=[("loader", ["pgaudit.log=ddl,role"])]))["LOG"] == "PASS"

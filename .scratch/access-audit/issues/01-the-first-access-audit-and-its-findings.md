@@ -39,4 +39,4 @@ First multi-platform run: 8 pass, 18 fail, 11 not tested. The skills and roles a
 - [ ] SC-01 (high): a plain-text password sits in the SnowCLI connection file for the administrator and was printed once in a session; rotate it and move the connection to key pair
 - [ ] KR-01 and AR-01 (not tested): record a rotation date and owner for the log-reader key, and schedule the first access review
 - [ ] Re-run the audit as the auditor role after the fixes; the gate in the skill passes
-- [ ] Learning → skill: the controls and the gate are in access-audit; database-monitoring's role section points at it
+- [x] Learning → skill: the controls, the gate and the remediation are in access-audit; aws-snowflake-operations holds the access-identity rules (key-pair read-only users, EVENTS_VIEW, the lag, never the person's admin account, credential files by key names only); database-monitoring holds the out-of-memory reading (2026-11-19 07:02 ET)

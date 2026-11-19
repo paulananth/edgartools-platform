@@ -84,6 +84,9 @@ python scripts/db_monitor.py logs --minutes 120
    merge locks); a blocker idle in a transaction is a client that did not commit.
 3. `sessions`: an `active` session on `IO` is the disk; on `Client` the worker is the bottleneck, not the database.
    `logs`: a memory line in the window means memory, whatever the step's own message says.
+   A step that dies with `out of memory` is `work_mem` times its sort and hash steps times its sessions against the
+   instance's memory: `memory` shows the setting, and the fix is a role-level `work_mem` ceiling for the loader and fewer
+   workers, never a retry at the same size.
 4. `statements`: the top total is the target to fix; compare two readings a few minutes apart, because the counters are
    cumulative since the last reset (a single reading shows history, not now).
 5. Report the numbers with what they mean, as counts: the waiting sessions, the longest wait, the blocker's state. Then
