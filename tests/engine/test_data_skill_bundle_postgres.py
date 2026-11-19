@@ -475,7 +475,7 @@ def test_doctor_passes_from_the_installed_bundle(installed, databases):
     assert report["unresolved"] == [] and report["commands_named"] > 20 and report["engine"] == "loads"
     assert "bundle_data" in report["skills"]
     assert report["rules_root"]["bundled_read_only"] is True
-    assert set(report["stores"].values()) == {"answers", "not set"}
+    assert report["stores"] == {"rules": "answers", "bookkeeping": "answers", "change_journal": "answers", "mdm": "answers"}
     # The bundled rules are read, never written: a write names the way out.
     refused = subprocess.run([str(root / "bin" / "edgar-warehouse"), "rules", "mapdoc", "write"],
                              capture_output=True, text=True, cwd=root, env=env)
