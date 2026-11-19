@@ -168,7 +168,7 @@ Read [STORES.md](../data-platform/STORES.md), "Qualify Silver storage", before d
 
 ## Install and enable one source
 
-Read [INSTALL-SOURCE.md](INSTALL-SOURCE.md) when the task is to load and master one Rules source before the next.
+Read [INSTALL-SOURCE.md](INSTALL-SOURCE.md) when the task is to load and master one Rules source before the next. On the hosted instance read [HOSTED-LOADS.md](HOSTED-LOADS.md) first.
 
 ## Load a capture
 
