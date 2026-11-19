@@ -1004,10 +1004,10 @@ def test_a_catch_up_publishes_the_status_of_every_step_already_done_from_its_own
 
 def test_the_status_command_gets_a_short_environment_the_bookkeeping_login_and_the_catalog_and_nothing_else():
     base = {"PATH": "/bin", "HOME": "/h", "AWS_SECRET_ACCESS_KEY": "no", "MDM_DATABASE_URL": "no", "OPENMETADATA_ADMIN_PASSWORD": "no"}
-    worker = {"BOOKKEEPING_DATABASE_URL": "postgresql://b:p@h/x", "MDM_DATABASE_URL": "postgresql://m:p@h/y", "SILVER_DATABASE_URL": "no"}
+    worker = {"DB_URL": "postgresql://b:p@h", "BOOKKEEPING_MANIFEST_ROOT": "file:///x", "OTHER_SECRET": "no"}
     catalog = {"OPENMETADATA_URL": "http://127.0.0.1:8587/api", "OPENMETADATA_TOKEN": "t"}
     given = chain.status_env(base, worker, catalog)
-    assert set(given) == {"PATH", "HOME", "BOOKKEEPING_DATABASE_URL", "OPENMETADATA_URL", "OPENMETADATA_TOKEN"}
+    assert set(given) == {"PATH", "HOME", "DB_URL", "OPENMETADATA_URL", "OPENMETADATA_TOKEN"}
     assert "no" not in given.values()  # no other login, key or password reaches it
 
 
@@ -1114,8 +1114,8 @@ def test_bookkeepings_runs_are_asked_for_within_the_commands_own_maximum_and_a_f
 def test_a_missing_worker_env_means_no_bookkeeping_login_not_a_crash(monkeypatch, tmp_path):
     monkeypatch.setattr(chain, "STORES", tmp_path)  # a machine with no stores folder: CI, or a fresh checkout
     assert chain.worker_env() == {}
-    (tmp_path / "worker.env").write_text("export BOOKKEEPING_DATABASE_URL='postgresql://b:p@h/x'\n")
-    assert chain.worker_env() == {"BOOKKEEPING_DATABASE_URL": "postgresql://b:p@h/x"}
+    (tmp_path / "worker.env").write_text("export DB_URL='postgresql://b:p@h'\n")
+    assert chain.worker_env() == {"DB_URL": "postgresql://b:p@h"}
     monkeypatch.setattr(chain, "_RUNS", None)
     monkeypatch.setattr(chain, "run_catalog_status", lambda command, env, timeout=60: ("[]", ""))
     (tmp_path / "worker.env").unlink()
