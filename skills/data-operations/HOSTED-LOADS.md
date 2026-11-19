@@ -2,14 +2,25 @@
 
 Read before starting or resuming a load on the hosted instance. Each item is a cause met on a real load and its rule.
 
+## The gate: nothing loads until the infrastructure is ready and tested
+`scripts/readiness.py` reads nine facts and writes `readiness.json` in the stores folder only on a full pass; `load_chain.py`
+refuses to start, resume or finish a load without it (the read-only `--plan`, `--list`, `--status` and `--catalog-status` still
+run). A pass belongs to one store generation (a reset of the databases closes the gate), one commit (any new commit closes it)
+and one day. The checks: the code is committed, contains `main` and its commit has green CI (tested means CI, never a local run
+alone); the compiled engine was built from this checkout's source (`readiness.py --build-engine` rebuilds it and records a hash of what it was built from); `doctor` is ready; the loader holds its connection limit, memory ceiling
+and timeouts; RDM holds its codes and silver a table per spec; every step has a capture; no load runs and the loader has no
+session; disk and load average have room; and the access audit of the database has no failing control. A fact that cannot be
+read is a failure. Fix what it names and run it again; there is no switch to skip it. A rehearsal of the first lane on a
+disposable store is the next check to add.
+
 ## Before a load starts
 - **Role guards first.** `infra/scripts/harden-hosted-roles.py --confirm` (owner login) gives every login a connection limit,
   statement and idle-transaction timeouts, a `work_mem` ceiling for the loader and the audit classes. A load with the
   instance's default `work_mem` (hundreds of MB per sort or hash step and session) ran the server out of memory with ten
   merge workers. The access-audit skill tests these guards.
 - **The engine must match the code.** A Rust change reaches a load only after the engine is rebuilt into the environment that
-  runs it (`uv pip install --reinstall ./crates/source-contract` for a venv used with `PYTHONPATH`). A step that fails with a
-  missing method or an unknown normalizer on today's `main` is a stale engine, not a data fault: rebuild, then resume.
+  runs it: `readiness.py --build-engine`. A step that fails with a missing method or an unknown normalizer on today's `main` is
+  a stale engine, not a data fault: rebuild, then run the gate again.
 - **`EDGAR_WAREHOUSE` names the executable** (`.venv/bin/edgar-warehouse`), never its folder: a folder fails with
   "Permission denied" on every step.
 

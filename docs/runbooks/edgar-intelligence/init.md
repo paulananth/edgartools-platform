@@ -92,6 +92,8 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    The statuses it already holds for the steps are the previous load's history; the new load's statuses supersede them (see
    [data-operations](../../../skills/data-operations/SKILL.md#publish-a-steps-status-to-the-catalog)).
 
+9. **Ready.** `python <data-operations skill>/scripts/readiness.py` reads the infrastructure and writes `readiness.json` only when every check passes (code with green CI, engine built from this source, `doctor`, guards, reference data, captures, quiet instance, room, audit). Done when it prints `READY`. A load does not start without it, and any reset of the databases or new commit closes it again.
+
 A missing grant or login that a command names is a gap to fix through the central connection section, not to work around.
 
 ## Load a fresh store
