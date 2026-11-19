@@ -67,7 +67,7 @@ def test_the_table_holds_exactly_the_views_rows(stores):
 ])
 def test_a_written_row_is_never_changed_and_nothing_is_written_early(stores, statement):
     owner, runtime = stores
-    with pytest.raises(DBAPIError):
+    with pytest.raises(DBAPIError, match="written once|duplicate key"):
         with owner.begin() as conn:
             conn.execute(text(statement))
     assert versions(runtime) == {"one 1": 2, "one 2": 2}
@@ -80,6 +80,14 @@ def test_the_runtime_cannot_write_the_table_directly(stores, statement):
     with pytest.raises(DBAPIError, match="permission denied"):
         with runtime.begin() as conn:
             conn.execute(text(statement))
+
+
+def test_the_runtime_cannot_write_a_version_twice(stores):
+    _, runtime = stores
+    with pytest.raises(DBAPIError, match="duplicate key"):
+        with runtime.begin() as conn:
+            conn.execute(text("SELECT rdm.write_published_codes('one', '2')"))
+    assert versions(runtime) == {"one 1": 2, "one 2": 2}
 
 
 def test_an_approved_version_writes_nothing(stores):
@@ -114,5 +122,5 @@ def test_the_migration_fills_a_store_that_already_holds_published_and_retired_ve
         conn.execute(text("DROP FUNCTION rdm.write_published_codes(text, text)"))
         conn.execute(text("DROP FUNCTION rdm.guard_published()"))
         conn.exec_driver_sql(sql.replace("%", "%%"))
-        conn.exec_driver_sql("GRANT SELECT ON rdm.published_code TO rdm_runtime")  # as migrate grants it
+    database.migrate(owner, runtime_role="rdm_runtime", existing_only=True)  # the grants follow the table
     assert versions(runtime) == {"one 1": 2, "one 2": 2}

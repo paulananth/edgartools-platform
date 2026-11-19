@@ -1,8 +1,8 @@
 -- The codes of every published version as a table, for the managed mirror, which carries tables and not views.
 -- Written once, by rdm.write_published_codes, when a version is published; a draft never reaches it, and a
 -- retired version keeps its rows. It holds what the version fixes when published: what changes later (the
--- version's valid_to and status) stays on rdm.code_set_version, and the latest valid_from of a code set is its
--- current version.
+-- version's valid_to and status) stays on rdm.code_set_version, which names the current version of a code set
+-- (published, with no valid_to); a code set whose current version was retired has none.
 
 CREATE TABLE rdm.published_code (
     code_set text NOT NULL,

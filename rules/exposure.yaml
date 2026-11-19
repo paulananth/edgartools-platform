@@ -170,7 +170,8 @@ tables:
     value: The identifier as the golden record holds it.
     entity_id: The MDM id of the golden record that holds it.
 # RDM: the codes of every published version, one row per code. The other RDM tables hold drafts beside
-# published versions, so none of them is a final output. The table's comments are its definitions.
+# published versions, so none of them is a final output. The table's comments are its definitions. What is
+# current stays on rdm.code_set_version (published, with no valid_to); a retired version keeps its rows here.
 - layer: rdm
   table: published_code
   scope: history
