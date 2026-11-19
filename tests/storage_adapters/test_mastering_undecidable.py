@@ -23,12 +23,12 @@ COMPANY = ("sec.company", "sec.company.v1", "company",
 PERSON = ("sec.submissions.person", "sec.submissions.person.v1", "person",
           {"cik": 777003, "name": "EXAMPLE ADVISORS LLC", "entityType": "other", "ein": None, "sic": "",
            "fiscalYearEnd": None, "stateOfIncorporation": ""},
-          {"cik": 777004, "name": "COOK TIMOTHY D", "entityType": "other", "ein": None, "sic": "",
+          {"cik": 777004, "name": "DOE JANE Q", "entityType": "other", "ein": None, "sic": "",
            "fiscalYearEnd": None, "stateOfIncorporation": ""},
           "classification_entity_undetermined")
 OWNER = ("sec.ownership", "sec.ownership.reporting_owner.v1", "person",
          {"accession_number": "0000777005-26-000001", "rpt_owner_cik": 777005, "rpt_owner_name": "EXAMPLE CAPITAL LLC"},
-         {"accession_number": "0000777006-26-000001", "rpt_owner_cik": 777006, "rpt_owner_name": "COOK TIMOTHY D",
+         {"accession_number": "0000777006-26-000001", "rpt_owner_cik": 777006, "rpt_owner_name": "DOE JANE Q",
           "is_director": True, "issuer_cik": 320193, "period_of_report": "2026-01-02"},
          "classification_entity_undetermined")
 
