@@ -2,8 +2,8 @@
 
 Date: 2026-09-25
 
-Question: does company mastering treat `ISHARES TR`, `VANGUARD INDEX FDS`,
-and `SPDR S&P 500 ETF TR` as BlackRock, Vanguard, and SSGA?
+Question: does company mastering treat an ETF trust named on 13F rows (`EXAMPLE INDEX TR`, say)
+as the sponsor that runs it?
 
 ## What company mastering actually joins
 
@@ -25,12 +25,12 @@ which is the SEC registrant, not the `nameOfIssuer` on an information table.
 renamed. Company mastering does confirm that case. The filed spelling stays
 an alias.
 
-`ISHARES TR`, `VANGUARD INDEX FDS`, and `SPDR S&P 500 ETF TR` are the names
-on the 13F rows. They are not the legal names BlackRock, Vanguard, and SSGA.
+The trusts' names are what the 13F rows carry.
+They are not the sponsors' legal names.
 Nothing in company mastering joins a product trust to its sponsor by those
 strings. If the trust has its own CIK, it is a separate Company.
 
 ## Consequence for ISSUED_BY
 
-Pointing the ETF CUSIP at BlackRock, Vanguard, or SSGA is a new sponsor
+Pointing the ETF CUSIP at the sponsor is a new sponsor
 relationship. It is not a result company mastering already produces.

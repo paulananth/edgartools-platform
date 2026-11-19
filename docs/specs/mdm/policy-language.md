@@ -301,7 +301,7 @@ Rules:
   declared lists against the named normalizer. `token_match` also counts a
   raw `&` as one token of its own: version 1 for every list, version 2 only
   for a list that carries `AND`, the one asking whether a name joins two
-  parties (ticket 12: version 1 held back McCormick & Co at a fund-name
+  parties (ticket 12: version 1 held back a "<surname> & Co" company at a fund-name
   step). A primitive is never edited once written; a correction is a new
   version, so a proved rule keeps the meaning it was proved with.
 - **`values_overlap@1`** counts how many of a list field's values fall in a

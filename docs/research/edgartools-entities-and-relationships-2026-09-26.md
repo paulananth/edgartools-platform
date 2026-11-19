@@ -9,7 +9,7 @@ Checked the installed package at `.venv/.../edgar`, version `5.30.0` in `__about
 | `SecFiler` | `entity/core.py` | Abstract filer. Must have a CIK, filings, and facts. | CIK |
 | `Entity` | `entity/core.py` | Any SEC filer. `get_entity` returns this. | CIK, or a ticker resolved to a CIK |
 | `Company` | `entity/core.py` | A public company. `get_company`. | CIK or ticker |
-| `FundCompany` | `funds/core.py` | A fund registrant. Subclass of `Entity`. The package text calls it the legal entity that files, and gives "Vanguard" as the example. | CIK |
+| `FundCompany` | `funds/core.py` | A fund registrant. Subclass of `Entity`. The package text calls it the legal entity that files, and gives a fund family as the example. | CIK |
 | `FundSeries` | `funds/core.py` | One product under that registrant. | Series id |
 | `FundClass` | `funds/core.py` | One share class. | Class id or ticker |
 | `Person` | `_party.py` | A first and last name on a form, plus an address. Not an `Entity`. No CIK. | The name on that form |

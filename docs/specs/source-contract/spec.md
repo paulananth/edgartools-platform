@@ -642,7 +642,7 @@ must be settled before Form 3/4/5 goes live (§25 item 7).
 **The same trap on a company source (ticket 09).** On SEC company
 profiles, `kind_values: { operating: company }` over `entityType` looks
 right, but `other` covers people **and** listed foreign companies (Wisekey,
-Brookfield Wealth Solutions, Oddity Tech in the 400-document batch). A row
+two filers in the 400-document batch). A row
 whose kind value is not in `kind_values` becomes a **deferred record**, and
 the Batch Gate counts it in `deferred`, whose limit is 0 unless declared
 with a `why:`. So a contract that maps most of its batch away cannot become

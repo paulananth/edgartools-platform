@@ -17,7 +17,7 @@ def no_custom_steps(monkeypatch):
 ROOT = Path(__file__).resolve().parents[2]
 SAMPLES = [None, '', False, 123, ['THE Inc'], {'name': 'A&B'},
            'Électricité Holdings Corporation /DE/', 'THE A&B L.L.C.',
-           'Wayfair Inc.', 'WAYFAIR LLC', 'COUSINS PROPERTIES INC', 'COUSINS PROPERTIES LP',
+           'Wayvane Inc.', 'WAYVANE LLC', 'KINDRED EXAMPLE PROPERTIES INC', 'KINDRED EXAMPLE PROPERTIES LP',
            'International Company Limited', 'A L L P', 'A L P', 'THE THE INC',
            'The A.G. /D E/', 'A/B INTERNATIONAL /123456/', 'A/B /1234567/',
            '\u001cThe A & B\u001f/DE/\u001e', 'Kelvin 𝑨 ﬁrm ＬＬＣ',
@@ -45,7 +45,7 @@ def test_missing_name_uses_empty_key_and_legal_forms_remain_distinct():
     config = contract('sec.company')
     reading = SourceEngine(config).read(b'{"names":[{}]}')
     assert reading.tables['names'][0]['key'] == ''
-    values = keys(config, ['Wayfair Inc.', 'Wayfair LLC', 'COUSINS PROPERTIES INC', 'COUSINS PROPERTIES LP'])
+    values = keys(config, ['Wayvane Inc.', 'Wayvane LLC', 'KINDRED EXAMPLE PROPERTIES INC', 'KINDRED EXAMPLE PROPERTIES LP'])
     assert len(set(values)) == 4
 
 

@@ -142,7 +142,7 @@ source_engine.STEPS = {}
 store = Artifacts()
 root = Path("name-key-proof").resolve()
 root.mkdir()
-names = ["Électricité Holdings Corporation /DE/", "THE A&B L.L.C.", "Wayfair Inc.", "WAYFAIR LLC"]
+names = ["Électricité Holdings Corporation /DE/", "THE A&B L.L.C.", "Wayvane Inc.", "WAYVANE LLC"]
 raw = store.put_bytes((root / "names.json").as_uri(), json.dumps({"names":[{"name":name} for name in names]}).encode())
 context = store.put(root.as_uri(), {"version":1,"input":raw,"values":{}})
 proof = {}
@@ -155,7 +155,7 @@ for source, first in [("sec.company", "ELECTRICITE HLDGS CORP"), ("gleif", "ELEC
     assert source_read.check({**task,"candidate":receipt},store) == ({"source.output":True},[])
     reading = store.json(receipt)
     rows = reading["artifacts"][0]["tables"]["names"]
-    assert [row["key"] for row in rows] == [first,"A AND B LLC","WAYFAIR INC","WAYFAIR LLC"]
+    assert [row["key"] for row in rows] == [first,"A AND B LLC","WAYVANE INC","WAYVANE LLC"]
     assert reading["artifacts"][0]["input"] == raw and reading["artifacts"][0]["context"] == context
     assert not reading["artifacts"][0]["deferred"]
     proof[source] = {"contract":contract,"input":manifest,"reading":receipt}

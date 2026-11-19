@@ -45,11 +45,11 @@ def test_one_key_never_distinguishes_from_itself():
 def test_variants_of_one_entity_and_renames_kept_apart():
     pairs = [("Zeta Corp", "Zeta Corporation"), ("Eta Corp", "Eta Corporation"),
              ("Theta Systems Inc", "Theta Systems"), ("Iota Systems Inc", "Iota Systems"),
-             ("Inhale Therapeutic Systems", "Nektar Therapeutics"),  # a rename
+             ("Omicron Therapeutic Systems", "Sigma Therapeutics"),  # a rename
              ("Gamma Holdings Inc", "Gamma Holdings LLC")]  # a conversion: one entity
     alike = nm.variants(pairs)
     assert alike.counts[("corp", "corporation")] == 2 and alike.counts[("", "inc")] == 2
-    assert ("inhale", "nektar") not in alike.counts
+    assert ("omicron", "sigma") not in alike.counts
     clash = nm.conflicts(nm.distinguishing(duckdb.connect(), DISTINCT), alike)
     assert [c["pair"] for c in clash] == [["inc", "llc"]]
 
