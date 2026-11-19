@@ -1,6 +1,6 @@
 ---
 name: database-monitoring
-description: Watches the performance and locks of the hosted PostgreSQL instance as a read-only login - connections, sessions waiting on locks and who blocks them, long transactions, the costliest statements, table churn. Use while a load runs, when a step looks stuck or slow, or before changing a worker count; never to change anything.
+description: Watches the performance, locks and server log of the hosted PostgreSQL instance as read-only logins - connections, sessions waiting on locks and who blocks them, long transactions, the costliest statements, table churn, memory settings and the log's errors and out-of-memory lines. Use while a load runs, when a step looks stuck or slow, or before changing a worker count; never to change anything.
 ---
 
 # Database monitoring
@@ -19,7 +19,8 @@ or a worker change is the operator's call, made in data-operations.
 | Connect as the owner, the loader or a runtime login to look | The diagnostic login (`DIAGNOSE_DATABASE_URL`, in the stores folder's `reader.env`) |
 | Print the address, a password or a login's URL | The script prints none; do not echo the environment |
 | End a session, cancel a query, vacuum, or change a setting | Report the finding; the operator decides |
-| Paste a statement's literals (they are values from the data) | The script replaces literals; keep it that way |
+| Paste a statement's literals, or a log's DETAIL, STATEMENT or CONTEXT lines (they quote values from the data) | The script replaces literals and drops those lines; keep it that way |
+| Read the server log as an administrator role | The read-only log role (see Postgres logs) |
 | Loop faster than the run changes | One reading every 30 minutes for a run already going |
 
 ## Setup
@@ -42,7 +43,39 @@ object per reading.
 | What is long? | `sessions --min-seconds 60` | Statements and transactions running at least that long, with the wait kind and event (`Lock`, `IO`, `Client`) |
 | What costs most? | `statements --by total` (also `mean`, `calls`) | `total_s` is where the time went; `mean_ms` with few calls is one slow statement; many calls at 1-2 ms is a chatty client. `blocks_read` against `blocks_hit` says cold reads against cache |
 | Which table churns? | `tables` | `dead` rows high with an old `last_autovacuum` means bloat; a large `seq_scan` against `idx_scan` on a big table means a missing index |
-| All of it | `all` | The five readings in one pass |
+| Can the memory settings overrun the machine? | `memory` | `work_mem` is per sort or hash step, per session: `work_mem_if_each_active_sorts_once_mb` is a floor, since one query can hold several steps; compare it with the instance size, `shared_buffers` included |
+| Which store spills or rolls back? | `databases` | `temp_mb` and `temp_files` are sorts and hashes that did not fit `work_mem`; `deadlocks` and a high `rollbacks` against `commits` name the store to look at |
+| What did the server log? | `logs --minutes 60` | See Postgres logs |
+| All of it | `all` | Every reading above (the log only when its connection is set) |
+
+## Postgres logs
+
+The hosted server writes its log to the account's event table (`SNOWFLAKE.TELEMETRY.EVENTS`, log type
+`postgres-otelcol-vm-agent`, one row per log line, keyed by the instance id, a few minutes late). The diagnostic Postgres
+login cannot read it; `logs` reads it through a SnowCLI connection:
+
+```bash
+export MONITOR_SNOWFLAKE_CONNECTION=<a connection whose role reads only the event table>
+python scripts/db_monitor.py logs --minutes 120
+```
+
+- **A read-only role.** The connection's role holds `USAGE` on a warehouse and `SELECT` on the event table, nothing else
+  (grant Snowflake's event-viewer application role to it where the account has one). The script reads `current_role()`
+  first and refuses `ACCOUNTADMIN`, `SECURITYADMIN`, `SYSADMIN`, `USERADMIN` and `ORGADMIN`. Creating that role is an
+  account change: the operator says so first (aws-snowflake-operations).
+- **What it keeps.** Lines that carry a level (`PANIC`, `FATAL`, `ERROR`, `WARNING`) and the memory and kill lines, grouped by
+  message with a count and the first and last time: `memory` first, then `fatal`, `error`, `warning`.
+- **Memory lines.** `out of memory`, `could not resize shared memory`, `terminated by signal 9` (the system's kill),
+  `invalid memory alloc request`, `cannot allocate memory`, `could not fork new process`, and the connection-exhaustion lines
+  (`remaining connection slots are reserved`, `too many clients`). One of these within a step's run window is that step's
+  cause until shown otherwise: read `memory` and `databases` beside it, and lower the step's workers before retrying.
+- **What the common ones mean.** `canceling autovacuum task` is vacuum yielding to a lock: harmless alone. `duplicate key
+  value violates unique constraint` is a writer racing another (expected for claims, a defect for anything else).
+  `Snowflake authentication failed` for a runtime login is a wrong or rotated password in a run's env file; for `postgres`,
+  `admin`, `root` or `test` from an address that is not ours it is a probe, and `pg_hba.conf` refusing it is the right outcome:
+  report the count and the times to the operator, never the address.
+- The log can hold what a failed statement quoted; the script drops those lines, so never read the table by hand to
+  "see more".
 
 ## Reading a stuck or slow step
 
@@ -50,6 +83,7 @@ object per reading.
 2. `locks`: if waiters exist, follow `blocker_pid`. Many waiters on one advisory lock are a queue behind one holder (the
    merge locks); a blocker idle in a transaction is a client that did not commit.
 3. `sessions`: an `active` session on `IO` is the disk; on `Client` the worker is the bottleneck, not the database.
+   `logs`: a memory line in the window means memory, whatever the step's own message says.
 4. `statements`: the top total is the target to fix; compare two readings a few minutes apart, because the counters are
    cumulative since the last reset (a single reading shows history, not now).
 5. Report the numbers with what they mean, as counts: the waiting sessions, the longest wait, the blocker's state. Then
@@ -61,4 +95,5 @@ object per reading.
 - `statements` needs the `pg_stat_statements` extension, present on the hosted instance; a store without it fails the
   reading, not the others.
 - The login sees sessions of every store on the instance; `pg_monitor` shows no table rows.
+- `logs` lags a few minutes and needs the read-only role; without it every other reading still works.
 - A reading is a moment: a lock held for a second does not show. Repeat before concluding anything.

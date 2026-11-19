@@ -82,3 +82,49 @@ def test_the_connection_is_a_read_only_session_and_a_superuser_is_refused(monkey
     monkeypatch.setattr(psycopg2, "connect", lambda *a, **k: Connection(True))
     with pytest.raises(SystemExit, match="superuser"):
         monitor.connect()
+
+
+def test_a_log_message_loses_its_addresses_literals_and_key_values():
+    shown = monitor.scrub("FATAL:  no entry for host \"10.20.30.40\", user 'bob' Key (cik)=(0001234) is bad")
+    assert "10.20.30.40" not in shown and "bob" not in shown and "0001234" not in shown
+    assert "<ip>" in shown and "(?)=(?)" in shown
+
+
+def test_the_log_reading_selects_only_and_names_every_memory_phrase():
+    sql = monitor.LOG_SQL.format(instance="abc123", minutes=60, top=5, level=monitor.LEVEL, level_word="x",
+                                 memory="|".join(f".*{p}.*" for p in monitor.MEMORY),
+                                 is_memory=" or ".join(f"m ilike '%{p}%'" for p in monitor.MEMORY))
+    assert sql.strip().lower().startswith("with") and not WRITES.search(re.sub(r"'[^']*'", "''", sql))
+    assert "out of memory" in sql and "terminated by signal 9" in sql and "abc123" in sql
+    assert "DETAIL" not in sql and "STATEMENT" not in sql  # those lines quote data and are never selected
+
+
+def test_the_instance_id_is_the_first_part_of_the_host(monkeypatch):
+    monkeypatch.setenv("DIAGNOSE_DATABASE_URL", "postgresql://reader:x@abc123def.region.example:5432/mdm")
+    assert monitor.instance_id() == "abc123def"
+
+
+@pytest.mark.parametrize("role", ["ACCOUNTADMIN", "sysadmin"])
+def test_the_log_reading_refuses_an_administrator_role(monkeypatch, role):
+    monkeypatch.setenv("MONITOR_SNOWFLAKE_CONNECTION", "c")
+    monkeypatch.setattr(monitor, "snow", lambda connection, sql: [{"ROLE": role}])
+    with pytest.raises(SystemExit, match="administrator role"):
+        monitor.logs(60)
+
+
+def test_the_log_reading_needs_its_connection_named(monkeypatch):
+    monkeypatch.delenv("MONITOR_SNOWFLAKE_CONNECTION", raising=False)
+    with pytest.raises(SystemExit, match="MONITOR_SNOWFLAKE_CONNECTION"):
+        monitor.logs(60)
+
+
+def test_a_read_only_role_reads_the_log_and_the_messages_are_scrubbed(monkeypatch):
+    monkeypatch.setenv("MONITOR_SNOWFLAKE_CONNECTION", "c")
+    monkeypatch.setenv("DIAGNOSE_DATABASE_URL", "postgresql://reader:x@abc123.region.example:5432/mdm")
+    answers = [[{"ROLE": "LOG_READER"}],
+               [{"KIND": "memory", "MESSAGE": "ERROR:  out of memory", "N": 2, "FIRST_AT": "a", "LAST_AT": "b"},
+                {"KIND": "fatal", "MESSAGE": "FATAL:  rejected host 1.2.3.4", "N": 1, "FIRST_AT": "a", "LAST_AT": "b"}]]
+    monkeypatch.setattr(monitor, "snow", lambda connection, sql: answers.pop(0))
+    found = monitor.logs(60)
+    assert [(r["kind"], r["n"]) for r in found] == [("memory", 2), ("fatal", 1)]
+    assert found[1]["message"] == "FATAL: rejected host <ip>"

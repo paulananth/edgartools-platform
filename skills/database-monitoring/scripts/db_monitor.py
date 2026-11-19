@@ -2,11 +2,16 @@
 """Read the performance and locks of the hosted PostgreSQL instance as the read-only diagnostic login.
 
 Usage: db_monitor.py summary | locks | sessions [--min-seconds N] | statements [--top N] [--by total|mean|calls]
-                     | tables [--top N] | all      (each takes --database NAME and --json)
+                     | tables [--top N] | memory | databases | logs [--minutes N] | all   (--database NAME, --json)
 
 The login is DIAGNOSE_DATABASE_URL (the stores folder's reader.env): a member of pg_monitor, never the owner or a runtime
 login. Every connection is a read-only session with a statement timeout; the script refuses a superuser. It prints no
 address, and shows a statement with its literals replaced, cut short, so no value from the data reaches the terminal.
+
+`logs` reads the instance's PostgreSQL server log from the account's event table through a SnowCLI connection named by
+MONITOR_SNOWFLAKE_CONNECTION, whose role can only read that table; it refuses an administrator role. It keeps the lines
+that carry a level (PANIC, FATAL, ERROR, WARNING) and the memory and kill lines, and drops the DETAIL, STATEMENT and
+CONTEXT lines, which quote values from the data. Addresses and literals are replaced.
 """
 from __future__ import annotations
 
@@ -14,6 +19,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 
 SQL = {
@@ -61,6 +67,19 @@ SQL = {
                coalesce(to_char(last_autovacuum, 'YYYY-MM-DD HH24:MI'), '') as last_autovacuum
         from pg_stat_user_tables order by n_dead_tup desc, seq_scan desc limit %(top)s""",
 }
+SQL["memory"] = """
+    select (select setting::bigint from pg_settings where name = 'work_mem') / 1024 as work_mem_mb,
+           (select setting::bigint from pg_settings where name = 'maintenance_work_mem') / 1024 as maintenance_work_mem_mb,
+           (select setting::bigint * 8 from pg_settings where name = 'shared_buffers') / 1024 as shared_buffers_mb,
+           (select setting::int from pg_settings where name = 'max_connections') as max_connections,
+           count(*) as connections, count(*) filter (where state = 'active') as active,
+           round((select setting::bigint from pg_settings where name = 'work_mem') / 1024.0
+                 * count(*) filter (where state = 'active')) as work_mem_if_each_active_sorts_once_mb
+    from pg_stat_activity where datname is not null"""
+SQL["databases"] = """
+    select datname as database, numbackends as sessions, xact_commit as commits, xact_rollback as rollbacks, deadlocks,
+           temp_files, round(temp_bytes / 1048576.0) as temp_mb, conflicts, blks_read as blocks_read, blks_hit as blocks_hit
+    from pg_stat_database where datname is not null order by temp_bytes desc"""
 ORDER = {"total": "total_exec_time", "mean": "mean_exec_time", "calls": "calls"}
 STATEMENT_COLUMNS = ("query", "waiting_query", "blocker_query")
 
@@ -109,6 +128,61 @@ def rows(conn, name: str, **params) -> list[dict]:
     return found
 
 
+ADMIN_ROLES = {"ACCOUNTADMIN", "SECURITYADMIN", "SYSADMIN", "USERADMIN", "ORGADMIN"}
+LEVEL = r"(PANIC|FATAL|ERROR|WARNING):  "
+MEMORY = ("out of memory", "could not resize shared memory", "terminated by signal 9", "invalid memory alloc request",
+          "cannot allocate memory", "could not fork new process", "remaining connection slots are reserved",
+          "too many clients")
+LOG_SQL = """
+    with l as (select timestamp as t, value:MESSAGE::string as m from SNOWFLAKE.TELEMETRY.EVENTS
+               where resource_attributes['snowflake.o11y.logtype'] = 'postgres-otelcol-vm-agent'
+                 and resource_attributes['instance.id'] = '{instance}' and record_type = 'LOG'
+                 and timestamp > current_timestamp() - interval '{minutes} minutes'
+                 and regexp_like(m, '.*{level}.*|{memory}')),
+    k as (select t, m, case when {is_memory} then 'memory' else lower(regexp_substr(m, '{level_word}')) end as kind from l)
+    select kind, left(coalesce(regexp_substr(m, '{level}.{{0,110}}'), regexp_substr(m, '.{{0,110}}')), 140) as message,
+           count(*) as n, min(t)::string as first_at, max(t)::string as last_at
+    from k group by 1, 2 order by (kind = 'memory') desc, n desc limit {top}"""
+
+
+def scrub(text: str | None) -> str:
+    """A log message without addresses, quoted literals or the values of a key."""
+    text = re.sub(r"\b\d{1,3}(?:\.\d{1,3}){3}\b", "<ip>", text or "")
+    text = re.sub(r"'(?:[^']|'')*'", "?", text)
+    text = re.sub(r"\(([^()]*)\)=\(([^()]*)\)", "(?)=(?)", text)
+    return " ".join(text.split())
+
+
+def instance_id() -> str:
+    """The instance's id: the first part of the diagnostic login's host name. Never printed."""
+    found = re.search(r"@([a-z0-9]+)[.:/]", os.environ.get("DIAGNOSE_DATABASE_URL", ""))
+    if not found:
+        sys.exit("DIAGNOSE_DATABASE_URL does not name an instance: source the stores folder's reader.env")
+    return found.group(1)
+
+
+def snow(connection: str, sql: str) -> list[dict]:
+    done = subprocess.run(["snow", "sql", "-c", connection, "--format", "json", "-q", sql], capture_output=True, text=True,
+                          check=False)
+    if done.returncode:  # its message can quote the account
+        sys.exit("the Snowflake read failed (check MONITOR_SNOWFLAKE_CONNECTION and its role)")
+    return json.loads(done.stdout or "[]")
+
+
+def logs(minutes: int, top: int = 20) -> list[dict]:
+    connection = os.environ.get("MONITOR_SNOWFLAKE_CONNECTION")
+    if not connection:
+        sys.exit("MONITOR_SNOWFLAKE_CONNECTION is not set: name the SnowCLI connection whose role reads only the event table")
+    role = snow(connection, "select current_role() as role")[0]["ROLE"]
+    if role.upper() in ADMIN_ROLES:
+        sys.exit("the connection runs as an administrator role: use the read-only log role (see the skill, Postgres logs)")
+    sql = LOG_SQL.format(instance=instance_id(), minutes=int(minutes), top=int(top), level=LEVEL,
+                         level_word="(PANIC|FATAL|ERROR|WARNING)", memory="|".join(f".*{p}.*" for p in MEMORY),
+                         is_memory=" or ".join(f"m ilike '%{p}%'" for p in MEMORY))
+    return [{"kind": r["KIND"], "message": scrub(r["MESSAGE"]), "n": r["N"], "first_at": r["FIRST_AT"], "last_at": r["LAST_AT"]}
+            for r in snow(connection, sql)]
+
+
 def show(title: str, found: list[dict], as_json: bool) -> None:
     if as_json:
         print(json.dumps({title: found}, default=str))
@@ -120,20 +194,27 @@ def show(title: str, found: list[dict], as_json: bool) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=["summary", "locks", "sessions", "statements", "tables", "all"])
+    parser.add_argument("command", choices=["summary", "locks", "sessions", "statements", "tables", "memory", "databases", "logs", "all"])
     parser.add_argument("--database", help="a database of the instance (the statements and tables are per database)")
     parser.add_argument("--min-seconds", type=int, default=30, help="sessions: only those running at least this long")
     parser.add_argument("--top", type=int, default=10)
     parser.add_argument("--by", choices=sorted(ORDER), default="total", help="statements: order")
+    parser.add_argument("--minutes", type=int, default=60, help="logs: how far back to read")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     conn = connect(args.database)
+    options = {"sessions": {"min_seconds": args.min_seconds}, "statements": {"top": args.top, "by": args.by},
+               "tables": {"top": args.top}}
     try:
-        wanted = ["summary", "locks", "sessions", "statements", "tables"] if args.command == "all" else [args.command]
+        wanted = (["summary", "locks", "sessions", "memory", "databases", "statements", "tables"]
+                  if args.command == "all" else [args.command])
         for name in wanted:
-            show(name, rows(conn, name, **{"summary": {}, "locks": {}, "sessions": {"min_seconds": args.min_seconds},
-                                           "statements": {"top": args.top, "by": args.by}, "tables": {"top": args.top}}[name]),
-                 args.json)
+            if name != "logs":
+                show(name, rows(conn, name, **options.get(name, {})), args.json)
+        if args.command == "logs" or (args.command == "all" and os.environ.get("MONITOR_SNOWFLAKE_CONNECTION")):
+            show("logs", logs(args.minutes), args.json)
+        elif args.command == "all":
+            print("== logs: not read (MONITOR_SNOWFLAKE_CONNECTION is not set)")
     finally:
         conn.close()
     return 0
