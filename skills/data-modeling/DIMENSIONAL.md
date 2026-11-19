@@ -92,6 +92,9 @@ source named. A year-to-date measure is a query over the period fact, not a stor
 | 4 Mini-dimension | Fast-changing attributes apart | See the table above |
 | 5 to 7 | Hybrids of 1, 2 and 4 | Only when one question needs both the historical and the current value; type 7 (the fact holds the master id and the version key) is the one to try first |
 
+For the three questions a dimension must answer (current, as of a date, in effect when the fact happened) and the as-of join
+that answers the third, see [TEMPORAL.md](TEMPORAL.md).
+
 A type 2 dimension is a larger join and a larger risk of multiplied rows: join on the master id and the fact's
 business date falling inside one version's validity, and prove one version per fact row.
 

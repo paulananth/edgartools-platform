@@ -120,8 +120,8 @@ Read from the techniques' own published material; a claim a source does not make
   query surface. Stated benefits: extension adds tables, so old queries keep working; no nulls; narrow reads. Limits: many
   narrow tables that depend on the views and join elimination to reassemble; closed intervals add query complexity;
   target support varies and some generators were never run on a live server; it is called an advanced technique, and the
-  page comparing it with a vault comes from one of its creators. Here attribute history already lives on master and
-  code-set versions, so the model would historize a second time.
+  page comparing it with a vault comes from one of its creators. Its author's published practice (history, as-of joins, identity, layers) is in [TEMPORAL.md](TEMPORAL.md). Here
+  attribute history already lives on master and code-set versions, so the model would historize a second time.
 - **Activity schema.** One time-ordered stream per entity type: an activity id, a UTC timestamp, the entity's global
   identifier (or an anonymous one until resolved), the activity name, a semi-structured feature object with the same
   keys for every row of one activity, an optional revenue amount and a link to the source record. Activities join to
@@ -230,7 +230,7 @@ marked approved or proposed.
 
 ## More techniques
 
-[DIMENSIONAL.md](DIMENSIONAL.md) holds the rest of the toolkit: the bus matrix, fact and dimension types, additivity,
+[TEMPORAL.md](TEMPORAL.md) holds history, as-of joins, corrections and identity. [DIMENSIONAL.md](DIMENSIONAL.md) holds the rest of the toolkit: the bus matrix, fact and dimension types, additivity,
 slowly changing history, late and missing keys, drilling across, and the proofs a Gold model needs.
 
 ## Hand off
