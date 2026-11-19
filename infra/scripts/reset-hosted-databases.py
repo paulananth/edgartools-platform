@@ -14,10 +14,17 @@ The stores' schemas come next (docs/runbooks/edgar-intelligence/init.md, "Initia
 Dropping needs a sign-off: --words is the operator's exact approval of this drop, and the run refuses without it.
 The words, the ET time and what was dropped (names and sizes) are appended to reinit-approvals.log in the stores
 folder (the folder of the owner.env that was sourced; STORES_FOLDER names it when it cannot be found).
+
+After the drop, the dropped stores' run files go too: the `load` folder under the BOOKKEEPING_MANIFEST_ROOT that the
+stores folder's worker.env names. No store refers to them once Bookkeeping is dropped. The `extracts` folder stays: an
+extract is kept by its content and rules, and a load reuses it.
 """
 import argparse
 import os
 import json
+import re
+import shlex
+import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -54,6 +61,21 @@ def sign_off(path: Path, words: str, dropped: dict) -> None:
 def approvals_log() -> Path:
     folder = os.environ.get("STORES_FOLDER") or Path.home() / ".config" / "edgartools" / "hosted"
     return Path(folder) / "reinit-approvals.log"
+
+
+def clear_run_files(stores: Path) -> Path | None:
+    """Delete the run files of the stores this folder names (`<manifest root>/load`) and say which folder went; None
+    when its worker.env names no manifest root or nothing is there."""
+    env = stores / "worker.env"
+    found = re.search(r"^(?:export\s+)?BOOKKEEPING_MANIFEST_ROOT=(.*)$", env.read_text(), re.M) if env.is_file() else None
+    value = shlex.split(found.group(1))[0] if found and found.group(1).strip() else ""
+    if not value:
+        return None
+    folder = Path(value.removeprefix("file://")) / "load"
+    if not folder.is_dir():
+        return None
+    shutil.rmtree(folder)
+    return folder
 
 
 def main() -> int:
@@ -103,6 +125,8 @@ def main() -> int:
                     who = grantee if grantee == "PUBLIC" else quote(grantee)
                     conn.exec_driver_sql(f"GRANT {privilege} ON DATABASE {quote(name)} TO {who}")
                 print(f"{name}: created again, {len(grants(acl, owner))} grants put back")
+            gone = clear_run_files(approvals_log().parent)
+            print(f"Run files of the dropped stores deleted: {gone}" if gone else "No run files to delete")
     finally:
         engine.dispose()
     return 0

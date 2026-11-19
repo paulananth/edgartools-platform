@@ -111,7 +111,21 @@ def test_each_new_bundle_is_prepared_submitted_and_driven(tmp_path, monkeypatch)
 
     assert [(b["documents"], b["new"], b["run_id"]) for b in result["bundles"]] == [(2, 0, None), (1, 1, "new-1")]
     assert ("drive", "new-1", ("read",)) in commands.calls  # the run's frozen steps, not the files on disk
-    assert (tmp_path / "m" / "load" / "example" / "by_letter" / "2026-10-25T000000Z" / "bundle-002").is_dir()
+    run_folder = tmp_path / "m" / "load" / "example" / "by_letter" / "2026-10-25T000000Z"
+    assert not run_folder.exists()  # a verified bundle's files are deleted: Bookkeeping keeps its hash, the capture its bytes
+
+
+def test_a_bundle_whose_run_stops_keeps_its_files_so_the_run_can_resume(tmp_path, monkeypatch):
+    class Stops(Recorded):
+        def drive(self, run_id, steps):
+            raise driving.RunStopped("step read did not finish before the deadline")
+
+    commands = Stops()
+    folder = capture(tmp_path / "c", "letters/a.json")
+    with pytest.raises(driving.RunStopped):
+        loader(tmp_path, monkeypatch, commands).load(
+            capture=folder, capture_run="capture-1", as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
+    assert (tmp_path / "m" / "load" / "example" / "by_letter" / "2026-10-25T000000Z" / "bundle-001" / "documents.json").is_file()
 
 
 def test_automatic_preparation_finishes_before_the_bundles(tmp_path, monkeypatch):

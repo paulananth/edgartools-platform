@@ -66,4 +66,11 @@ which no phase timing could name.
 ## Stopping loads
 - Stop the scheduler first (it would start the next step), then its step processes. The state file keeps every done step.
 - A reset of the stores (`reset-hosted-databases.py --words "<the operator's words>"`, which records them) refuses without the operator's sign-off and while any session is connected: confirm none runs
-  (`summary`) before it, and expect the previous run's done steps to be set aside as another store's state.
+  (`summary`) before it, and expect the previous run's done steps to be set aside as another store's state. It deletes the
+  dropped stores' run files (`<manifest root>/load`) and keeps the extracts.
+
+## Run files
+A load writes each bundle's prepared files under `<manifest root>/load/<source>/<target>/<run>/bundle-NNN` and deletes them
+once that bundle's run is verified complete: Bookkeeping keeps the manifest's hash, the capture keeps the bytes. Only a run
+that stopped keeps its files, so it can resume. Files kept with nothing that refers to them are inventory waste: they fill the disk until the
+readiness disk check fails.

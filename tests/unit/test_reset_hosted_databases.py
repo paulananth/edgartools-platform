@@ -42,3 +42,22 @@ def test_a_drop_without_words_is_refused_before_any_connection(monkeypatch, caps
     monkeypatch.setattr(reset.sa, "create_engine", lambda *a, **k: (_ for _ in ()).throw(AssertionError("connected")))
     assert reset.main() == 2
     assert "exact approval" in capsys.readouterr().err
+
+
+def test_a_reset_deletes_the_run_files_of_the_stores_it_drops_and_keeps_the_extracts(tmp_path):
+    """No store refers to them once Bookkeeping is dropped: kept, they only fill the disk (185 GB once)."""
+    root = tmp_path / "manifests"
+    (root / "load" / "invented.source" / "mastering" / "2026-01-01T000000Z" / "bundle-001").mkdir(parents=True)
+    (root / "load" / "invented.source" / "mastering" / "2026-01-01T000000Z" / "bundle-001" / "documents.json").write_text("[]")
+    (root / "extracts" / "abc").mkdir(parents=True)
+    stores = tmp_path / "stores"
+    stores.mkdir()
+    (stores / "worker.env").write_text(f"export DB_URL='postgresql://invented/db'\nexport BOOKKEEPING_MANIFEST_ROOT='file://{root}'\n")
+    assert reset.clear_run_files(stores) == root / "load"
+    assert not (root / "load").exists() and (root / "extracts" / "abc").is_dir()
+    assert reset.clear_run_files(stores) is None  # nothing left: a second reset deletes nothing
+
+
+def test_a_stores_folder_that_names_no_run_files_folder_deletes_nothing(tmp_path):
+    (tmp_path / "worker.env").write_text("export DB_URL='postgresql://invented/db'\n")
+    assert reset.clear_run_files(tmp_path) is None
