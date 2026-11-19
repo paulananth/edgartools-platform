@@ -14,8 +14,12 @@ The operator asked for the whole design, not one slice, made lean by the seven w
 
 - [x] Read every silver spec (grain, links, time, measures, load mode) and the exposure list. 2026-11-19 09:26 ET
 - [x] Write the whole bus, the object list, the cross-fact findings and the waste check below. 2026-11-19 09:26 ET
-- [ ] Operator answers the decision list at the end
-- [ ] Name the first requirement (a business question) that justifies the first build; until then nothing is built
+- [x] Operator answered the decision list: "Approved", 2026-11-19 09:30 ET, for all eight recommendations as written (section 7). Evidence: the design above and the 16 silver specs.
+- [x] First requirement named by that approval: a manager's holdings by security and quarter. First build: `master`, `dim_company`, `dim_security`, `dim_date`, `thirteenf_filing` and `thirteenf_holding` facts (six views).
+- [ ] Check what `DB_EDGARTOOLS_GOLD` holds today with a read-only identity (the operator's rule forbids the admin account and the `edgartools-prod` and `snowconn` connections: ask for a read-only connection)
+- [ ] Write the Gold configuration for the six views (one file; grain, key, links, roles, members, requirement) and the shared dbt template that reads it; consult the GoF reviewer first
+- [ ] Prove each view on the smallest sample (seven proofs, DIMENSIONAL.md) on an invented four-company fixture before any hosted run
+- [ ] Build in the approved destination after the mirror exists and the load has finished
 - [ ] Count, on the loaded stores, the rows each join would multiply or drop (needs the load)
 - [ ] ~~dbt generator and views~~ deferred: no named requirement, no approved writable destination
 - [ ] Learning → skill: gaps found when the first object is built return to `GOLD.md`
@@ -108,3 +112,14 @@ KISS: no surrogate keys, no history dimension, no bridge except the relationship
 6. **Business time for the five registration and prospectus facts:** ask profiling to find it, or accept recorded time only.
 7. **13F amendments** are new accessions: keep them as rows; "latest amended position" only on a named requirement.
 8. **`market_value` unit** across periods: profile it before any sum across quarters.
+
+## 7. Approval record
+
+Operator, 2026-11-19 09:30 ET: "Approved". Said in answer to the eight decisions in section 6, each with its recommendation. Approved in plain
+words: (1) the first question is a manager's holdings by security and quarter; (2) Gold goes in schema `GOLD` of
+`DB_EDGARTOOLS_GOLD`, written by a dbt role that reads only the mirror database, after the existing contents are checked;
+(3) a Gold object is a view, persisted only after a measured slow query; (4) dimensions hold name, identifiers and status only;
+(5) a security's issuer is reached through the relationship fact; (6) profiling looks for a business time of the five
+registration and prospectus facts, otherwise they answer by recorded time; (7) amendments stay rows; (8) `market_value` is
+profiled before any sum across quarters. It changes no store, role or Snowflake object: it approves the design and the
+destination name only. Building waits for the mirror and the finished load.
