@@ -102,7 +102,7 @@ resource "snowflake_account_role" "auditor" {
 }
 
 resource "snowflake_grant_database_role" "auditor_viewers" {
-  for_each           = toset(["SECURITY_VIEWER", "USAGE_VIEWER", "GOVERNANCE_VIEWER"])
+  for_each           = toset(["SECURITY_VIEWER", "USAGE_VIEWER", "GOVERNANCE_VIEWER", "ORGANIZATION_BILLING_VIEWER"]) # the last reads the rate sheet, so a plan is priced from the account's own rates
   database_role_name = "\"SNOWFLAKE\".\"${each.key}\""
   parent_role_name   = snowflake_account_role.auditor.name
 }

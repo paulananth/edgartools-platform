@@ -33,6 +33,9 @@ OPERATE or OWNERSHIP, and OPERATE can also stop, resize and reset it. So the pre
 family, version, state, storage and high-availability setting are read once by the account owner (names and numbers only, never the access
 details) and written into the create plan, then read again when the plan is approved. The Gold destination's schemas, objects and network
 rule are read by the audit role, which holds USAGE on the database and its schemas and REFERENCES on its tables (metadata, no rows).
+The account's rates are read by the same role from `SNOWFLAKE.ORGANIZATION_USAGE.RATE_SHEET_DAILY` (it holds the `ORGANIZATION_BILLING_VIEWER` database role, which also shows invoices and
+contract items: billing data, read-only). A service type appears in the sheet only once the account has used it, so a mirror's own rates are confirmed after its first day, and a plan states
+which rates were read and which were assumed.
 
 Use `aws-snowflake-operations` before Snowflake commands. Inspect the selected
 account, role and instance live. Keep credentials, database addresses and
