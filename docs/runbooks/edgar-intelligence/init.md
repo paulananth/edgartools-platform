@@ -246,4 +246,12 @@ tables: MDM, Silver and RDM (`rdm.published_code`), each with its own target dat
 [the data-platform skill's hosted mirroring guide](../../../skills/data-platform/HOSTED-MIRRORING.md#after-the-first-load-mirror-only-the-exposed-subset).
 Done when each mirror lists exactly its configured tables, each replicating, with none missing or unexpected.
 
-A store **reset** (step 2) breaks a mirror: the guide says what to plan first.
+The mirrors are rebuilt as a step of every load, after `--finish`, in this order: (1) `exposure_manifest.py generate`, then `check` (read-only: 19 tables
+today, 16 silver, 2 mdm, 1 rdm); (2) the guide's read-only pre-flight on each store (instance `STANDARD_*` or `HIGHMEM_*`, target database absent, a key and a
+supported type on every column); (3) one create plan for the three mirrors, approved by the operator before any `CREATE_MIRROR` (billable). The plan the operator
+approved on 2026-11-19: targets `DB_EDGARTOOLS_MIRROR_MDM`, `DB_EDGARTOOLS_MIRROR_SILVER` and `DB_EDGARTOOLS_MIRROR_RDM`, Iceberg on Snowflake-managed storage,
+serverless apply, a refresh every 10 minutes, created after the load ends so the first snapshot copies the loaded rows once (created while the tables were empty
+would also work and replicate as the load runs). A target name cannot be reused, so a mirror that is dropped and made again takes a new name (add a suffix).
+The reset of 2026-11-19 found no mirror in the account, so none had to be dropped first.
+
+A store **reset** (step 2) breaks a mirror: the guide says what to plan first. Before a reset, list the mirrors (`SHOW DATABASES LIKE '%MIRROR%'`, read-only).
