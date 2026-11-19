@@ -109,7 +109,7 @@ billable mirror creation retain their own gates.
 
 ### Gold warehouse
 
-Read [GOLD.md](GOLD.md) when the question is how approved final tables become Gold facts and conformed dimensions.
+Read [GOLD.md](GOLD.md) when the question is how approved final tables become Gold facts and conformed dimensions. The fact and dimension techniques, additivity and history types are [DIMENSIONAL.md](DIMENSIONAL.md).
 Apply it to any business domain: approved configuration supplies the entity
 list, each entity's dimension view, and facts at their own grains. Reuse one
 modeling path; concrete entity examples do not restrict the supported domains.

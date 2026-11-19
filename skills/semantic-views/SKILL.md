@@ -7,6 +7,8 @@ description: Draft, certify, and deploy an Explore-only Snowflake semantic view 
 
 A Semantic View is an Explore-only question contract for one Gold fact grain. It is not a physical denormalized table and not an input to a Trading Decision. Read `CONTEXT.md`, ADR 0017 (`docs/adr/0017-semantic-view-is-explore-only.md`), [data modeling](../data-modeling/SKILL.md), and [Snowflake operations](../aws-snowflake-operations/SKILL.md) first.
 
+The fact's measures keep the additivity the design declared (semi-additive and non-additive measures are not summed across the wrong dimension): [DIMENSIONAL.md](../data-modeling/DIMENSIONAL.md#additivity-declare-it-for-every-measure).
+
 ## The four objects
 
 | Object | Comes from | Rule |

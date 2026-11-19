@@ -183,6 +183,11 @@ marked approved or proposed.
   and the approved writable destination, or an explicit pending naming decision.
 - The row count the key would drop or multiply.
 
+## More techniques
+
+[DIMENSIONAL.md](DIMENSIONAL.md) holds the rest of the toolkit: the bus matrix, fact and dimension types, additivity,
+slowly changing history, late and missing keys, drilling across, and the proofs a Gold model needs.
+
 ## Hand off
 
 The decision is the handoff. dbt implementation and the warehouse target are
