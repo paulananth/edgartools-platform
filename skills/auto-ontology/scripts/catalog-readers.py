@@ -96,9 +96,15 @@ def verify(url):
         }
 
 
+def owner_url(owner, store):
+    """The owner file's `DB_URL` with the source's store database; a `DB_URL` that names a database keeps it."""
+    parts = urlsplit(owner["DB_URL"])
+    return owner["DB_URL"] if parts.path.strip("/") else urlunsplit(parts._replace(path="/" + store))
+
+
 def provision(source, owner, reader_file):
     key = source["variable"]
-    endpoint = pg_url(owner[source["owner_variable"]])
+    endpoint = pg_url(owner_url(owner, source["store"]))
     parsed = urlsplit(endpoint)
     saved = load_env(reader_file) if reader_file.exists() else {}
     if key in saved:

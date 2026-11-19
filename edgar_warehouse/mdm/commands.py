@@ -83,7 +83,9 @@ def clear_source(args) -> int:
     from edgar_warehouse.mastering.store import open_store
 
     # The owner login: the runtime role may not delete decisions, which are the record of what was decided.
-    engine = engine_from_env("MDM_MIGRATION_DATABASE_URL", restricted=False)
+    from edgar_warehouse.database_connections import owner_engine
+
+    engine = owner_engine("mdm")
     db = open_store(engine)
     try:
         report = clear.clear(db, args.source, confirm=args.confirm)

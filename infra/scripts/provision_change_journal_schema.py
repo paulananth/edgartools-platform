@@ -9,13 +9,14 @@ import os
 from sqlalchemy import create_engine
 
 from edgar_warehouse.change_journal.database import migrate
+from edgar_warehouse.database_connections import owner_url
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runtime-role", required=True)
     args = parser.parse_args()
-    owner = create_engine(os.environ["CHANGE_JOURNAL_MIGRATION_DATABASE_URL"])
+    owner = create_engine(owner_url("change_journal"))
     try:
         print(
             json.dumps(migrate(owner, runtime_role=args.runtime_role), sort_keys=True)

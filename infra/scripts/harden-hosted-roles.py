@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Put the access guards on the hosted instance's login roles: a connection limit, timeouts, a memory ceiling and the audit classes.
 
-    set -a; . <stores folder>/connection.env; set +a
+    set -a; . <stores folder>/owner.env; set +a
     python infra/scripts/harden-hosted-roles.py            # lists what differs: role and setting names, no values of the data
     python infra/scripts/harden-hosted-roles.py --confirm  # applies the differences
 
 Each guard is one control of the access audit (skills/access-audit): DB-05 a connection limit on every login, TMO a bound on
 statements and idle transactions, LOG the audit classes for the logins that change schemas, policy or approvals. It uses the
-owner login (MDM_MIGRATION_DATABASE_URL), changes only roles that exist, and is safe to run again: a role already at its guard
+owner login (DB_URL), changes only roles that exist, and is safe to run again: a role already at its guard
 is left alone. The loader's work_mem is a ceiling per sort or hash step and session, so ten merge workers with several steps
 each cannot ask for more than the instance holds. A setting the platform refuses to a non-superuser is reported by name and
 the run exits 1; nothing is worked around with a superuser.
@@ -68,10 +68,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--confirm", action="store_true", help="Apply the differences (without it, only list them)")
     args = parser.parse_args(argv)
-    url = os.environ.get("MDM_MIGRATION_DATABASE_URL")
+    url = os.environ.get("DB_URL")
     if not url:
-        sys.exit("MDM_MIGRATION_DATABASE_URL is not set: source the stores folder's connection.env (it is never printed)")
-    engine = sa.create_engine(make_url(url), isolation_level="AUTOCOMMIT")
+        sys.exit("DB_URL is not set: source the stores folder's owner.env (it is never printed)")
+    engine = sa.create_engine(make_url(url).set(database="postgres"), isolation_level="AUTOCOMMIT")
     failed = 0
     with engine.connect() as conn:
         steps = plan(*read(conn))

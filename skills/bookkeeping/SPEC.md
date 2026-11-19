@@ -312,12 +312,11 @@ for local store provisioning, role selection and manifest storage. Local
 provisioning creates empty stores with restricted logins under NOLOGIN owners
 and refuses to adopt databases owned by another workstream.
 
-Migrate existing control databases only when explicitly authorized, using
-`bookkeeping migrate --runtime-role <role>` and `rules init` under their
-selected owner duties. Use `bookkeeping init` only to initialize the fresh
-control schema; `bookkeeping migrate` refuses a missing schema.
-`change-journal init` or `change-journal migrate`
-remain separate owner-authorized operations. They do not populate business or
+Change an existing control database only when explicitly authorized, using
+`bookkeeping init --runtime-role <role>` and `rules init` under the owner
+duty (`DB_URL` of the owner file); each is the whole step, on a fresh store and again when a
+later schema file arrives. `change-journal init`
+remains a separate owner-authorized operations. They do not populate business or
 source data. Resource checkpoint and request authorization migrations retain
 the five-table control boundary; see
 [Change Journal](../change-journal/SPEC.md) for their transaction/recovery contract.

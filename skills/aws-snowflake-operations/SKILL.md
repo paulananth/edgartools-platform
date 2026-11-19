@@ -161,17 +161,17 @@ front of it silently orders by the wrong one, so order by the alias instead.
 - **Reachability through a network policy** is decided by the policy's network rules of mode `POSTGRES_INGRESS`;
   `ALLOWED_IP_LIST` does not apply to an instance. A checker that reads only the IP list reports every rule-based
   policy as denied: resolve the rules before concluding an address is blocked, and change no policy on that report.
-- Its connection files live in `~/.config/edgartools/hosted/` (`connection.env` the owner logins, `worker.env`,
+- Its connection files live in `~/.config/edgartools/hosted/` (`owner.env` the owner login, `worker.env`,
   `governance.env`; folder and files owner-only), beside the other private env files, never in a repo `.env` (each
   worktree is a checkout of a public repository) nor among the disposable local stores, whose folders are deleted when
   unused. This is the one folder: `load --stores` takes it, and a second copy elsewhere goes stale. Source `worker.env`
   before a hosted load; never print its values. Its manifests are the run artifacts (large); the manifest root in
   `worker.env` names where they go.
-- `mdm migrate` does not run automatically on deploy. Treat any prod deploy carrying new migration files
+- `mdm init` does not run automatically on deploy. Treat any prod deploy carrying new migration files
   as incomplete until it has been re-run explicitly — "the image is current" and "the migration was
   applied" are separate facts.
 - Snowflake-hosted Postgres re-grants `snowflake_write`'s baseline DML as a platform side effect of
-  `ALTER POSTGRES INSTANCE ... RESET ACCESS FOR '<role>'` for *either* role, so run `mdm migrate` as the last
+  `ALTER POSTGRES INSTANCE ... RESET ACCESS FOR '<role>'` for *either* role, so run `mdm init` as the last
   database-mutating step after any reset. A reset also replaces that role's password, so it needs the operator's word.
 
 ### Creating the hosted store in an empty account
@@ -182,9 +182,9 @@ notes is not the live one. The order:
 
 1. Use [`scripts/mdm_create_network_policy.sql`](scripts/mdm_create_network_policy.sql) with an explicitly approved writable control database/schema for the network rule and policy. This is operational connectivity setup, independent of Gold; it does not create a Gold schema or approve a model destination. Preserve existing policy references until an approved relocation is verified.
 2. Use `pg_connect.py --create` from the Snowflake Postgres manage skill for a new instance, with the created network policy. Review compute family and storage before execution.
-3. `bootstrap-prod-mdm.sh`, which rotates both credentials and runs `mdm migrate` last. It rotates on every run
+3. `bootstrap-prod-mdm.sh`, which rotates both credentials and runs `mdm init` last. It rotates on every run
    with no way to skip it, and a rotation needs the operator's word; without it, build the connection file from the
-   instance's saved credentials and run `mdm migrate` directly.
+   instance's saved credentials and run `mdm init` directly.
 
 - The network-policy SQL helper needs `snow sql --filename ... -D name=value --enable-templating JINJA`. Without
   it the CLI leaves `{{ name }}` unreplaced and fails with `syntax error ... unexpected '{'`.

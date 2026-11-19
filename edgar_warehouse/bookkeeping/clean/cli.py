@@ -83,7 +83,7 @@ TASK_COMMANDS = frozenset({"claim", "renew", "report", "fail"})
 
 
 def _handle(args):
-    from .database import get_engine, migrate
+    from .database import default_url, get_engine, migrate
     operation = args.bookkeeping_command
     if operation == "serve":
         book = configured_bookkeeping()
@@ -92,20 +92,19 @@ def _handle(args):
         finally:
             book.close()
         return 0
-    if operation in {"init", "migrate"}:
-        owner = get_engine()
+    if operation == "init":
+        owner = get_engine(default_url())
         try:
             result = migrate(
                 owner,
                 runtime_role=args.runtime_role,
-                existing_only=operation == "migrate",
                 database_name=args.database_name,
             )
         finally:
             owner.dispose()
     elif operation == "grant-profile":
         from .database import grant_profile
-        owner = get_engine()
+        owner = get_engine(default_url())
         try:
             result = grant_profile(owner, profile=args.profile, worker=args.worker)
         finally:
@@ -123,7 +122,7 @@ def _handle(args):
 def register(subparsers):
     parser = subparsers.add_parser("bookkeeping", help="Runs, work units, leases and checkpoints")
     commands = parser.add_subparsers(dest="bookkeeping_command", required=True)
-    for name in ("init", "migrate"):
+    for name in ("init",):
         command = commands.add_parser(name)
         command.add_argument("--runtime-role", required=True)
         command.add_argument("--database-name", default="bookkeeping", help="The configured isolated control database")

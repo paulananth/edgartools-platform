@@ -1,8 +1,8 @@
-"""`edgar-warehouse silver`: migrate the silver schema, register a silver table
+"""`edgar-warehouse silver`: make the silver schema, register a silver table
 spec as a table, land a part's rows into it, and describe a table for an agent.
 
 Connections come from the environment and are never printed:
-SILVER_MIGRATION_DATABASE_URL (the schema owner, for init, migrate and register),
+DB_URL of the owner file (the schema owner, for init and register),
 SILVER_DATABASE_URL (the restricted runtime login, for created, land and describe) and
 MDM_DATABASE_URL (read, for the MDM ids of a table that links to masters, and the
 statement format and country the measures read from each Company).
@@ -30,12 +30,18 @@ def _handle(args):
         engines.append(value)
         return value
 
+    def owned(store):
+        from edgar_warehouse.database_connections import owner_engine
+
+        value = owner_engine(store)
+        engines.append(value)
+        return value
+
     try:
-        if args.silver_command in {"init", "migrate"}:
-            result = database.migrate(engine("SILVER_MIGRATION_DATABASE_URL"), runtime_role=args.runtime_role,
-                                      existing_only=args.silver_command == "migrate")
+        if args.silver_command == "init":
+            result = database.migrate(owned("silver"), runtime_role=args.runtime_role)
         elif args.silver_command == "register":
-            result = database.register(engine("SILVER_MIGRATION_DATABASE_URL"), spec_file(args.spec, args.part),
+            result = database.register(owned("silver"), spec_file(args.spec, args.part),
                                        runtime_role=args.runtime_role)
         elif args.silver_command == "created":
             result = database.created(engine("SILVER_DATABASE_URL"), spec_file(args.spec, args.part))
@@ -98,7 +104,7 @@ def spec_file(path: Path, part: str | None) -> dict:
 
 def _commands(parser):
     commands = parser.add_subparsers(dest="silver_command", required=True)
-    for name in ("init", "migrate"):
+    for name in ("init",):
         command = commands.add_parser(name)
         command.add_argument("--runtime-role", required=True)
         command.set_defaults(handler=_handle)

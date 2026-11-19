@@ -27,7 +27,7 @@ from urllib.parse import quote, unquote, urlsplit, urlunsplit
 from uuid import uuid4
 
 DATABASES = ("mdm", "rdm", "rules", "bookkeeping", "change_journal", "silver")
-FILES = ("connection.env", "worker.env", "governance.env", "reader.env")
+FILES = ("owner.env", "worker.env", "governance.env", "reader.env")
 # The diagnostic login: it reads sessions, locks and statistics (pg_monitor) and no table, and connects to no store.
 # Its URL is the only one in reader.env, which is made on the first confirmed run.
 READER, READER_FILE, READER_SETTING = "ops_reader", "reader.env", "DIAGNOSE_DATABASE_URL"
@@ -125,7 +125,7 @@ def rewrite(folder: Path, host: str, port: int, admin: str, admin_password: str)
     return changed
 
 
-LOADER_FILES = ("connection.env", "worker.env", "governance.env")  # the files that name a runtime login; reader.env never does
+LOADER_FILES = ("worker.env", "governance.env")  # the files that name a runtime login; reader.env never does
 
 
 def _loader_password(folder: Path) -> str:
@@ -142,7 +142,7 @@ def _loader_password(folder: Path) -> str:
 
 
 def use_loader(folder: Path) -> int:
-    """Point every runtime URL in the stores folder (connection.env, worker.env, governance.env) at the one loader login. The
+    """Point every runtime URL in the stores folder (worker.env, governance.env) at the one loader login. The
     administrator's and the governance logins are not runtime URLs and stay. Each file that changes is kept as
     `<file>.before-loader` (mode 0600) the first time. Returns how many URLs changed (0 when all are already it)."""
     password, total = _loader_password(folder), 0

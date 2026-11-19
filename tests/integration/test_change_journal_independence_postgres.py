@@ -55,7 +55,7 @@ def test_isolated_journal_migrations_append_reconcile_and_cli_with_restricted_ro
     root = tmp_path
     environment = {
         "CHANGE_JOURNAL_DATABASE_URL": databases.ledger.engine.url.render_as_string(hide_password=False),
-        "CHANGE_JOURNAL_MIGRATION_DATABASE_URL": databases.ledger_admin.url.render_as_string(hide_password=False),
+        "DB_URL": databases.ledger_admin.url.render_as_string(hide_password=False),
     }
     # This module owns a fresh disposable fixture. Require the installed wheel
     # to initialize an empty store, rather than relying on fixture migrations.
@@ -113,7 +113,6 @@ finally:
     receipt_path = root / "receipt.json"
     receipt_path.write_text(json.dumps(receipt))
     for arguments in (["init", "--runtime-role", "ledger_runtime"],
-                      ["migrate", "--runtime-role", "ledger_runtime"],
                       ["status", "--source", "unseen.source", "--feed", "unseen.feed"],
                       ["events", "--source", "unseen.source", "--feed", "unseen.feed", "--limit", "1"],
                       ["verify", str(receipt_path)]):
@@ -128,5 +127,5 @@ raise SystemExit(main(sys.argv[1:]))
             assert body == [receipt]
         elif arguments[0] == "verify":
             assert body == receipt
-        elif arguments[0] in {"init", "migrate"}:
+        elif arguments[0] == "init":
             assert set(body) == {"schema.sql", "003_native_storage"}

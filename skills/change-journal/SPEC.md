@@ -56,9 +56,9 @@ Neither duty falls back to Bookkeeping, legacy ledger, Rules or MDM. Apply with:
 edgar-warehouse change-journal init --runtime-role <role>
 ```
 
-For an already initialized, checksummed schema, use `change-journal migrate
---runtime-role <role>` with the same separate migration connection. Migrate
-refuses to create a missing schema; neither command imports legacy events.
+For an already initialized, checksummed schema, run `change-journal init
+--runtime-role <role>` again with the same separate owner connection (`DB_URL`);
+it never imports legacy events.
 
 The version 1 envelope contains `producer`, original `event_key`, root
 `run_id`, `source`, `feed`, identifier-only `scope`, `event_type`, UTC

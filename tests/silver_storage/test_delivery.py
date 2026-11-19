@@ -246,7 +246,7 @@ def test_normal_cli_reads_configured_connection(silver, tmp_path, monkeypatch, c
     path.write_text(json.dumps(config))
     delivered = tmp_path / "rows.jsonl"
     delivered.write_text("\n".join(json.dumps(row) for row in rows()))
-    monkeypatch.setenv("SILVER_MIGRATION_DATABASE_URL", owner.url.render_as_string(hide_password=False))
+    monkeypatch.setenv("DB_URL", owner.url.render_as_string(hide_password=False))
     monkeypatch.setenv("SILVER_DATABASE_URL", runtime.url.render_as_string(hide_password=False))
     monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
     assert main(["silver", "register", str(path), "--runtime-role", role]) == 0

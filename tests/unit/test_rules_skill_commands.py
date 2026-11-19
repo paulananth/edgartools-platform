@@ -44,7 +44,7 @@ def test_every_flag_the_skill_writes_exists_on_its_command(path):
 
 def test_migrate_means_a_schema_upgrade_and_no_command_moves_rules_into_a_database():
     built = _built()
-    assert "--agent-role" in built["migrate"]._option_string_actions
+    assert "--agent-role" in built["init"]._option_string_actions
     assert not {"load", "unload", "save", "activate"} & set(built)
 
 

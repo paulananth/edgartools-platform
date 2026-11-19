@@ -49,7 +49,7 @@ including the hosted Bookkeeping control group.
 
 | Schema | Command |
 |---|---|
-| MDM | `edgar-warehouse mdm migrate --application-role <role>` |
+| MDM | `edgar-warehouse mdm init --application-role <role>` |
 | RDM | `edgar-warehouse rdm init --runtime-role <role>` |
 | Bookkeeping | `edgar-warehouse bookkeeping init --runtime-role <role>`. The database name is `bookkeeping`. |
 | Change Journal | `edgar-warehouse change-journal init --runtime-role <role>`. The database name is `change_journal`. |
@@ -73,7 +73,7 @@ made from it, never edited by hand. Read the table's columns there, or in the Da
 | Silver, one table per source | `rules/sources/<source>/silver-<table>.yaml` (and `rules/silver/`): a spec stewards review, registered as DDL by `deploy-silver.sh` for every dialect |
 
 Then every committed silver table, with the silver owner's login:
-`bash infra/scripts/deploy-silver.sh <local environment name | path to connection.env>`. It registers each
+`bash infra/scripts/deploy-silver.sh <local environment name | path to owner.env>`. It registers each
 `rules/sources/*/silver-*.yaml` and `rules/silver/silver-*.yaml`; an unchanged spec changes nothing and a changed one
 is refused (register it as a new table).
 

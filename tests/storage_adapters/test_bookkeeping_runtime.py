@@ -108,8 +108,8 @@ def test_normal_cli_uses_configured_database_and_default_driver(control, monkeyp
             assert conn.scalar(text("SELECT 1")) == 1
     finally:
         engine.dispose()
-    monkeypatch.setenv("BOOKKEEPING_DATABASE_URL", owner.url.render_as_string(hide_password=False))
-    assert main(["bookkeeping", "migrate", "--runtime-role", role, "--database-name", owner.url.database]) == 0
+    monkeypatch.setenv("DB_URL", owner.url.render_as_string(hide_password=False))
+    assert main(["bookkeeping", "init", "--runtime-role", role, "--database-name", owner.url.database]) == 0
     assert json.loads(capsys.readouterr().out)
 
 

@@ -79,7 +79,6 @@ connections never fall back to Bookkeeping, legacy ledger, Rules or MDM.
 
 ```bash
 edgar-warehouse change-journal init --runtime-role <role>
-edgar-warehouse change-journal migrate --runtime-role <role>
 ```
 
 The database defaults to `change_journal`. On either command, an explicitly

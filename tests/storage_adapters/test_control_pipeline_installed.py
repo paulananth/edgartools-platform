@@ -22,16 +22,17 @@ def test_installed_rules_and_real_workers_complete_and_resume_one_run(installed,
         owner, worker, role = stack.enter_context(database_factory())
         journal_owner, journal, journal_role = stack.enter_context(database_factory())
         owner_url = owner.url.render_as_string(hide_password=False)
-        env = {"RULES_MIGRATION_DATABASE_URL": rules_owner.url.render_as_string(hide_password=False),
-               "RULES_DATABASE_URL": rules_runtime.url.render_as_string(hide_password=False),
+        owners = {("rules", "init"): rules_owner.url.render_as_string(hide_password=False),
+                  ("change-journal", "init"): journal_owner.url.render_as_string(hide_password=False),
+                  ("bookkeeping", "init"): owner_url, ("bookkeeping", "grant-profile"): owner_url}
+        env = {"RULES_DATABASE_URL": rules_runtime.url.render_as_string(hide_password=False),
                "BOOKKEEPING_DATABASE_URL": worker.url.render_as_string(hide_password=False),
                "BOOKKEEPING_MANIFEST_ROOT": (root / "runs").as_uri(),
-               "CHANGE_JOURNAL_MIGRATION_DATABASE_URL": journal_owner.url.render_as_string(hide_password=False),
                "CHANGE_JOURNAL_DATABASE_URL": journal.url.render_as_string(hide_password=False)}
         def command(*args, verifier=False, report=True):
             selected = {**env}
-            if args[:2] in (("bookkeeping", "init"), ("bookkeeping", "migrate"), ("bookkeeping", "grant-profile")):
-                selected["BOOKKEEPING_DATABASE_URL"] = owner_url
+            if args[:2] in owners:
+                selected["DB_URL"] = owners[args[:2]]
             elif verifier:
                 selected["BOOKKEEPING_DATABASE_URL"] = reader.url.set(database=owner.url.database).render_as_string(hide_password=False)
             result = _run(python, "-m", "edgar_warehouse.cli", *args, env=selected, cwd=root)
@@ -41,7 +42,7 @@ def test_installed_rules_and_real_workers_complete_and_resume_one_run(installed,
             return json.loads(result.stdout) if report else None
         command("rules", "init", "--agent-role", rules_role)
         command("bookkeeping", "init", "--runtime-role", role, "--database-name", owner.url.database)
-        command("bookkeeping", "migrate", "--runtime-role", reader_role, "--database-name", owner.url.database)
+        command("bookkeeping", "init", "--runtime-role", reader_role, "--database-name", owner.url.database)
         command("change-journal", "init", "--runtime-role", journal_role, "--database-name", journal_owner.url.database)
         with owner.connect() as conn:
             known = set(conn.scalars(text("SELECT User FROM mysql.user" if owner.dialect.name == "mysql" else "SELECT rolname FROM pg_roles")))

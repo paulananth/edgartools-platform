@@ -157,50 +157,32 @@ def test_a_failure_shows_its_text_only_when_the_text_is_this_scripts_own_or_the_
     assert local.error_text(KeyError("password=invented")) == "KeyError"
 
 
-def test_bookkeeping_owner_uses_the_runtime_url_key(tmp_path, monkeypatch):
+def test_the_owner_file_holds_one_DB_URL_without_a_database_and_the_worker_file_the_runtime_urls(tmp_path, monkeypatch):
     stores = local.LocalStores(tmp_path, tmp_path)
     stores.identity("one", create=True)
 
     class Address:
+        def _replace(self, **kwargs):
+            return self
+
         def render_as_string(self, hide_password=False):
-            return "postgresql://invented@127.0.0.1/invented"
+            return "postgresql://invented@127.0.0.1"
 
     checked(monkeypatch, stores, "url", lambda *a, **k: Address())
     stores.connections("one")
-    worker = (stores.folder("one") / "worker.env").read_text()
-    connection = (stores.folder("one") / "connection.env").read_text()
 
-    def exported(text):
-        return [line.split("=", 1)[0][7:] for line in text.splitlines() if line.startswith("export ")]
+    def exported(path):
+        return [line.split("=", 1)[0][7:] for line in (stores.folder("one") / path).read_text().splitlines() if line.startswith("export ")]
 
-    assert "BOOKKEEPING_DATABASE_URL" in exported(worker)
-    assert "BOOKKEEPING_DATABASE_URL" in exported(connection)
-    assert "BOOKKEEPING_MIGRATION_DATABASE_URL" not in exported(worker)
-    assert "BOOKKEEPING_MIGRATION_DATABASE_URL" not in exported(connection)
-    assert "BOOKKEEPING_MIGRATION_DATABASE_URL" in worker
-    assert "BOOKKEEPING_MIGRATION_DATABASE_URL" in connection
-    assert "BOOKKEEPING_ADMIN_DATABASE_URL" not in exported(worker)
-    assert "BOOKKEEPING_ADMIN_DATABASE_URL" not in exported(connection)
-    assert "BOOKKEEPING_ADMIN_DATABASE_URL" in worker
-    assert "BOOKKEEPING_ADMIN_DATABASE_URL" in connection
-    assert "BOOKKEEPING_MANIFEST_ROOT" in exported(worker)
-    assert "BOOKKEEPING_MANIFEST_ROOT" in exported(connection)
+    assert exported("owner.env") == ["DB_URL"]
+    assert "BOOKKEEPING_DATABASE_URL" in exported("worker.env") and "DB_URL" not in exported("worker.env")
+    assert "BOOKKEEPING_MANIFEST_ROOT" in exported("worker.env")
+    assert not (stores.folder("one") / "connection.env").exists()
 
 
-def test_bookkeeping_cli_does_not_name_a_migration_url():
-    text = (PATH.parents[2] / "edgar_warehouse/bookkeeping/clean/cli.py").read_text()
-    assert "BOOKKEEPING_MIGRATION_DATABASE_URL" not in text
-    assert "get_engine()" in text
-
-
-def test_provision_script_uses_the_bookkeeping_url_key():
-    text = (PATH.parents[1] / "scripts/provision-clean-bookkeeping.py").read_text()
-    assert "BOOKKEEPING_ADMIN_DATABASE_URL" not in text
-    assert 'os.environ["BOOKKEEPING_DATABASE_URL"]' in text
-    assert 'set(database="postgres")' in text
-    shell = (PATH.parents[1] / "scripts/provision-local-postgres-stores.sh").read_text()
-    assert "BOOKKEEPING_ADMIN_DATABASE_URL" not in shell
-    skills = PATH.parents[2] / "skills"
-    named = [str(path.relative_to(skills)) for path in skills.rglob("*.md")
-             if "BOOKKEEPING_ADMIN_DATABASE_URL" in path.read_text()]
+def test_no_owner_variable_is_named_migration_anywhere_in_the_product():
+    root = PATH.parents[2]
+    named = [str(path.relative_to(root)) for folder in ("edgar_warehouse", "skills", "infra", "scripts", "docs/runbooks")
+             for path in (root / folder).rglob("*") if path.is_file() and path.suffix in {".py", ".md", ".sh", ".json", ".yaml"}
+             and "bundle_data" not in path.parts and "_MIGRATION_DATABASE_URL" in path.read_text(errors="replace")]
     assert named == []

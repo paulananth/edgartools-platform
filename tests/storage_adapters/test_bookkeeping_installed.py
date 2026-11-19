@@ -38,21 +38,22 @@ assert not names & set({DOMAIN!r})
                 def url(engine):
                     return engine.url.set(drivername=engine.dialect.name).render_as_string(hide_password=False)
                 environment = {**os.environ,
-                               "CHANGE_JOURNAL_MIGRATION_DATABASE_URL": url(journal_owner),
                                "CHANGE_JOURNAL_DATABASE_URL": url(journal_runtime)}
                 reader_url = reader.url.set(database=owner.url.database, drivername=owner.dialect.name).render_as_string(hide_password=False)
                 def invoke(*arguments, document=None, verifier=False, expected=0, module="edgar_warehouse.bookkeeping"):
-                    owner_command = arguments[0] in {"init", "migrate", "grant-profile"}
+                    owner_command = arguments[0] in {"init", "grant-profile"}
+                    owner_login = url(journal_owner) if module == "edgar_warehouse.change_journal.cli" else url(owner)
                     result = subprocess.run([str(python), "-I", "-m", module, *arguments],
                                             input=None if document is None else json.dumps(document), capture_output=True,
                                             text=True, cwd=tmp_path, timeout=30,
-                                            env={**environment, "BOOKKEEPING_DATABASE_URL": url(owner) if owner_command else (reader_url if verifier else url(worker))})
+                                            env={**environment, "BOOKKEEPING_DATABASE_URL": reader_url if verifier else url(worker),
+                                                 **({"DB_URL": owner_login} if owner_command else {})})
                     if result.returncode != expected:
                         (tmp_path / "private-installed-control.log").write_text(result.stdout + "\n" + result.stderr)
                     assert result.returncode == expected, "Installed control failed; private diagnostic retained"
                     return json.loads(result.stdout)
                 invoke("init", "--runtime-role", role, "--database-name", owner.url.database)
-                invoke("migrate", "--runtime-role", reader_role, "--database-name", owner.url.database)
+                invoke("init", "--runtime-role", reader_role, "--database-name", owner.url.database)
                 invoke("init", "--runtime-role", journal_role, "--database-name", journal_owner.url.database,
                        module="edgar_warehouse.change_journal.cli")
                 granted = []
@@ -103,12 +104,12 @@ finally: book.close()
                     assert invoke("resume", run_id, expected=3)["run"]["state"] == "running"
                     assert invoke("finalize", run_id)["run"]["state"] == "complete"
                     assert json.loads(artifacts.verified({"uri": counted, "sha256": final["items"][1]["receipt"]["sha256"]})) == {"lines": 1}
-                    invoke("migrate", "--runtime-role", role, "--database-name", owner.url.database)
+                    invoke("init", "--runtime-role", role, "--database-name", owner.url.database)
                     with journal_owner.begin() as conn:
                         conn.execute(text("DROP TABLE journal.event CASCADE" if owner.dialect.name == "postgresql" else "DROP TABLE journal_event"))
-                    refused = subprocess.run([str(python), "-I", "-m", "edgar_warehouse.change_journal.cli", "migrate",
+                    refused = subprocess.run([str(python), "-I", "-m", "edgar_warehouse.change_journal.cli", "init",
                         "--runtime-role", journal_role, "--database-name", journal_owner.url.database],
-                        capture_output=True, text=True, cwd=tmp_path, timeout=30, env=environment)
+                        capture_output=True, text=True, cwd=tmp_path, timeout=30, env={**environment, "DB_URL": url(journal_owner)})
                     assert refused.returncode != 0, "Installed Journal recreated missing history"
                     assert not inspect(journal_owner).has_table("event" if owner.dialect.name == "postgresql" else "journal_event",
                         schema="journal" if owner.dialect.name == "postgresql" else None)

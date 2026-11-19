@@ -9,7 +9,7 @@ description: Initialize or migrate Bookkeeping, or plan, validate, run, inspect 
 > commands. Start there for setup (install, stores, `edgar-warehouse doctor`)
 > and for the whole flow; this skill holds one step's detail.
 
-**Modes:** init, migrate, plan, validate, run, status, recover. Bookkeeping
+**Modes:** init, plan, validate, run, status, recover. Bookkeeping
 owns work control and verified completion. Workers, each in its own process,
 own the work itself. `edgar-warehouse rules run` submits the approved versions;
 workers then pull the work (`edgar-warehouse workers work`), each checking
@@ -63,7 +63,6 @@ $bookkeeping run --source <source> [--feed <feed>]
 $bookkeeping status <run-id>
 $bookkeeping recover <run-id>
 $bookkeeping init
-$bookkeeping migrate
 ```
 
 These are **skill arguments**, not warehouse CLI commands. Plan, validate and
@@ -266,7 +265,6 @@ tables, runtime privileges and zero imported run/work rows:
 
 ```bash
 edgar-warehouse bookkeeping init --runtime-role <role>
-edgar-warehouse bookkeeping migrate --runtime-role <role>
 ```
 
 The database defaults to `bookkeeping`. An explicitly approved different name

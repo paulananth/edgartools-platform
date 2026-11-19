@@ -85,8 +85,8 @@ class Store:
 # One entry per store (GoF consult, ticket 05 RDM part): silver specs add one.
 STORES = {
     "MDM": Store("MDM", "MDM_DATABASE_URL", True, "edgar-warehouse mdm check-connectivity", "edgar_warehouse.context:Context"),
-    "RDM": Store("RDM", "RDM_DATABASE_URL", False, "edgar-warehouse rdm migrate", "edgar_warehouse.rdm.context:CodeContext"),
-    "SILVER": Store("silver", "SILVER_DATABASE_URL", False, "edgar-warehouse silver migrate",
+    "RDM": Store("RDM", "RDM_DATABASE_URL", False, "edgar-warehouse rdm init", "edgar_warehouse.rdm.context:CodeContext"),
+    "SILVER": Store("silver", "SILVER_DATABASE_URL", False, "edgar-warehouse silver init",
                     "edgar_warehouse.silver_writer.context:TableContext"),
 }
 

@@ -46,11 +46,11 @@ def test_existing_verified_reader_is_reused_without_owner_connection(
     monkeypatch.setattr(readers.psycopg, "connect", connect)
     source = {
         "variable": "STORE_DATABASE_URL",
-        "owner_variable": "STORE_MIGRATION_DATABASE_URL",
+        "store": "store",
         "role": "reader",
     }
     actual, report = readers.provision(
-        source, {"STORE_MIGRATION_DATABASE_URL": url}, path
+        source, {"DB_URL": url}, path
     )
     assert actual == url
     assert report == {"writable_relations": 0}
@@ -138,14 +138,14 @@ def test_saved_reader_cannot_silently_select_a_different_source(readers, tmp_pat
     )
     source = {
         "variable": "STORE_DATABASE_URL",
-        "owner_variable": "STORE_MIGRATION_DATABASE_URL",
+        "store": "store",
         "role": "reader",
     }
     with pytest.raises(ValueError, match="Saved reader differs"):
         readers.provision(
             source,
             {
-                "STORE_MIGRATION_DATABASE_URL": "postgresql://owner:invented@localhost/new?sslmode=require"
+                "DB_URL": "postgresql://owner:invented@localhost/new?sslmode=require"
             },
             path,
         )

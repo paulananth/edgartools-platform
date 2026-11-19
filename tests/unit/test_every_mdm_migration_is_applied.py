@@ -1,4 +1,4 @@
-"""Every schema file is applied by `mdm migrate` or by the one owner-only step that names it.
+"""Every schema file is applied by `mdm init` or by the one owner-only step that names it.
 
 A numbered file left out of `MIGRATIONS` is never applied, and nothing else notices.
 """

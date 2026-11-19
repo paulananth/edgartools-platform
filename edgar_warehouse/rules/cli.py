@@ -21,8 +21,10 @@ def _handle(args):
     from . import frozen
     from .db import Rules, get_engine, migrate
 
-    if args.rules_command in ("init", "migrate"):
-        owner = get_engine(os.environ["RULES_MIGRATION_DATABASE_URL"])
+    if args.rules_command == "init":
+        from edgar_warehouse.database_connections import owner_url
+
+        owner = get_engine(owner_url("rules"))
         try:
             result = migrate(owner, agent_role=args.agent_role)
         finally:

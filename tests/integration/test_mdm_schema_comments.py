@@ -49,7 +49,7 @@ def test_only_governed_storage_is_installed(database):
 
 
 def test_migrating_a_store_that_holds_data_changes_nothing(database):
-    """A second `mdm migrate` over a store with rows installs nothing, keeps
+    """A second `mdm init` over a store with rows installs nothing, keeps
     the rows, and leaves the application login its read access."""
     with database.admin.connect() as conn:
         before = {t: conn.scalar(text(f"SELECT count(*) FROM mdm.{t}"))

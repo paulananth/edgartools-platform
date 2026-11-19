@@ -361,10 +361,10 @@ step:
 A unit's input names the step before it (`{"from": {"step": "read", "key": ...}}`
 in a version-2 input manifest), so one run goes read → prepare → merge.
 
-Before the first run, once per MDM database: `edgar-warehouse mdm migrate`. Then, for each profile in step order, as in Parse:
+Before the first run, once per MDM database: `edgar-warehouse mdm init`. Then, for each profile in step order, as in Parse:
 
 For an existing MDM store, before starting the new publication runtime,
-rerun `edgar-warehouse mdm migrate --application-role <MDM application role>`
+rerun `edgar-warehouse mdm init --application-role <MDM application role>`
 with the migration owner's `MDM_DATABASE_URL`. This applies the checksummed
 publication-input migration and preserves existing publication readers' SELECT
 grants. Already frozen runs retain their original code/native binary; their
