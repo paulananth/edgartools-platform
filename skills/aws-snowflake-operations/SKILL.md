@@ -213,6 +213,22 @@ notes is not the live one. The order:
   before treating a clean result as evidence — a SQL contract "applied successfully" says nothing about
   the image that writes to it.
 
+## Access identities (read-only first)
+
+- Every tool, monitor and audit uses a named, least-privilege identity. The person's own administrator account (password,
+  `ACCOUNTADMIN`) is never used by an agent, never changed and never planned against; it must stay as it is.
+- A read-only identity is a key-pair service user (type `SERVICE`, no password; connection `authenticator = "SNOWFLAKE_JWT"`)
+  on a role that holds only what it reads. Reading the Postgres server log: Snowflake's `EVENTS_VIEWER` application role gives
+  `SELECT` on `SNOWFLAKE.TELEMETRY.EVENTS_VIEW`, not on the events table; the instance's id is the first label of its host name
+  and filters `resource_attributes['instance.id']`. Auditing: the security, usage and governance viewer database roles plus
+  `MONITOR USAGE ON ACCOUNT`.
+- `ACCOUNT_USAGE` lags by minutes to hours (a new user or grant is missing at first), and a view the role may not read fails:
+  treat both as "not tested", never as "empty, so clean".
+- These identities, the resource monitor, the statement timeout and the key-pair-only authentication policy are code
+  (`infra/terraform/access/snowflake`), applied by a dedicated access-admin service identity under the
+  [access-audit](../access-audit/SKILL.md) skill, not by hand.
+- The server log quotes the data a failed statement held: read it only through the monitoring script, which drops those lines.
+
 ## Credentials on the command line
 
 - Never pipe `snow sql ... RESET ACCESS` or `aws secretsmanager get-secret-value` output to
@@ -223,6 +239,10 @@ notes is not the live one. The order:
 
 Hosted MDM connection setup belongs to
 [Data Platform](../data-platform/SKILL.md#connection-urls-and-environment).
+
+- Never inspect a credential file by redacting a pattern (`sed` or `grep` on `password =`): a missed pattern prints the secret.
+  List key names only (`cut -d= -f1`, or a parser that returns keys). A plain-text password found in a client file is an
+  audit finding: move that connection to a key pair.
 
 ## Development Commands
 
