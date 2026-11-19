@@ -133,3 +133,23 @@ def test_a_read_only_role_reads_the_log_and_the_messages_are_scrubbed(monkeypatc
 def test_a_half_cut_address_is_replaced_too():
     assert monitor.scrub("authentication failed (user: u database: d remote host: 73.89.1") == "authentication failed (user: u database: d remote host: <ip>"
     assert "106.13" not in monitor.scrub("rejected for host 106.13.180.")
+
+
+def test_a_reading_over_a_limit_is_named_and_one_under_is_not():
+    now = {"connections": 90, "max_connections": 100, "longest_transaction_s": 10, "waiting_on_locks": 0,
+           "longest_idle_in_transaction_s": 0, "size_mb": 500, "temp_mb": 0}
+    assert monitor.breaches(now, {"connections_pct": 80, "size_mb": 1000}, None) == ["connections 90 of 100"]
+    assert monitor.breaches(now, {}, None) == []
+    assert monitor.breaches(now, {"budget": 5}, 5.5) == ["estimated spend 5.50 (budget 5)"]
+
+
+def test_budget_appends_a_private_history_and_estimates_spend_from_its_first_line(tmp_path, monkeypatch):
+    reading = {"summary": [{"connections": 1, "max_connections": 100, "active": 1, "idle_in_transaction": 0,
+                            "waiting_on_locks": 0, "longest_transaction_s": 0, "longest_idle_in_transaction_s": 0}],
+               "size": [{"size_mb": 165, "temp_mb": None}]}
+    monkeypatch.setattr(monitor, "rows", lambda conn, name, **_: reading[name])
+    history = tmp_path / "h.jsonl"
+    history.write_text('{"at": "2020-01-01T00:00:00+00:00"}\n')
+    over = monitor.budget(None, str(history), {"budget": 1}, 0.01)
+    assert over and over[0].startswith("estimated spend") and len(history.read_text().splitlines()) == 2
+    assert history.stat().st_mode & 0o777 == 0o600

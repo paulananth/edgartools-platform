@@ -33,6 +33,10 @@ SQL = {
                coalesce(round(max(extract(epoch from now() - state_change))
                               filter (where state like 'idle in transaction%')), 0) as longest_idle_in_transaction_s
         from pg_stat_activity where datname is not null""",
+    "size": """
+        select round(sum(pg_database_size(datname)) / 1048576) as size_mb,
+               (select coalesce(round(sum(temp_bytes) / 1048576), 0) from pg_stat_database) as temp_mb
+        from pg_database where not datistemplate""",
     "locks": """
         select blocked.pid as waiting_pid, blocked.datname as database, blocked.usename as login,
                round(extract(epoch from now() - blocked.state_change)) as waited_s,
@@ -196,20 +200,68 @@ def show(title: str, found: list[dict], as_json: bool) -> None:
         print("  " + "  ".join(f"{key}={value}" for key, value in record.items() if value not in ("", None)))
 
 
+def breaches(now: dict, limits: dict, spent: float | None) -> list[str]:
+    """What a reading says is over a limit, in plain words; a limit left out is not checked."""
+    found = []
+    if limits.get("connections_pct") and now["max_connections"] and \
+            100 * now["connections"] / now["max_connections"] >= limits["connections_pct"]:
+        found.append(f"connections {now['connections']} of {now['max_connections']}")
+    for key, label in (("longest_transaction_s", "longest transaction"), ("longest_idle_in_transaction_s", "idle in transaction"),
+                       ("size_mb", "stores' size MB"), ("temp_mb", "spilled MB since start"), ("waiting_on_locks", "waiting on locks")):
+        if limits.get(key) and now[key] >= limits[key]:
+            found.append(f"{label} {now[key]} (limit {limits[key]})")
+    if limits.get("budget") and spent is not None and spent >= limits["budget"]:
+        found.append(f"estimated spend {spent:.2f} (budget {limits['budget']})")
+    return found
+
+
+def budget(conn, history: str, limits: dict, rate: float | None) -> list[str]:
+    """A poor man's resource monitor: one reading of the pressure and size, one line appended to a local history,
+    and the limits it is over. The clock is the history's first line, so spend is the hours since then times --rate."""
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    now = {**rows(conn, "summary")[0], **rows(conn, "size")[0]}
+    now = {key: float(value) if value is not None else 0 for key, value in now.items()}
+    path = Path(history)
+    stamp = datetime.now(timezone.utc)
+    first = stamp
+    if path.exists() and path.stat().st_size:
+        first = datetime.fromisoformat(path.read_text().splitlines()[0].split('"at": "')[1].split('"')[0])
+    spent = (stamp - first).total_seconds() / 3600 * rate if rate else None
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a") as handle:
+        handle.write(json.dumps({"at": stamp.isoformat(), **now, "spent": spent}) + "\n")
+    path.chmod(0o600)
+    return breaches(now, limits, spent)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=["summary", "locks", "sessions", "statements", "tables", "memory", "databases", "logs", "all"])
+    parser.add_argument("command", choices=["summary", "locks", "sessions", "statements", "tables", "memory", "databases", "logs", "budget", "all"])
     parser.add_argument("--database", help="a database of the instance (the statements and tables are per database)")
     parser.add_argument("--min-seconds", type=int, default=30, help="sessions: only those running at least this long")
     parser.add_argument("--top", type=int, default=10)
     parser.add_argument("--by", choices=sorted(ORDER), default="total", help="statements: order")
     parser.add_argument("--minutes", type=int, default=60, help="logs: how far back to read")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--history", default="db-monitor-history.jsonl", help="budget: the local file each reading is appended to")
+    parser.add_argument("--rate", type=float, help="budget: the instance's cost per hour, to estimate spend from the history's age")
+    for name in ("budget", "connections-pct", "longest-transaction-s", "longest-idle-in-transaction-s", "size-mb", "temp-mb",
+                 "waiting-on-locks"):
+        parser.add_argument(f"--limit-{name}", type=float, help="budget: report when a reading reaches this")
     args = parser.parse_args(argv)
     conn = connect(args.database)
     options = {"sessions": {"min_seconds": args.min_seconds}, "statements": {"top": args.top, "by": args.by},
                "tables": {"top": args.top}}
     try:
+        if args.command == "budget":
+            limits = {k[6:]: v for k, v in vars(args).items() if k.startswith("limit_") and v is not None}
+            over = budget(conn, args.history, limits, args.rate)
+            for line in over:
+                print("OVER: " + line)
+            print("budget: " + ("over a limit" if over else "within every limit"))
+            return 1 if over else 0
         wanted = (["summary", "locks", "sessions", "memory", "databases", "statements", "tables"]
                   if args.command == "all" else [args.command])
         for name in wanted:

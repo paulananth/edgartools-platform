@@ -42,5 +42,5 @@ disposable store is the next check to add.
 
 ## Stopping loads
 - Stop the scheduler first (it would start the next step), then its step processes. The state file keeps every done step.
-- A reset of the stores (`reset-hosted-databases.py --confirm`) refuses while any session is connected: confirm none runs
+- A reset of the stores (`reset-hosted-databases.py --words "<the operator's words>"`, which records them) refuses without the operator's sign-off and while any session is connected: confirm none runs
   (`summary`) before it, and expect the previous run's done steps to be set aside as another store's state.

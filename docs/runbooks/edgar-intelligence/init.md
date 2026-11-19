@@ -28,7 +28,7 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    ```bash
    set -a; . ~/.config/edgartools/hosted/owner.env; set +a
    python infra/scripts/reset-hosted-databases.py             # lists sizes; refuses while any session is connected
-   python infra/scripts/reset-hosted-databases.py --confirm
+   python infra/scripts/reset-hosted-databases.py --words "<the operator's exact words>"   # a drop needs the operator's sign-off, kept in reinit-approvals.log
    ```
    A fresh instance gets its six databases (`mdm`, `rdm`, `rules`, `bookkeeping`, `change_journal`, `silver`) and their
    restricted logins from the stores folder's own files, each login with the password its URL already holds (no login
