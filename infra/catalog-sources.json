@@ -2,17 +2,17 @@
   "sources": [
     {
       "variable": "MDM_DATABASE_URL",
-      "role": "discovery_reader_mdm",
+      "role": "discovery_reader",
       "store": "mdm"
     },
     {
       "variable": "RDM_DATABASE_URL",
-      "role": "discovery_reader_rdm",
+      "role": "discovery_reader",
       "store": "rdm"
     },
     {
       "variable": "SILVER_DATABASE_URL",
-      "role": "discovery_reader_silver",
+      "role": "discovery_reader",
       "store": "silver"
     }
   ]

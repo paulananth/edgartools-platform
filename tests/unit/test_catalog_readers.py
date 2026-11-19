@@ -192,3 +192,67 @@ def test_the_exposure_list_gives_each_stores_schema_and_tables(readers):
     assert schema == "silver" and "thirteenf_holding" in tables and len(tables) == 16
     with pytest.raises(ValueError, match="names no table"):
         readers.exposed(EXPOSURE_FILE, "rules")
+
+
+def test_one_reader_login_serves_every_store_and_is_made_once(readers, monkeypatch, tmp_path):
+    """The second store reuses the first's login and password: the role exists, its credentials are saved, so it is granted, not made again."""
+    statements, exists = [], {"made": False}
+
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def execute(self, query, params=None):
+            text = query.as_string(None) if hasattr(query, "as_string") else query
+            statements.append(text)
+            if text.startswith("CREATE ROLE"):
+                exists["made"] = True
+
+        def fetchone(self):
+            return (1,) if exists["made"] else None
+
+    class Connection(Cursor):
+        def cursor(self):
+            return Cursor()
+
+    monkeypatch.setattr(readers.psycopg, "connect", lambda *a, **k: Connection())
+    monkeypatch.setattr(readers, "verify", lambda value, expected=None: {"expected": expected})
+    reader = tmp_path / "reader.env"
+    owner = {"DB_URL": "postgresql://owner:x@h:5432"}
+    first = {"variable": "MDM_DATABASE_URL", "store": "mdm", "role": "discovery_reader"}
+    second = {"variable": "RDM_DATABASE_URL", "store": "rdm", "role": "discovery_reader"}
+    url1, _ = readers.provision(first, owner, reader, exposure=EXPOSURE_FILE)
+    url2, _ = readers.provision(second, owner, reader, exposure=EXPOSURE_FILE)
+    assert sum(s.startswith("CREATE ROLE") for s in statements) == 1  # one login
+    a, b = readers.urlsplit(url1), readers.urlsplit(url2)
+    assert (a.username, a.password) == (b.username, b.password) and (a.path, b.path) == ("/mdm", "/rdm")  # one credential, each store's database
+    joined = "\n".join(statements)
+    assert 'GRANT SELECT ON TABLE "rdm"."published_code"' in joined and 'GRANT SELECT ON TABLE "public"."mastering_master"' in joined
+    assert "ALL TABLES" not in joined
+
+
+def test_a_login_that_exists_with_no_saved_credentials_is_still_refused(readers, monkeypatch, tmp_path):
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def execute(self, *_):
+            pass
+
+        def fetchone(self):
+            return (1,)
+
+    class Connection(Cursor):
+        def cursor(self):
+            return Cursor()
+
+    monkeypatch.setattr(readers.psycopg, "connect", lambda *a, **k: Connection())
+    source = {"variable": "RDM_DATABASE_URL", "store": "rdm", "role": "discovery_reader"}
+    with pytest.raises(ValueError, match="without saved credentials"):
+        readers.provision(source, {"DB_URL": "postgresql://owner:x@h:5432"}, tmp_path / "reader.env", exposure=EXPOSURE_FILE)
