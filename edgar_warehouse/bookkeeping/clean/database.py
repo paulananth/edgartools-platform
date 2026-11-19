@@ -13,17 +13,17 @@ from .config import Blocked, canonical
 
 
 def default_url(store: str = "bookkeeping") -> str:
-    """`DB_URL` with this store's database (a `DB_URL` that names one keeps it). Bookkeeping ships alone, so it reads the
-    variable itself."""
+    """`DB_URL` with this store's database (a `DB_URL` that names one keeps it; `DB_PREFIX` isolates a copy). Bookkeeping
+    ships alone, so it reads the variable itself."""
     value = os.environ.get("DB_URL")
     if not value:
-        raise KeyError("DB_URL is not set: source the owner file of the stores folder (its value is never printed)")
+        raise KeyError("DB_URL is not set: source the duty's file of the stores folder (its value is never printed)")
     parsed = make_url(value)
-    return parsed.set(database=parsed.database or store).render_as_string(hide_password=False)
+    return parsed.set(database=parsed.database or f"{os.environ.get('DB_PREFIX', '')}{store}").render_as_string(hide_password=False)
 
 
 def get_engine(url: str | None = None):
-    target = make_url(url or os.environ["BOOKKEEPING_DATABASE_URL"])
+    target = make_url(url or default_url())
     drivers = {"postgresql": "postgresql+psycopg2", "mysql": "mysql+pymysql", "mssql": "mssql+pymssql"}
     if target.drivername in drivers:
         target = target.set(drivername=drivers[target.drivername])

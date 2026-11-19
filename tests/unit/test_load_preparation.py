@@ -226,16 +226,16 @@ def test_registered_preparation_uses_the_selected_worker_environment_and_dispose
             seen.append("disposed")
 
     selected = {"selected-worker": "invented"}
-    monkeypatch.setattr(connections, "engine_from_environment",
-                        lambda name, environment, restricted: seen.append((name, environment, restricted)) or Engine())
+    monkeypatch.setattr(connections, "mdm_engine_from",
+                        lambda environment, restricted: seen.append((environment, restricted)) or Engine())
     monkeypatch.setattr(database_connections, "storage_adapter",
                         lambda: type("Adapter", (), {"registered_policy": lambda self, conn, digest: None})())
     # The value is only a presence marker: connection construction is stubbed above.
-    selected["MDM_DATABASE_URL"] = "invented-present"
+    selected["DB_URL"] = "invented-present"
     with pytest.raises(RunStopped, match="registered mastering policy"):
         with preparation.registered_store("invented-policy", selected):
             pytest.fail("unregistered policy was admitted")
-    assert seen == [("MDM_DATABASE_URL", selected, True), "disposed"]
+    assert seen == [(selected, True), "disposed"]
 
 
 def test_an_explicit_connection_environment_overrides_ambient_values(monkeypatch):
@@ -244,8 +244,8 @@ def test_an_explicit_connection_environment_overrides_ambient_values(monkeypatch
     calls = []
     adapter = type("Adapter", (), {"connect": lambda self, *a, **k: calls.append((a, k)) or "engine"})()
     monkeypatch.setattr(connections, "storage_adapter", lambda: adapter)
-    monkeypatch.setenv("MDM_DATABASE_URL", "not-a-connection")
-    selected = {"MDM_DATABASE_URL": "postgresql://invented:invented@localhost/invented",
+    monkeypatch.setenv("DB_URL", "not-a-connection")
+    selected = {"DB_URL": "postgresql://invented:invented@localhost",
                 "MDM_APPLICATION_ROLE": "invented_worker"}
-    assert connections.engine_from_environment("MDM_DATABASE_URL", selected) == "engine"
-    assert calls == [((selected["MDM_DATABASE_URL"], "postgresql"), {"runtime_role": "invented_worker"})]
+    assert connections.mdm_engine_from(selected) == "engine"
+    assert calls == [(("postgresql://invented:invented@localhost/mdm", "postgresql"), {"runtime_role": "invented_worker"})]

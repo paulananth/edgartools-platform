@@ -452,13 +452,13 @@ def test_a_target_that_lands_silver_stops_at_once_when_an_env_file_has_no_silver
         {"name": "read", "operation": "source.read", "input": {}}, {"name": "land", "operation": "silver.land"}]}}}}
     monkeypatch.setattr(loading.files, "source", lambda name: silver)
     for duty in driving.DUTIES:
-        (tmp_path / f"{duty}.env").write_text("export BOOKKEEPING_MANIFEST_ROOT=file://%s/m\nunset SILVER_DATABASE_URL\n" % tmp_path)
+        (tmp_path / f"{duty}.env").write_text("export BOOKKEEPING_MANIFEST_ROOT=file://%s/m\nunset DB_URL\n" % tmp_path)
 
     with pytest.raises(loading.RunStopped, match="lands silver .*land.* no silver login"):
         loading.Loader(source="example", target="by_letter", stores=tmp_path, workers=1, minutes=1, say=lambda line: None)
 
     for duty in ("worker",):
-        (tmp_path / f"{duty}.env").write_text("export BOOKKEEPING_MANIFEST_ROOT=file://%s/m\nexport SILVER_DATABASE_URL=x\n" % tmp_path)
+        (tmp_path / f"{duty}.env").write_text("export BOOKKEEPING_MANIFEST_ROOT=file://%s/m\nexport DB_URL=x\n" % tmp_path)
     assert loading.Loader(source="example", target="by_letter", stores=tmp_path, workers=1, minutes=1, say=lambda line: None)
 
 
@@ -476,7 +476,7 @@ def landing_loader(tmp_path, monkeypatch, *, spec=True):
     monkeypatch.setattr(loading.files, "source", lambda name: LANDS)
     monkeypatch.setattr(loading.files, "load", lambda path: {"table": "invented_letters"})
     for duty in driving.DUTIES:
-        login = "export SILVER_DATABASE_URL=postgresql://invented_runtime:x@localhost/silver\n"
+        login = "export DB_URL=postgresql://invented_runtime:x@localhost/silver\n"
         (tmp_path / f"{duty}.env").write_text("export BOOKKEEPING_MANIFEST_ROOT=file://%s/m\n" % tmp_path + login)
     commands = Recorded(processed={"letters/a.json"})
     found = loading.Loader(source="example", target="by_letter", stores=tmp_path, workers=1, minutes=1,
@@ -557,7 +557,7 @@ def mastering_loader(tmp_path, monkeypatch, commands, *, silver=True):
     """A loader of the mastering target, on a stores folder with (or without) a silver login."""
     found = loader(tmp_path, monkeypatch, commands)
     if silver:
-        found.env["worker"]["SILVER_DATABASE_URL"] = "postgresql://invented_runtime:x@localhost/silver"
+        found.env["worker"]["DB_URL"] = "postgresql://invented_runtime:x@localhost/silver"
     return found
 
 

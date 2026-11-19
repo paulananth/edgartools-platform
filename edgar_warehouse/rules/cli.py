@@ -370,7 +370,7 @@ def _catalog(args):
                   "plan": {"status": "ready", "counts": counts},
                   "publish": {"status": "not_run"}, "readback": {"status": "not_run"},
                   "cause": "Bookkeeping could not be read",
-                  "next_action": "Check BOOKKEEPING_DATABASE_URL access, then retry with --bookkeeping-run."}
+                  "next_action": "Check the DB_URL login's access to Bookkeeping, then retry with --bookkeeping-run."}
         report["summary"] = "FAILED: cannot read Bookkeeping quality evidence. Check Bookkeeping access and retry."
         return _catalog_output(report)
 

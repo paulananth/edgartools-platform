@@ -59,9 +59,9 @@ def _stage(envelope: dict, artifacts, folder: Path) -> tuple[Path, dict]:
 
 
 def _engine(*, restricted: bool):
-    from edgar_warehouse.mdm.connections import engine_from_env
+    from edgar_warehouse.mdm.connections import mdm_engine
 
-    return engine_from_env("MDM_DATABASE_URL", restricted=restricted)
+    return mdm_engine(restricted=restricted)
 
 
 def _settings(engine, manifest: dict, kind: str):

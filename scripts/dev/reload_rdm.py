@@ -9,7 +9,7 @@ For each version, in order: draft it from its canonical rows, approve it, publis
 folder, and refuse unless the published bytes equal the repository's file and its pin. Nothing is written
 into the repository. A version RDM already holds is left alone.
 
-    uv run python scripts/dev/reload_rdm.py            # uses RDM_DATABASE_URL, never printed
+    uv run python scripts/dev/reload_rdm.py            # uses DB_URL (the loader file), never printed
 
 A new version of a published code set is drafted from its newest published rows plus the added codes
 (each a row in the published shape: code, label, definition, parent_code, level, properties), for
@@ -28,7 +28,7 @@ from datetime import date
 from pathlib import Path
 
 from edgar_warehouse.control_contract import Blocked
-from edgar_warehouse.database_connections import engine_from_env
+from edgar_warehouse.database_connections import store_engine
 from edgar_warehouse.rdm.store import RDM
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -203,7 +203,7 @@ def held(rdm: RDM, code_set: str, version: str) -> bool:
 
 
 def main() -> int:
-    rdm = RDM(engine_from_env("RDM_DATABASE_URL"))
+    rdm = RDM(store_engine("rdm"))
     done = []
     for code_set in ORDER:
         words = WORDS[code_set]

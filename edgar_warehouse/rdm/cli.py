@@ -3,7 +3,7 @@ draft, record the operator's approval, publish, and compare two versions.
 
 Connections come from the environment and are never printed:
 DB_URL of the owner file (the schema owner, for init) and
-RDM_DATABASE_URL (the restricted runtime login, for everything else).
+DB_URL of the loader file (the restricted runtime login, for everything else).
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from pathlib import Path
 
 
 def _handle(args):
-    from edgar_warehouse.database_connections import engine_from_env, owner_engine
+    from edgar_warehouse.database_connections import owner_engine, store_engine
 
     from .database import migrate
     from .store import RDM
@@ -25,7 +25,7 @@ def _handle(args):
         finally:
             owner.dispose()
     else:
-        engine = engine_from_env("RDM_DATABASE_URL")
+        engine = store_engine("rdm")
         rdm = RDM(engine)
         try:
             if args.rdm_command == "import-reference":

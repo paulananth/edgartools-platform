@@ -23,7 +23,11 @@ TABLE = "rules_used"
 
 
 def get_engine(url=None):
-    target = make_url(url or os.environ["RULES_DATABASE_URL"])
+    if url is None:
+        from edgar_warehouse.database_connections import owner_url
+
+        url = owner_url("rules")
+    target = make_url(url)
     drivers = {"postgresql": "postgresql+psycopg2", "mysql": "mysql+pymysql"}
     if target.drivername in drivers:
         target = target.set(drivername=drivers[target.drivername])

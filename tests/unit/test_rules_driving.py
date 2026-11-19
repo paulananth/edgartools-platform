@@ -184,7 +184,7 @@ class Book:
 def test_a_status_read_starts_no_process_and_gives_what_the_command_prints(tmp_path, monkeypatch):
     """The driver asks for status twice a step; a process and a database session each time cost a hosted store
     about twelve sessions a bundle."""
-    found = {"worker": {"BOOKKEEPING_DATABASE_URL": "postgresql://invented"}}
+    found = {"worker": {"DB_URL": "postgresql://invented"}}
     reads = commands(found, tmp_path)
     book = Book()
     monkeypatch.setattr(reads, "book", lambda: book)
@@ -200,13 +200,13 @@ def test_a_status_read_opens_the_worker_connection_once(tmp_path, monkeypatch):
     import edgar_warehouse.bookkeeping.clean.engine as engine
     monkeypatch.setattr(database, "get_engine", lambda url: opened.append(url) or object())
     monkeypatch.setattr(engine, "Bookkeeping", lambda built: Book())
-    reads = commands({"worker": {"BOOKKEEPING_DATABASE_URL": "postgresql://invented"}}, tmp_path)
+    reads = commands({"worker": {"DB_URL": "postgresql://invented"}}, tmp_path)
     reads.status("run-1"), reads.status("run-1", "read")
-    assert opened == ["postgresql://invented"]
+    assert opened == ["postgresql://invented/bookkeeping"]
 
 
 def test_a_failed_status_read_keeps_its_message_off_the_screen(tmp_path, monkeypatch):
-    reads = commands({"worker": {"BOOKKEEPING_DATABASE_URL": "postgresql://invented"}}, tmp_path)
+    reads = commands({"worker": {"DB_URL": "postgresql://invented"}}, tmp_path)
     monkeypatch.setattr(reads, "book", lambda: Book(error=RuntimeError("could not connect to 127.0.0.1")))
     with pytest.raises(driving.RunStopped) as caught:
         reads.status("run-1")

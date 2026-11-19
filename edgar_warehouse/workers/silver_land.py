@@ -8,8 +8,8 @@ step). Its keys say what to take from it:
 
 The worker calls the existing silver writer (`land`) once for each artifact
 of the reading, so a table with `append` load mode lands each filer's rows
-exactly once, and a retry lands the same rows again with no change. SILVER_DATABASE_URL
-is the silver login; MDM_DATABASE_URL, when set,
+exactly once, and a retry lands the same rows again with no change. DB_URL
+names the loader login, with the silver database; the MDM database, when set,
 finds each linked master's id. Its output is a receipt naming what the
 reading held: rows, distinct keys and a digest of the keys. The check reads
 the reading again, rebuilds the receipt, and reads silver to
@@ -183,10 +183,10 @@ def _recomputed_quality(identity: dict, artifacts, envelope: dict, keys: dict, s
 
 
 def engines():
-    from edgar_warehouse.database_connections import engine_from_env
+    from edgar_warehouse.database_connections import store_engine
 
-    silver = engine_from_env("SILVER_DATABASE_URL")
-    mdm = engine_from_env("MDM_DATABASE_URL") if os.environ.get("MDM_DATABASE_URL") else None
+    silver = store_engine("silver")
+    mdm = store_engine("mdm") if os.environ.get("DB_URL") else None
     return silver, mdm
 
 

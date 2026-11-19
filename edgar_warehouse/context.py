@@ -84,9 +84,9 @@ class Store:
 
 # One entry per store (GoF consult, ticket 05 RDM part): silver specs add one.
 STORES = {
-    "MDM": Store("MDM", "MDM_DATABASE_URL", True, "edgar-warehouse mdm check-connectivity", "edgar_warehouse.context:Context"),
-    "RDM": Store("RDM", "RDM_DATABASE_URL", False, "edgar-warehouse rdm init", "edgar_warehouse.rdm.context:CodeContext"),
-    "SILVER": Store("silver", "SILVER_DATABASE_URL", False, "edgar-warehouse silver init",
+    "MDM": Store("MDM", "mdm", True, "edgar-warehouse mdm check-connectivity", "edgar_warehouse.context:Context"),
+    "RDM": Store("RDM", "rdm", False, "edgar-warehouse rdm init", "edgar_warehouse.rdm.context:CodeContext"),
+    "SILVER": Store("silver", "silver", False, "edgar-warehouse silver init",
                     "edgar_warehouse.silver_writer.context:TableContext"),
 }
 
@@ -117,7 +117,7 @@ def _handle(args: argparse.Namespace) -> int:
     except Exception as error:  # noqa: BLE001 - a driver message can carry the database address
         answer = {
             "error": f"The {store.name} database could not be read ({type(error).__name__}).",
-            "try": f"Check that {store.variable} is set and that {store.name} is migrated ({store.check}).",
+            "try": f"Check that DB_URL is set and that {store.name} is migrated ({store.check}).",
         }
         code = 1
     print(json.dumps(answer, ensure_ascii=False))
@@ -129,20 +129,20 @@ def _engine(store: Store = STORES["MDM"], subject: str | None = None):
 
     from sqlalchemy import event
 
-    from edgar_warehouse.database_connections import engine_from_env
+    from edgar_warehouse.database_connections import store_engine
 
-    if not os.environ.get(store.variable):
+    if not os.environ.get("DB_URL"):
         if store.name == "RDM" and subject:  # a misspelled kind lands here too
             from edgar_warehouse.rules.files import context_subjects
 
             kinds = context_subjects() - {"relationship"}
 
             raise ContextError(f"{subject!r} is not a master kind ({', '.join(sorted(kinds))}) or 'relationship'; "
-                               f"as a code set it is read from RDM, and {store.variable} is not set.",
-                               f"Set {store.variable} to a login that may read RDM, or name a kind.")
-        raise ContextError(f"{store.variable} is not set.",
-                           f"Set {store.variable} to a login that may read {store.name}, then run the command again.")
-    engine = engine_from_env(store.variable,
+                               f"as a code set it is read from RDM, and DB_URL is not set.",
+                               f"Set DB_URL (the loader file) to a login that may read RDM, or name a kind.")
+        raise ContextError(f"DB_URL is not set.",
+                           f"Set DB_URL (the loader file) to a login that may read {store.name}, then run the command again.")
+    engine = store_engine(store.variable,
         runtime_role=os.environ.get("MDM_APPLICATION_ROLE", "application") if store.application_role else None)
 
     @event.listens_for(engine, "connect")
