@@ -26,10 +26,8 @@ WRITER = {"write", "ddl", "role"}
 GUARDS = {
     "edgar_loader": {"limit": 300, "settings": {"work_mem": "64MB", "statement_timeout": "4h", "idle_in_transaction_session_timeout": "10min",
                                                  "pgaudit.log": "ddl,role"}},
-    "mdm_governance": {"limit": 10, "settings": {"statement_timeout": "5min", "idle_in_transaction_session_timeout": "5min",
-                                                  "pgaudit.log": "write,ddl,role"}},
-    "rules_governance": {"limit": 10, "settings": {"statement_timeout": "5min", "idle_in_transaction_session_timeout": "5min",
-                                                    "pgaudit.log": "write,ddl,role"}},
+    "governance": {"limit": 10, "settings": {"statement_timeout": "5min", "idle_in_transaction_session_timeout": "5min",
+                                              "pgaudit.log": "write,ddl,role"}},
     "ops_reader": {"limit": 10, "settings": {"statement_timeout": "60s", "idle_in_transaction_session_timeout": "60s"}},
 }
 VALUE = re.compile(r"^[0-9A-Za-z,. ]+$")

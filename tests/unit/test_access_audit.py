@@ -213,3 +213,36 @@ def test_the_audit_refuses_the_connections_that_sign_in_as_the_operators_admin(c
 
 def test_audit_classes_set_on_a_role_count_when_the_instance_default_is_none():
     assert graded("postgres", lambda e: e["settings"].update({"pgaudit.log": "none"}) or e.update(role_settings=[("loader", ["pgaudit.log=ddl,role"])]))["LOG"] == "PASS"
+
+
+def test_the_connection_limit_control_leaves_out_the_platforms_own_logins_and_counts_ours(monkeypatch):
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def execute(self, sql):
+            self.sql = sql
+
+        def fetchall(self):
+            if "rolconnlimit" in self.sql:
+                return [("governance", 10), ("edgar_loader", -1), ("postgres", -1), ("application", -1)]
+            if "pg_settings" in self.sql:
+                return [("ssl", "on")]
+            return [(0, 0, 0, 0)]
+
+    class Connection:
+        def set_session(self, **_):
+            pass
+
+        def cursor(self):
+            return Cursor()
+
+    fake = type(sys)("psycopg2")
+    fake.Error = Exception
+    fake.connect = lambda *a, **k: Connection()
+    monkeypatch.setitem(sys.modules, "psycopg2", fake)
+    found = postgres.collect({"DB_URL": "postgresql://invented@h/x"})["logins"]
+    assert found == [("governance", 10), ("edgar_loader", -1)]

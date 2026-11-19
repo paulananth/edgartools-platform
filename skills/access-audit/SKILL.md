@@ -67,6 +67,9 @@ platform's usage views have not shown yet (they lag). The workstation adapter al
 | ROT | Credentials rotate on a dated, owned schedule | AWS keys are tested; elsewhere read the ticket |
 | REV | Access is reviewed on a schedule with a signed record | A person reads it: NOT_TESTED until a record exists |
 
+A database's own logins, made with the instance and used by the platform (its administrator account and application login), are left out
+of the connection-limit count: a limit on them can lock the platform out. Every login this platform makes is counted.
+
 The report ends with a **coverage matrix**, objective by platform: `P` pass, `F` fail, `?` not tested, `-` the adapter has no
 test for it. A `-` is a gap in the audit, not a clean platform: close it by extending the adapter or record why it does not apply.
 

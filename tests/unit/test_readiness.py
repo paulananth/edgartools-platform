@@ -124,3 +124,15 @@ def test_the_engine_hash_follows_the_source_and_not_the_file_times(tmp_path):
     assert readiness.engine_hash(crate) == first
     (crate / "src" / "lib.rs").write_text("fn b() {}")
     assert readiness.engine_hash(crate) != first
+
+
+def test_the_audit_runs_with_the_readers_login_so_it_can_read_the_database(monkeypatch):
+    seen = {}
+
+    def run(command, **kwargs):
+        seen.update(kwargs["env"])
+        return type("Done", (), {"stdout": json.dumps([{"id": "CST.postgres", "result": "FAIL"}, {"id": "IND.postgres", "result": "PASS"}])})()
+
+    monkeypatch.setattr(readiness.subprocess, "run", run)
+    assert readiness.audit_failures({"DB_URL": "postgresql://invented@h"}) == ["CST.postgres"]
+    assert seen["DB_URL"] == "postgresql://invented@h"

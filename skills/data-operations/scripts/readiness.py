@@ -209,11 +209,12 @@ def plan_missing(env: dict) -> int:
     return sum(1 for line in done.stdout.splitlines() if "no plan" in line) if done.returncode == 0 else 99
 
 
-def audit_failures() -> list[str] | None:
+def audit_failures(env: dict | None = None) -> list[str] | None:
     script = REPO / "skills" / "access-audit" / "scripts" / "access_audit.py"
     if not script.exists():
         return None
-    done = subprocess.run([sys.executable, str(script), "--platform", "postgres", "--json"], capture_output=True, text=True, check=False)
+    done = subprocess.run([sys.executable, str(script), "--platform", "postgres", "--json"], capture_output=True, text=True, check=False,
+                          env={**os.environ, **(env or {})})
     try:
         return sorted(r["id"] for r in json.loads(done.stdout) if r["result"] == "FAIL")
     except ValueError:
@@ -229,7 +230,7 @@ def gather(stores: Path, repo: Path = REPO) -> dict:
     usage = shutil.disk_usage(Path.home())
     return {"git": git_facts(repo), "engine": engine_facts(repo), "doctor": doctor_ok(stores, env), "loader": loader, "reference": reference,
             "plan_missing": plan_missing(env), "loads_running": loads_running(), "loader_sessions": sessions,
-            "disk_gib": usage.free / 2**30, "load1": os.getloadavg()[0], "cores": os.cpu_count() or 1, "audit": audit_failures()}
+            "disk_gib": usage.free / 2**30, "load1": os.getloadavg()[0], "cores": os.cpu_count() or 1, "audit": audit_failures(reader)}
 
 
 def main(argv: list[str] | None = None) -> int:
