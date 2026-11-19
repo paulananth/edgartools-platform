@@ -8,6 +8,9 @@ from .base import control
 
 NAME = "postgres"
 PLATFORM_SUPERUSERS = {"postgres", "snowflake_superuser"}
+# Logins the platform makes with the instance and uses itself (the administrator account and the application login, a member
+# of the platform's write group): a connection limit on them can lock the platform out, so the limit control does not count them.
+PLATFORM_LOGINS = PLATFORM_SUPERUSERS | {"application"}
 
 
 def configured(env) -> bool:
@@ -34,7 +37,8 @@ def collect(env, as_admin: bool = False) -> dict:
             "memberships": [r[0] for r in ask("select b.rolname from pg_auth_members m join pg_roles a on a.oid = m.member join pg_roles b on b.oid = m.roleid where a.rolname = current_user")],
             "writes": ask("select count(*) from information_schema.role_table_grants where grantee = current_user and privilege_type in ('INSERT', 'UPDATE', 'DELETE', 'TRUNCATE')")[0][0],
             "superusers": [r[0] for r in ask("select rolname from pg_roles where rolsuper and rolcanlogin")],
-            "logins": ask("select rolname, rolconnlimit from pg_roles where rolcanlogin and rolname !~ '^(pg_|snowflake)'"),
+            "logins": [row for row in ask("select rolname, rolconnlimit from pg_roles where rolcanlogin and rolname !~ '^(pg_|snowflake)'")
+                       if row[0] not in PLATFORM_LOGINS],
             "role_settings": ask("select r.rolname, s.setconfig from pg_db_role_setting s join pg_roles r on r.oid = s.setrole where s.setdatabase = 0"),
             "settings": dict(ask("select name, setting from pg_settings where name in ('log_connections', 'log_disconnections', 'log_statement', 'pgaudit.log', 'ssl', 'password_encryption', 'statement_timeout', 'idle_in_transaction_session_timeout')")),
         }

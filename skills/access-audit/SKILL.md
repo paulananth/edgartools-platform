@@ -59,6 +59,9 @@ platform's usage views have not shown yet (they lag). The workstation adapter al
 | LPR | No unexpected ownership, grant-management or wildcard-admin power | The escalation path |
 | NET | A network or public-exposure boundary applies | Boundary protection |
 | CST | Cost and capacity guards (monitors, budgets, connection limits) | A runaway cannot spend or exhaust without a stop |
+
+A database's own logins, made with the instance and used by the platform (its administrator account and application login), are left out
+of the connection-limit count: a limit on them can lock the platform out. Every login this platform makes is counted.
 | TMO | Execution is bounded (statement or session timeouts) | A runaway statement cannot run for days |
 | POL | Credential policies exist | Standards enforced, not hoped for |
 | LOG | Access and changes logged; transport and storage encrypted | Who did what, when |
