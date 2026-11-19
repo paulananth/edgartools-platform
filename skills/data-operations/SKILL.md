@@ -231,7 +231,7 @@ What it does, in order:
    submits it (`rules run`), works each step in its declared order and
    finalizes. `--bundles N` loads N bundles at once. Each is its own run,
    because bundles of one target are one wave, not a
-   queue, and their silver rows merge by key side by side (only a snapshot table takes the whole table). A bundle that stops does not stop the others. Once `--minutes`
+   queue, and on PostgreSQL their silver rows merge by key side by side (a snapshot takes the whole table). A bundle that stops does not stop the others. Once `--minutes`
    has passed no new bundle starts, and every stop is named at the end. The Change Journal leaves out documents already loaded under
    these rules. Already-loaded documents are counted and skipped, and an
    unchanged rerun starts no work. "These rules" are the source's own rules and the part of the merge policy that

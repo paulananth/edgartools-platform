@@ -347,6 +347,18 @@ def _open_insert(runtime, name, visit_id, amount):
     return conn, tx
 
 
+def _waits_on_a_lock(runtime, fragment, seconds=10):
+    """Whether a session running a statement with `fragment` is waiting on a lock now (polled, not guessed)."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        with runtime.connect() as conn:
+            if conn.scalar(text("SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' "
+                                "AND query ILIKE :q AND pid <> pg_backend_pid()"), {"q": f"%{fragment}%"}):
+                return True
+        time.sleep(0.05)
+    return False
+
+
 def _deliver(sink, spec, rows, results, key):
     try:
         results[key] = sink.write(spec, rows)
@@ -391,8 +403,7 @@ def test_a_snapshot_still_takes_the_whole_table(stores):
     delivery = threading.Thread(target=_deliver, args=(sink, spec, visits()[:2], results, "a"))
     delivery.start()
     try:
-        delivery.join(3)
-        waited = delivery.is_alive()
+        waited = _waits_on_a_lock(runtime, "LOCK TABLE")
     finally:
         tx.commit()
         held.close()
@@ -412,7 +423,7 @@ def test_the_same_key_delivered_at_once_leaves_one_row_and_an_append_refuses_a_d
     results = {}
     delivery = threading.Thread(target=_deliver, args=(sink, spec, [visits()[0]], results, "a"))
     delivery.start()
-    time.sleep(1)
+    assert _waits_on_a_lock(runtime, "INSERT INTO silver"), "the delivery did not wait for the delivery holding its key"
     tx.commit()
     held.close()
     delivery.join(30)
@@ -434,6 +445,6 @@ def test_the_same_rows_delivered_by_two_deliveries_at_once_land_once(stores):
         t.start()
     for t in threads:
         t.join(60)
-    assert sorted(r["inserted"] for r in results.values()) == [0, 3] or all(not isinstance(r, Blocked) for r in results.values())
+    assert not any(isinstance(r, Blocked) for r in results.values()), results
     assert sorted(table(runtime)) == [1, 2, 3]
-    assert sum(r["inserted"] for r in results.values()) == 3
+    assert sum(r["inserted"] for r in results.values()) == 3  # each row landed once, whichever delivery got it

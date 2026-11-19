@@ -23,6 +23,15 @@ def refusal(exc: Exception) -> str:
         ("column", getattr(diag, "column_name", None)), ("table", getattr(diag, "table_name", None))) if value]
     return f" ({', '.join(parts)})" if parts else f" ({type(orig or exc).__name__})"
 
+def delivery_refusal(table: str, exc: Exception) -> str:
+    """Why a delivery failed in the database: another delivery's rows at once (retry), or a value or constraint."""
+    orig = getattr(exc, "orig", None)
+    if getattr(orig, "pgcode", None) in ("40P01", "40001"):
+        return f"silver.{table}: another delivery changed the same rows at once; deliver again"
+    detail = f": {orig}" if isinstance(orig, Blocked) else refusal(exc)
+    return f"silver.{table}: a value is not its column's type or a storage constraint refused the delivery{detail}"
+
+
 def lock(conn, spec):
     """One delivery at a time merges into a table: its checks and its writes see no other delivery's rows arrive."""
     if conn.dialect.name == "postgresql":
@@ -107,10 +116,10 @@ class DatabaseSink:
                         ).on_conflict_do_nothing(index_elements=[target.c[k] for k in spec["key"]])).rowcount
 
                     def count_changed():
-                        count = conn.scalar(select(func.count()).select_from(stage.join(target, match)).where(differs(source)))
-                        if count and spec["load_mode"] == "append":
+                        found = conn.scalar(select(func.count()).select_from(stage.join(target, match)).where(differs(source)))
+                        if found and spec["load_mode"] == "append":
                             raise Blocked(f"silver.{spec['table']} is append only: delivered rows change rows already landed under the same key")
-                        return count
+                        return found
 
                     # By row, the insert comes first: it waits for a delivery still holding the same key, and the check
                     # after it sees that delivery's committed row (a refusal rolls the insert back).
@@ -129,13 +138,12 @@ class DatabaseSink:
                     if spec["load_mode"] == "snapshot":
                         deleted = conn.execute(delete(target).where(~exists(select(1).select_from(stage).where(match)))).rowcount
                 finally:
-                    if conn.dialect.name == "postgresql": stage.drop(conn)
-                    else: conn.execute(delete(stage))
+                    if conn.dialect.name == "mysql": conn.execute(delete(stage))
+                # A failed delivery's rollback removes its staging table; dropping it first would raise on the aborted
+                # transaction and hide why the delivery failed.
+                if conn.dialect.name == "postgresql": stage.drop(conn)
         except (DBAPIError, StatementError) as exc:
-            if getattr(getattr(exc, "orig", None), "pgcode", None) in ("40P01", "40001"):
-                raise Blocked(f"silver.{spec['table']}: another delivery changed the same rows at once; deliver again") from None
-            detail = f": {exc.orig}" if isinstance(getattr(exc, "orig", None), Blocked) else refusal(exc)
-            raise Blocked(f"silver.{spec['table']}: a value is not its column's type or a storage constraint refused the delivery{detail}") from None
+            raise Blocked(delivery_refusal(spec["table"], exc)) from None
         return {"table": spec["table"], "rows": count, "inserted": inserted, "changed": changed,
                 "deleted": deleted, **updates}
 
