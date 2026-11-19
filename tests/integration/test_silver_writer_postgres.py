@@ -336,3 +336,104 @@ def test_two_deliveries_stage_side_by_side_and_only_the_merge_waits(stores):
     assert landed_meanwhile, "the quick delivery waited for the slow one to finish sending its rows"
     assert (results["slow"]["inserted"], results["quick"]["inserted"]) == (2, 1)
     assert sorted(table(runtime)) == [1, 2, 3]
+
+
+def _open_insert(runtime, name, visit_id, amount):
+    """Another delivery's merge in progress: a row inserted into the table and not yet committed."""
+    conn = runtime.connect()
+    tx = conn.begin()
+    conn.execute(text(f'INSERT INTO silver."{name}" (visit_id, amount, loaded_at) VALUES (:i, :a, now())'),
+                 {"i": visit_id, "a": amount})
+    return conn, tx
+
+
+def _deliver(sink, spec, rows, results, key):
+    try:
+        results[key] = sink.write(spec, rows)
+    except Blocked as exc:
+        results[key] = exc
+
+
+def test_deliveries_of_different_keys_merge_while_another_merge_is_open(stores):
+    """A merge in progress on one table does not hold up a delivery of other keys: no table lock."""
+    import threading
+
+    owner, runtime, _, _ = stores
+    silver.register(owner, visit_spec(load_mode="upsert"), runtime_role=RUNTIME)
+    sink = PostgresSink(runtime)
+    spec = sink.spec("visit")
+    held, tx = _open_insert(runtime, "visit", 100, "1")
+    results = {}
+    delivery = threading.Thread(target=_deliver, args=(sink, spec, visits()[:2], results, "a"))
+    delivery.start()
+    try:
+        delivery.join(20)
+        landed_meanwhile = not delivery.is_alive()
+    finally:
+        tx.commit()
+        held.close()
+        delivery.join(30)
+    assert landed_meanwhile, "a delivery of other keys waited for another merge on the same table"
+    assert results["a"]["inserted"] == 2
+    assert sorted(table(runtime)) == [1, 2, 100]
+
+
+def test_a_snapshot_still_takes_the_whole_table(stores):
+    """A snapshot deletes the rows it does not hold, so it merges alone."""
+    import threading
+
+    owner, runtime, _, _ = stores
+    silver.register(owner, visit_spec(load_mode="snapshot"), runtime_role=RUNTIME)
+    sink = PostgresSink(runtime)
+    spec = sink.spec("visit")
+    held, tx = _open_insert(runtime, "visit", 100, "1")
+    results = {}
+    delivery = threading.Thread(target=_deliver, args=(sink, spec, visits()[:2], results, "a"))
+    delivery.start()
+    try:
+        delivery.join(3)
+        waited = delivery.is_alive()
+    finally:
+        tx.commit()
+        held.close()
+        delivery.join(30)
+    assert waited, "a snapshot merged while another merge on its table was open"
+    assert sorted(table(runtime)) == [1, 2]  # key 100 is absent from the snapshot, so the snapshot removed it
+
+
+def test_the_same_key_delivered_at_once_leaves_one_row_and_an_append_refuses_a_different_value(stores):
+    import threading
+
+    owner, runtime, _, _ = stores
+    silver.register(owner, visit_spec(), runtime_role=RUNTIME)  # append
+    sink = PostgresSink(runtime)
+    spec = sink.spec("visit")
+    held, tx = _open_insert(runtime, "visit", 1, "99")  # visit 1 is arriving with another amount
+    results = {}
+    delivery = threading.Thread(target=_deliver, args=(sink, spec, [visits()[0]], results, "a"))
+    delivery.start()
+    time.sleep(1)
+    tx.commit()
+    held.close()
+    delivery.join(30)
+    assert isinstance(results["a"], Blocked) and "append only" in str(results["a"])
+    assert table(runtime)[1]["amount"] == 99  # the row that was there first is the row that stays
+    assert len(table(runtime)) == 1
+
+
+def test_the_same_rows_delivered_by_two_deliveries_at_once_land_once(stores):
+    import threading
+
+    owner, runtime, _, _ = stores
+    silver.register(owner, visit_spec(load_mode="upsert"), runtime_role=RUNTIME)
+    sink = PostgresSink(runtime)
+    spec = sink.spec("visit")
+    results = {}
+    threads = [threading.Thread(target=_deliver, args=(sink, spec, visits(), results, k)) for k in "ab"]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(60)
+    assert sorted(r["inserted"] for r in results.values()) == [0, 3] or all(not isinstance(r, Blocked) for r in results.values())
+    assert sorted(table(runtime)) == [1, 2, 3]
+    assert sum(r["inserted"] for r in results.values()) == 3

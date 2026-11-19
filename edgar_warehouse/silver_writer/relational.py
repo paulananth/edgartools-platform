@@ -62,9 +62,12 @@ class DatabaseSink:
         differs = lambda fields: or_(*(target.c[c].is_distinct_from(stage.c[c]) for c in fields))
         try:
             with self.engine.begin() as conn:
-                # PostgreSQL stages into a table of this session, so deliveries stage side by side and the table is
-                # locked for the merge only; MySQL's staging table is shared, so its lock comes first.
+                # PostgreSQL stages into a table of this session, so deliveries stage side by side. A snapshot deletes
+                # the rows it does not hold, so it locks the table for its merge; any other PostgreSQL delivery merges
+                # by row (the key is the primary key), beside other deliveries. MySQL's staging table is shared, so its
+                # lock comes first.
                 staged_alone = conn.dialect.name == "postgresql"
+                by_row = staged_alone and spec["load_mode"] != "snapshot"
                 if staged_alone: stage.create(conn)
                 else:
                     lock(conn, spec)
@@ -78,7 +81,7 @@ class DatabaseSink:
                         if len(batch) == BATCH:
                             conn.execute(insert(stage), batch); batch = []
                     if batch: conn.execute(insert(stage), batch)
-                    if staged_alone: lock(conn, spec)
+                    if staged_alone and not by_row: lock(conn, spec)
                     if not count and spec["load_mode"] == "snapshot":
                         raise Blocked(f"silver.{spec['table']} is a snapshot: an empty delivery would empty it; refused")
                     group_keys = [stage.c[k] for k in spec["key"]]
@@ -88,14 +91,32 @@ class DatabaseSink:
                     duplicates = select(func.count()).select_from(stage).group_by(*group_keys).having(func.count() > 1)
                     if conn.execute(duplicates.limit(1)).first():
                         raise Blocked(f"silver.{spec['table']}: the delivery holds a key more than once")
-                    changed = conn.scalar(select(func.count()).select_from(stage.join(target, match)).where(differs(source)))
-                    if changed and spec["load_mode"] == "append":
-                        raise Blocked(f"silver.{spec['table']} is append only: delivered rows change rows already landed under the same key")
                     now = datetime.now(UTC)
                     from sqlalchemy import literal
                     values = [stage.c[c] for c in staged] + [literal(now, type_=target.c[c].type) for c in specs.added_time(spec)]
                     incoming = select(*values).select_from(stage).where(~exists(select(1).select_from(target).where(match)))
-                    inserted = conn.execute(insert(target).from_select(staged + specs.added_time(spec), incoming)).rowcount
+
+                    def insert_missing():
+                        if not by_row:
+                            return conn.execute(insert(target).from_select(staged + specs.added_time(spec), incoming)).rowcount
+                        # In key order, so deliveries that share keys meet in the same order; a row another delivery
+                        # inserted first is left to it (a changed value is then found below).
+                        from sqlalchemy.dialects.postgresql import insert as pg_insert
+                        return conn.execute(pg_insert(target).from_select(
+                            staged + specs.added_time(spec), incoming.order_by(*(stage.c[k] for k in spec["key"]))
+                        ).on_conflict_do_nothing(index_elements=[target.c[k] for k in spec["key"]])).rowcount
+
+                    def count_changed():
+                        count = conn.scalar(select(func.count()).select_from(stage.join(target, match)).where(differs(source)))
+                        if count and spec["load_mode"] == "append":
+                            raise Blocked(f"silver.{spec['table']} is append only: delivered rows change rows already landed under the same key")
+                        return count
+
+                    # By row, the insert comes first: it waits for a delivery still holding the same key, and the check
+                    # after it sees that delivery's committed row (a refusal rolls the insert back).
+                    if by_row: inserted = insert_missing()
+                    changed = count_changed()
+                    if not by_row: inserted = insert_missing()
                     updates = {"mdm_ids_updated": 0}
                     for name, columns in groups.items():
                         if columns:
@@ -111,6 +132,8 @@ class DatabaseSink:
                     if conn.dialect.name == "postgresql": stage.drop(conn)
                     else: conn.execute(delete(stage))
         except (DBAPIError, StatementError) as exc:
+            if getattr(getattr(exc, "orig", None), "pgcode", None) in ("40P01", "40001"):
+                raise Blocked(f"silver.{spec['table']}: another delivery changed the same rows at once; deliver again") from None
             detail = f": {exc.orig}" if isinstance(getattr(exc, "orig", None), Blocked) else refusal(exc)
             raise Blocked(f"silver.{spec['table']}: a value is not its column's type or a storage constraint refused the delivery{detail}") from None
         return {"table": spec["table"], "rows": count, "inserted": inserted, "changed": changed,
