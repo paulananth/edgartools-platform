@@ -45,6 +45,7 @@ bypass-selection = true
 "../../edgar_warehouse/database_types.py" = "edgar_warehouse/database_types.py"
 "../../edgar_warehouse/application" = "edgar_warehouse/application"
 "../../edgar_warehouse/financials" = "edgar_warehouse/financials"
+"../../edgar_warehouse/gold" = "edgar_warehouse/gold"
 "../../edgar_warehouse/mastering" = "edgar_warehouse/mastering"
 "../../edgar_warehouse/mdm" = "edgar_warehouse/mdm"
 "../../edgar_warehouse/rdm" = "edgar_warehouse/rdm"

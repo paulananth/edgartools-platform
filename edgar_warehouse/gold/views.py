@@ -8,9 +8,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
+from edgar_warehouse.rules import files
 
-CONFIG = Path(__file__).resolve().parents[2] / "rules" / "gold" / "gold.yaml"
+CONFIG = files.ROOT / "gold" / "gold.yaml"  # the rules root, so an installed bundle reads its own copy
 
 DIALECTS = {
     "snowflake": {
@@ -31,7 +31,7 @@ DIALECTS = {
 
 
 def load(path: Path = CONFIG) -> dict:
-    return yaml.safe_load(path.read_text())
+    return files.load(path)
 
 
 class Context:

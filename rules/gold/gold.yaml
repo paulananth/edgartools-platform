@@ -25,33 +25,35 @@ master:
   name_fields: [name, legal_name, display_name, name_of_issuer]
   name_value_path: "fields.{field}.value"
 
-requirement: &holdings "A manager's holdings by security and quarter (operator, Approved, ticket 05 section 7)"
+# The questions that justify an object. An object names one here; an object with none is not built.
+requirements:
+  holdings: "A manager's holdings by security and quarter (operator, Approved, ticket 05 section 7)"
 
 objects:
 - name: master
   kind: base
-  requirement: *holdings
+  requirement: holdings
   grain: one row per MDM id (an alias row names the master it became)
 
 - name: dim_company
   kind: dimension
   master_kind: company
   identifiers: [cik]
-  requirement: *holdings
+  requirement: holdings
   grain: one row per canonical company master, plus the unknown and not-applicable members
 
 - name: dim_security
   kind: dimension
   master_kind: security
   identifiers: [cusip]
-  requirement: *holdings
+  requirement: holdings
   grain: one row per canonical security master, plus the unknown and not-applicable members
 
 - name: dim_date
   kind: calendar
   from: "1994-01-01"
   to: "2035-12-31"
-  requirement: *holdings
+  requirement: holdings
   grain: one row per calendar day; joined twice, as business time and as recorded time
 
 - name: fact_thirteenf_filing
@@ -62,7 +64,7 @@ objects:
   - {column: manager_mdm_id, dimension: dim_company, role: manager}
   times: {business: report_date, recorded: filing_date}
   carry: [form, primary_document]
-  requirement: *holdings
+  requirement: holdings
   grain: one row per accession number and manager
 
 - name: fact_thirteenf_holding
@@ -81,5 +83,5 @@ objects:
     single_link: {column: manager_mdm_id, dimension: dim_company, role: manager}
   measures: [shares_held, market_value, voting_auth_sole, voting_auth_shared, voting_auth_none]
   carry: [cusip, share_type, put_call, discretion_type]
-  requirement: *holdings
+  requirement: holdings
   grain: one row per accession number and holding index

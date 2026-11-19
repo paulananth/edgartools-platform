@@ -62,7 +62,7 @@ def test_every_object_names_its_requirement_and_every_link_names_a_dimension_tha
     config = views.load()
     names = {item["name"] for item in config["objects"]}
     for item in config["objects"]:
-        assert item["requirement"] and item["grain"], item["name"]
+        assert config["requirements"][item["requirement"]] and item["grain"], item["name"]
         for link in item.get("links", []) + ([item["parent"]["single_link"]] if "parent" in item else []):
             assert link["dimension"] in names
 
