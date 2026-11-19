@@ -10,8 +10,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))  # the sibling exposure
 import json
 import os
 import re
+from typing import Any, Callable
 from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, quote, unquote, urlsplit
 from urllib.request import Request, urlopen
 
 from exposure_manifest import validate_manifest
@@ -50,7 +51,7 @@ def build_snowflake_connection(manifest: dict[str, Any], connection_string: str)
 
     parsed_query = parse_qs(parsed.query)
     account = parsed.hostname
-    user = parsed.username
+    user = unquote(parsed.username) if parsed.username else None  # a credential in a URL is percent-encoded
     warehouse = parsed_query.get("warehouse", [None])[0]
     connection_database = parsed_query.get("database", [None])[0]
     role = parsed_query.get("role", [None])[0]
@@ -58,7 +59,7 @@ def build_snowflake_connection(manifest: dict[str, Any], connection_string: str)
         raise ValueError("Snowflake connection requires user, warehouse, database, and role")
     if not role.upper().endswith("_READER"):
         raise ValueError("Snowflake connection role must be a read-only *_READER role")
-    password = parsed.password
+    password = unquote(parsed.password) if parsed.password else None
     private_key = parsed_query.get("private_key", [None])[0]
     if not password and not private_key:
         raise ValueError("Snowflake connection requires a password or private key")
@@ -91,6 +92,34 @@ def build_snowflake_connection(manifest: dict[str, Any], connection_string: str)
     return connection
 
 
+def approved_identities(manifest: dict[str, Any]) -> set[tuple[str, str]]:
+    """The (schema, table) pairs the manifest approves, in the case Snowflake stores them."""
+    return {(item["schema"].upper(), item["table"].upper()) for item in (t["physical"] for t in manifest["tables"])}
+
+
+def read_back_identities(base: str, headers: dict[str, str], database: str, request: Callable[..., dict[str, Any]]) -> set[tuple[str, str]]:
+    """What AutoOntology actually ingested, by exact schema and table, read from its catalog."""
+    found: set[tuple[str, str]] = set()
+    listed = request("GET", f"{base}/api/schemas/{quote(database, safe='')}", headers=headers) or {}
+    for schema in listed.get("schemas", []):
+        tables = request("GET", f"{base}/api/tables/{quote(schema['id'], safe='')}", headers=headers)
+        for table in tables.get("data", []):
+            found.add(((table.get("schema_name") or schema.get("schema_name") or "").upper(), (table.get("name") or "").upper()))
+    return found
+
+
+def compilation_outcome(status: dict[str, Any]) -> str | None:
+    """None when the last semantic compilation succeeded and nothing newer failed; otherwise why not, in a sentence. `calculated`
+    only says some Term exists, which a failed or running pass can also leave behind."""
+    if status.get("running"):
+        return "a semantic compilation is running"
+    if status.get("last_failure_at"):
+        return "the last semantic compilation failed"
+    if not status.get("calculated") or not status.get("last_success_at"):
+        return "no semantic compilation has succeeded"
+    return None
+
+
 def configure_connection(
     api_url: str,
     api_key: str,
@@ -110,9 +139,15 @@ def configure_connection(
     if set(tested.get("schemas", [])) != set(expected["schemas"]):
         raise RuntimeError("AutoOntology returned schemas outside the approved manifest")
     created = request("POST", f"{base}/api/connections", headers=headers, body=payload)
+    ingested = read_back_identities(base, headers, expected["database"], request)
+    approved = approved_identities(manifest)
+    if ingested != approved:  # the regex filters unqualified names, so only the catalog itself shows what was taken
+        raise RuntimeError(f"AutoOntology ingested tables that differ from the approved manifest: "
+                           f"{len(ingested - approved)} extra, {len(approved - ingested)} missing")
     readiness = request("GET", f"{base}/api/semantic-compilation/status", headers=headers)
-    if not readiness.get("calculated") or readiness.get("running") or readiness.get("blockers"):
-        raise RuntimeError("AutoOntology semantic compilation is not ready")
+    problem = compilation_outcome(readiness)
+    if problem:
+        raise RuntimeError(f"AutoOntology semantic compilation is not ready: {problem}")
     return {"test": tested, "created": created, "readiness": readiness}
 
 
