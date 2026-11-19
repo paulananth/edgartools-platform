@@ -160,10 +160,7 @@ def test_cli_inspection_and_receipt_verification(
 ):
     from edgar_warehouse.cli import main
 
-    monkeypatch.setenv(
-        "CHANGE_JOURNAL_DATABASE_URL",
-        databases.ledger.engine.url.render_as_string(hide_password=False),
-    )
+    monkeypatch.setenv("DB_URL", databases.loader)
     value = event()
     receipt = databases.ledger.append(value)
     path = tmp_path / "receipt.json"
@@ -210,9 +207,8 @@ def test_journal_cli_init_uses_the_owner_and_preserves_events(databases, monkeyp
 def test_the_journal_uses_only_its_own_connection(monkeypatch):
     from edgar_warehouse.change_journal.store import get_engine
 
-    monkeypatch.delenv("CHANGE_JOURNAL_DATABASE_URL", raising=False)
+    monkeypatch.delenv("DB_URL", raising=False)
     monkeypatch.setenv("CHANGE_LEDGER_DATABASE_URL", "postgresql://other/ledger")
-    monkeypatch.setenv("MDM_DATABASE_URL", "postgresql://other/mdm")
     with pytest.raises(KeyError):
         get_engine()
 
@@ -278,15 +274,7 @@ def test_cli_delivery_recovery_reports_pending_without_executing_work(
 
     book, rid, _, _ = submit(databases, tmp_path, count=1)
     complete(book, rid)
-    monkeypatch.setenv(
-        "BOOKKEEPING_DATABASE_URL",
-        databases.runtime.url.render_as_string(hide_password=False),
-    )
-    monkeypatch.setenv(
-        "CHANGE_JOURNAL_DATABASE_URL",
-        databases.ledger.engine.url.render_as_string(hide_password=False),
-    )
-    monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
+    monkeypatch.setenv("DB_URL", databases.loader)
     original = databases.ledger.append
 
     def unavailable(*args, **kwargs):

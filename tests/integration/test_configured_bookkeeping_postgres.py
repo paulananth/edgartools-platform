@@ -41,6 +41,7 @@ class Databases:
     rules: Rules
     ledger: ChangeJournal
     ledger_admin: object
+    loader: str  # the DB_URL of one login that holds every store's runtime privileges, with no database
 
 
 @pytest.fixture(scope="module")
@@ -56,11 +57,12 @@ def databases():
 
             setup = engine("postgres")
             with setup.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-                for role in ("bk_runtime", "mdm_reader", "rules_agent", "operator", "ledger_runtime", "clean_application"):
+                for role in ("bk_runtime", "mdm_reader", "rules_agent", "operator", "ledger_runtime", "clean_application", "loader"):
                     conn.exec_driver_sql(f"CREATE ROLE {role} LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE")
                 # Control's grants go to one group; the worker (bk_runtime) is its member.
                 conn.exec_driver_sql("CREATE ROLE bk_control NOLOGIN")
                 conn.exec_driver_sql("GRANT bk_control TO bk_runtime")
+                conn.exec_driver_sql("GRANT bk_runtime, rules_agent, ledger_runtime, clean_application TO loader")
                 for db in ("bookkeeping", "rules", "change_journal"):
                     conn.exec_driver_sql(f"CREATE DATABASE {db}")
             admin = engine("bookkeeping")
@@ -76,8 +78,11 @@ def databases():
                 grant_profile(admin, profile=profile, worker="bk_runtime")
             migrate_rules(rules_admin, agent_role="rules_agent")
             migrate_journal(ledger_admin, runtime_role="ledger_runtime")
+            from sqlalchemy.engine import make_url
+
+            loader = make_url(server.url("postgres", "loader", driver="postgresql")).set(database=None).render_as_string(hide_password=False)
             yield Databases(admin, runtime, Rules(engine("rules", "rules_agent")),
-                            ChangeJournal(engine("change_journal", "ledger_runtime")), ledger_admin)
+                            ChangeJournal(engine("change_journal", "ledger_runtime")), ledger_admin, loader)
         finally:
             for value in engines:
                 value.dispose()
@@ -841,13 +846,10 @@ def test_two_workers_in_their_own_processes_complete_a_cli_submitted_run(databas
                "input": {"from": {"step": "s0", "key": str(n)}}, "output": (tmp_path / f"count-{n}").as_uri(),
                "cursor": {"offset": n}} for n in range(2)]
     inputs = book.artifacts.put(tmp_path.as_uri() + "/manifests", {"version": 2, "steps": {"s0": copies, "s1": counts}})
-    environment = {"BOOKKEEPING_DATABASE_URL": databases.runtime.url.render_as_string(hide_password=False),
-                   "RULES_DATABASE_URL": databases.rules.engine.url.render_as_string(hide_password=False),
-                   "CHANGE_JOURNAL_DATABASE_URL": databases.ledger.engine.url.render_as_string(hide_password=False),
+    environment = {"DB_URL": databases.loader,
                    "BOOKKEEPING_MANIFEST_ROOT": (tmp_path / "cli-manifests").as_uri()}
     for key, value in environment.items():
         monkeypatch.setenv(key, value)
-    monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
     from edgar_warehouse.rules import files
     files.write_source(body, tmp_path / "rules-root" / "sources" / name)
     assert main(["rules", "run", "--source", name, "--target", "silver", "--root", str(tmp_path / "rules-root"),
@@ -1000,12 +1002,9 @@ def test_rules_run_submits_a_source_with_acquisition_over_captured_files(databas
         {"keys": {"id": "0", "destination": (tmp_path / "out-0").as_uri()},
          "input": book.artifacts.put(tmp_path.as_uri() + "/inputs", {"row": 0}),
          "output": (tmp_path / "out-0").as_uri(), "cursor": {"offset": 0}}]})
-    for key, value in {"BOOKKEEPING_DATABASE_URL": databases.runtime.url.render_as_string(hide_password=False),
-                       "RULES_DATABASE_URL": databases.rules.engine.url.render_as_string(hide_password=False),
-                       "CHANGE_JOURNAL_DATABASE_URL": databases.ledger.engine.url.render_as_string(hide_password=False),
+    for key, value in {"DB_URL": databases.loader,
                        "BOOKKEEPING_MANIFEST_ROOT": (tmp_path / "cli-manifests").as_uri()}.items():
         monkeypatch.setenv(key, value)
-    monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
     from edgar_warehouse.rules import files
     files.write_source(body, tmp_path / "rules-root" / "sources" / name)
     assert main(["rules", "run", "--source", name, "--target", "silver", "--root", str(tmp_path / "rules-root"),

@@ -14,36 +14,31 @@ pytestmark = pytest.mark.skipif(os.environ.get("SKILL_ADAPTER_TEST_ENGINE") == "
                                 reason="Full SQL Server control lifecycle follows PostgreSQL/MySQL")
 
 
-def test_installed_rules_and_real_workers_complete_and_resume_one_run(installed, database_factory):
+def test_installed_rules_and_real_workers_complete_and_resume_one_run(installed, database_factory, store_databases):
     python, root = installed
     with ExitStack() as stack:
         _, reader, reader_role = stack.enter_context(database_factory())
-        rules_owner, rules_runtime, rules_role = stack.enter_context(database_factory())
         owner, worker, role = stack.enter_context(database_factory())
-        journal_owner, journal, journal_role = stack.enter_context(database_factory())
-        owner_url = owner.url.render_as_string(hide_password=False)
-        owners = {("rules", "init"): rules_owner.url.render_as_string(hide_password=False),
-                  ("change-journal", "init"): journal_owner.url.render_as_string(hide_password=False),
-                  ("bookkeeping", "init"): owner_url, ("bookkeeping", "grant-profile"): owner_url}
-        env = {"RULES_DATABASE_URL": rules_runtime.url.render_as_string(hide_password=False),
-               "BOOKKEEPING_DATABASE_URL": worker.url.render_as_string(hide_password=False),
-               "BOOKKEEPING_MANIFEST_ROOT": (root / "runs").as_uri(),
-               "CHANGE_JOURNAL_DATABASE_URL": journal.url.render_as_string(hide_password=False)}
+        # Each store is its own database, named for the store behind this test's prefix; one runtime login reaches them all.
+        prefix, stores = stack.enter_context(store_databases(owner, "bookkeeping", "change_journal", "rules"))
+        none = lambda engine: engine.url.set(database=None).render_as_string(hide_password=False)
+        owner_url, worker_url = none(owner), none(worker)
+        env = {"BOOKKEEPING_MANIFEST_ROOT": (root / "runs").as_uri(), "DB_PREFIX": prefix}
         def command(*args, verifier=False, report=True):
-            selected = {**env}
-            if args[:2] in owners:
-                selected["DB_URL"] = owners[args[:2]]
+            selected = {**env, "DB_URL": worker_url}
+            if args[:2] in (("rules", "init"), ("bookkeeping", "init"), ("change-journal", "init"), ("bookkeeping", "grant-profile")):
+                selected["DB_URL"] = owner_url
             elif verifier:
-                selected["BOOKKEEPING_DATABASE_URL"] = reader.url.set(database=owner.url.database).render_as_string(hide_password=False)
+                selected["DB_URL"] = none(reader)
             result = _run(python, "-m", "edgar_warehouse.cli", *args, env=selected, cwd=root)
             if result.returncode:
                 (root / "private-control-pipeline.log").write_text(result.stdout + "\n" + result.stderr)
             assert result.returncode == 0, "Installed pipeline failed; private diagnostic retained"
             return json.loads(result.stdout) if report else None
-        command("rules", "init", "--agent-role", rules_role)
-        command("bookkeeping", "init", "--runtime-role", role, "--database-name", owner.url.database)
-        command("bookkeeping", "init", "--runtime-role", reader_role, "--database-name", owner.url.database)
-        command("change-journal", "init", "--runtime-role", journal_role, "--database-name", journal_owner.url.database)
+        command("rules", "init", "--agent-role", role)
+        command("bookkeeping", "init", "--runtime-role", role, "--database-name", prefix + "bookkeeping")
+        command("bookkeeping", "init", "--runtime-role", reader_role, "--database-name", prefix + "bookkeeping")
+        command("change-journal", "init", "--runtime-role", role, "--database-name", prefix + "change_journal")
         with owner.connect() as conn:
             known = set(conn.scalars(text("SELECT User FROM mysql.user" if owner.dialect.name == "mysql" else "SELECT rolname FROM pg_roles")))
         groups = []

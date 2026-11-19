@@ -44,6 +44,6 @@ def test_a_runs_rules_are_recorded_once_and_read_back(database_factory, monkeypa
             conn.execute(text(f"DELETE FROM {target}"))
         from edgar_warehouse.cli import main
 
-        monkeypatch.setenv("RULES_DATABASE_URL", runtime.url.render_as_string(hide_password=False))
+        monkeypatch.setenv("DB_URL", runtime.url.render_as_string(hide_password=False))
         assert main(["rules", "status", "--pipeline", "invented.pipeline"]) == 0
         assert [row["digest"] for row in json.loads(capsys.readouterr().out)] == [first["digest"], changed["digest"]]

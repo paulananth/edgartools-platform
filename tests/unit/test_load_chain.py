@@ -1003,7 +1003,7 @@ def test_a_catch_up_publishes_the_status_of_every_step_already_done_from_its_own
 
 
 def test_the_status_command_gets_a_short_environment_the_bookkeeping_login_and_the_catalog_and_nothing_else():
-    base = {"PATH": "/bin", "HOME": "/h", "AWS_SECRET_ACCESS_KEY": "no", "MDM_DATABASE_URL": "no", "OPENMETADATA_ADMIN_PASSWORD": "no"}
+    base = {"PATH": "/bin", "HOME": "/h", "AWS_SECRET_ACCESS_KEY": "no", "SOME_DATABASE_URL": "no", "OPENMETADATA_ADMIN_PASSWORD": "no"}
     worker = {"DB_URL": "postgresql://b:p@h", "BOOKKEEPING_MANIFEST_ROOT": "file:///x", "OTHER_SECRET": "no"}
     catalog = {"OPENMETADATA_URL": "http://127.0.0.1:8587/api", "OPENMETADATA_TOKEN": "t"}
     given = chain.status_env(base, worker, catalog)

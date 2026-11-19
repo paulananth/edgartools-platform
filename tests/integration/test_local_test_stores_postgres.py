@@ -63,7 +63,6 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
             assert (stores.folder(name) / filename).stat().st_mode & 0o777 == 0o600
         assert not (stores.folder(name) / "verifier.env").exists()
         worker, governance = (environment(f + ".env") for f in ("worker", "governance"))
-        assert "SILVER_DATABASE_URL" not in worker
         assert "DB_URL" not in worker
         book = engine("bookkeeping", "postgres")
         with book.connect() as conn:

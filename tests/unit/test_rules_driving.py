@@ -146,18 +146,18 @@ def test_a_failed_command_keeps_its_message_off_the_screen(tmp_path, monkeypatch
 
 
 def test_a_key_the_file_unsets_is_removed_from_the_duty_process(tmp_path, monkeypatch):
-    write(tmp_path, worker="unset OTHER_DATABASE_URL MDM_DATABASE_URL\nexport MDM_DATABASE_URL='postgresql://w@h/mdm'\n")
+    write(tmp_path, worker="unset OTHER_DATABASE_URL DB_URL\nexport DB_URL='postgresql://w@h/mdm'\n")
     monkeypatch.setenv("OTHER_DATABASE_URL", "postgresql://shell@elsewhere/db")
 
     found = driving.duties(tmp_path)
 
-    assert found["worker"] == {"OTHER_DATABASE_URL": None, "MDM_DATABASE_URL": "postgresql://w@h/mdm"}
+    assert found["worker"] == {"OTHER_DATABASE_URL": None, "DB_URL": "postgresql://w@h/mdm"}
     seen = {}
     monkeypatch.setattr(driving.subprocess, "run", lambda command, env, **_: seen.update(env) or
                         type("Done", (), {"returncode": 0, "stdout": "{}", "stderr": ""})())
     commands(found, tmp_path)("worker", "bookkeeping", "status", "1")
     assert "OTHER_DATABASE_URL" not in seen
-    assert seen["MDM_DATABASE_URL"] == "postgresql://w@h/mdm"
+    assert seen["DB_URL"] == "postgresql://w@h/mdm"
 
 
 def test_a_missing_duty_file_names_the_command_that_makes_it(tmp_path):

@@ -307,9 +307,7 @@ print(json.dumps({{"shipped": shipped, "modules": modules, "absent": absent, "ru
 
 def _stores(databases):
     url = lambda engine: engine.url.render_as_string(hide_password=False)
-    return {"RULES_DATABASE_URL": url(databases.rules.engine),
-            "BOOKKEEPING_DATABASE_URL": url(databases.runtime),
-            "CHANGE_JOURNAL_DATABASE_URL": url(databases.ledger.engine)}
+    return {"DB_URL": databases.loader}  # one login holding each store's runtime privileges; each store adds its own database
 
 
 def test_source_sequence_runs_from_installed_bundle_without_checkout(installed):
@@ -555,7 +553,7 @@ def empty_rules_database():
 def test_the_rules_creator_runs_from_the_bundle_on_an_empty_rules_database(installed, empty_rules_database, tmp_path):
     python, root = installed
     url = empty_rules_database
-    env = {"DB_URL": url, "RULES_DATABASE_URL": url}
+    env = {"DB_URL": url}
     cli = lambda *a: _run(python, "-m", "edgar_warehouse.cli", *a, env=env, cwd=root)
     folder = tmp_path / "rules"
     assert cli("skill", "install", "--home", str(tmp_path / "home"), "--rules", str(folder)).returncode == 0
@@ -716,8 +714,9 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
     store = Artifacts()
     for profile in profiles:
         grant_profile(databases.admin, profile=profile, worker="bk_runtime")
-    mdm_name = f"mdm_bundle_{uuid4().hex[:8]}"
+    mdm_name = "mdm"  # the loader's DB_URL names no database, so each store is its own name: one trial at a time
     with databases.admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        conn.exec_driver_sql(f"DROP DATABASE IF EXISTS {mdm_name} WITH (FORCE)")
         conn.exec_driver_sql(f"CREATE DATABASE {mdm_name}")
     mdm_admin = create_engine(databases.admin.url.set(database=mdm_name))
     mdm_app = create_engine(mdm_admin.url.set(username="clean_application", password="test"))
@@ -914,7 +913,7 @@ read:
 
     url = lambda engine: engine.url.render_as_string(hide_password=False)
     env = {**_stores(databases), "BOOKKEEPING_MANIFEST_ROOT": (tmp_path / "control").as_uri()}
-    worker = {"MDM_DATABASE_URL": url(mdm_app), "MDM_APPLICATION_ROLE": "clean_application"}
+    worker = {"MDM_APPLICATION_ROLE": "clean_application"}
 
     def cli(*args, **extra):
         done = _run(python, "-m", "edgar_warehouse.cli", *args, env={**env, **extra}, cwd=root)

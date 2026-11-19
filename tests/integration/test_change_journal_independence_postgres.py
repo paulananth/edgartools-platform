@@ -53,10 +53,8 @@ print("minimal wheel installed")
 
 def test_isolated_journal_migrations_append_reconcile_and_cli_with_restricted_role(databases, tmp_path, journal_python):
     root = tmp_path
-    environment = {
-        "CHANGE_JOURNAL_DATABASE_URL": databases.ledger.engine.url.render_as_string(hide_password=False),
-        "DB_URL": databases.ledger_admin.url.render_as_string(hide_password=False),
-    }
+    owner_env = {"DB_URL": databases.ledger_admin.url.render_as_string(hide_password=False)}  # the owner file
+    environment = {"DB_URL": databases.ledger.engine.url.render_as_string(hide_password=False)}  # the loader file
     # This module owns a fresh disposable fixture. Require the installed wheel
     # to initialize an empty store, rather than relying on fixture migrations.
     with databases.ledger_admin.begin() as conn:
@@ -65,7 +63,7 @@ def test_isolated_journal_migrations_append_reconcile_and_cli_with_restricted_ro
     initialized = run_isolated(root, '''
 from edgar_warehouse.change_journal.cli import main
 raise SystemExit(main(["init", "--runtime-role", "ledger_runtime"]))
-''', environment=environment, python=journal_python, installed=True)
+''', environment=owner_env, python=journal_python, installed=True)
     assert initialized.returncode == 0, initialized.stderr
     assert set(json.loads(initialized.stdout)) == {"schema.sql", "003_native_storage"}
     key = uuid4().hex
@@ -120,7 +118,7 @@ finally:
 import sys
 from edgar_warehouse.change_journal.cli import main
 raise SystemExit(main(sys.argv[1:]))
-''', arguments=arguments, environment=environment, python=journal_python, installed=True)
+''', arguments=arguments, environment=owner_env if arguments[0] == "init" else environment, python=journal_python, installed=True)
         assert result.returncode == 0, result.stderr
         body = json.loads(result.stdout)
         if arguments[0] == "events":

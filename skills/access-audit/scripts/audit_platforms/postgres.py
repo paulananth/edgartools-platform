@@ -11,14 +11,17 @@ PLATFORM_SUPERUSERS = {"postgres", "snowflake_superuser"}
 
 
 def configured(env) -> bool:
-    return bool(env.get("DIAGNOSE_DATABASE_URL"))
+    return bool(env.get("DB_URL"))
 
 
 def collect(env, as_admin: bool = False) -> dict:
     import psycopg2
 
     try:
-        conn = psycopg2.connect(re.sub(r"^postgresql\+\w+", "postgresql", env["DIAGNOSE_DATABASE_URL"]), connect_timeout=10)
+        from urllib.parse import urlsplit, urlunsplit
+
+        url = urlunsplit(urlsplit(re.sub(r"^postgresql\+\w+", "postgresql", env["DB_URL"]))._replace(path="/postgres"))
+        conn = psycopg2.connect(url, connect_timeout=10)
     except psycopg2.Error:
         sys.exit("cannot connect as the diagnostic login")
     conn.set_session(readonly=True, autocommit=True)
