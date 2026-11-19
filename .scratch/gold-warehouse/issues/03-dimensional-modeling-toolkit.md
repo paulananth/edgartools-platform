@@ -16,7 +16,7 @@ not define them); the definitions and their mapping to this platform are mine an
 - [x] Anchor modeling read from its repository (`docs/ANCHOR.md`, README) and encyclopedia article: definitions, sixth normal form, history, views, limits now in `GOLD.md`. 2026-11-19 09:00 ET
 - [x] Chased the unread sources: Kimball type 2 page (read), a practitioner's Data Vault 2.0 article (read), Inmon (books paywalled, publisher article unreadable, marked unconfirmed), Data Vault Alliance (not reachable, marked unconfirmed). 2026-11-19 09:01 ET
 - [x] The operator's anchor-modeling-skill repository read (constructs, time, identity and keys, performance, warehouse practice) and distilled into `skills/data-modeling/TEMPORAL.md`, linked from `SKILL.md`, `GOLD.md` and `DIMENSIONAL.md`; 151 lint tests passed. 2026-11-19 09:05 ET
-- [ ] Operator decides whether the repository's own skill is also installed here (generators for six databases) or stays a pointer
+- [x] Operator ruled the repository's own skill stays a pointer (words: "Keep it as a pointer"); `TEMPORAL.md` links it and installs nothing. 2026-11-19 09:19 ET
 - [ ] ~~Read the Data Vault specification and Inmon's books~~ deferred: paywalled; the skill marks the points unconfirmed until the operator supplies them
 - [ ] Operator reviews the platform rulings it proposes: dimension attributes stay null in the data (labels are the semantic layer's); type 1 is the default and type 2 only on a named requirement; a ratio is stored as its parts
 - [ ] Learning → skill: `DIMENSIONAL.md` itself; gaps found when the first slice is built return here
