@@ -148,13 +148,21 @@ Gold object, in this order; an object that fails one is dropped or deferred, not
 
 | Waste | In a Gold design | Rule |
 |---|---|---|
-| Over-production | A table, column, dimension or aggregate no question needs | **Every object names the requirement that needs it.** A fact with none stays on the bus as "planned" and is not built |
+| Over-production | A table, column, dimension or aggregate no question needs | **Every object names the requirement that needs it.** An approved silver table spec is the requirement of its own fact: every exposed silver table gets its fact view, made from the spec. A further object (a snapshot, an aggregate, a wide table) names its own requirement, and with none it stays on the bus as "planned" |
 | Transport | A copy of mirror rows in Gold | **A Gold fact or dimension is a view over the mirror by default.** Persist only a view measured too slow, naming the time and the cost |
 | Over-processing | A rebuild, a proof or a layer after the input is proved | Prove once on the smallest sample that holds each case; carry the proof forward while input and rules are unchanged; no layer that only passes rows through |
 | Motion | Writing the same logic per source or per fact | Dimension unpacking, the unknown members and each fact's key checks are one shared template driven by configuration |
 | Inventory | Objects whose requirement ended | Each object lists its requirement; an object with none left is removed in the same change |
 | Waiting | Questions a ruling already answers; a build held for a decision the design could take | Decide what follows from a ruling; ask the remaining decisions as one list with a recommendation each |
 | Defects | A join that multiplies rows, a unit summed wrongly, a key that does not resolve | Run the proofs (DIMENSIONAL.md) on bounds first: row counts before and after each join |
+
+**No silver table is silver-only.** A silver table is approved for a use when its spec is approved, so Gold carries it: the
+fact view is made from the spec, never written by hand. The spec's `key` is the fact's key; each of its `links` becomes a
+`<to_part>_key` column joined to the dimension of the link's `kind` (the unknown member when no master holds the id); its
+`time.as_of` is the business date, `time.event_time` the event date and `time.as_at` the recorded date; every other spec column is carried as filed. A fact
+the spec alone cannot make (a date or a manager taken from a parent table) is written as its own object in the
+configuration, and the spec's generated fact gives way to it. Each dimension a link names is configured. The mirror then
+carries what these views read ([HOSTED-MIRRORING](../data-platform/HOSTED-MIRRORING.md)).
 
 **KISS in shapes:** the fewest objects that answer the questions. One fact view per silver grain; one base view of the
 masters with a thin view per kind on it; one view of the published codes; one date dimension. No surrogate keys (the
