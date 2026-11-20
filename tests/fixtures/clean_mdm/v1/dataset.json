@@ -8,8 +8,7 @@
       "government": "government",
       "international_organization": "international_organization",
       "person": "person",
-      "security": "security",
-      "venue": "venue"
+      "security": "security"
     },
     "profiles": [
       {
@@ -107,14 +106,6 @@
         ],
         "target_source": "fixture.representative",
         "type": "IS_INTERNATIONAL_BRANCH_OF",
-        "valid_from": "valid_from"
-      },
-      {
-        "target_key": [
-          "operator"
-        ],
-        "target_source": "fixture.representative",
-        "type": "VENUE_OPERATOR",
         "valid_from": "valid_from"
       },
       {

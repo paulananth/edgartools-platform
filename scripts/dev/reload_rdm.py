@@ -124,16 +124,22 @@ WORDS = {
         usage=[("mdm", "relationship", "type", "exact")],
         hints=[("meaning", "A type's properties: from and to (the kinds at each end), from_profile and to_profile, "
                            "hierarchy, cycles, one_parent, one_target, ultimate_parent and ultimate_type, keeps_start, ends_parent_links.")],
-        versions={"5": ("claude (ticket 234, N-CEN adviser types)",
-                        "Question: should the two capacities of INVESTMENT_ADVISER_TO be named with N-CEN's own "
-                        "terms, advisor and subadvisor, labelled \"Advisor\" and \"Subadvisor\" as the data set "
-                        "writes them? yes but any type must also be added to rdm maybe this should be in data "
-                        "modeling skill")}),
+        versions={"6": ("claude (hosted-mirroring ticket 09, venue is no MDM kind)",
+                        "Yes (remove the relationship types that name only the unused kinds); venue is RDM's "
+                        "iso-10383-mic on a Security's listing")}),
+    "mdm-kinds": dict(
+        name="MDM kinds",
+        definition="The kinds of entity MDM knows. A kind that holds golden records has its merge rules; the "
+                   "others label held-back records with the kind they probably are.",
+        authority="internal", ticket="hosted-mirroring 09",
+        usage=[("mdm", "master", "kind", "exact")],
+        hints=[("meaning", "A kind's property golden_records says whether MDM holds golden records of it.")],
+        versions={"1": ("claude (hosted-mirroring ticket 09)", "RDM code set (Recommended)")}),
 }
 # Crosswalk targets must be held before the set that points at them.
 ORDER = ["sec-place-types", "sec-place-codes", "sec-ownership-transaction-codes", "openfigi-country-composite",
          "iso-10383-mic", "nport-filed-currencies", "sec-sic-codes", "financial-line-items", "corporate-tax-rates",
-         "mdm-relationship-types"]
+         "mdm-kinds", "mdm-relationship-types"]
 CODE_KEYS = ("code", "label", "definition", "parent_code", "valid_from", "valid_to", "status", "invalid_reason",
              "value", "unit", "properties")
 

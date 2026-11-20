@@ -30,7 +30,7 @@ MDM is the first scope. It masters identities and the relationships between them
 
 There is one MDM. It is not called "Clean MDM" (operator, 2026-10-13); the old MDM it replaced is deleted.
 
-The master data domains are Company, Person, Security, Fund Structure, Branch, Government Entity, International Organization, and Market/Venue. A profile hangs on one of those domains and is not itself a domain.
+The master data domains are Company, Person, Security, Fund Structure, Branch, Government Entity and International Organization. A profile hangs on one of those domains and is not itself a domain.
 
 **Company Identity**:
 The identity of one accepted legal company, shared by its governed Adviser and Audit Firm registrations and, for a business development company, its fund registration. A subsidiary, a filing trust, and its adviser are separate Companies when they have separate identifiers. A rename of one identifier stays one Company, and the old name is an alias.
@@ -129,10 +129,6 @@ _Avoid_: Head-office identity, subsidiary Company inferred from branch status
 **Government Entity**:
 A government body represented in its own right, distinct from a legally incorporated Company whose owner is a government.
 _Avoid_: Government ownership as an identity kind, International Organization
-
-**Market/Venue**:
-A trading market or venue distinct from the organization operating it, identified by its ISO 10383 MIC from RDM's `iso-10383-mic` code set. That set carries each segment under its operating MIC. A Security's listing names its venue by MIC.
-_Avoid_: Operator Company, corporate ownership hierarchy, a data vendor's exchange code as the venue's identity
 
 **International Organization**:
 An organization accepted as that kind from its source category, distinct from a Company and from a Government Entity. It keeps the source classification it was accepted under.
