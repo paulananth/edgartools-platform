@@ -38,4 +38,3 @@ The prior split is recorded in [The data-onboarding skill is split behind pointe
 ## Completion evidence
 
 Record the answer and artifact links under `## Answer` when resolved. Keep private values out of the public record. A not-applicable phase needs evidence and an explicit applicability disposition, not a false PASS. Do not mark this ticket resolved while a checklist item remains open.
-

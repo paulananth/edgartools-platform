@@ -36,4 +36,3 @@ Start from skills/change-journal/SKILL.md: Skipping and forcing, Required indepe
 ## Completion evidence
 
 Record the answer and artifact links under `## Answer` when resolved. Keep private values out of the public record. A not-applicable phase needs evidence and an explicit applicability disposition, not a false PASS. Do not mark this ticket resolved while a checklist item remains open.
-

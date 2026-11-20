@@ -36,4 +36,3 @@ Start from skills/access-audit/SKILL.md: Hard stops, Objectives, The gate before
 ## Completion evidence
 
 Record the answer and artifact links under `## Answer` when resolved. Keep private values out of the public record. A not-applicable phase needs evidence and an explicit applicability disposition, not a false PASS. Do not mark this ticket resolved while a checklist item remains open.
-
