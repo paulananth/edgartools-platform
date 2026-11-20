@@ -3,9 +3,10 @@ import pytest
 
 from edgar_warehouse.bookkeeping.clean import database as bookkeeping
 from edgar_warehouse.change_journal import store as journal
-from edgar_warehouse.rules import db as rules
 
-FACTORIES = {"bookkeeping": bookkeeping.get_engine, "change journal": journal.get_engine, "rules": rules.get_engine}
+# The Rules Database's engine is `database_connections.connect`, checked on real servers
+# (tests/storage_adapters/test_engine_checkout.py).
+FACTORIES = {"bookkeeping": bookkeeping.get_engine, "change journal": journal.get_engine}
 
 
 @pytest.mark.parametrize("name", FACTORIES)

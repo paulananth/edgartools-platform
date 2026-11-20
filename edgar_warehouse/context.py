@@ -5,7 +5,7 @@ MDM's context through read-only connections and answers in JSON of at most
 8 KB: names first, what the thing is, where each value came from, and what an
 agent can ask next. It names no identifier or relationship type, and no kind
 beyond MDM's own storage (companies keep their own versioned table): the kinds
-come from MDM, their meanings from `rules/context/definitions.yaml`.
+come from MDM, their meanings from RDM code set `mdm-kinds`.
 
 A subject that is no master kind and not `relationship` is a code set: it is
 read from RDM (`edgar_warehouse/rdm/context.py`, the rdm schema of the data database). The
