@@ -73,7 +73,7 @@ No scenario or test code is approved by creating these tickets. Proposed Givenâ€
 
 ## Decisions so far
 
-No child ticket has been resolved. Scope and the six requested outcomes come from the operator's request; effectiveness findings remain to be measured.
+- [data-platform: Define one responsibility](issues/01-data-platform-responsibility.md): Data Platform owns the next-phase decision, shared source-readiness acceptance, and connection discovery/setup. Downstream procedures stay with their owning skill. PR #1956, merged 2026-11-20 17:07 ET.
 
 ## Not yet specified
 
