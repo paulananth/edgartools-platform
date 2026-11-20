@@ -58,7 +58,8 @@ Out of scope: profiling the bytes; writing `source.yaml`, `quality.yaml`, a
 configured `read:` contract, a code set version, a dbt model or a semantic
 view; approving findings or versions; switching a rule on. Those belong to
 data-profiling, data-onboarding, data-quality, data-platform, refining-rules,
-aws-snowflake-operations and semantic-views.
+aws-snowflake-operations and semantic-views; which one receives each item, and
+from which artifact, is [SKILL.md](SKILL.md), "Decisions, artifacts and handoffs".
 
 ## Use when
 
