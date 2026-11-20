@@ -37,9 +37,9 @@ An expired token answers HTTP 401 on every call but `/system/version`: renew the
 
 ## The mirror SQL (qualified)
 
-`mirror_sql.py create|alter|verify|retire|release` prints the mirror skill's `CREATE_MIRROR` (Iceberg, Snowflake-managed storage), `ALTER_MIRROR`,
-`LIST_MIRRORED_TABLES` and `DROP_MIRROR(<mirror>, TRUE)` text. Its tables are the ones a dbt sources file reads (`--reads`), each of which must
-be on the exposure list (`--exposure`); an exposed table nothing reads is not mirrored. `alter` takes the mirror's read-back table list
+`mirror_sql.py create|alter|verify|check|retire|release` prints the mirror skill's `CREATE_MIRROR` (Iceberg, Snowflake-managed storage), `ALTER_MIRROR`,
+`LIST_MIRRORED_TABLES` and `DROP_MIRROR(<mirror>, TRUE)` text. Its tables are the ones `rules/managed-mirror.yaml` lists (`--managed`), each of which must
+be on the exposure list (`--exposure`); an exposed table the record does not list is not mirrored, and `check --reads` fails when Gold reads one the record lacks. `alter` takes the mirror's read-back table list
 (`--mirrored`) and adds and removes the difference. The target database comes from `rules/snowflake.yaml`. It connects to nothing; run its output as the mirror
 operator after the pre-flight and the operator's approval ([HOSTED-MIRRORING](../../HOSTED-MIRRORING.md)).
 
