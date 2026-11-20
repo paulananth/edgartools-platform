@@ -6,10 +6,9 @@ answer says what the code means, where it sits in the hierarchy, which code
 sets it maps to, and the version's pin, in JSON of at most 8 KB (the command's
 own rules: `edgar_warehouse/context.py`).
 
-Time: a version is the published one from its `valid_from` to its `valid_to`
-(publish and replace times). `--as-at` reads the version current at that time
-as it stood then. `--as-of` reads the same version and also checks the code's
-own business dates (`code_valid_from`..`code_valid_to`).
+Time: a code set keeps one version, so neither flag picks a version. `--as-of`
+checks the code's own business dates (`code_valid_from`..`code_valid_to`);
+`--as-at` is refused.
 """
 
 from __future__ import annotations
@@ -20,7 +19,7 @@ import shlex
 import sys
 from datetime import date, datetime
 
-from sqlalchemy import select, func
+from sqlalchemy import select
 
 from edgar_warehouse.context import PROG, SEARCH_MAX, ContextError, fit, page_offset, parse_time
 from .storage import code_context, scope, tables, transaction, search_candidates
@@ -66,25 +65,21 @@ class CodeContext:
 
     @staticmethod
     def _version(conn, args) -> dict:
-        """The version current at the time a flag names (now without one), and
-        that time; a version retired before then, with no successor, is none."""
-        flag, value = ("--as-of", args.as_of) if args.as_of else ("--as-at", args.as_at) if args.as_at else (None, None)
-        moment = parse_time(value, flag, f"{PROG} {args.subject} {args.key or ''}".strip()) if value else None
+        """The code set's one published version, and the time --as-of names (a code's own
+        business dates are checked against it). A code set keeps one version, so there is no
+        earlier one to read: --as-at is refused."""
+        command = f"{PROG} {args.subject} {args.key or ''}".strip()
+        if args.as_at:
+            raise ContextError("A code set keeps one version, so --as-at has no earlier version to read.", command)
+        moment = parse_time(args.as_of, "--as-of", command) if args.as_of else None
         table = tables(conn.dialect.name)["code_set_version"]
-        now = func.now() if conn.dialect.name == "postgresql" else func.utc_timestamp(6)
-        wanted = moment or now
         row = conn.execute(select(*(table.c[n] for n in
             ("version", "sha256", "valid_from", "valid_to", "status", "approved_by", "approved_at"))).where(
-            scope(conn, table, code_set=args.subject), table.c.status.in_(("published", "retired")),
-            table.c.valid_from <= wanted, table.c.valid_to.is_(None) | (table.c.valid_to > wanted)).order_by(
-                table.c.valid_from.desc()).limit(1)).mappings().first()
+            scope(conn, table, code_set=args.subject), table.c.status == "published",
+            table.c.valid_to.is_(None))).mappings().first()
         if row is None:
-            when = f" {flag} {value}" if value else " now"
-            raise ContextError(f"{args.subject} has no published version{when}.", f"edgar-warehouse rdm describe {args.subject}")
-        trust = {"source": "rdm", **{k: _iso(v) for k, v in row.items()}}
-        if moment is not None:  # as it stood then: not yet replaced or retired
-            trust.update(valid_to=None, status="published", read_at=moment.isoformat())
-        return {"version": row["version"], "moment": moment, "trust": trust}
+            raise ContextError(f"{args.subject} has no published version now.", f"edgar-warehouse rdm describe {args.subject}")
+        return {"version": row["version"], "moment": moment, "trust": {"source": "rdm", **{k: _iso(v) for k, v in row.items()}}}
 
     def _code(self, conn, args, info: dict) -> dict:
         picked = self._version(conn, args)

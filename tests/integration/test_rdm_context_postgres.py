@@ -3,8 +3,8 @@
 The view's migration (002) upgrades a populated RDM database. A code comes
 back named, with its meaning, its place in the hierarchy, the code sets it
 maps to and the version's pin; search finds labels and synonyms (full-text
-first, then the words as typed); --as-of and --as-at read the version current
-then, as it stood; every answer is at most 8 KB, and an error names the
+first, then the words as typed); a code set keeps one version, so --as-of checks a code's own
+dates and --as-at is refused; every answer is at most 8 KB, and an error names the
 command that would work.
 """
 
@@ -49,7 +49,7 @@ def published(tmp_path_factory):
     with server() as engine:
         owner, runtime = engine("rdm"), engine("rdm", "rdm_runtime")
         store = RDM(runtime)
-        assert sorted(database.migrate(owner, runtime_role="rdm_runtime")) == ["001-published-code.sql", "schema.sql"]
+        assert sorted(database.migrate(owner, runtime_role="rdm_runtime")) == ["001-published-code.sql", "002-one-version.sql", "schema.sql"]
         if True:
             _import(store)
             store.approve("sec-place-codes", "1", **OPERATOR)
@@ -66,21 +66,21 @@ def published(tmp_path_factory):
                         hints=[{"kind": "meaning", "text": "An industry grouping of companies"}])
             store.approve("test-sector", "1", **OPERATOR)
             store.publish("test-sector", "1", out=out)
-            between = _now(runtime)
             store.draft({"code_set": "test-sector"}, "2",
                         [{"code": "F", "label": "Finance and insurance"},
                          {"code": "F1", "label": "Depository institutions", "parent_code": "F"},
-                         {"code": "F11", "label": "State commercial banks", "parent_code": "F1"}],
+                         {"code": "F11", "label": "State commercial banks", "parent_code": "F1"},
+                         {"code": "F12", "label": "Savings institutions (10% reserve)", "parent_code": "F1",
+                          "valid_to": date.today() - timedelta(days=1)}],
                         created_by="test", supersedes="1")
             store.approve("test-sector", "2", **OPERATOR)
             store.publish("test-sector", "2", out=out)
             store.draft({"code_set": "test-retired", "name": "A retired set"}, "1", [{"code": "A", "label": "Aye"}], created_by="test")
             store.approve("test-retired", "1", **OPERATOR)
             store.publish("test-retired", "1", out=out)
-            before_retiring = _now(runtime)
             store.retire("test-retired", "1")
-        assert sorted(database.migrate(owner, runtime_role="rdm_runtime", existing_only=True)) == ["001-published-code.sql", "schema.sql"]
-        yield runtime, first, between, before_retiring
+        assert sorted(database.migrate(owner, runtime_role="rdm_runtime", existing_only=True)) == ["001-published-code.sql", "002-one-version.sql", "schema.sql"]
+        yield runtime, first
 
 
 def test_the_view_has_every_published_code_with_comments(published):
@@ -91,7 +91,7 @@ def test_the_view_has_every_published_code_with_comments(published):
         uncommented = conn.scalars(text(
             "SELECT a.attname FROM pg_attribute a WHERE a.attrelid = 'rdm.code_context'::regclass AND a.attnum > 0 "
             "AND col_description(a.attrelid, a.attnum) IS NULL")).all()
-    assert counts == {"sec-place-codes 1": 309, "test-sector 1": 4, "test-sector 2": 3, "test-retired 1": 1}
+    assert counts == {"sec-place-codes 1": 309, "test-sector 2": 4}  # a code set keeps one version
     assert uncommented == []
 
 
@@ -114,33 +114,27 @@ def test_a_code_comes_back_named_with_its_path_crosswalk_and_pin(published):
         ask(engine, "sec-place-codes", "DE", hops=2)
 
 
-def test_as_of_and_as_at_read_the_version_current_then_as_it_stood(published):
-    engine, _, between, before_retiring = published
-    then = ask(engine, "test-sector", "F11", as_at=between.isoformat())
-    assert then["trust"]["version"] == "1" and then["path"].startswith("Finance >") and then["level"] == "industry"
-    assert then["trust"]["valid_to"] is None and then["trust"]["status"] == "published"  # not yet replaced then
-    assert then["synonyms"] == ["Chartered state banks"]
-    assert ask(engine, "test-sector", "F11", as_of=between.isoformat())["trust"]["version"] == "1"
+def test_a_code_set_keeps_one_version_so_as_at_is_refused_and_as_of_checks_the_codes_own_dates(published):
+    engine, *_ = published
     assert ask(engine, "test-sector", "F11")["trust"]["version"] == "2"
-    assert ask(engine, "test-sector", "F12", as_at=between.isoformat())["code_valid_to"] is not None
+    assert ask(engine, "test-sector", "F11", as_of="2026-01-01T00:00:00+00:00")["trust"]["version"] == "2"
+    with pytest.raises(ContextError, match="keeps one version"):
+        ask(engine, "test-sector", "F11", as_at="2026-01-01T00:00:00+00:00")
+    assert ask(engine, "test-sector", "F12")["code_valid_to"] is not None
     with pytest.raises(ContextError, match="was not valid on"):  # the code's own business dates
-        ask(engine, "test-sector", "F12", as_of=between.isoformat())
-    assert ask(engine, "test-retired", "A", as_at=before_retiring.isoformat())["trust"]["status"] == "published"
-    with pytest.raises(ContextError, match="no published version now"):
+        ask(engine, "test-sector", "F12", as_of=_now(engine).isoformat())
+    with pytest.raises(ContextError, match="no published version now"):  # a retired code set keeps none
         ask(engine, "test-retired", "A")
-    with pytest.raises(ContextError, match="no published version --as-of"):
-        ask(engine, "test-sector", "F11", as_of="2000-01-01T00:00:00+00:00")
 
 
 def test_search_finds_labels_then_words_as_typed(published):
-    engine, _, between, _ = published
+    engine, *_ = published
     found = ask(engine, "sec-place-codes", search="delaware")
     assert found["matches"][0] == {"name": "DELAWARE", "code": "DE", "path": "DELAWARE", "matched_by": "label"}
     assert found["trust"]["sha256"] and found["trust"]["approved_by"] == "operator"
     assert ask(engine, "sec-place-codes", search="elawa")["matches"][0]["matched_by"] == "label contains"
     assert ask(engine, "test-sector", search="chartered")["matches"] == []  # the synonym is version 1's only
-    assert ask(engine, "test-sector", search="chartered", as_of=between.isoformat())["matches"][0]["matched_by"] == "synonym"
-    assert [m["code"] for m in ask(engine, "test-sector", search="10%", as_at=between.isoformat())["matches"]] == ["F12"]
+    assert [m["code"] for m in ask(engine, "test-sector", search="10%")["matches"]] == ["F12"]
     assert ask(engine, "sec-place-codes", search="%")["matches"] == []  # % matches itself, not everything
     missed = ask(engine, "test-sector", search="zebra")
     assert missed["matches"] == [] and "Try fewer words" in missed["next_step"]

@@ -43,7 +43,7 @@ reads it, why it exists).
 | `code_label` | (`code_set`, `version`, `code`, `language`, `label`) | `kind` (`preferred`, `synonym`), `source` (steward, profiling, agent draft) |
 | `level` | (`code_set`, `version`, `depth`) | `name`, `definition` (stewards name the levels) |
 | `code_path` | (`code_set`, `version`, `code`) | `path` (text, delimiter-escaped codes, root first), `label_path` ("Finance > Depository > State banks"), `level`, `depth`. **Written once at publish**; never edited |
-| `published_code` | (`code_set`, `version`, `code`) | One row per code of every published version, with the columns of the `code_context` view that never change (the code's label, definition, synonyms, path, crosswalk, the version's `sha256`, `valid_from` and approval). **Written once at publish**, so a draft never appears; a retired version keeps its rows. It is the published-only table the Snowflake mirror carries, since a mirror carries tables and not views |
+| `published_code` | (`code_set`, `version`, `code`) | One row per code of the code set's published version, with the columns of the `code_context` view that never change (the code's label, definition, synonyms, path, crosswalk, the version's `sha256`, `valid_from` and approval). **Written once at publish**, so a draft never appears; it holds only the code set's one version, and its rows leave with it. It is the published-only table the Snowflake mirror carries, since a mirror carries tables and not views |
 | `crosswalk_row` | (`from_set`, `from_version`, `from_code`, `to_set`, `to_version`, `to_code`) | `match_type` (`exact`, `close`, `broad`, `narrow`; SKOS mapping), `evidence`. `to_version` is `outside` for a code set RDM does not hold (an outside standard) |
 | `code_set_usage` | (`code_set`, `version`, `store`, `object`, `field`) | `store` (`mdm`, `silver`, `source`, `other`), `match` (`exact`, `upper_trimmed`), `note`: where the codes' values live and how to compare them |
 | `code_set_hint` | (`code_set`, `version`, `kind`, `ordinal`) | `kind` (`meaning`, `use_when`, `avoid_when`, `example_question`), `text`: hints for an agent in plain words |
@@ -61,14 +61,15 @@ Integrity:
   publish refuses a cycle or a missing parent (it walks each code's parents
   before writing any path).
 - Rows of a version are immutable once its status is `published`: a trigger
-  refuses any update or delete; a change is a new version that `supersedes` it.
+  refuses any update, and refuses a delete unless the version has been replaced or retired (its `valid_to` is set). A code
+  set holds exactly one version: publishing a new one replaces it (§3).
 - One `published` version per code set at any instant: a unique index on
   the code set over published versions whose `valid_to` is empty, and
   publishing closes the replaced version's `valid_to` at the new one's
   `valid_from` (operator, 2026-10-07: chosen over the `btree_gist`
   exclusion constraint, which not every PG16 build ships).
 - A version's content changes only while it is a draft; approval needs the
-  approver's name and exact words; nothing deletes a version.
+  approver's name and exact words; only a replaced or retired version is deleted, and only by publish or retire.
 
 ### 2.2 Hierarchy storage
 
@@ -87,13 +88,17 @@ Integrity:
 | draft | an agent (profiling, data-quality, refining-rules) or a steward | creates a `draft` version: codes, labels, levels, crosswalks, invalid-row fixes, with `evidence` and `created_by` |
 | review | the operator or a steward | reads the draft through `edgar-warehouse context` and the version diff (§5) |
 | approve | the operator only | records exact words and time (`approved_by`, `approved_words`, `approved_at`). Agents never approve |
-| publish | a command, after approval | computes `code_path` and `sha256`, writes `published_code`, sets `published`, closes the previous version's `valid_to`, writes the silver copy (§6) |
-| retire | the operator | sets `retired` and closes `valid_to`; nothing deletes a published version |
+| publish | a command, after approval | computes `code_path` and `sha256`, writes `published_code`, sets `published`, then deletes the version it replaces: its rows in every table, in the same transaction; writes the silver copy (§6) |
+| retire | the operator | removes the code set's version: its rows in every table, in one transaction |
 | verify | anyone | `rdm verify` recomputes a version's sha256 from its rows and compares it with the stored one |
 
-A published version must name, in `supersedes`, the newest version ever
-published (current or retired); the first names none. The database checks
-this too. Publishing writes the files (§6) before it commits.
+A published version must name, in `supersedes`, the version it replaces (the
+current one); the first names none. `supersedes` is a recorded name, not a
+foreign key, because the version it names is deleted when the new one publishes.
+The database checks it too. History is git (`rules/reference/published/`, one
+folder per code set); a pin `{code_set, version, sha256}` of a replaced version
+no longer resolves in the store, so a policy that pins a code set is registered
+with the new version's pin before that version publishes. Publishing writes the files (§6) before it commits.
 
 The agent records the operator's approval in their name and exact words, as
 the Rules agent does (operator, 2026-09-29, rules skill ticket 14); the
@@ -180,8 +185,9 @@ interface for stewards beyond the workbook sheet profiling generates.
 
 - `rdm` is its own database in the same Postgres server as `rules`,
   `bookkeeping` and `change_journal` (operator: "Own RDM database").
-- Every published version is kept; retired versions are never deleted, so any
-  pin stays resolvable.
+- A code set holds one version (operator, 2026-11-20: "there should not be more
+  than one version now"); git keeps the history, so no pin is kept resolvable by
+  the store.
 
 ## Examples
 
