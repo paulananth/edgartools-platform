@@ -22,13 +22,14 @@ class JournalConflict(ValueError):
 
 
 def _default_url(store: str) -> str:
-    """`DB_URL` with this store's database (a `DB_URL` that names one keeps it; `DB_PREFIX` isolates a copy). The package
-    imports nothing outside itself, so it reads the variable itself."""
-    value = os.environ.get("DB_URL")
+    """`CONTROL_URL`, the control database that holds rules, bookkeeping and the change journal, each in its own schema
+    (skills/data-platform/CONNECTIONS.md). The package imports nothing outside itself, so it reads the variable itself. It must name its database."""
+    value = os.environ.get("CONTROL_URL")
     if not value:
-        raise KeyError("DB_URL is not set: source the duty's file of the stores folder (its value is never printed)")
-    parsed = make_url(value)
-    return parsed.set(database=parsed.database or f"{os.environ.get('DB_PREFIX', '')}{store}").render_as_string(hide_password=False)
+        raise KeyError("CONTROL_URL is not set: source the duty's file of the stores folder (its value is never printed)")
+    if not make_url(value).database:
+        raise ValueError("CONTROL_URL must name its database")
+    return value
 
 
 def get_engine(url: str | None = None):

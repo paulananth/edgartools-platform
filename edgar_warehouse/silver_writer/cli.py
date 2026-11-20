@@ -2,8 +2,8 @@
 spec as a table, land a part's rows into it, and describe a table for an agent.
 
 Connections come from the environment and are never printed:
-DB_URL of the owner file (the schema owner, for init and register),
-DB_URL of the loader file (the restricted runtime login, for created, land and describe; its MDM database is read, for the MDM ids of a table that links to masters, and the
+DATA_URL of the owner file (the schema owner, for init and register),
+DATA_URL of the loader file (the restricted runtime login, for created, land and describe; its MDM database is read, for the MDM ids of a table that links to masters, and the
 statement format and country the measures read from each Company).
 """
 
@@ -15,7 +15,7 @@ from pathlib import Path
 
 
 def _handle(args):
-    from edgar_warehouse.database_connections import store_engine
+    from edgar_warehouse.database_connections import configured, store_engine
 
     from . import database
     from .rows import records
@@ -47,7 +47,7 @@ def _handle(args):
         elif args.silver_command == "line-items":
             from edgar_warehouse.financials import line_items
 
-            ids = MdmIds(engine("mdm")) if os.environ.get("DB_URL") else None
+            ids = MdmIds(engine("mdm")) if configured("mdm") else None
             silver_engine = engine("silver")
             result = line_items.build(silver_engine, DatabaseSink(silver_engine), ids)
         elif args.silver_command == "links":
@@ -67,7 +67,7 @@ def _handle(args):
             result = measures.build(silver_engine, DatabaseSink(silver_engine), MdmIds(mdm_engine),
                                     lambda keys: measures.from_company(mdm_engine, keys))
         elif args.silver_command in {"land", "refresh-ids"}:
-            ids = MdmIds(engine("mdm")) if os.environ.get("DB_URL") else None
+            ids = MdmIds(engine("mdm")) if configured("mdm") else None
             sink = DatabaseSink(engine("silver"))
             result = (land(sink, args.table, records(args.rows), ids) if args.silver_command == "land"
                       else refresh_ids(sink, args.table, ids))

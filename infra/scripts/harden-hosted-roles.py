@@ -8,7 +8,7 @@
 It also gives Snowflake's mirror login (snowflake_system) CONNECT on each mirrored store, which PUBLIC does not hold.
 Each guard is one control of the access audit (skills/access-audit): DB-05 a connection limit on every login, TMO a bound on
 statements and idle transactions, LOG the audit classes for the logins that change schemas, policy or approvals. It uses the
-owner login (DB_URL), changes only roles that exist, and is safe to run again: a role already at its guard
+owner login (the owner file), changes only roles that exist, and is safe to run again: a role already at its guard
 is left alone. The loader's work_mem is a ceiling per sort or hash step and session, so ten merge workers with several steps
 each cannot ask for more than the instance holds. A setting the platform refuses to a non-superuser is reported by name and
 the run exits 1; nothing is worked around with a superuser.
@@ -34,7 +34,7 @@ GUARDS = {
 VALUE = re.compile(r"^[0-9A-Za-z,. ]+$")
 # The stores a managed Snowflake mirror reads, and the system login Snowflake's mirror connects as. PUBLIC holds no CONNECT on
 # the stores, so without this grant a mirror fails with "permission denied for database".
-MIRRORED = ("mdm", "rdm", "silver")
+MIRRORED = ("data",)  # the data database: mdm, rdm and silver, each in its schema
 MIRROR_LOGIN = "snowflake_system"
 
 
@@ -83,10 +83,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--confirm", action="store_true", help="Apply the differences (without it, only list them)")
     args = parser.parse_args(argv)
-    url = os.environ.get("DB_URL")
-    if not url:
-        sys.exit("DB_URL is not set: source the stores folder's owner.env (it is never printed)")
-    engine = sa.create_engine(make_url(url).set(database="postgres"), isolation_level="AUTOCOMMIT")
+    from edgar_warehouse.database_connections import instance_url
+
+    try:
+        url = instance_url()
+    except KeyError as missing:
+        sys.exit(f"{missing.args[0]} (source the stores folder's owner.env)")
+    engine = sa.create_engine(url, isolation_level="AUTOCOMMIT")
     failed = 0
     with engine.connect() as conn:
         steps = plan(*read(conn))

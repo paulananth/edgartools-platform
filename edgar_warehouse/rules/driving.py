@@ -18,6 +18,7 @@ import shlex
 import subprocess
 import sys
 import time
+from edgar_warehouse.database_connections import configured, url_variable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -108,8 +109,8 @@ class Commands:
 
             from edgar_warehouse.database_connections import owner_url
 
-            if not self.env["worker"].get("DB_URL"):
-                raise RunStopped("The worker.env of these stores names no DB_URL")
+            if not configured("bookkeeping", self.env["worker"]):
+                raise RunStopped(f"The worker.env of these stores names no {url_variable('bookkeeping')}")
             self._book = Bookkeeping(get_engine(owner_url("bookkeeping", self.env["worker"])))
         return self._book
 

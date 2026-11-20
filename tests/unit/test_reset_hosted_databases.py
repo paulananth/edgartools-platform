@@ -19,7 +19,7 @@ def test_a_database_with_no_access_list_has_no_grants():
 
 
 def test_every_database_the_platform_holds_is_named():
-    assert reset.DATABASES == ("mdm", "rdm", "rules", "bookkeeping", "change_journal", "silver")
+    assert reset.DATABASES == ("data", "control")
 
 
 def test_a_sign_off_keeps_the_words_the_time_and_what_was_dropped_in_a_private_file(tmp_path):

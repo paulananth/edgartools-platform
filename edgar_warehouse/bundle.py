@@ -98,7 +98,9 @@ def unresolved(parser: argparse.ArgumentParser, root: Path = SKILLS) -> list[str
 
 
 def _store(store: str) -> str:
-    if not os.environ.get("DB_URL"):
+    from edgar_warehouse.database_connections import configured
+
+    if not configured(store):
         return "not set"
     from sqlalchemy import create_engine, text
 

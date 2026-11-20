@@ -89,7 +89,9 @@ def journal():
 
     from edgar_warehouse.change_journal.store import ChangeJournal, get_engine
 
-    url = os.environ.get("DB_URL", "")
+    from edgar_warehouse.database_connections import configured, store_url
+
+    url = str(store_url("change_journal")) if configured("change_journal") else ""
     if url not in _JOURNALS:
         _JOURNALS[url] = ChangeJournal(get_engine())
     return _JOURNALS[url]

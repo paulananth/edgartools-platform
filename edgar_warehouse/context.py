@@ -8,9 +8,9 @@ beyond MDM's own storage (companies keep their own versioned table): the kinds
 come from MDM, their meanings from `rules/context/definitions.yaml`.
 
 A subject that is no master kind and not `relationship` is a code set: it is
-read from RDM (`edgar_warehouse/rdm/context.py`, `DB_URL`'s rdm database). The
+read from RDM (`edgar_warehouse/rdm/context.py`, the rdm schema of `DATA_URL`'s database). The
 subject `silver` is a silver table's spec (`edgar_warehouse/silver_writer/context.py`,
-`DB_URL`'s silver database).
+the silver schema of `DATA_URL`'s database).
 """
 
 from __future__ import annotations
@@ -117,7 +117,7 @@ def _handle(args: argparse.Namespace) -> int:
     except Exception as error:  # noqa: BLE001 - a driver message can carry the database address
         answer = {
             "error": f"The {store.name} database could not be read ({type(error).__name__}).",
-            "try": f"Check that DB_URL is set and that {store.name} is migrated ({store.check}).",
+            "try": f"Check that the loader file is sourced and that {store.name} is initialized ({store.check}).",
         }
         code = 1
     print(json.dumps(answer, ensure_ascii=False))
@@ -131,17 +131,19 @@ def _engine(store: Store = STORES["MDM"], subject: str | None = None):
 
     from edgar_warehouse.database_connections import store_engine
 
-    if not os.environ.get("DB_URL"):
+    from edgar_warehouse.database_connections import configured, url_variable
+
+    if not configured(store.variable):
         if store.name == "RDM" and subject:  # a misspelled kind lands here too
             from edgar_warehouse.rules.files import context_subjects
 
             kinds = context_subjects() - {"relationship"}
 
             raise ContextError(f"{subject!r} is not a master kind ({', '.join(sorted(kinds))}) or 'relationship'; "
-                               f"as a code set it is read from RDM, and DB_URL is not set.",
-                               f"Set DB_URL (the loader file) to a login that may read RDM, or name a kind.")
-        raise ContextError(f"DB_URL is not set.",
-                           f"Set DB_URL (the loader file) to a login that may read {store.name}, then run the command again.")
+                               f"as a code set it is read from RDM, and {url_variable(store.variable)} is not set.",
+                               f"Source the loader file (a login that may read RDM), or name a kind.")
+        raise ContextError(f"{url_variable(store.variable)} is not set.",
+                           f"Source the loader file (a login that may read {store.name}), then run the command again.")
     engine = store_engine(store.variable,
         runtime_role=os.environ.get("MDM_APPLICATION_ROLE", "application") if store.application_role else None)
 
