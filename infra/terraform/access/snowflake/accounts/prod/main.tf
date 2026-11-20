@@ -194,3 +194,64 @@ resource "snowflake_user_authentication_policy_attachment" "auditor" {
   user_name                  = snowflake_service_user.auditor.name
   authentication_policy_name = snowflake_authentication_policy.service_keypair_only.fully_qualified_name
 }
+
+# --- The mirror operator ---------------------------------------------------------------------------------------------
+# Creates, reads back and changes the managed Postgres mirrors (SNOWFLAKE.POSTGRES.*_MIRROR) and nothing else, so no mirror
+# step needs the account administrator (separation of duties). The mirroring application role is all it holds beyond the
+# warehouse; the Snowflake application needs USAGE on the instance it mirrors.
+resource "snowflake_account_role" "mirror_operator" {
+  name    = "EDGARTOOLS_MIRROR_OPERATOR"
+  comment = "Managed Postgres mirrors: create, read back, change; nothing else"
+}
+
+resource "snowflake_grant_application_role" "mirror_operator" {
+  application_role_name    = "\"SNOWFLAKE\".\"POSTGRES_MIRROR_ADMIN\""
+  parent_account_role_name = snowflake_account_role.mirror_operator.name
+}
+
+resource "snowflake_grant_privileges_to_account_role" "mirror_operator_warehouse" {
+  account_role_name = snowflake_account_role.mirror_operator.name
+  privileges        = ["USAGE"]
+  on_account_object {
+    object_type = "WAREHOUSE"
+    object_name = var.warehouse
+  }
+}
+
+resource "snowflake_execute" "mirror_instance_usage" {
+  execute = "GRANT USAGE ON POSTGRES INSTANCE ${var.postgres_instance} TO APPLICATION SNOWFLAKE"
+  revert  = "REVOKE USAGE ON POSTGRES INSTANCE ${var.postgres_instance} FROM APPLICATION SNOWFLAKE"
+}
+
+resource "snowflake_service_user" "mirror_operator" {
+  name                         = "EDGARTOOLS_MIRROR_OPERATOR"
+  default_role                 = snowflake_account_role.mirror_operator.name
+  default_warehouse            = var.warehouse
+  rsa_public_key               = var.mirror_operator_public_key
+  statement_timeout_in_seconds = var.service_statement_timeout_seconds
+  comment                      = "Managed Postgres mirrors"
+}
+
+resource "snowflake_grant_account_role" "mirror_operator" {
+  role_name = snowflake_account_role.mirror_operator.name
+  user_name = snowflake_service_user.mirror_operator.name
+}
+
+resource "snowflake_user_authentication_policy_attachment" "mirror_operator" {
+  user_name                  = snowflake_service_user.mirror_operator.name
+  authentication_policy_name = snowflake_authentication_policy.service_keypair_only.fully_qualified_name
+}
+
+# CREATE_MIRROR refuses a role that does not own the Postgres instance ("does not own the requested postgres instance"), so
+# the mirror operator owns it. The grants on it are copied, never revoked, and the administrator holds the operator role, so
+# it keeps control of the instance (operator, 2026-11-19: "Fix the permission issue").
+resource "snowflake_grant_account_role" "mirror_operator_to_admin" {
+  role_name        = snowflake_account_role.mirror_operator.name
+  parent_role_name = "ACCOUNTADMIN"
+}
+
+resource "snowflake_execute" "mirror_operator_owns_instance" {
+  execute    = "GRANT OWNERSHIP ON POSTGRES INSTANCE ${var.postgres_instance} TO ROLE ${snowflake_account_role.mirror_operator.name} COPY CURRENT GRANTS"
+  revert     = "GRANT OWNERSHIP ON POSTGRES INSTANCE ${var.postgres_instance} TO ROLE ACCOUNTADMIN COPY CURRENT GRANTS"
+  depends_on = [snowflake_grant_account_role.mirror_operator_to_admin]
+}

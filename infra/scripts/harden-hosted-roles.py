@@ -5,6 +5,7 @@
     python infra/scripts/harden-hosted-roles.py            # lists what differs: role and setting names, no values of the data
     python infra/scripts/harden-hosted-roles.py --confirm  # applies the differences
 
+It also gives Snowflake's mirror login (snowflake_system) CONNECT on each mirrored store, which PUBLIC does not hold.
 Each guard is one control of the access audit (skills/access-audit): DB-05 a connection limit on every login, TMO a bound on
 statements and idle transactions, LOG the audit classes for the logins that change schemas, policy or approvals. It uses the
 owner login (DB_URL), changes only roles that exist, and is safe to run again: a role already at its guard
@@ -31,6 +32,10 @@ GUARDS = {
     "ops_reader": {"limit": 10, "settings": {"statement_timeout": "60s", "idle_in_transaction_session_timeout": "60s"}},
 }
 VALUE = re.compile(r"^[0-9A-Za-z,. ]+$")
+# The stores a managed Snowflake mirror reads, and the system login Snowflake's mirror connects as. PUBLIC holds no CONNECT on
+# the stores, so without this grant a mirror fails with "permission denied for database".
+MIRRORED = ("mdm", "rdm", "silver")
+MIRROR_LOGIN = "snowflake_system"
 
 
 def quote(name: str) -> str:
@@ -50,6 +55,18 @@ def plan(limits: dict[str, int], settings: dict[str, dict[str, str]], guards: di
                 raise ValueError(f"unsafe value for {key}")
             if settings.get(role, {}).get(key) != value:
                 steps.append((role, key, f"ALTER ROLE {quote(role)} SET {key} = '{value}'"))
+    return steps
+
+
+def mirror_access(acls: dict[str, list[str] | None], login: str = MIRROR_LOGIN) -> list[tuple[str, str, str]]:
+    """(login, what, sql) for each mirrored database whose access list does not give the mirror's login CONNECT."""
+    steps = []
+    for database in MIRRORED:
+        if database not in acls:
+            continue
+        held = [item.split("/")[0] for item in acls[database] or []]
+        if not any(entry.split("=")[0] == login and "c" in entry.split("=")[1] for entry in held):
+            steps.append((login, f"connect on {database}", f"GRANT CONNECT ON DATABASE {quote(database)} TO {quote(login)}"))
     return steps
 
 
@@ -73,6 +90,10 @@ def main(argv: list[str] | None = None) -> int:
     failed = 0
     with engine.connect() as conn:
         steps = plan(*read(conn))
+        roles = {r[0] for r in conn.execute(sa.text("select rolname from pg_roles"))}
+        if MIRROR_LOGIN in roles:
+            acls = dict(conn.execute(sa.text("select datname, datacl::text[] from pg_database")).all())
+            steps += mirror_access(acls)
         for role, what, sql in steps:
             if not args.confirm:
                 print(f"would set {role}: {what}")

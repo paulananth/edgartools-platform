@@ -110,6 +110,20 @@ serverless or warehouse selection, exclusions, insert-only tables and costs.
 Resize approval does not approve mirror creation. Wait for explicit approval
 before `SNOWFLAKE.POSTGRES.CREATE_MIRROR`; it creates billable infrastructure.
 
+Two permissions a mirror needs beyond the sub-skill's grant sequence:
+- The role that calls `CREATE_MIRROR` must own the Postgres instance ("does not own the requested postgres instance"):
+  the mirror operator does (aws-snowflake-operations, "Access identities"); the administrator never creates a mirror.
+- Snowflake's system login `snowflake_system` must hold CONNECT on each mirrored database ("permission denied for
+  database"): the stores revoke it from PUBLIC, and `infra/scripts/harden-hosted-roles.py` grants it.
+
+An instance carries at most two mirrors: each mirror needs one CDC publication and `snowflake_cdc.max_publications`
+is 2, which `POSTGRES_SETTINGS` does not accept ("Unrecognized Postgres setting"). A third mirror needs Snowflake support
+to raise it; until then, choose the two the readers need first. Read the limit and the publications held before a create
+(`show snowflake_cdc.max_publications`, `pg_publication` in each mirrored database).
+
+A mirror's target schema takes the source schema's name in upper case (`rdm` gives `RDM`, `public` gives `PUBLIC`), so
+the readers of a mirror name the target database and that schema.
+
 On permission or extension errors, stop without retrying and direct the
 operator to refresh the instance in Snowsight (Postgres → Manage), as required
 by the mirror workflow. Do not improvise extension installation.

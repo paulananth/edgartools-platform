@@ -233,6 +233,12 @@ notes is not the live one. The order:
   `~/.config/edgartools/gold-writer/gold-writer.env` (account, user, role, warehouse and the private key's path; the key stays in that
   folder, mode 0600). Prove a new writer by connecting with the key and checking that a view in its schema is created and dropped, and
   that a table, a view in another schema and an account-usage read are refused.
+- The mirror operator makes, reads back and changes the managed Postgres mirrors, and nothing else: a key-pair service user
+  (`~/.config/edgartools/mirror-operator/mirror-operator.env`, key in that folder, mode 0600) whose role holds the
+  `SNOWFLAKE.POSTGRES_MIRROR_ADMIN` application role and owns the Postgres instance, since `CREATE_MIRROR` refuses any role
+  that does not own it. The ownership was moved with `COPY CURRENT GRANTS`, and the administrator holds the operator role, so it
+  keeps control of the instance. Prove it by connecting with the key: the mirror procedures are listed, and creating a database
+  and reading account usage are refused.
 - An access change made by an account owner's SQL, before the access-admin identity exists, is the same objects as the Terraform
   and is written there too; import them (`terraform import`) before the first apply, or the plan tries to create them again.
 
