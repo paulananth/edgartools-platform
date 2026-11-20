@@ -1,6 +1,6 @@
 # 07: RDM publishes one view per code set
 
-Status: open
+Status: resolved
 
 The operator, 2026-11-20: "Rdm has to publish views on types this must be in the skills"; asked where, chose
 "One per code set, in Gold (Recommended)". Then, told the view showed the latest of several versions: "there should
@@ -17,3 +17,10 @@ not be more than one version now".
 - [x] Read back: 19 tables `REPLICATING`, row counts equal Postgres in all 19 2026-11-20 09:58 ET
 - [ ] ~~Hosted RDM still holds the six old versions (111 published code rows of `mdm-relationship-types` 1-4 and the history set)~~ deferred to its own ticket: the store keeps a retired version's rows by design and has no command that removes a version; the views cannot show them, since each selects its one version by name
 - [x] Learning → skill: data-modeling GOLD.md, "RDM publishes one view per code set" 2026-11-20 10:34 ET
+
+## Answer
+
+Resolved 2026-11-20 15:09 ET. Every part is done and read back (PR 1944 and the read-backs in PR 1949): Gold makes one `ref_<code set>` view per
+folder of `rules/reference/published/`, a code set keeps one version in the repository, and the mirror carries `rdm.published_code` (19 of 19
+tables replicating, row counts equal to PostgreSQL). The one deferred part, the old versions in the hosted store, moves to ticket 08, which
+changes the store so that publishing replaces the previous version.
