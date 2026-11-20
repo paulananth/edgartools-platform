@@ -49,3 +49,9 @@ def test_snowflakes_mirror_login_gets_connect_on_each_mirrored_database_and_noth
     assert harden.mirror_access(acls) == [
         ("snowflake_system", "connect on data", 'GRANT CONNECT ON DATABASE "data" TO "snowflake_system"')]
     assert harden.mirror_access({"data": ["snowflake_system=c/owner"], "control": None}) == []  # held already; control is never mirrored
+
+
+def test_every_login_the_platform_makes_holds_a_connection_limit():
+    """The access audit's CST fails on any login without one: the catalog reader is a login too."""
+    assert {"edgar_loader", "governance", "ops_reader", "discovery_reader"} <= set(harden.GUARDS)
+    assert harden.GUARDS["discovery_reader"]["limit"] == 10
