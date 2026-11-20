@@ -1,0 +1,5 @@
+# The Snowflake database names, in this one file. Everything else reads them from here: the exposure list and its
+# scripts, the Gold views, the dbt profile (written by `python -m edgar_warehouse.gold.views write infra/dbt/gold`)
+# and the Terraform access grants. A renamed database is a change to one line here.
+mirror: DB_EDGARTOOLS_MIRROR   # the managed mirror of the exposed tables (schemas MDM, RDM, SILVER)
+gold: DB_EDGARTOOLS_GOLD       # where dbt writes the Gold views

@@ -124,9 +124,9 @@ resource "snowflake_grant_privileges_to_account_role" "auditor_warehouse" {
 
 # The Gold destination database: the auditor reads its metadata (schemas, objects, grants) to check what is there before a build, and
 # no data (REFERENCES shows a table to the role without reading a row).
-variable "gold_database" {
-  type    = string
-  default = "DB_EDGARTOOLS_GOLD"
+# Named once, in rules/snowflake.yaml; a renamed database is a one-line change there.
+locals {
+  gold_database = yamldecode(file("${path.module}/../../../../../../rules/snowflake.yaml")).gold
 }
 
 resource "snowflake_grant_privileges_to_account_role" "auditor_gold_database" {
@@ -134,7 +134,7 @@ resource "snowflake_grant_privileges_to_account_role" "auditor_gold_database" {
   privileges        = ["USAGE"]
   on_account_object {
     object_type = "DATABASE"
-    object_name = var.gold_database
+    object_name = local.gold_database
   }
 }
 
@@ -142,7 +142,7 @@ resource "snowflake_grant_privileges_to_account_role" "auditor_gold_schemas" {
   account_role_name = snowflake_account_role.auditor.name
   privileges        = ["USAGE"]
   on_schema {
-    all_schemas_in_database = var.gold_database
+    all_schemas_in_database = local.gold_database
   }
 }
 
@@ -150,7 +150,7 @@ resource "snowflake_grant_privileges_to_account_role" "auditor_gold_future_schem
   account_role_name = snowflake_account_role.auditor.name
   privileges        = ["USAGE"]
   on_schema {
-    future_schemas_in_database = var.gold_database
+    future_schemas_in_database = local.gold_database
   }
 }
 
@@ -160,7 +160,7 @@ resource "snowflake_grant_privileges_to_account_role" "auditor_gold_tables" {
   on_schema_object {
     all {
       object_type_plural = "TABLES"
-      in_database        = var.gold_database
+      in_database        = local.gold_database
     }
   }
 }
@@ -171,7 +171,7 @@ resource "snowflake_grant_privileges_to_account_role" "auditor_gold_future_table
   on_schema_object {
     future {
       object_type_plural = "TABLES"
-      in_database        = var.gold_database
+      in_database        = local.gold_database
     }
   }
 }

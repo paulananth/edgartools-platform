@@ -94,6 +94,8 @@ and the rest in another db", then "Yes, open the ticket and start, make the skil
       the instance's own extension workers) and no replication slots; after: `data` and `control` hold their schemas and the mirror still replicates. 2026-11-20 06:14 ET
 - [ ] The two old Snowflake target databases (`DB_EDGARTOOLS_MIRROR_MDM`, `DB_EDGARTOOLS_MIRROR_SILVER`) are kept until Gold is repointed at
       `DB_EDGARTOOLS_MIRROR`: the deployed Gold tables may still select from them, and a drop there is not undoable
+- [x] The Snowflake database names are configuration in one file, `rules/snowflake.yaml` (operator, 2026-11-20 06:59 ET: "must be on a single place not over multiple files"); the exposure script, the Gold views, the dbt profile and the Terraform grants read it; verified by `tests/unit/test_gold_views.py` (205 passed with the exposure tests) and a Terraform read of the file
+- [ ] Rename the two kept databases (drop the `DB_` prefix) and drop the two old targets: waits for the operator's ANANP11 words; after it, a one-line change per name in `rules/snowflake.yaml`
 - [ ] Follow-up ticket: master ids and links as joins inside the data database
 - [ ] Merge the PR when CI is green
 - [ ] Learning → skill

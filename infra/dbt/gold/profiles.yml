@@ -1,5 +1,6 @@
 # The write login's key-pair service user and role come from the private environment, never from this file. The role reads only the
-# mirror database and writes only DB_EDGARTOOLS_GOLD.GOLD (an approved destination, ticket 05).
+# mirror database and writes only the Gold destination (an approved destination, ticket 05).
+# The `database` line is written from rules/snowflake.yaml by `python -m edgar_warehouse.gold.views write infra/dbt/gold`.
 edgartools_gold:
   target: prod
   outputs:

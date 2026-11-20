@@ -133,7 +133,11 @@ def config_sha256(path: Path, root: Path | None = None) -> str:
 def load_config(path: Path) -> dict:
     import yaml
 
-    return yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+    config = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+    names = Path(path).parent / "snowflake.yaml"  # the database names are kept in one file
+    if names.exists() and isinstance(config.get("target"), dict):
+        config["target"].setdefault("database", yaml.safe_load(names.read_text(encoding="utf-8"))["mirror"])
+    return config
 
 
 def requested(config: dict) -> dict[str, dict]:
