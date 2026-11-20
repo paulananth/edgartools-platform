@@ -2,11 +2,13 @@
 
 Type: task
 Status: open
-Blocked by: 23, 06
+Priority: P0
+Blocked by: 06, 18, 23, 30
 Labels: wayfinder:task
 Map: [Make source-onboarding skills effective](../map.md)
 Skill: [data-onboarding](../../../skills/data-onboarding/SKILL.md)
 Step: 6 of 6
+Skill dependencies: data-modeling, data-quality
 Applicability: Every new source or new kind; live-source revisions route to refining-rules.
 
 ## Question
@@ -25,7 +27,11 @@ The prior split is recorded in [The data-onboarding skill is split behind pointe
 
 ## Prerequisites
 
-[data-onboarding: Specify generic verification](./23-data-onboarding-generic-verification.md); [data-platform: Measure effectiveness](./06-data-platform-effectiveness.md)
+[data-platform: Measure effectiveness](./06-data-platform-effectiveness.md); [data-modeling: Measure effectiveness](./18-data-modeling-effectiveness.md); [data-onboarding: Specify generic verification](./23-data-onboarding-generic-verification.md); [data-quality: Measure effectiveness](./30-data-quality-effectiveness.md)
+
+Priority rationale: A complete configured source is the primary deliverable.
+
+These blockers order skill-improvement work. They do not activate optional source phases or grant operational permission.
 
 ## Acceptance checklist
 

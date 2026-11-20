@@ -18,24 +18,24 @@ Consult the invoked Wayfinder skill, [CLAUDE.md](../../CLAUDE.md), the [skills i
 
 ### Scope
 
-| Skill | When it participates |
-| --- | --- |
-| [data-platform](../../skills/data-platform/SKILL.md) | Every source: route the work and discover configured connections. |
-| [data-profiling](../../skills/data-profiling/SKILL.md) | Every new captured dataset; compare mode only when an approved delivery changes. |
-| [data-modeling](../../skills/data-modeling/SKILL.md) | Every new part whose class, identity, relationship or destination needs mapping. |
-| [data-onboarding](../../skills/data-onboarding/SKILL.md) | Every new source or new kind; live-source revisions route to refining-rules. |
-| [data-quality](../../skills/data-quality/SKILL.md) | Every source with field constraints, defects or downstream quality obligations. |
-| [refining-rules](../../skills/refining-rules/SKILL.md) | Conditional: the proposed onboarding work changes an existing source or matching policy. |
-| [mdm-engineering](../../skills/mdm-engineering/SKILL.md) | Conditional: choose mastering proof or investigate a demonstrated engine or storage gap; configuration remains the default. |
-| [bookkeeping](../../skills/bookkeeping/SKILL.md) | Every source's declared execution targets; honor the target's configured grain. |
-| [change-journal](../../skills/change-journal/SKILL.md) | Every source whose processing or publication produces journal events and delivery receipts. |
-| [data-operations](../../skills/data-operations/SKILL.md) | Every local source qualification and operational load; hosted actions require applicable authorization. |
-| [data-governance](../../skills/data-governance/SKILL.md) | Every source's governed outputs and lineage claims. |
-| [data-catalog](../../skills/data-catalog/SKILL.md) | Every source's business metadata and steward-facing publication. |
-| [openmetadata](../../skills/openmetadata/SKILL.md) | Conditional: OpenMetadata is the configured catalog destination. |
-| [access-audit](../../skills/access-audit/SKILL.md) | Review the skill or access changes being finalized; run only applicable read-only platform checks. |
-| [pipeline-orchestration](../../skills/pipeline-orchestration/SKILL.md) | Conditional: onboarding includes a recurring timer, dependency sequence or start/stop deployment. |
-| [aws-snowflake-operations](../../skills/aws-snowflake-operations/SKILL.md) | Conditional: onboarding touches AWS, Snowflake, hosted connections, images or deployment. |
+| Skill | Priority | Depends on skills | When it participates |
+| --- | --- | --- | --- |
+| [data-platform](../../skills/data-platform/SKILL.md) | P0 | None | Every source: route the work and discover configured connections. |
+| [data-profiling](../../skills/data-profiling/SKILL.md) | P0 | [data-platform](../../skills/data-platform/SKILL.md) | Every new captured dataset; compare mode only when an approved delivery changes. |
+| [data-modeling](../../skills/data-modeling/SKILL.md) | P0 | [data-profiling](../../skills/data-profiling/SKILL.md) | Every new part whose class, identity, relationship or destination needs mapping. |
+| [data-onboarding](../../skills/data-onboarding/SKILL.md) | P0 | [data-modeling](../../skills/data-modeling/SKILL.md), [data-quality](../../skills/data-quality/SKILL.md) | Every new source or new kind; live-source revisions route to refining-rules. |
+| [data-quality](../../skills/data-quality/SKILL.md) | P0 | [data-profiling](../../skills/data-profiling/SKILL.md), [data-modeling](../../skills/data-modeling/SKILL.md) | Every source with field constraints, defects or downstream quality obligations. |
+| [refining-rules](../../skills/refining-rules/SKILL.md) | P2 | [data-onboarding](../../skills/data-onboarding/SKILL.md), [data-quality](../../skills/data-quality/SKILL.md) | Conditional: the proposed onboarding work changes an existing source or matching policy. |
+| [mdm-engineering](../../skills/mdm-engineering/SKILL.md) | P2 | [data-modeling](../../skills/data-modeling/SKILL.md) | Conditional: choose mastering proof or investigate a demonstrated engine or storage gap; configuration remains the default. |
+| [bookkeeping](../../skills/bookkeeping/SKILL.md) | P1 | [data-onboarding](../../skills/data-onboarding/SKILL.md) | Every source's declared execution targets; honor the target's configured grain. |
+| [change-journal](../../skills/change-journal/SKILL.md) | P1 | [bookkeeping](../../skills/bookkeeping/SKILL.md) | Every source whose processing or publication produces journal events and delivery receipts. |
+| [data-operations](../../skills/data-operations/SKILL.md) | P1 | [data-onboarding](../../skills/data-onboarding/SKILL.md), [bookkeeping](../../skills/bookkeeping/SKILL.md), [change-journal](../../skills/change-journal/SKILL.md) | Every local source qualification and operational load; hosted actions require applicable authorization. |
+| [data-governance](../../skills/data-governance/SKILL.md) | P1 | [data-modeling](../../skills/data-modeling/SKILL.md) | Every source's governed outputs and lineage claims. |
+| [data-catalog](../../skills/data-catalog/SKILL.md) | P1 | [data-governance](../../skills/data-governance/SKILL.md), [data-onboarding](../../skills/data-onboarding/SKILL.md), [data-quality](../../skills/data-quality/SKILL.md) | Every source's business metadata and steward-facing publication. |
+| [openmetadata](../../skills/openmetadata/SKILL.md) | P2 | [data-catalog](../../skills/data-catalog/SKILL.md) | Conditional: OpenMetadata is the configured catalog destination. |
+| [access-audit](../../skills/access-audit/SKILL.md) | P1 | [data-platform](../../skills/data-platform/SKILL.md) | Review the skill or access changes being finalized; run only applicable read-only platform checks. |
+| [pipeline-orchestration](../../skills/pipeline-orchestration/SKILL.md) | P3 | [data-operations](../../skills/data-operations/SKILL.md), [bookkeeping](../../skills/bookkeeping/SKILL.md), [change-journal](../../skills/change-journal/SKILL.md) | Conditional: onboarding includes a recurring timer, dependency sequence or start/stop deployment. |
+| [aws-snowflake-operations](../../skills/aws-snowflake-operations/SKILL.md) | P3 | [data-operations](../../skills/data-operations/SKILL.md), [access-audit](../../skills/access-audit/SKILL.md) | Conditional: onboarding touches AWS, Snowflake, hosted connections, images or deployment. |
 
 Conditional skills receive the same six improvement tickets, but an individual source uses them only when the applicability condition holds. This prevents a local onboarding from requiring deployment or scheduling solely to finish a checklist.
 
@@ -48,7 +48,20 @@ Conditional skills receive the same six improvement tickets, but an individual s
 5. Specify generic verification: reuse configured engines and shared harnesses, with source-provided invented fixtures and observable expected outcomes.
 6. Measure effectiveness: compare representative task outcomes with a baseline, including repeated work, questions, failures and elapsed time.
 
-The data-platform track establishes the shared conventions. Every other track's step depends on its preceding step and the matching data-platform step. Thus the first frontier is the ownership ticket for data-platform; afterward independent skills can advance when their dependencies resolve. `Blocked by:` fields are authoritative; query the child files rather than maintaining another open-ticket list here.
+### Priority and dependency policy
+
+- **P0 — source-building foundation:** data-platform, data-profiling, data-modeling, data-quality and data-onboarding. Establish reusable evidence and a configured source first.
+- **P1 — operational and governed completion:** bookkeeping, change-journal, data-operations, data-governance, data-catalog and access-audit. These are required completion concerns where applicable, not optional polish.
+- **P2 — conditional specialist paths:** refining-rules, mdm-engineering and openmetadata. Promote an applicable ticket when it blocks the selected source.
+- **P3 — recurring and hosted expansion:** pipeline-orchestration and aws-snowflake-operations. Promote them when the selected source explicitly requires scheduling or hosted delivery; this rank does not make an applicable safety or access check optional.
+
+Among open, unblocked, unclaimed tickets, take the highest priority first (P0 before P1 before P2 before P3), then the lowest ticket number. Dependencies always override priority; a promoted downstream ticket brings its unresolved prerequisites with it. Rank is backlog urgency, not runtime source sequence or permission.
+
+Each ticket depends on its preceding step, the matching data-platform step and the matching step of the upstream skills in the table. For example, the onboarding entrypoint waits for the modeling and quality entrypoints; it does not wait for all six upstream improvements to finish. The first frontier remains the ownership ticket for data-platform. Independent unblocked branches can advance separately.
+
+The table describes dependencies between **improvement tracks**, not a literal operational command sequence. Quality checks consume mapped fields during real onboarding; the table's quality-to-onboarding edge makes the quality skill contract clear before the onboarding skill integrates it. Change Journal remains independent even though its improvement examples consume Bookkeeping's producer evidence. Hosted work consumes data-operations' local qualification guidance, not a completed hosted load. Access audit remains a cross-cutting finalization gate for applicable changes and is not postponed until P3.
+
+`Priority:`, `Skill dependencies:` and `Blocked by:` in the child files record urgency, upstream ownership and concrete blockers respectively. The child blockers are authoritative; do not infer readiness from priority or maintain another open-ticket list.
 
 No scenario or test code is approved by creating these tickets. Proposed Given–When–Then scenarios must receive the operator's required approval before implementation. Local checks remain bounded and affected-only; CI runs the full suite. Longer user journeys and failure transitions take priority over trivial or repeated tests.
 
@@ -76,6 +89,12 @@ No child ticket has been resolved. Scope and the six requested outcomes come fro
 - AutoOntology, Gold, dashboards and consumer products downstream of the source-onboarding destination.
 - General software design and SQL implementation skills unless an actual capability gap requires separate code work.
 - Production-support and database-monitoring incident workflows unless onboarding encounters such an incident.
+
+## Priority and dependency update
+
+- [x] Add a priority and upstream skill dependencies to all 96 tickets and the 16-skill scope table (2026-11-20 06:48 ET).
+- [x] Verify all priorities and 308 dependency edges; 564 links resolve, no cycles or priority inversions, and the documentation genericity check passes 144 tests (2026-11-20 06:48 ET).
+- [x] Learning → skill: none; this update orders planned improvements without changing an operating skill (2026-11-20 06:48 ET).
 
 ## Charting record
 

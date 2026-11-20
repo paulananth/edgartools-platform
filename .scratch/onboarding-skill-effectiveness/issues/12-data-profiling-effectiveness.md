@@ -2,11 +2,13 @@
 
 Type: task
 Status: open
-Blocked by: 11, 06
+Priority: P0
+Blocked by: 06, 11
 Labels: wayfinder:task
 Map: [Make source-onboarding skills effective](../map.md)
 Skill: [data-profiling](../../../skills/data-profiling/SKILL.md)
 Step: 6 of 6
+Skill dependencies: data-platform
 Applicability: Every new captured dataset; compare mode only when an approved delivery changes.
 
 ## Question
@@ -23,7 +25,11 @@ Start from skills/data-profiling/SKILL.md: Modes, Profile once, How to work, Com
 
 ## Prerequisites
 
-[data-profiling: Specify generic verification](./11-data-profiling-generic-verification.md); [data-platform: Measure effectiveness](./06-data-platform-effectiveness.md)
+[data-platform: Measure effectiveness](./06-data-platform-effectiveness.md); [data-profiling: Specify generic verification](./11-data-profiling-generic-verification.md)
+
+Priority rationale: Reusable evidence is the input to every source model.
+
+These blockers order skill-improvement work. They do not activate optional source phases or grant operational permission.
 
 ## Acceptance checklist
 

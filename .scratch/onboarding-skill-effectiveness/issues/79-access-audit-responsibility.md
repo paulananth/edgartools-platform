@@ -2,11 +2,13 @@
 
 Type: task
 Status: open
+Priority: P1
 Blocked by: 01
 Labels: wayfinder:task
 Map: [Make source-onboarding skills effective](../map.md)
 Skill: [access-audit](../../../skills/access-audit/SKILL.md)
 Step: 1 of 6
+Skill dependencies: data-platform
 Applicability: Review the skill or access changes being finalized; run only applicable read-only platform checks.
 
 ## Question
@@ -24,6 +26,10 @@ Start from skills/access-audit/SKILL.md: Hard stops, Objectives, The gate before
 ## Prerequisites
 
 [data-platform: Define one responsibility](./01-data-platform-responsibility.md)
+
+Priority rationale: Independent access evidence is cross-cutting; remediation is separate.
+
+These blockers order skill-improvement work. They do not activate optional source phases or grant operational permission.
 
 ## Acceptance checklist
 

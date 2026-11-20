@@ -2,11 +2,13 @@
 
 Type: task
 Status: open
-Blocked by: 85, 02
+Priority: P3
+Blocked by: 02, 44, 50, 56, 85
 Labels: wayfinder:task
 Map: [Make source-onboarding skills effective](../map.md)
 Skill: [pipeline-orchestration](../../../skills/pipeline-orchestration/SKILL.md)
 Step: 2 of 6
+Skill dependencies: data-operations, bookkeeping, change-journal
 Applicability: Conditional: onboarding includes a recurring timer, dependency sequence or start/stop deployment.
 
 ## Question
@@ -23,7 +25,11 @@ Start from skills/pipeline-orchestration/SKILL.md: Establish the runnable pipeli
 
 ## Prerequisites
 
-[pipeline-orchestration: Define one responsibility](./85-pipeline-orchestration-responsibility.md); [data-platform: Reconcile shared rules](./02-data-platform-consistent-rules.md)
+[data-platform: Reconcile shared rules](./02-data-platform-consistent-rules.md); [bookkeeping: Reconcile shared rules](./44-bookkeeping-consistent-rules.md); [change-journal: Reconcile shared rules](./50-change-journal-consistent-rules.md); [data-operations: Reconcile shared rules](./56-data-operations-consistent-rules.md); [pipeline-orchestration: Define one responsibility](./85-pipeline-orchestration-responsibility.md)
+
+Priority rationale: Scheduling follows a verified runnable source.
+
+These blockers order skill-improvement work. They do not activate optional source phases or grant operational permission.
 
 ## Acceptance checklist
 

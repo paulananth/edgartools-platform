@@ -2,11 +2,13 @@
 
 Type: task
 Status: open
-Blocked by: 01
+Priority: P0
+Blocked by: 01, 07, 13
 Labels: wayfinder:task
 Map: [Make source-onboarding skills effective](../map.md)
 Skill: [data-quality](../../../skills/data-quality/SKILL.md)
 Step: 1 of 6
+Skill dependencies: data-profiling, data-modeling
 Applicability: Every source with field constraints, defects or downstream quality obligations.
 
 ## Question
@@ -23,7 +25,11 @@ Start from skills/data-quality/SKILL.md: plan, measure, decide, write, Publish q
 
 ## Prerequisites
 
-[data-platform: Define one responsibility](./01-data-platform-responsibility.md)
+[data-platform: Define one responsibility](./01-data-platform-responsibility.md); [data-profiling: Define one responsibility](./07-data-profiling-responsibility.md); [data-modeling: Define one responsibility](./13-data-modeling-responsibility.md)
+
+Priority rationale: Measured checks and dispositions prevent unsafe mappings.
+
+These blockers order skill-improvement work. They do not activate optional source phases or grant operational permission.
 
 ## Acceptance checklist
 

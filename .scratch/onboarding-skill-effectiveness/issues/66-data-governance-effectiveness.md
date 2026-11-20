@@ -2,11 +2,13 @@
 
 Type: task
 Status: open
-Blocked by: 65, 06
+Priority: P1
+Blocked by: 06, 18, 65
 Labels: wayfinder:task
 Map: [Make source-onboarding skills effective](../map.md)
 Skill: [data-governance](../../../skills/data-governance/SKILL.md)
 Step: 6 of 6
+Skill dependencies: data-modeling
 Applicability: Every source's governed outputs and lineage claims.
 
 ## Question
@@ -23,7 +25,11 @@ Start from skills/data-governance/SKILL.md: What is governed, Completion; LINEAG
 
 ## Prerequisites
 
-[data-governance: Specify generic verification](./65-data-governance-generic-verification.md); [data-platform: Measure effectiveness](./06-data-platform-effectiveness.md)
+[data-platform: Measure effectiveness](./06-data-platform-effectiveness.md); [data-modeling: Measure effectiveness](./18-data-modeling-effectiveness.md); [data-governance: Specify generic verification](./65-data-governance-generic-verification.md)
+
+Priority rationale: Governed output and lineage meaning precede catalog presentation.
+
+These blockers order skill-improvement work. They do not activate optional source phases or grant operational permission.
 
 ## Acceptance checklist
 

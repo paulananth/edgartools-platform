@@ -2,11 +2,13 @@
 
 Type: task
 Status: open
-Blocked by: 01
+Priority: P0
+Blocked by: 01, 07
 Labels: wayfinder:task
 Map: [Make source-onboarding skills effective](../map.md)
 Skill: [data-modeling](../../../skills/data-modeling/SKILL.md)
 Step: 1 of 6
+Skill dependencies: data-profiling
 Applicability: Every new part whose class, identity, relationship or destination needs mapping.
 
 ## Question
@@ -23,7 +25,11 @@ Start from skills/data-modeling/SKILL.md: Decision rules, Workflow, Prove the mo
 
 ## Prerequisites
 
-[data-platform: Define one responsibility](./01-data-platform-responsibility.md)
+[data-platform: Define one responsibility](./01-data-platform-responsibility.md); [data-profiling: Define one responsibility](./07-data-profiling-responsibility.md)
+
+Priority rationale: Identity and destination decisions precede configuration.
+
+These blockers order skill-improvement work. They do not activate optional source phases or grant operational permission.
 
 ## Acceptance checklist
 

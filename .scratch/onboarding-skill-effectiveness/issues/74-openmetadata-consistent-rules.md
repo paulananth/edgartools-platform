@@ -2,11 +2,13 @@
 
 Type: task
 Status: open
-Blocked by: 73, 02
+Priority: P2
+Blocked by: 02, 68, 73
 Labels: wayfinder:task
 Map: [Make source-onboarding skills effective](../map.md)
 Skill: [openmetadata](../../../skills/openmetadata/SKILL.md)
 Step: 2 of 6
+Skill dependencies: data-catalog
 Applicability: Conditional: OpenMetadata is the configured catalog destination.
 
 ## Question
@@ -25,7 +27,11 @@ Coordinate with [Move the business-meaning passages out of the openmetadata skil
 
 ## Prerequisites
 
-[openmetadata: Define one responsibility](./73-openmetadata-responsibility.md); [data-platform: Reconcile shared rules](./02-data-platform-consistent-rules.md)
+[data-platform: Reconcile shared rules](./02-data-platform-consistent-rules.md); [data-catalog: Reconcile shared rules](./68-data-catalog-consistent-rules.md); [openmetadata: Define one responsibility](./73-openmetadata-responsibility.md)
+
+Priority rationale: Conditional destination adapter consumes catalog expectations.
+
+These blockers order skill-improvement work. They do not activate optional source phases or grant operational permission.
 
 ## Acceptance checklist
 

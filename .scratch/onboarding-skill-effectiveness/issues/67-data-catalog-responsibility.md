@@ -2,11 +2,13 @@
 
 Type: task
 Status: open
-Blocked by: 01
+Priority: P1
+Blocked by: 01, 19, 25, 61
 Labels: wayfinder:task
 Map: [Make source-onboarding skills effective](../map.md)
 Skill: [data-catalog](../../../skills/data-catalog/SKILL.md)
 Step: 1 of 6
+Skill dependencies: data-governance, data-onboarding, data-quality
 Applicability: Every source's business metadata and steward-facing publication.
 
 ## Question
@@ -25,7 +27,11 @@ Coordinate with [Move the business-meaning passages out of the openmetadata skil
 
 ## Prerequisites
 
-[data-platform: Define one responsibility](./01-data-platform-responsibility.md)
+[data-platform: Define one responsibility](./01-data-platform-responsibility.md); [data-onboarding: Define one responsibility](./19-data-onboarding-responsibility.md); [data-quality: Define one responsibility](./25-data-quality-responsibility.md); [data-governance: Define one responsibility](./61-data-governance-responsibility.md)
+
+Priority rationale: Business metadata consumes the model, targets and checks.
+
+These blockers order skill-improvement work. They do not activate optional source phases or grant operational permission.
 
 ## Acceptance checklist
 

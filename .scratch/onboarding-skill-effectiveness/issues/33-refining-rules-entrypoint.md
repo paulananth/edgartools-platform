@@ -2,11 +2,13 @@
 
 Type: task
 Status: open
-Blocked by: 32, 03
+Priority: P2
+Blocked by: 03, 21, 27, 32
 Labels: wayfinder:task
 Map: [Make source-onboarding skills effective](../map.md)
 Skill: [refining-rules](../../../skills/refining-rules/SKILL.md)
 Step: 3 of 6
+Skill dependencies: data-onboarding, data-quality
 Applicability: Conditional: the proposed onboarding work changes an existing source or matching policy.
 
 ## Question
@@ -23,7 +25,11 @@ Start from skills/refining-rules/SKILL.md: Shared with Data Onboarding, change-m
 
 ## Prerequisites
 
-[refining-rules: Reconcile shared rules](./32-refining-rules-consistent-rules.md); [data-platform: Make the entrypoint executable](./03-data-platform-entrypoint.md)
+[data-platform: Make the entrypoint executable](./03-data-platform-entrypoint.md); [data-onboarding: Make the entrypoint executable](./21-data-onboarding-entrypoint.md); [data-quality: Make the entrypoint executable](./27-data-quality-entrypoint.md); [refining-rules: Reconcile shared rules](./32-refining-rules-consistent-rules.md)
+
+Priority rationale: Conditional path for existing-source revisions.
+
+These blockers order skill-improvement work. They do not activate optional source phases or grant operational permission.
 
 ## Acceptance checklist
 

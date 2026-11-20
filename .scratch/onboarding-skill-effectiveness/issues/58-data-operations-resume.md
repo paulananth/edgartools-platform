@@ -2,11 +2,13 @@
 
 Type: task
 Status: open
-Blocked by: 57, 04
+Priority: P1
+Blocked by: 04, 22, 46, 52, 57
 Labels: wayfinder:task
 Map: [Make source-onboarding skills effective](../map.md)
 Skill: [data-operations](../../../skills/data-operations/SKILL.md)
 Step: 4 of 6
+Skill dependencies: data-onboarding, bookkeeping, change-journal
 Applicability: Every local source qualification and operational load; hosted actions require applicable authorization.
 
 ## Question
@@ -23,7 +25,11 @@ Start from skills/data-operations/SKILL.md: Start with live state, Install and e
 
 ## Prerequisites
 
-[data-operations: Make the entrypoint executable](./57-data-operations-entrypoint.md); [data-platform: Make progress resumable](./04-data-platform-resume.md)
+[data-platform: Make progress resumable](./04-data-platform-resume.md); [data-onboarding: Make progress resumable](./22-data-onboarding-resume.md); [bookkeeping: Make progress resumable](./46-bookkeeping-resume.md); [change-journal: Make progress resumable](./52-change-journal-resume.md); [data-operations: Make the entrypoint executable](./57-data-operations-entrypoint.md)
+
+Priority rationale: Local load reconciliation completes operational qualification.
+
+These blockers order skill-improvement work. They do not activate optional source phases or grant operational permission.
 
 ## Acceptance checklist
 

@@ -2,11 +2,13 @@
 
 Type: task
 Status: open
+Priority: P0
 Blocked by: 02
 Labels: wayfinder:task
 Map: [Make source-onboarding skills effective](../map.md)
 Skill: [data-platform](../../../skills/data-platform/SKILL.md)
 Step: 3 of 6
+Skill dependencies: none
 Applicability: Every source: route the work and discover configured connections.
 
 ## Question
@@ -24,6 +26,10 @@ Start from skills/data-platform/SKILL.md: Source readiness, The flow, Connection
 ## Prerequisites
 
 [data-platform: Reconcile shared rules](./02-data-platform-consistent-rules.md)
+
+Priority rationale: Shared routing and rule conventions unblock every track.
+
+These blockers order skill-improvement work. They do not activate optional source phases or grant operational permission.
 
 ## Acceptance checklist
 

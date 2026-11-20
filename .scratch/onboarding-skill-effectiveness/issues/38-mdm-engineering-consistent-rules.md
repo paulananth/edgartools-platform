@@ -2,11 +2,13 @@
 
 Type: task
 Status: open
-Blocked by: 37, 02
+Priority: P2
+Blocked by: 02, 14, 37
 Labels: wayfinder:task
 Map: [Make source-onboarding skills effective](../map.md)
 Skill: [mdm-engineering](../../../skills/mdm-engineering/SKILL.md)
 Step: 2 of 6
+Skill dependencies: data-modeling
 Applicability: Conditional: choose mastering proof or investigate a demonstrated engine or storage gap; configuration remains the default.
 
 ## Question
@@ -23,7 +25,11 @@ Start from skills/mdm-engineering/SKILL.md: Hard stops, Choose the cheapest proo
 
 ## Prerequisites
 
-[mdm-engineering: Define one responsibility](./37-mdm-engineering-responsibility.md); [data-platform: Reconcile shared rules](./02-data-platform-consistent-rules.md)
+[data-platform: Reconcile shared rules](./02-data-platform-consistent-rules.md); [data-modeling: Reconcile shared rules](./14-data-modeling-consistent-rules.md); [mdm-engineering: Define one responsibility](./37-mdm-engineering-responsibility.md)
+
+Priority rationale: Conditional mastering proof or demonstrated engine gap.
+
+These blockers order skill-improvement work. They do not activate optional source phases or grant operational permission.
 
 ## Acceptance checklist
 

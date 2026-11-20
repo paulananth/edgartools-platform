@@ -2,11 +2,13 @@
 
 Type: task
 Status: open
-Blocked by: 44, 03
+Priority: P1
+Blocked by: 03, 21, 44
 Labels: wayfinder:task
 Map: [Make source-onboarding skills effective](../map.md)
 Skill: [bookkeeping](../../../skills/bookkeeping/SKILL.md)
 Step: 3 of 6
+Skill dependencies: data-onboarding
 Applicability: Every source's declared execution targets; honor the target's configured grain.
 
 ## Question
@@ -23,7 +25,11 @@ Start from skills/bookkeeping/SKILL.md: Required independence, Source registrati
 
 ## Prerequisites
 
-[bookkeeping: Reconcile shared rules](./44-bookkeeping-consistent-rules.md); [data-platform: Make the entrypoint executable](./03-data-platform-entrypoint.md)
+[data-platform: Make the entrypoint executable](./03-data-platform-entrypoint.md); [data-onboarding: Make the entrypoint executable](./21-data-onboarding-entrypoint.md); [bookkeeping: Reconcile shared rules](./44-bookkeeping-consistent-rules.md)
+
+Priority rationale: Configured targets must execute with verified recovery.
+
+These blockers order skill-improvement work. They do not activate optional source phases or grant operational permission.
 
 ## Acceptance checklist
 

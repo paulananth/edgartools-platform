@@ -2,11 +2,13 @@
 
 Type: task
 Status: open
-Blocked by: 82, 05
+Priority: P1
+Blocked by: 05, 82
 Labels: wayfinder:task
 Map: [Make source-onboarding skills effective](../map.md)
 Skill: [access-audit](../../../skills/access-audit/SKILL.md)
 Step: 5 of 6
+Skill dependencies: data-platform
 Applicability: Review the skill or access changes being finalized; run only applicable read-only platform checks.
 
 ## Question
@@ -23,7 +25,11 @@ Start from skills/access-audit/SKILL.md: Hard stops, Objectives, The gate before
 
 ## Prerequisites
 
-[access-audit: Make progress resumable](./82-access-audit-resume.md); [data-platform: Specify generic verification](./05-data-platform-generic-verification.md)
+[data-platform: Specify generic verification](./05-data-platform-generic-verification.md); [access-audit: Make progress resumable](./82-access-audit-resume.md)
+
+Priority rationale: Independent access evidence is cross-cutting; remediation is separate.
+
+These blockers order skill-improvement work. They do not activate optional source phases or grant operational permission.
 
 ## Acceptance checklist
 

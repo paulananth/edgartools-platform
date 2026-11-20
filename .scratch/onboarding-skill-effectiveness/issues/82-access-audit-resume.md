@@ -2,11 +2,13 @@
 
 Type: task
 Status: open
-Blocked by: 81, 04
+Priority: P1
+Blocked by: 04, 81
 Labels: wayfinder:task
 Map: [Make source-onboarding skills effective](../map.md)
 Skill: [access-audit](../../../skills/access-audit/SKILL.md)
 Step: 4 of 6
+Skill dependencies: data-platform
 Applicability: Review the skill or access changes being finalized; run only applicable read-only platform checks.
 
 ## Question
@@ -23,7 +25,11 @@ Start from skills/access-audit/SKILL.md: Hard stops, Objectives, The gate before
 
 ## Prerequisites
 
-[access-audit: Make the entrypoint executable](./81-access-audit-entrypoint.md); [data-platform: Make progress resumable](./04-data-platform-resume.md)
+[data-platform: Make progress resumable](./04-data-platform-resume.md); [access-audit: Make the entrypoint executable](./81-access-audit-entrypoint.md)
+
+Priority rationale: Independent access evidence is cross-cutting; remediation is separate.
+
+These blockers order skill-improvement work. They do not activate optional source phases or grant operational permission.
 
 ## Acceptance checklist
 

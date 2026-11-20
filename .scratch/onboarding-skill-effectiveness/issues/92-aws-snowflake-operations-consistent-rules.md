@@ -2,11 +2,13 @@
 
 Type: task
 Status: open
-Blocked by: 91, 02
+Priority: P3
+Blocked by: 02, 56, 80, 91
 Labels: wayfinder:task
 Map: [Make source-onboarding skills effective](../map.md)
 Skill: [aws-snowflake-operations](../../../skills/aws-snowflake-operations/SKILL.md)
 Step: 2 of 6
+Skill dependencies: data-operations, access-audit
 Applicability: Conditional: onboarding touches AWS, Snowflake, hosted connections, images or deployment.
 
 ## Question
@@ -23,7 +25,11 @@ Start from skills/aws-snowflake-operations/SKILL.md: Data layers, The hosted MDM
 
 ## Prerequisites
 
-[aws-snowflake-operations: Define one responsibility](./91-aws-snowflake-operations-responsibility.md); [data-platform: Reconcile shared rules](./02-data-platform-consistent-rules.md)
+[data-platform: Reconcile shared rules](./02-data-platform-consistent-rules.md); [data-operations: Reconcile shared rules](./56-data-operations-consistent-rules.md); [access-audit: Reconcile shared rules](./80-access-audit-consistent-rules.md); [aws-snowflake-operations: Define one responsibility](./91-aws-snowflake-operations-responsibility.md)
+
+Priority rationale: Hosted expansion follows local qualification and access evidence.
+
+These blockers order skill-improvement work. They do not activate optional source phases or grant operational permission.
 
 ## Acceptance checklist
 

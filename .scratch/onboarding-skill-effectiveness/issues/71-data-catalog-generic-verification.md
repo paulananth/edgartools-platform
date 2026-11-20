@@ -2,11 +2,13 @@
 
 Type: task
 Status: open
-Blocked by: 70, 05
+Priority: P1
+Blocked by: 05, 23, 29, 65, 70
 Labels: wayfinder:task
 Map: [Make source-onboarding skills effective](../map.md)
 Skill: [data-catalog](../../../skills/data-catalog/SKILL.md)
 Step: 5 of 6
+Skill dependencies: data-governance, data-onboarding, data-quality
 Applicability: Every source's business metadata and steward-facing publication.
 
 ## Question
@@ -25,7 +27,11 @@ Coordinate with [Move the business-meaning passages out of the openmetadata skil
 
 ## Prerequisites
 
-[data-catalog: Make progress resumable](./70-data-catalog-resume.md); [data-platform: Specify generic verification](./05-data-platform-generic-verification.md)
+[data-platform: Specify generic verification](./05-data-platform-generic-verification.md); [data-onboarding: Specify generic verification](./23-data-onboarding-generic-verification.md); [data-quality: Specify generic verification](./29-data-quality-generic-verification.md); [data-governance: Specify generic verification](./65-data-governance-generic-verification.md); [data-catalog: Make progress resumable](./70-data-catalog-resume.md)
+
+Priority rationale: Business metadata consumes the model, targets and checks.
+
+These blockers order skill-improvement work. They do not activate optional source phases or grant operational permission.
 
 ## Acceptance checklist
 

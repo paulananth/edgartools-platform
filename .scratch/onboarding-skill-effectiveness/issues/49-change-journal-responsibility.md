@@ -2,11 +2,13 @@
 
 Type: task
 Status: open
-Blocked by: 01
+Priority: P1
+Blocked by: 01, 43
 Labels: wayfinder:task
 Map: [Make source-onboarding skills effective](../map.md)
 Skill: [change-journal](../../../skills/change-journal/SKILL.md)
 Step: 1 of 6
+Skill dependencies: bookkeeping
 Applicability: Every source whose processing or publication produces journal events and delivery receipts.
 
 ## Question
@@ -23,7 +25,11 @@ Start from skills/change-journal/SKILL.md: Skipping and forcing, Required indepe
 
 ## Prerequisites
 
-[data-platform: Define one responsibility](./01-data-platform-responsibility.md)
+[data-platform: Define one responsibility](./01-data-platform-responsibility.md); [bookkeeping: Define one responsibility](./43-bookkeeping-responsibility.md)
+
+Priority rationale: Producer completion and delivery evidence must remain distinct.
+
+These blockers order skill-improvement work. They do not activate optional source phases or grant operational permission.
 
 ## Acceptance checklist
 
