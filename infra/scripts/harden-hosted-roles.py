@@ -30,6 +30,8 @@ GUARDS = {
     "governance": {"limit": 10, "settings": {"statement_timeout": "5min", "idle_in_transaction_session_timeout": "5min",
                                               "pgaudit.log": "write,ddl,role"}},
     "ops_reader": {"limit": 10, "settings": {"statement_timeout": "60s", "idle_in_transaction_session_timeout": "60s"}},
+    # The catalog reader (auto-ontology's catalog-readers.py): SELECT on the exposed tables, nothing else.
+    "discovery_reader": {"limit": 10, "settings": {"statement_timeout": "60s", "idle_in_transaction_session_timeout": "60s"}},
 }
 VALUE = re.compile(r"^[0-9A-Za-z,. ]+$")
 # The stores a managed Snowflake mirror reads, and the system login Snowflake's mirror connects as. PUBLIC holds no CONNECT on

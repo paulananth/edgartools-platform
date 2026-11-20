@@ -62,7 +62,17 @@ and the rest in another db", then "Yes, open the ticket and start, make the skil
       test stores
 - [ ] `rules/exposure.yaml` and `rules/gold/gold.yaml`: one target database, mdm's source schema `mdm`
 - [ ] Prove on the local test server with the two-database layout: init, a small load, links and master ids, the catalog reader
-- [ ] Hosted: the operator's sign-off words, reset, init in the new layout, reload (hours; said before it starts)
+- [x] Hosted: operator "wait for CI then reset hosted" (recorded in reinit-approvals.log). Duty files converted to the two URLs (same
+      logins; the old files kept as `.before-two-urls`); `data` and `control` created; provisioning ("edgar_loader can create nothing
+      in any of the 2 databases"); the mirror login's CONNECT on `data`; the six inits exit 0 (data: mdm 25, public 30, rdm 10
+      tables; control: bookkeeping 5, journal 1, rules 1); RDM 15 versions, 7,378 published codes, equal to the repository's
+      rows; 16 silver tables registered; engine rebuilt; catalog republished and confirmed. The old six databases and their
+      mirrors are kept until the new mirror is read back. 2026-11-19 23:06 ET
+- [ ] Readiness: `discovery_reader` (the catalog reader) held no connection limit (audit CST); the role guards hold it.
+      `tests/unit/test_harden_hosted_roles.py::test_every_login_the_platform_makes_holds_a_connection_limit` failed before
+      ("Extra items in the left set"). Apply after merge, then the gate.
+- [ ] Hosted: the reload (hours; said before it starts)
+- [ ] Hosted: drop the old six databases and their two mirrors (approval), once the new mirror reads back
 - [ ] Hosted: the two mirrors dropped (approval) and one mirror of the data database created and read back
 - [ ] Follow-up ticket: master ids and links as joins inside the data database
 - [ ] Merge the PR when CI is green
