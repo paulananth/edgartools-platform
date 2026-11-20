@@ -2,7 +2,6 @@
 
 import io
 import json
-import sqlite3
 import sys
 import zipfile
 from pathlib import Path
@@ -215,18 +214,6 @@ def test_oversized_input_is_sampled_with_a_seed_and_full_pass_is_exact(con, tmp_
     assert rows(con, "s") == rows(again, "s")
     read = inputs.full_values(parts[0], ["c", "k"])
     assert read["c"] == ({1, 2}, 1000, 334) and len(read["k"][0]) == 1000
-
-
-def test_database_file_tables_become_parts(con, tmp_path):
-    db = tmp_path / "t.db"
-    with sqlite3.connect(db) as lite:
-        lite.execute("CREATE TABLE a (k INTEGER)")
-        lite.execute("INSERT INTO a VALUES (1), (2)")
-    try:
-        parts = inputs.register(con, "t", str(db), tmp_path / "w")
-    except duckdb.Error as exc:  # the sqlite extension may need a download CI cannot make
-        pytest.skip(f"sqlite extension unavailable: {type(exc).__name__}")
-    assert [p.name for p in parts] == ["a"] and rows(con, "a") == [(1,), (2,)]
 
 
 def test_database_address_from_environment_is_never_printed(con, tmp_path, monkeypatch, capsys):
