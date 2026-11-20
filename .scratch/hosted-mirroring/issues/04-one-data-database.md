@@ -86,7 +86,14 @@ and the rest in another db", then "Yes, open the ticket and start, make the skil
       must merge and be proved on this store. 2026-11-20 06:03 ET
 - [ ] Finish under five minutes on this store: rebase `claude/links-reads-one-pass`, merge, rerun `--finish` (hosted is loaded, so the proof is real)
 - [ ] Hosted: drop the old six databases and their two mirrors (approval), once the new mirror reads back
-- [ ] Hosted: the two mirrors dropped (approval) and one mirror of the data database created and read back
+- [x] Hosted: the two old mirrors dropped (operator, approval question: "Drop both, mirror data") and one mirror, `edgartools_mirror_data`, created over
+      the 19 exposed tables (Iceberg, serverless, 60 min) into `DB_EDGARTOOLS_MIRROR`: all 19 tables `REPLICATING` within about 70 min of the
+      create, every row count equal to PostgreSQL's (largest: 5.35 M silver rows, 5.31 M identifiers, `rdm.published_code` 7,378). 2026-11-20 06:14 ET
+- [x] Hosted: the six old per-store databases dropped (operator: "drop the old databases once the new mirror works"; words in the approvals log;
+      names and sizes: mdm 20 GB, silver 4.2 GB, change_journal 467 MB, rdm, rules, bookkeeping under 20 MB). Checked first: no client sessions (only
+      the instance's own extension workers) and no replication slots; after: `data` and `control` hold their schemas and the mirror still replicates. 2026-11-20 06:14 ET
+- [ ] The two old Snowflake target databases (`DB_EDGARTOOLS_MIRROR_MDM`, `DB_EDGARTOOLS_MIRROR_SILVER`) are kept until Gold is repointed at
+      `DB_EDGARTOOLS_MIRROR`: the deployed Gold tables may still select from them, and a drop there is not undoable
 - [ ] Follow-up ticket: master ids and links as joins inside the data database
 - [ ] Merge the PR when CI is green
 - [ ] Learning → skill
