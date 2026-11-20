@@ -65,6 +65,14 @@ a missing URL or one that names no database is refused by name, never guessed. A
 (monitoring, role guards, the reset, the audit) uses `DATA_URL`. Nothing in the product is called a migration: a store has one
 `init`, which makes its schema or brings it to current.
 
+**The data database holds data; anything that says how data is processed is in the control database.** The registered
+rules (the merge rules and the Dataset Contracts under their digests, and their pins) live in the control database's `rules`
+schema, beside `rules_used`, and the merge reads them there by digest; run evidence and build records live in `bookkeeping`.
+The data database keeps its golden records, reference codes and silver rows, the merge's working tables, and the merge's
+progress per file (`mastering_file`, `mastering_delivery`), since a file is marked merged in the same transaction that writes
+its masters. One init stamp records the data database's schema; it keeps no migration history. A table nothing reads or
+writes is deleted from init with its code, never kept empty.
+
 Why two: a managed mirror reads one database, and the instance allows two CDC publications, so the stores consumers read share
 one database and one mirror; the control stores stay apart, so their churn and their grants never reach a consumer.
 

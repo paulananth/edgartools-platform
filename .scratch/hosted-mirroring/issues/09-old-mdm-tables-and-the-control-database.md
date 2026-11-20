@@ -26,8 +26,8 @@ but the merge marks a file done in the same transaction that writes its masters,
 ## Checklist
 
 - [x] Investigate both groups: counts on the hosted data database, the readers and writers on `main`, sorted by waste (table above) 2026-11-20 10:03 ET
-- [ ] Operator decision: the rules registry moves to the control database (recommended), or the registry is dropped and the merge reads the policy from the rules files by digest
-- [ ] Skill first: data-platform (stores) says what the control database holds and that the data database holds data only
+- [x] Operator decision (2026-11-20): the rules registry moves to the control database's `rules` schema ("I recommend moving it to the control database's rules schema. Agreed") 2026-11-20 10:08 ET
+- [x] Skill first: data-platform CONNECTIONS.md says the data database holds data and the control database how it is processed (the registered rules in `rules`, run evidence in `bookkeeping`), one init stamp, no empty table kept; skill lints pass 2026-11-20 10:08 ET
 - [ ] Delete the old engine's tables, views and kind list from init (`mdm/migrations/schema.sql`, the `mdm_store_*` install), with the code that reads them (`mastering/rebuild.py`, `mdm/schema.py` views, the empty-store check)
 - [ ] Move the registry and the build record per the decision; one init stamp in place of the two migration tables
 - [ ] Hosted: re-init per the runbook, counts before and after
