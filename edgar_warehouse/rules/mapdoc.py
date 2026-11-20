@@ -157,16 +157,18 @@ def _kind_of(adapter: dict) -> str:
     return _text((adapter.get("classification") or {}).get("kind"))
 
 
-def winners(policy: dict, root: Path) -> dict[str, dict[str, tuple[list[str], list[str]]]]:
+def winners(policy: dict, root: Path, sources: dict[Path, dict] | None = None) -> dict[str, dict[str, tuple[list[str], list[str]]]]:
     """kind -> MDM field -> (the datasets that fill it, first wins; the sheet
     row: those datasets, the winner, which rule orders them, its path), as
     the merge engine picks a winner
     (`survivorship._select_values`): a field with its own rule
     (`fields.<name>`) takes the kind's `defaults` and changes any part of
     it, its source order included; every other field takes the default."""
+    if sources is None:
+        sources = {path: files.load_source(path) for path in sorted((root / "sources").glob("*/source.yaml"))}
     filled: dict[str, set] = defaultdict(set)
-    for path in sorted((root / "sources").glob("*/source.yaml")):
-        for code, entry in (files.load_source(path).get("dataset_contracts") or {}).items():
+    for body in sources.values():
+        for code, entry in (body.get("dataset_contracts") or {}).items():
             for field in mapped((entry.get("contract") or {}).get("adapter") or {}, "fields"):
                 filled[field].add(code)
     found: dict[str, dict] = {}
@@ -215,7 +217,8 @@ def custom_parsing(read: dict) -> list[list[str]]:
     return rows
 
 
-def _source_sheets(name: str, body: dict, policy: dict, root: Path) -> dict[str, list[list[str]]]:
+def _source_sheets(name: str, body: dict, policy: dict, root: Path,
+                   by_kind: dict | None = None) -> dict[str, list[list[str]]]:
     about = [["What", "Value"], ["How to change this", HOW_TO_CHANGE], ["Source", name],
              ["Captured files (bronze family)", _text((body.get("bronze") or {}).get("family"))]]
     fields = [["Dataset", "MDM field", "Part", "Source path", "Used for", "Rules path"]]
@@ -233,7 +236,8 @@ def _source_sheets(name: str, body: dict, policy: dict, root: Path) -> dict[str,
                 if rule.get("family") == "binding" and rule.get("source") in (None, code)
                 for n in binding_namespaces(rule)}
 
-    by_kind = winners(policy, root)
+    if by_kind is None:
+        by_kind = winners(policy, root)
     for code, entry in (body.get("dataset_contracts") or {}).items():
         contract = entry.get("contract") or {}
         adapter = contract.get("adapter") or {}
@@ -436,13 +440,13 @@ def documents(root: Path | None = None) -> dict[Path, tuple[str, dict[str, list[
     source or kind it describes, its sheets, and the rules files behind it."""
     root = root or files.ROOT
     policy = files.policy(root)
-    by_kind = winners(policy, root)
+    sources = {path: files.load_source(path) for path in sorted((root / "sources").glob("*/source.yaml"))}
+    by_kind = winners(policy, root, sources)
     found: dict[Path, tuple] = {}
-    for path in sorted((root / "sources").glob("*/source.yaml")):
-        body = files.load_source(path)
+    for path, body in sources.items():
         name = path.parent.name
         found[path.parent / "MAPPING.xlsx"] = (
-            name, {**_source_sheets(name, body, policy, root), **pipeline_sheets(body)},
+            name, {**_source_sheets(name, body, policy, root, by_kind), **pipeline_sheets(body)},
             [path, path.parent / "quality.yaml"])
     for path in sorted((root / "pipelines").glob("*/pipeline.yaml")):
         body = files.load(path)
