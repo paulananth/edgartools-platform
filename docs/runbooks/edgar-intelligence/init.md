@@ -272,4 +272,8 @@ serverless apply, a refresh every 10 minutes, created after the load ends so the
 would also work and replicate as the load runs). A target name cannot be reused, so a mirror that is dropped and made again takes a new name (add a suffix).
 The reset of 2026-11-19 found no mirror in the account, so none had to be dropped first.
 
+The Snowflake database names are in `rules/snowflake.yaml`, nowhere else. A target database cannot be renamed (the managed mirror owns it), so a new
+name means a new mirror: create it beside the old one, wait until every table reads `REPLICATING` with equal counts, change the name in
+`rules/snowflake.yaml`, then `DROP_MIRROR(<old mirror>, TRUE)` ([HOSTED-MIRRORING](../../../skills/data-platform/HOSTED-MIRRORING.md)).
+
 A store **reset** (step 2) breaks a mirror: the guide says what to plan first. Before a reset, list the mirrors (`SHOW DATABASES LIKE '%MIRROR%'`, read-only).

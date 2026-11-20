@@ -10,6 +10,10 @@ from datetime import date
 import pytest
 
 from edgar_warehouse.gold import views
+from edgar_warehouse.rules import files
+
+NAMES = files.load(files.ROOT / "snowflake.yaml")
+DEST, MIRROR = NAMES["gold"]["database"], NAMES["mirror"]["database"]
 
 
 def body(entity, kind, name, canonical=None, status="active"):
@@ -127,11 +131,11 @@ def test_the_calendar_has_one_row_per_day(db):
 
 def test_the_snowflake_text_is_qualified_reads_the_mirror_and_replaces_a_view():
     text = views.render()
-    assert text["master"].startswith("CREATE OR REPLACE VIEW DB_EDGARTOOLS_GOLD.GOLD.master AS")
-    assert "FROM DB_EDGARTOOLS_MIRROR.MDM.mastering_master" in text["master"]
+    assert text["master"].startswith(f"CREATE OR REPLACE VIEW {DEST}.GOLD.master AS")
+    assert f"FROM {MIRROR}.MDM.mastering_master" in text["master"]
     assert "SELECT entity_id, canonical_id, kind, status," in text["master"]  # columns, never parsed from the body
     assert "PARSE_JSON(body):fields.name.value::VARCHAR" in text["master"] and "PARSE_JSON(body):kind" not in text["master"]
-    assert "DB_EDGARTOOLS_MIRROR.SILVER.thirteenf_holding s" in text["fact_thirteenf_holding"]
+    assert f"{MIRROR}.SILVER.thirteenf_holding s" in text["fact_thirteenf_holding"]
     assert list(text)[0] == "master"
     assert "DATEADD(day, 1, day)" in text["dim_date"]
 
@@ -147,8 +151,8 @@ def test_each_object_is_one_dbt_view_that_reads_the_mirror_through_source_and_go
 
 def test_the_dbt_sources_name_the_mirror_database_and_only_the_tables_the_views_read():
     found = {s["name"]: (s["database"], s["schema"], [t["name"] for t in s["tables"]]) for s in views.sources()["sources"]}
-    assert found["silver"] == ("DB_EDGARTOOLS_MIRROR", "SILVER", ["thirteenf_filing", "thirteenf_holding"])
-    assert found["mdm"] == ("DB_EDGARTOOLS_MIRROR", "MDM", ["mastering_identifier", "mastering_master"])
+    assert found["silver"] == (MIRROR, "SILVER", ["thirteenf_filing", "thirteenf_holding"])
+    assert found["mdm"] == (MIRROR, "MDM", ["mastering_identifier", "mastering_master"])
 
 
 def test_the_project_is_written_from_the_configuration_and_a_dropped_view_is_dropped(tmp_path):
@@ -157,4 +161,23 @@ def test_the_project_is_written_from_the_configuration_and_a_dropped_view_is_dro
     written = views.write_project(tmp_path)
     assert written == sorted(f"{item['name']}.sql" for item in views.load()["objects"])
     assert not (tmp_path / "models" / "old_view.sql").exists()
-    assert "DB_EDGARTOOLS_MIRROR" in (tmp_path / "models" / "sources.yml").read_text()
+    assert MIRROR in (tmp_path / "models" / "sources.yml").read_text()
+
+
+def test_each_database_is_named_once_and_the_committed_dbt_profile_follows_it():
+    config = views.load()
+    assert config["mirror"]["database"] == MIRROR
+    assert "database" not in files.load(views.CONFIG)["mirror"] and "destination" not in files.load(views.CONFIG)
+    assert "database" not in files.load(files.ROOT / "exposure.yaml")["target"]
+    committed = (files.ROOT.parent / "infra" / "dbt" / "gold" / "profiles.yml").read_text()
+    assert views.profile(committed) == committed
+    assert f"database: {DEST}" in committed
+    renamed = views.profile(committed, {"destination": {"database": "RENAMED_GOLD", "schema": "RENAMED"}})
+    assert "database: RENAMED_GOLD" in renamed and "schema: RENAMED" in renamed and DEST not in renamed.split("outputs:")[1]
+
+
+def test_the_exposure_scripts_take_the_mirror_name_from_the_same_file():
+    import sys
+    sys.path.insert(0, str(files.ROOT.parent / "skills" / "data-platform" / "scripts" / "exposure"))
+    import exposure_manifest
+    assert exposure_manifest.load_config(files.ROOT / "exposure.yaml")["target"]["database"] == MIRROR

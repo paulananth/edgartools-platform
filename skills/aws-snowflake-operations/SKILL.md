@@ -35,8 +35,8 @@ No dev environment exists on AWS or on Snowflake; a command that targets dev has
 | **Merge Stage and MDM** | PostgreSQL 16 (local, or Snowflake Postgres when hosted) | Pre-merge records wait in the Merge Stage; the golden record is in MDM. |
 | **RDM** | PostgreSQL 16 | Code sets and their versions. |
 | **Silver** | PostgreSQL 16, written by `edgar_warehouse/silver_writer/` | Every detail of each source, typed and keyed. |
-| **Mirror** | Snowflake `DB_EDGARTOOLS_MIRROR` (target design) | One managed Postgres mirror database with Snowflake-managed Iceberg tables for approved final MDM, RDM and Silver outputs. Consumers read it; the mirror owns writes. |
-| **Gold** | Snowflake writable destination; database/schema names await approval | Use dbt when consumption requirements need transformations of approved mirror inputs. Direct mirror reads do not need dbt. Gold writes outside the managed mirror database. |
+| **Mirror** | Snowflake mirror database (named in `rules/snowflake.yaml`) | One managed Postgres mirror database with Snowflake-managed Iceberg tables for approved final MDM, RDM and Silver outputs. Consumers read it; the mirror owns writes. |
+| **Gold** | Snowflake writable destination (database and schema named in `rules/snowflake.yaml`) | Use dbt when consumption requirements need transformations of approved mirror inputs. Direct mirror reads do not need dbt. Gold writes outside the managed mirror database. |
 
 The mirror supports direct read-only consumption, with dbt Gold on top when
 required by consumption requirements. This is not a claim that

@@ -92,8 +92,17 @@ and the rest in another db", then "Yes, open the ticket and start, make the skil
 - [x] Hosted: the six old per-store databases dropped (operator: "drop the old databases once the new mirror works"; words in the approvals log;
       names and sizes: mdm 20 GB, silver 4.2 GB, change_journal 467 MB, rdm, rules, bookkeeping under 20 MB). Checked first: no client sessions (only
       the instance's own extension workers) and no replication slots; after: `data` and `control` hold their schemas and the mirror still replicates. 2026-11-20 06:14 ET
-- [ ] The two old Snowflake target databases (`DB_EDGARTOOLS_MIRROR_MDM`, `DB_EDGARTOOLS_MIRROR_SILVER`) are kept until Gold is repointed at
+- [ ] ~~The two old Snowflake target databases (`DB_EDGARTOOLS_MIRROR_MDM`, `DB_EDGARTOOLS_MIRROR_SILVER`) are kept until Gold is repointed~~ moved to the orphan-target part above: Gold was empty, the drop was refused at
       `DB_EDGARTOOLS_MIRROR`: the deployed Gold tables may still select from them, and a drop there is not undoable
+- [x] The Snowflake database names are configuration in one file, `rules/snowflake.yaml` (operator, 2026-11-20 06:59 ET: "must be on a single place not over multiple files"); the exposure script, the Gold views, the dbt profile and the Terraform grants read it; verified by `tests/unit/test_gold_views.py` (205 passed with the exposure tests) and a Terraform read of the file
+- [ ] Rename the two kept databases (drop the `DB_` prefix) and drop the two old targets: waits for the operator's ANANP11 words; after it, a one-line change per name in `rules/snowflake.yaml`
+- [x] Documentation first: the rename procedure (no rename of a mirror target; create beside, verify, switch the name, `DROP_MIRROR(..., TRUE)`; an orphan target needs Snowflake support) is in `skills/data-platform/HOSTED-MIRRORING.md` and the init runbook before the steps run. 2026-11-20 07:10 ET
+- [x] ANANP11 used once (operator, 2026-11-20: "use ANANP11 once, move forward if you need to recreate mirror or gold if rename is not possible"; words in the approvals log): `DB_EDGARTOOLS_GOLD` renamed to `EDGARTOOLS_GOLD` (it was empty). 2026-11-20 07:10 ET
+- [x] Mirror target rename refused (owner is the managed mirror); `edgartools_mirror` created into `EDGARTOOLS_MIRROR` beside `edgartools_mirror_data` (19 tables, Iceberg, 60 min, same as the old). 2026-11-20 07:10 ET
+- [x] The procedure is encoded: `skills/data-platform/scripts/exposure/mirror_sql.py` (operator, 2026-11-20 07:10 ET: "encode it in skill"), tested by `tests/unit/test_exposure_mirror_sql.py`; its table list equals the live mirror's 19
+- [ ] All 19 tables of `edgartools_mirror` `REPLICATING` with counts equal to PostgreSQL's and to the old mirror's
+- [ ] `rules/snowflake.yaml` names `EDGARTOOLS_MIRROR` and `EDGARTOOLS_GOLD`; then `DROP_MIRROR('edgartools_mirror_data', TRUE)`
+- [ ] The orphan targets `DB_EDGARTOOLS_MIRROR_MDM` and `DB_EDGARTOOLS_MIRROR_SILVER` (neither role may drop them): a Snowflake support request, which the operator sends
 - [ ] Follow-up ticket: master ids and links as joins inside the data database
 - [ ] Merge the PR when CI is green
 - [ ] Learning → skill

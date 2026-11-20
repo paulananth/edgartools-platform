@@ -6,6 +6,7 @@ an invented fixture. Nothing here connects to a database or creates an object.
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from edgar_warehouse.rules import files
@@ -31,7 +32,11 @@ DIALECTS = {
 
 
 def load(path: Path = CONFIG) -> dict:
-    return files.load(path)
+    """The Gold configuration, with the database names of rules/snowflake.yaml."""
+    config, names = files.load(path), files.load(files.ROOT / "snowflake.yaml")
+    config["destination"] = dict(names["gold"])
+    config["mirror"]["database"] = names["mirror"]["database"]
+    return config
 
 
 class Context:
@@ -172,8 +177,16 @@ def sources(config: dict | None = None) -> dict:
          "tables": [{"name": table} for table in sorted(tables)]} for layer, tables in sorted(read.items())]}
 
 
+def profile(text: str, config: dict | None = None) -> str:
+    """The dbt profile text with the destination database and schema taken from the configuration."""
+    config = config or load()
+    for key in ("database", "schema"):
+        text = re.sub(rf"(?m)^(\s+{key}: ).*$", lambda m: m.group(1) + config["destination"][key], text)
+    return text
+
+
 def write_project(folder: Path, config: dict | None = None) -> list[str]:
-    """Write the dbt models and sources into `folder/models`: the names written. The folder's dbt_project.yml and profiles.yml are committed."""
+    """Write the dbt models, sources and profile into `folder`: the models written. Only dbt_project.yml is committed alone."""
     models = Path(folder) / "models"
     models.mkdir(parents=True, exist_ok=True)
     for stale in models.glob("*.sql"):  # a view dropped from the configuration is dropped from the project
@@ -183,6 +196,9 @@ def write_project(folder: Path, config: dict | None = None) -> list[str]:
         (models / name).write_text(text)
         written.append(name)
     (models / "sources.yml").write_text(files.dumps(sources(config)))
+    profiles = Path(folder) / "profiles.yml"
+    if profiles.exists():
+        profiles.write_text(profile(profiles.read_text(), config))
     return sorted(written)
 
 

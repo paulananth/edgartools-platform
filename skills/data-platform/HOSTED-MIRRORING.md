@@ -128,6 +128,17 @@ is 2, which `POSTGRES_SETTINGS` does not accept ("Unrecognized Postgres setting"
 to raise it; until then, choose the two the readers need first. Read the limit and the publications held before a create
 (`show snowflake_cdc.max_publications`, `pg_publication` in each mirrored database).
 
+**Database names are configuration** (`rules/snowflake.yaml`, one block per part); no script, profile or grant repeats one.
+
+**A target database cannot be renamed, and an orphan cannot be dropped.** The managed mirror owns its target: `ALTER DATABASE ... RENAME`
+and `DROP DATABASE` are refused for the administrator and for the mirror operator alike ("must have OWNERSHIP"). A target left behind
+by `DROP_MIRROR(<mirror>, FALSE)` has no mirror to drop it any more; neither role could drop it, so ask Snowflake support. So:
+- rename by recreating, with `scripts/exposure/mirror_sql.py` (it writes the `CREATE_MIRROR`, `LIST_MIRRORED_TABLES` and `DROP_MIRROR` text from
+  `rules/exposure.yaml` and `rules/snowflake.yaml`, so no call is typed by hand): `CREATE_MIRROR` (the skill's SETUP) with the new target name and a new mirror name, as the mirror operator, while
+  the old mirror still replicates (an instance holds two); when every table reads `REPLICATING` with equal counts, move the readers and
+  the configuration, then `DROP_MIRROR(<old mirror>, TRUE)` so its target goes with it;
+- always drop a mirror with the second argument `TRUE`, never `FALSE`.
+
 A mirror's target schema takes the source schema's name in upper case (`rdm` gives `RDM`, `public` gives `PUBLIC`), so
 the readers of a mirror name the target database and that schema.
 
