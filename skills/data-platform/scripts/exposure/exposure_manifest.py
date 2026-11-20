@@ -136,7 +136,7 @@ def load_config(path: Path) -> dict:
     config = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
     names = Path(path).parent / "snowflake.yaml"  # the database names are kept in one file
     if names.exists() and isinstance(config.get("target"), dict):
-        config["target"].setdefault("database", yaml.safe_load(names.read_text(encoding="utf-8"))["mirror"])
+        config["target"].setdefault("database", yaml.safe_load(names.read_text(encoding="utf-8"))["mirror"]["database"])
     return config
 
 

@@ -34,7 +34,8 @@ DIALECTS = {
 def load(path: Path = CONFIG) -> dict:
     """The Gold configuration, with the database names of rules/snowflake.yaml."""
     config, names = files.load(path), files.load(files.ROOT / "snowflake.yaml")
-    config["destination"]["database"], config["mirror"]["database"] = names["gold"], names["mirror"]
+    config["destination"] = dict(names["gold"])
+    config["mirror"]["database"] = names["mirror"]["database"]
     return config
 
 
@@ -177,9 +178,11 @@ def sources(config: dict | None = None) -> dict:
 
 
 def profile(text: str, config: dict | None = None) -> str:
-    """The dbt profile text with the destination database taken from the configuration."""
+    """The dbt profile text with the destination database and schema taken from the configuration."""
     config = config or load()
-    return re.sub(r"(?m)^(\s+database: ).*$", lambda m: m.group(1) + config["destination"]["database"], text)
+    for key in ("database", "schema"):
+        text = re.sub(rf"(?m)^(\s+{key}: ).*$", lambda m: m.group(1) + config["destination"][key], text)
+    return text
 
 
 def write_project(folder: Path, config: dict | None = None) -> list[str]:

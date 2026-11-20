@@ -5,9 +5,8 @@ version: gold-first-build.holdings-by-manager-security-quarter
 
 # The writable destination the operator approved, and the mirror it reads. The destination's existing contents are
 # not yet checked (ticket 05): nothing is created until they are.
-destination:               # the database is `gold` in rules/snowflake.yaml
-  schema: GOLD
-# The mirror's database is `mirror` in rules/snowflake.yaml.
+# The destination's database and schema are `gold` in rules/snowflake.yaml.
+# The mirror's database is `mirror.database` in rules/snowflake.yaml.
 mirror:
   schemas: {mdm: MDM, silver: SILVER, rdm: RDM}
   body_type: text            # UNVERIFIED: whether the mirror carries mastering_master.body as text or as a variant

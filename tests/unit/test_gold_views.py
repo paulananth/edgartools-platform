@@ -13,7 +13,7 @@ from edgar_warehouse.gold import views
 from edgar_warehouse.rules import files
 
 NAMES = files.load(files.ROOT / "snowflake.yaml")
-DEST, MIRROR = NAMES["gold"], NAMES["mirror"]
+DEST, MIRROR = NAMES["gold"]["database"], NAMES["mirror"]["database"]
 
 
 def body(entity, kind, name, canonical=None, status="active"):
@@ -167,13 +167,13 @@ def test_the_project_is_written_from_the_configuration_and_a_dropped_view_is_dro
 def test_each_database_is_named_once_and_the_committed_dbt_profile_follows_it():
     config = views.load()
     assert config["mirror"]["database"] == MIRROR
-    assert "database" not in files.load(views.CONFIG)["mirror"] and "database" not in files.load(views.CONFIG)["destination"]
+    assert "database" not in files.load(views.CONFIG)["mirror"] and "destination" not in files.load(views.CONFIG)
     assert "database" not in files.load(files.ROOT / "exposure.yaml")["target"]
     committed = (files.ROOT.parent / "infra" / "dbt" / "gold" / "profiles.yml").read_text()
     assert views.profile(committed) == committed
     assert f"database: {DEST}" in committed
-    renamed = views.profile(committed, {"destination": {"database": "RENAMED_GOLD"}})
-    assert "database: RENAMED_GOLD" in renamed and DEST not in renamed.split("outputs:")[1]
+    renamed = views.profile(committed, {"destination": {"database": "RENAMED_GOLD", "schema": "RENAMED"}})
+    assert "database: RENAMED_GOLD" in renamed and "schema: RENAMED" in renamed and DEST not in renamed.split("outputs:")[1]
 
 
 def test_the_exposure_scripts_take_the_mirror_name_from_the_same_file():

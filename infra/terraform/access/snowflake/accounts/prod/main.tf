@@ -126,7 +126,7 @@ resource "snowflake_grant_privileges_to_account_role" "auditor_warehouse" {
 # no data (REFERENCES shows a table to the role without reading a row).
 # Named once, in rules/snowflake.yaml; a renamed database is a one-line change there.
 locals {
-  gold_database = yamldecode(file("${path.module}/../../../../../../rules/snowflake.yaml")).gold
+  gold_database = yamldecode(file("${path.module}/../../../../../../rules/snowflake.yaml")).gold.database
 }
 
 resource "snowflake_grant_privileges_to_account_role" "auditor_gold_database" {
