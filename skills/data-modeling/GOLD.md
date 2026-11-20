@@ -164,8 +164,16 @@ the spec alone cannot make (a date or a manager taken from a parent table) is wr
 configuration, and the spec's generated fact gives way to it. Each dimension a link names is configured. The mirror then
 carries what these views read ([HOSTED-MIRRORING](../data-platform/HOSTED-MIRRORING.md)).
 
+**RDM publishes one view per code set.** Every code set RDM has published (each folder of `rules/reference/published/`)
+gets its own Gold view, `ref_<code set>`, of that code set's codes, made from that list over the mirrored
+`rdm.published_code`, never written by hand. A reader names the code set it means and never filters a mixed table by
+`code_set`. **A code set keeps exactly one version** (version 1.0: git holds what came before): its folder holds one
+version, and the view selects that version by name, so no other row can reach it. A new version replaces the old
+folder in the change that publishes it; a retired code set loses its folder, and its view goes with it. The views
+refuse a folder with more than one version.
+
 **KISS in shapes:** the fewest objects that answer the questions. One fact view per silver grain; one base view of the
-masters with a thin view per kind on it; one view of the published codes; one date dimension. No surrogate keys (the
+masters with a thin view per kind on it; one view per published code set; one date dimension. No surrogate keys (the
 master id is the key), no history dimension until a named business date needs it, no bridge until its rows are counted
 and a question needs it, no junk or outrigger dimension, no wide table, no aggregate, no snapshot copy. A new object is a
 decision recorded against a requirement, never a default.

@@ -221,3 +221,39 @@ def test_a_generated_fact_resolves_its_links_and_dates_on_rows():
         conn.execute(statements[name])
     rows = conn.execute(f"select accession_number, filer_key, event_date, recorded_date from {item['name']} order by 1").fetchall()
     assert rows == [("a1", "c1", "2026-01-02", "2026-01-03"), ("a2", config["members"]["unknown"], "2026-01-04", "2026-01-05")]
+
+
+def test_rdm_publishes_one_view_per_published_code_set():
+    views_by_set = {i["code_set"]: i["name"] for i in views.load()["objects"] if i["kind"] == "code_set"}
+    published = sorted(d.name for d in (files.ROOT / "reference" / "published").iterdir() if d.is_dir())
+    assert sorted(views_by_set) == published
+    assert views_by_set["sec-place-types"] == "ref_sec_place_types"
+
+
+def test_every_published_code_set_holds_exactly_one_version():
+    folders = [d for d in (files.ROOT / "reference" / "published").iterdir() if d.is_dir()]
+    assert {d.name: len([v for v in d.iterdir() if v.is_dir()]) for d in folders} == {d.name: 1 for d in folders}
+
+
+def test_a_code_set_view_selects_its_one_version_by_name():
+    config = views.load()
+    item = next(i for i in config["objects"] if i["name"] == "ref_sec_place_types")
+    conn = sqlite3.connect(":memory:")
+    conn.execute(f"create table published_code (code_set text, {', '.join(item['columns'])})")
+    rest = [c for c in item["columns"] if c not in ("code", "label", "version")]
+    conn.executemany(f"insert into published_code (code_set, code, label, version, {', '.join(rest)}) "
+                     f"values (?, ?, ?, ?, {', '.join('?' * len(rest))})", [
+        ("sec-place-types", "A", "Kept", item["version"], *[None] * len(rest)),
+        ("sec-place-types", "A", "Left over", "an-older-version", *[None] * len(rest)),   # a stale row never reaches it
+        ("another-set", "Z", "Other", item["version"], *[None] * len(rest))])
+    conn.execute(views.render(dialect="sqlite", qualify=False)[item["name"]])
+    assert conn.execute(f"select code, label from {item['name']}").fetchall() == [("A", "Kept")]
+
+
+def test_a_code_set_with_two_versions_is_refused(tmp_path, monkeypatch):
+    for version in ("1", "2"):
+        (tmp_path / "reference" / "published" / "invented-set" / version).mkdir(parents=True)
+    monkeypatch.setattr(views.files, "ROOT", tmp_path)
+    with pytest.raises(ValueError, match="invented-set holds 2 versions"):
+        views.code_set_views({"code_sets": {"published": "reference/published", "name": "ref_{code_set}", "source": "rdm.x",
+                                            "columns": ["code"], "requirement": "r"}})

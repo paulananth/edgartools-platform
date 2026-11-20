@@ -13,7 +13,8 @@ certification alone is insufficient. Identify the actual physical relation
 and its consumer contract; a logical catalog asset is not proof that relation
 exists. A table whose name includes master is not automatically eligible.
 RDM's tables hold draft versions beside published ones, so none of them is final: its final output is `rdm.published_code`, written once when
-a version is published (the published-only form of the `rdm.code_context` view, which a mirror cannot carry).
+a version is published (the published-only form of the `rdm.code_context` view, which a mirror cannot carry). The mirror
+carries it, and Gold publishes one view per code set over it ([data-modeling GOLD.md](../data-modeling/GOLD.md)).
 
 For every selected table, configuration must state its store connection key,
 database/schema/table identity, final-output role and exposure eligibility.

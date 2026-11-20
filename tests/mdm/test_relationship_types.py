@@ -145,65 +145,18 @@ def test_every_capacity_a_contract_states_is_one_its_type_has():
         assert capacity in types[type_name].get("capacities", []), (type_name, capacity)
 
 
-def test_version_2_of_the_code_set_adds_only_the_other_capacity():
-    # Both versions are read from RDM by their pins (ticket 188); no second copy of the table is kept here.
-    from edgar_warehouse.mdm.evidence import KINDS
-    from edgar_warehouse.rules.source_engine import prepare_relationship_types
-
-    pin = {**files.reference_pin("mdm-relationship-types"), "version": "2",
-           "sha256": "0ef43fd1905cb62d323acebfdfb341702c78e96e4670952d7c9dbdb074662078"}
-    first = {**pin, "version": "1", "sha256": "9a0a3525e9427ab88405240a81b85be9d89a54c540b0c53770bdd269df7c4d33"}
-    before = prepare_relationship_types(files.published_reference(first), sorted(KINDS))
-    after = prepare_relationship_types(files.published_reference(pin), sorted(KINDS))
-    assert set(before) == set(after)
-    assert {n for n in after if after[n] != before[n]} == {"EMPLOYED_BY"}
-    assert after["EMPLOYED_BY"]["capacities"] == [*before["EMPLOYED_BY"]["capacities"], "other"]
-    assert {k: v for k, v in after["EMPLOYED_BY"].items() if k != "capacities"} == \
-           {k: v for k, v in before["EMPLOYED_BY"].items() if k != "capacities"}
-
-
-VERSION_3 = "4d9f696384fb3aa72aa0fa9b7dff6a3a22450d010488e6af580dca4658c94e70"
-VERSION_4 = "8ab302e8a54160a858200e8d887f7b97539952be7060270b6af7126476af1a71"
-
-
-def test_version_3_of_the_code_set_adds_only_one_issuer_to_issued_by():
-    """Ticket 24 (operator, 2026-11-04): a Security has one issuer at a time."""
-    from edgar_warehouse.mdm.evidence import KINDS
-    from edgar_warehouse.rules.source_engine import prepare_relationship_types
-
-    pin = {**files.reference_pin("mdm-relationship-types"), "version": "3", "sha256": VERSION_3}
-    second = {**pin, "version": "2", "sha256": "0ef43fd1905cb62d323acebfdfb341702c78e96e4670952d7c9dbdb074662078"}
-    before = prepare_relationship_types(files.published_reference(second), sorted(KINDS))
-    after = prepare_relationship_types(files.published_reference(pin), sorted(KINDS))
-    assert set(before) == set(after)
-    assert {n for n in after if after[n] != before[n]} == {"ISSUED_BY"}
-    assert after["ISSUED_BY"] == {**before["ISSUED_BY"], "one_target": True}
-
-
-def test_version_4_of_the_code_set_adds_only_the_related_person():
-    """Operator, 2026-11-08: "RELATED_PERSON (Recommended)", Form ADV's own term (Schedule D 7.A)."""
-    from edgar_warehouse.mdm.evidence import KINDS
-    from edgar_warehouse.rules.source_engine import prepare_relationship_types
-
-    pin = {**files.reference_pin("mdm-relationship-types"), "version": "4", "sha256": VERSION_4}
-    third = {**pin, "version": "3", "sha256": VERSION_3}
-    before = prepare_relationship_types(files.published_reference(third), sorted(KINDS))
-    after = prepare_relationship_types(files.published_reference(pin), sorted(KINDS))
-    assert set(after) - set(before) == {"RELATED_PERSON"}
-    assert all(after[n] == before[n] for n in before)
-    assert (after["RELATED_PERSON"]["from"], after["RELATED_PERSON"]["to"]) == (["company"], ["company"])
-
-
-def test_version_5_of_the_code_set_adds_only_the_adviser_capacities():
-    """N-CEN's own adviser types as capacities of INVESTMENT_ADVISER_TO (operator, 2026-11-14: "yes")."""
+def test_the_one_version_of_the_code_set_holds_each_approved_change():
+    """A code set keeps one version (git holds what came before); each ruling it carries is stated here:
+    EMPLOYED_BY's capacity `other`; one issuer per Security (ticket 24, operator, 2026-11-04); RELATED_PERSON, Form ADV's
+    own term (operator, 2026-11-08); INVESTMENT_ADVISER_TO's N-CEN capacities (operator, 2026-11-14: "yes")."""
     from edgar_warehouse.mdm.evidence import KINDS
     from edgar_warehouse.rules.source_engine import prepare_relationship_types
 
     pin = files.reference_pin("mdm-relationship-types")
-    assert pin["version"] == "5"
-    fourth = {**pin, "version": "4", "sha256": VERSION_4}
-    before = prepare_relationship_types(files.published_reference(fourth), sorted(KINDS))
-    after = prepare_relationship_types(files.published_reference(pin), sorted(KINDS))
-    assert set(after) == set(before)
-    assert {n for n in before if after[n] != before[n]} == {"INVESTMENT_ADVISER_TO"}
-    assert after["INVESTMENT_ADVISER_TO"] == {**before["INVESTMENT_ADVISER_TO"], "capacities": ["advisor", "subadvisor"]}
+    folders = [v.name for v in (files.ROOT / "reference" / "published" / "mdm-relationship-types").iterdir() if v.is_dir()]
+    assert folders == [pin["version"]]
+    types = prepare_relationship_types(files.published_reference(pin), sorted(KINDS))
+    assert "other" in types["EMPLOYED_BY"]["capacities"]
+    assert types["ISSUED_BY"]["one_target"] is True
+    assert (types["RELATED_PERSON"]["from"], types["RELATED_PERSON"]["to"]) == (["company"], ["company"])
+    assert types["INVESTMENT_ADVISER_TO"]["capacities"] == ["advisor", "subadvisor"]

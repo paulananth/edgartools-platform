@@ -124,28 +124,16 @@ WORDS = {
         usage=[("mdm", "relationship", "type", "exact")],
         hints=[("meaning", "A type's properties: from and to (the kinds at each end), from_profile and to_profile, "
                            "hierarchy, cycles, one_parent, one_target, ultimate_parent and ultimate_type, keeps_start, ends_parent_links.")],
-        versions={"1": ("claude (ticket 132)", "Use RDM for keeping types and other information; "
-                                               "Add code properties to RDM (Recommended)"),
-                  "2": ("claude (ticket 182)", None),
-                  "3": ("claude (ticket 24)", "This can't be true \"Security with two issuers keep two ISSUED_BY links\" "
-                                              "fix the root cause"),
-                  "4": ("claude (Form ADV related persons)", "RELATED_PERSON (Recommended)"),
-                  "5": ("claude (ticket 234, N-CEN adviser types)",
+        versions={"5": ("claude (ticket 234, N-CEN adviser types)",
                         "Question: should the two capacities of INVESTMENT_ADVISER_TO be named with N-CEN's own "
                         "terms, advisor and subadvisor, labelled \"Advisor\" and \"Subadvisor\" as the data set "
                         "writes them? yes but any type must also be added to rdm maybe this should be in data "
                         "modeling skill")}),
-    "mdm-relationship-types-before-real-names": dict(
-        name="MDM relationship types before the real names",
-        definition="The table of relationship types as the operator approved it before the types took their real "
-                   "names; the test layer that rebuilds that approval reads it.",
-        authority="internal", ticket="188",
-        versions={"1": ("claude (ticket 188)", None)}),
 }
 # Crosswalk targets must be held before the set that points at them.
 ORDER = ["sec-place-types", "sec-place-codes", "sec-ownership-transaction-codes", "openfigi-country-composite",
          "iso-10383-mic", "nport-filed-currencies", "sec-sic-codes", "financial-line-items", "corporate-tax-rates",
-         "mdm-relationship-types", "mdm-relationship-types-before-real-names"]
+         "mdm-relationship-types"]
 CODE_KEYS = ("code", "label", "definition", "parent_code", "valid_from", "valid_to", "status", "invalid_reason",
              "value", "unit", "properties")
 
