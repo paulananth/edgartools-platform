@@ -138,9 +138,12 @@ to raise it; until then, choose the two the readers need first. Read the limit a
 
 **Database names are configuration** (`rules/snowflake.yaml`, one block per part); no script, profile or grant repeats one.
 
-**A target database cannot be renamed, and an orphan cannot be dropped.** The managed mirror owns its target: `ALTER DATABASE ... RENAME`
-and `DROP DATABASE` are refused for the administrator and for the mirror operator alike ("must have OWNERSHIP"). A target left behind
-by `DROP_MIRROR(<mirror>, FALSE)` has no mirror to drop it any more; neither role could drop it, so ask Snowflake support. So:
+**A live target is owned by the Snowflake application, not by the owner role; an orphan can be moved and dropped.** Proved on a probe mirror: while a mirror
+replicates (active or suspended) `GRANT OWNERSHIP` on its target is refused ("cannot be transferred while the mirror is active"), `CREATE_MIRROR` refuses a
+database that already exists (even one the mirror operator owns, so ownership cannot be arranged in advance), and `ALTER DATABASE ... RENAME` and
+`DROP DATABASE` are refused for the administrator and for the mirror operator ("must have OWNERSHIP"). A target left by
+`DROP_MIRROR(<mirror>, FALSE)` has no mirror, and the administrator can then `GRANT OWNERSHIP ON DATABASE <name> TO ROLE <owner role>` (without `COPY CURRENT GRANTS`, which
+is refused for an application-owned object; the mirror operator alone gets "Insufficient privileges") and the owner role drops it: no support request. So:
 - rename by recreating, with `scripts/exposure/mirror_sql.py` (it writes the `CREATE_MIRROR`, `ALTER_MIRROR`, `LIST_MIRRORED_TABLES` and `DROP_MIRROR`
   text from the Gold project's sources file, `rules/exposure.yaml` and `rules/snowflake.yaml`, so no call is typed by hand): `CREATE_MIRROR` (the skill's SETUP) with the new target name and a new mirror name, as the mirror operator, while
   the old mirror still replicates (an instance holds two); when every table reads `REPLICATING` with equal counts, move the readers and
