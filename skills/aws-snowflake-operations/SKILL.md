@@ -245,7 +245,7 @@ notes is not the live one. The order:
 ## Fixing an access finding
 
 A finding from the [access-audit](../access-audit/SKILL.md) skill is fixed here, as code, with no hand steps
-(`skills/access-audit/scripts/access_remediate.py`; the Terraform root is `infra/terraform/access/snowflake/accounts/prod`).
+([access_remediate.py](../access-audit/scripts/access_remediate.py); the Terraform root is `infra/terraform/access/snowflake/accounts/prod`).
 The auditor never fixes; this procedure never grades.
 
 1. `bootstrap` creates a key pair for a dedicated **access-admin** service identity (a role that creates roles, users and
