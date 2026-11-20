@@ -158,9 +158,10 @@ def _engine(store: Store = STORES["MDM"], subject: str | None = None):
 
 
 def definitions() -> dict:
+    """Each kind's plain words: its code's definition in RDM code set mdm-kinds."""
     from edgar_warehouse.rules import files
 
-    return files.load(files.ROOT / "context" / "definitions.yaml")
+    return {"kinds": {code["code"]: code["definition"] for code in files.kinds()}}
 
 
 def relationship_definitions() -> dict:

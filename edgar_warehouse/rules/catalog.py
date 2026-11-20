@@ -59,13 +59,11 @@ SOURCES, MDM, MASTER_RECORDS = "sources", "mdm", "master_records"
 SILVER, RDM, CODE_SETS = "silver", "rdm", "code_sets"
 JOURNAL, JOURNAL_SCHEMA, JOURNAL_TABLE = "journal", "change_journal", "processed_files"
 TEXT = "STRING"  # the catalog shows what a value means, not a database type
-# One relationship endpoint the rules name differently from its catalog domain.
-ENDPOINT_CATALOG_NAME = {"venue": "market_venue"}
 GOLD, SILVER_MARK = "Certification.Gold", "Certification.Silver"
 # The kinds of an identity: the domain whose glossary holds the term, for a heading
 # that does not start with a domain's display name (ticket 158, ticket 159).
 KIND_HOME = {"Adviser": "company", "Audit Firm": "company", "Fund Company": "company",
-             "Fund": "fund_structure", "Fund Series": "fund_structure", "Market/Venue": "market_venue"}
+             "Fund": "fund_structure", "Fund Series": "fund_structure"}
 RELATIONSHIP_FACTS = (" Each link has a capacity, and holds over one or more dated intervals, "
                       "stated by a filing or observed from one.")
 # The four data classes: tag name, its CONTEXT.md heading, and the words when CONTEXT.md has none.
@@ -642,8 +640,8 @@ def _relationships(root: Path, policy: dict) -> list[dict]:
         props = row.get("properties") or {}
         capacities = [{"code": r["code"], "label": r["label"], "properties": r.get("properties") or {}}
                       for r in rows if r.get("parent_code") == name]
-        origin = ", ".join(_display(ENDPOINT_CATALOG_NAME.get(code, code)) for code in (props.get("from") or []))
-        destination = ", ".join(_display(ENDPOINT_CATALOG_NAME.get(code, code)) for code in (props.get("to") or []))
+        origin = ", ".join(_display(code) for code in (props.get("from") or []))
+        destination = ", ".join(_display(code) for code in (props.get("to") or []))
         roles = ", ".join(item["label"] for item in capacities if item.get("label"))
         text = row.get("definition") or row["label"]
         if origin or destination:
@@ -748,7 +746,7 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
         roots.append(row)
         props = row.get("properties") or {}
         for code in (props.get("from") or []) + (props.get("to") or []):
-            ends.add(ENDPOINT_CATALOG_NAME.get(code, code))
+            ends.add(code)
     names = sorted(kinds | ends)
     kind_tables = {fqn(SERVICE, MDM, MASTER_RECORDS, kind): kind for kind in kinds}
     words = {heading: _sentence(description.split("Avoid:")[0], 240)
@@ -781,8 +779,7 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
              if (home := glossary_of(heading)) and not heading.endswith(" Profile")]
     by_term = {term["name"]: term for term in terms}
     for row in roots:
-        first = next(iter((row.get("properties") or {}).get("from") or []), None)
-        home = ENDPOINT_CATALOG_NAME.get(first, first)
+        home = next(iter((row.get("properties") or {}).get("from") or []), None)
         if home not in names:
             continue
         by_term[row["code"]] = {

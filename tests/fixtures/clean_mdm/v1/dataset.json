@@ -8,8 +8,7 @@
       "government": "government",
       "international_organization": "international_organization",
       "person": "person",
-      "security": "security",
-      "venue": "venue"
+      "security": "security"
     },
     "profiles": [
       {

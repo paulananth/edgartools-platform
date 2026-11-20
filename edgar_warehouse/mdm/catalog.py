@@ -17,7 +17,16 @@ def _selected_path(root=None):
 
 
 def load(root=None):
-    return _validate(files.load(_selected_path(root)))
+    path = _selected_path(root)
+    return _read(files.load(path), path)
+
+
+def _read(body, path):
+    """The catalog, its kinds read from the code set it pins, in the rules folder it came from."""
+    if not isinstance(body, dict) or not isinstance(body.get("kinds"), dict):
+        raise ValueError("Mastering engine catalog pins its kinds as an RDM code set")
+    body["kinds"] = [code["code"] for code in files.published_reference(body["kinds"], path.parents[1])]
+    return _validate(body)
 
 
 def _validate(body):
@@ -98,7 +107,7 @@ def _validate_pair_comparison(pair, kinds):
 
 LOADED_PATH = _selected_path().resolve()
 LOADED_BYTES = LOADED_PATH.read_bytes()
-CATALOG = _validate(files.loads(LOADED_BYTES.decode("utf-8"), LOADED_PATH.name))
+CATALOG = _read(files.loads(LOADED_BYTES.decode("utf-8"), LOADED_PATH.name), LOADED_PATH)
 
 
 def assert_current():

@@ -222,6 +222,11 @@ profile.update(eligibility_kind="bundle-invented-kind", eligibility_categories=[
                waterfall_field="invented_waterfall",
                waterfall_identifier_field="invented_target")
 body["pair_comparisons"]["bundle-invented"] = profile
+import hashlib, json
+kinds = "".join(json.dumps({"code": kind, "definition": "Invented."}) + "\\n" for kind in body["kinds"]).encode()
+(folder / "reference/published/mdm-kinds/test").mkdir(parents=True)
+(folder / "reference/published/mdm-kinds/test/canonical.jsonl").write_bytes(kinds)
+body["kinds"] = {"code_set": "mdm-kinds", "version": "test", "sha256": hashlib.sha256(kinds).hexdigest()}
 (folder / catalog.RELATIVE).write_text(files.dumps(body))
 env = {**os.environ, "EDGAR_RULES_ROOT": str(folder.resolve())}
 code = """

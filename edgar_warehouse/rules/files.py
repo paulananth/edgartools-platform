@@ -32,13 +32,17 @@ ROOT = Path(os.environ.get("EDGAR_RULES_ROOT")
             or (BUNDLED if BUNDLED.is_dir() else Path(__file__).resolve().parents[2] / "rules"))
 
 
+def kinds(root: Path | None = None) -> list[dict]:
+    """The codes of RDM code set mdm-kinds, at the version the engine catalog pins."""
+    pin = load((root or ROOT) / "mastering" / "engine-v1.yaml").get("kinds")
+    if not isinstance(pin, dict):
+        raise RulesFileError("The engine catalog pins its kinds as an RDM code set")
+    return published_reference(pin, root)
+
+
 def context_subjects(root: Path | None = None) -> frozenset[str]:
     """Configured context namespace, independent of any store implementation."""
-    body = load((root or ROOT) / "context" / "definitions.yaml")
-    names = body.get("kinds") if isinstance(body, dict) else None
-    if (not isinstance(names, dict) or not all(isinstance(n, str) and n.strip() == n and n for n in names)):
-        raise RulesFileError("Context definitions name the configured kinds")
-    return frozenset({*names, "relationship"})
+    return frozenset({*(code["code"] for code in kinds(root)), "relationship"})
 
 
 def writable(root: Path) -> Path:

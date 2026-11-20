@@ -324,8 +324,13 @@ A master part is a **new kind** only when all of these hold, each measured on th
   (`context <kind> --search`), and its identifiers are no existing kind's namespaces.
 
 A part that fails one is a role an existing kind plays, a detail of one, or silver. A new kind is proposed in `findings.yaml` as a draft code of
-`mdm-kinds` (code, label, definition, its identifiers) beside the draft of its rules file; the operator
-approves both, and data-onboarding publishes them in one change.
+`mdm-kinds` (code, label, definition, `golden_records: true`) beside the draft of its rules file; the operator
+approves both, and data-onboarding publishes them in one change. Its identifiers stay in its rules file.
+
+A code with `golden_records: false` has no rules file and no golden records: a classification rule labels
+held-back records with it as the kind they probably are, the evidence for onboarding it later. Before
+removing a kind, count the held-back records labelled with it and the rules that name it: it is unused only
+when both are zero. A value list that names no entity (a trading venue's MIC) is a code set, not a kind.
 
 ## An id from a name: only when no id exists
 

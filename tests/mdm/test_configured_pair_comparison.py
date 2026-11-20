@@ -10,6 +10,7 @@ import pytest
 
 from edgar_warehouse.mdm import catalog
 from edgar_warehouse.rules import files
+from tests.support.kinds import write_catalog
 
 
 @pytest.fixture
@@ -31,7 +32,7 @@ def configured_root(tmp_path):
         "left_address_fields": ["invented_location"],
         "right_address_fields": ["invented_preferred", "invented_fallback"],
     }
-    (tmp_path / catalog.RELATIVE).write_text(files.dumps(body))
+    write_catalog(tmp_path, body)
     return tmp_path
 
 
