@@ -1,7 +1,7 @@
 """CLI subcommand: `edgar-warehouse mdm ...`, MDM only.
 
 Commands: init, check-connectivity,
-prepare-capture, rebuild, rebuild-name-index and rebuild-detail-lookup.
+prepare-capture, build-lookups, steward, clear-source and check-connectivity.
 """
 from __future__ import annotations
 
@@ -45,24 +45,9 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
                      "by default only documents the Change Journal does not record as processed under these rules")
     capture.set_defaults(handler=_logged_handler("prepare-capture", _command("prepare_capture")))
 
-    replay = mdm_sub.add_parser("rebuild", help="Replay every stored record into the mastering tables; a stopped replay "
-                                "runs again and skips what is done")
-    replay.add_argument("--policy-digest", required=True, help="The registered merge rules to replay under")
-    replay.add_argument("--check", action="store_true", help="Compare the mastering tables with the old masters, counts only")
-    replay.set_defaults(handler=_logged_handler("rebuild", _command("rebuild")))
     lookups = mdm_sub.add_parser("build-lookups", help="Bring the name, detail and cross-reference lookups "
                                  "up to the last load; a stopped build resumes")
     lookups.set_defaults(handler=_logged_handler("build-lookups", _command("build_lookups")))
-    rebuild = mdm_sub.add_parser("rebuild-name-index", help="Owner-only resumable name-index rebuild")
-    rebuild.add_argument("--limit", type=int, help="Stop after this many masters; retain resumable progress")
-    rebuild.add_argument("--page-size", type=int, default=200, help="Masters per owner transaction (1 to 1000)")
-    rebuild.add_argument("--restart", action="store_true", help="Restart overtaken progress from the beginning")
-    rebuild.set_defaults(handler=_logged_handler("rebuild-name-index", _command("rebuild_name_index")))
-    detail = mdm_sub.add_parser("rebuild-detail-lookup", help="Owner-only resumable detail-lookup rebuild")
-    detail.add_argument("--limit", type=int, help="Stop after this many masters; retain resumable progress")
-    detail.add_argument("--page-size", type=int, default=200, help="Masters per owner transaction (1 to 1000)")
-    detail.add_argument("--restart", action="store_true", help="Restart overtaken progress from the beginning")
-    detail.set_defaults(handler=_logged_handler("rebuild-detail-lookup", _command("rebuild_detail_lookup")))
     steward = mdm_sub.add_parser("steward", help="Steward decisions on master data")
     steward_sub = steward.add_subparsers(dest="steward_command", required=True)
     split = steward_sub.add_parser("split", help="Split a consolidation a matching rule made: both masters return and "

@@ -146,10 +146,3 @@ def search(adapter, conn, kind, words, limit):
     return [{"entity_id": row["id"], "kind": kind, "name": row["name"],
              "status": bodies[row["id"]].get("status"), "matched_by": row["matched_by"]} for row in ranked]
 
-
-def rebuild(engine, *, limit=None, page_size=200, restart=False):
-    """Quiescent, resumable owner pass. Overtaking requires explicit restart."""
-    spec = configuration()
-    if spec is None:
-        raise Conflict("Name search has no configured index")
-    return master_index.rebuild(engine, index_for(spec), limit=limit, page_size=page_size, restart=restart)

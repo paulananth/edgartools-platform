@@ -110,9 +110,8 @@ Operator: "Maybe create a security detail table and keep it in
 the mdm", then "Detail rows set in config (Recommended)".
 
 - A Dataset Contract states its detail lists in configuration (OpenFIGI:
-  `listings`, keyed by FIGI), and a master's record carries them. On
-  installed stores no separate detail table is written (migration 028 retired
-  what kept `mdm.detail_version`); the venue lookup above is the one
+  `listings`, keyed by FIGI), and a master's record carries them. No
+  separate detail table is written; the venue lookup above is the one
   Security-only part.
 - A Security's CUSIP and ISIN answers make **one set of listings, joined by
   FIGI**; each row records which answer gave it ("One set, joined by FIGI").

@@ -165,7 +165,7 @@ identifier part.
   digit (`rules/identifiers/`).
 - **Cross-references (lookup only):** the only listing's FIGI, the composite
   FIGI and ticker (the US composite's, else the ISIN country's composite's),
-  the share-class FIGI. `mdm.cross_reference_lookup` finds a Security by them.
+  the share-class FIGI. The context command's `security <namespace>:<value>` finds a Security by them.
   No rule matches on any of them. Every listing's FIGI is an identifier
   (OpenFIGI, part B1), and a listing's (exchange code, ticker) finds its
   Security through the venue lookup (the listings section).

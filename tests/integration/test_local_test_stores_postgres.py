@@ -107,7 +107,7 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
                 assert not conn.scalar(text("SELECT has_schema_privilege(current_user,'mdm','CREATE')"))
             with pytest.raises(DBAPIError):
                 with reader.begin() as conn:
-                    conn.execute(text("DELETE FROM mdm.master_entity WHERE false"))
+                    conn.execute(text("DELETE FROM mdm.policy WHERE false"))
         # Run a real offline copy using the generated worker file.
         artifacts = Artifacts()
         inp = artifacts.put(tmp_path.as_uri() + "/inputs", {"invented": 1})

@@ -31,8 +31,8 @@ uv run --with duckdb --with pyyaml python match_names.py \
   MDM cross-reference table through the contract, with no code:
   `cross_references: {name_id: <name path>}` and
   `cross_reference_formats: {name_id: name_id@1}`. Like every cross-reference
-  it is lookup only: `mdm.cross_reference_lookup('name_id', <id>)` finds the
-  records of any source with that name; it never joins records.
+  it is lookup only: the context command's `<kind> name_id:<id>` finds the
+  masters of any source with that name; it never joins records.
 - The report shows how many records it would pair one to one across the two
   sources, how many names are held twice (those pair nothing), and, on pairs a
   shared id proves, where the name id agrees and where it contradicts.
