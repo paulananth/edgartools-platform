@@ -137,7 +137,7 @@ def test_exact_five_tables_restricted_runtime_and_migrations(databases):
         tables = set(conn.scalars(text("SELECT tablename FROM pg_tables WHERE schemaname='bookkeeping'")))
         assert tables == {"pipeline_run", "work_item", "lease", "checkpoint", "journal_outbox"}
         assert str(conn.scalar(text("SHOW server_version"))).startswith("16.")
-    migrate(databases.admin, runtime_role="bk_control")
+    migrate(databases.admin, runtime_role="bk_control", database_name="control")
     for sql in ("UPDATE bookkeeping.lease SET token=0", "DELETE FROM bookkeeping.pipeline_run",
                 "CREATE TABLE bookkeeping.bad(x text)", "SELECT bookkeeping.compact(30)"):
         with pytest.raises(DBAPIError), databases.runtime.begin() as conn:
