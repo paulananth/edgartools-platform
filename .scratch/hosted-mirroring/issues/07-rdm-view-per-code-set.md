@@ -14,6 +14,6 @@ not be more than one version now".
 - [x] The hosted RDM holds the same 11 code sets as the repository's folders (read as the owner: none missing either way) 2026-11-20 09:54 ET
 - [x] Mirror test: Gold now reads 19 tables, `rdm.published_code` among them (`tests/unit/test_exposure_mirror_sql.py`) 2026-11-20 09:54 ET
 - [x] `ALTER_MIRROR` added `rdm.published_code` and the 14 silver tables (operator: "use ANANP11"; words in the approvals log): "Mirror altered", read back as 18 tables listed while the copy runs 2026-11-20 09:54 ET
-- [ ] Read back: 19 tables `REPLICATING`
+- [x] Read back: 19 tables `REPLICATING`, row counts equal Postgres in all 19 2026-11-20 09:58 ET
 - [ ] ~~Hosted RDM still holds the six old versions (111 published code rows of `mdm-relationship-types` 1-4 and the history set)~~ deferred to its own ticket: the store keeps a retired version's rows by design and has no command that removes a version; the views cannot show them, since each selects its one version by name
-- [ ] Learning → skill: data-modeling GOLD.md, "RDM publishes one view per code set"
+- [x] Learning → skill: data-modeling GOLD.md, "RDM publishes one view per code set" 2026-11-20 10:34 ET
