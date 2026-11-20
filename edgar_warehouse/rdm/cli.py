@@ -42,6 +42,8 @@ def _handle(args):
                 result = rdm.publish(args.code_set, args.version, out=args.out)
             elif args.rdm_command == "retire":
                 result = rdm.retire(args.code_set, args.version)
+            elif args.rdm_command == "prune":
+                result = rdm.prune(args.code_set)
             elif args.rdm_command == "verify":
                 result = rdm.verify(args.code_set, args.version)
             else:
@@ -169,12 +171,15 @@ def _commands(parser):
     publish.add_argument("version")
     publish.add_argument("--out", type=Path, required=True, help="Folder for the version's JSON Lines files")
     publish.set_defaults(handler=_handle)
-    for name, help_text in (("retire", "Retire a published version on the operator's word (kept, never deleted)"),
+    for name, help_text in (("retire", "Retire a code set's published version on the operator's word (its rows are removed; git keeps it)"),
                             ("verify", "Check a version's stored sha256 against its rows")):
         command = commands.add_parser(name, help=help_text)
         command.add_argument("code_set")
         command.add_argument("version")
         command.set_defaults(handler=_handle)
+    prune = commands.add_parser("prune", help="Delete every replaced or retired version a store still holds (one code set, or all)")
+    prune.add_argument("code_set", nargs="?")
+    prune.set_defaults(handler=_handle)
     diff = commands.add_parser("diff", help="Codes added, removed, relabelled and moved between two versions")
     diff.add_argument("code_set")
     diff.add_argument("old")

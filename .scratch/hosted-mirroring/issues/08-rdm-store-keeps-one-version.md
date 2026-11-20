@@ -1,6 +1,6 @@
 # 08: The RDM store keeps one version of each code set
 
-Status: open
+Status: claimed
 
 The operator, 2026-11-20: "there should not be more than one version now", then, asked whether to open this ticket:
 "Yes". Ticket 07 made the repository hold one version per code set and made each Gold view select that version by
@@ -26,11 +26,11 @@ Retiring a code set removes it. A version's rows stay immutable while it is the 
 
 ## Checklist
 
-- [ ] Spec first: docs/specs/rdm/spec.md says a code set holds one version; `supersedes` names the version it replaces; the "every published version is kept" rule and the "as it stood then" read are removed
-- [ ] Skill: the RDM rule in data-modeling GOLD.md ("A code set keeps exactly one version") points to the store rule; data-operations names the publish that replaces
-- [ ] Consult `/gof-refactor-reviewer` on `edgar_warehouse/rdm/store.py` (publish, retire) before code
-- [ ] Publish removes the previous version's rows, in one transaction; the immutability trigger allows only that delete (init SQL; no migration)
-- [ ] Retire removes the code set; `context.py` drops the past-version read
-- [ ] Tests: a publish of version 2 leaves only version 2 in every RDM table (fails on today's code: version 1 kept); the trigger still refuses any other update or delete; `tests/integration/test_rdm_published_postgres.py` updated (it asserts a retired version keeps its rows)
-- [ ] Hosted: remove the six old versions through the new path, with counts before and after; Gold's `ref_` views and `rdm.published_code` read back with one version per code set
-- [ ] Learning → skill
+- [x] Spec first: docs/specs/rdm/spec.md and docs/specs/agent-context/spec.md say a code set holds one version; `supersedes` names the version it replaces and is a recorded name, not a key; the "every published version is kept" rule and the "as it stood then" read are removed 2026-11-20 15:28 ET
+- [x] Skill: data-modeling GOLD.md points to the store rule; data-operations names the publish that replaces and `rdm prune`; data-profiling CODE-SETS.md says a new version replaces the current one 2026-11-20 15:28 ET
+- [x] Consult `/gof-refactor-reviewer` (haiku) on store.py, the triggers and context.py before code. Findings taken: one shared delete (`_drop_closed`, children first), one predicate (a version whose `valid_to` is set may be deleted, nothing else), `guard_published` and `code_path` need the same predicate, the supersedes foreign key goes on both engines, `retire` and `publish` share the delete. Declined: dropping the `retired` status and the supersedes checks (`retired` is the step that sets `valid_to`; the checks still hold with one version) 2026-11-20 15:28 ET
+- [x] Publish removes the previous version's rows in one transaction; the triggers allow only that delete. PostgreSQL: `migrations/002-one-version.sql` (a numbered file, because an installed store refuses a changed `schema.sql`, so the hosted store takes it with `rdm init` and no reset), `rdm.delete_published_codes`; MySQL: `mysql-one-version-v5.sql` and `schema.py`. Both engines: `tests/reference_storage` 66 passed each 2026-11-20 15:28 ET
+- [x] Retire removes the code set's version (the code set's own row stays: its words are immutable); `context.py` drops the past-version read, `--as-at` is refused for a code set; `rdm prune` deletes what an earlier build kept 2026-11-20 15:28 ET
+- [x] Tests. Failed before the change: `test_only_the_published_version_appears` (`{'gone 1': 2, 'one 1': 2, 'one 2': 2} != {'one 2': 2}`) and `test_a_publish_leaves_only_its_version_in_every_table_and_a_retire_leaves_none` (version 1 held in every table). Still refused (new test): a delete of the kept version's rows or version row, and any update. `tests/integration/test_rdm_published_postgres.py`, `test_rdm_postgres.py`, `test_rdm_context_postgres.py` rewritten to state the new answers: 30 passed on PostgreSQL 16 2026-11-20 15:28 ET
+- [ ] Hosted: `rdm init` (applies 002), then `rdm prune` through the new path, with counts before and after; Gold's `ref_` views and `rdm.published_code` read back with one version per code set, and the mirror's row counts equal PostgreSQL's
+- [x] Learning → skill: data-operations SKILL.md ("RDM, per domain": publish replaces, `rdm prune`), data-modeling GOLD.md (the store holds the same rule), data-profiling CODE-SETS.md 2026-11-20 15:28 ET

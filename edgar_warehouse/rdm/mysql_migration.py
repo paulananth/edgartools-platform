@@ -13,6 +13,7 @@ MIGRATION = Path(__file__).parent / "migrations" / "mysql-v1.sql"
 SEARCH_MIGRATION = MIGRATION.with_name("mysql-search-v2.sql")
 VALUE_MIGRATION = MIGRATION.with_name("mysql-value-v3.sql")
 PROPERTIES_MIGRATION = MIGRATION.with_name("mysql-properties-v4.sql")
+ONE_VERSION_MIGRATION = MIGRATION.with_name("mysql-one-version-v5.sql")
 
 
 def migrate(engine, *, runtime_role, existing_only=False, database_name=None):
@@ -112,8 +113,8 @@ def migrate(engine, *, runtime_role, existing_only=False, database_name=None):
                 target = quote(database_name) + "." + quote(name)
                 conn.execute(text("GRANT SELECT ON " + target + " TO " + role))
                 rights = ("INSERT(code_set,name,definition,authority,steward)" if name == "code_set" else
-                    "INSERT(code_set,version,supersedes,created_by,evidence),UPDATE(status,approved_by,approved_words,valid_from,valid_to,sha256)"
-                    if name == "code_set_version" else "INSERT" if name == "code_path" else "INSERT,UPDATE,DELETE")
+                    "INSERT(code_set,version,supersedes,created_by,evidence),UPDATE(status,approved_by,approved_words,valid_from,valid_to,sha256),DELETE"
+                    if name == "code_set_version" else "INSERT,DELETE" if name == "code_path" else "INSERT,UPDATE,DELETE")
                 conn.execute(text("GRANT " + rights + " ON " + target + " TO " + role))
             conn.execute(text("GRANT SELECT ON " + quote(database_name) + ".rdm_readiness TO " + role))
             conn.execute(text("GRANT SELECT ON " + quote(database_name) + ".code_context TO " + role))
@@ -179,9 +180,20 @@ def _rebuild_search_guards(conn, base_statements):
             conn.execute(text(statement))
 
 
+def _drop_supersedes_key(conn, base_statements):
+    """supersedes names a version that is deleted when its successor publishes: no foreign key holds it."""
+    for (name,) in conn.execute(text(
+            "SELECT CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA=DATABASE() "
+            "AND TABLE_NAME='code_set_version' AND COLUMN_NAME='_supersedes_key' AND REFERENCED_TABLE_NAME IS NOT NULL")).all():
+        conn.execute(text("ALTER TABLE code_set_version DROP FOREIGN KEY `" + name + "`"))
+    if "_supersedes_key" in {row["name"] for row in inspect(conn).get_columns("code_set_version")}:
+        conn.execute(text("ALTER TABLE code_set_version DROP COLUMN _supersedes_key"))
+
+
 # Follow-up migrations in their installed order: (id, name, path constant, a step
 # run once before completion). A new one is a new file and one entry here. The
 # ids are recorded in installed stores, so the order never changes.
 FOLLOW_UPS = ((2, "search", "SEARCH_MIGRATION", _rebuild_search_guards),
               (3, "value", "VALUE_MIGRATION", None),
-              (4, "properties", "PROPERTIES_MIGRATION", None))
+              (4, "properties", "PROPERTIES_MIGRATION", None),
+              (5, "one-version", "ONE_VERSION_MIGRATION", _drop_supersedes_key))
