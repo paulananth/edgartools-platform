@@ -1,7 +1,8 @@
-"""The mirror SQL is written from the exposure list and the one file of database names; nothing connects."""
+"""The mirror SQL is written from what a dbt project reads, bounded by the exposure list; nothing connects."""
 import importlib.util
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -11,12 +12,15 @@ spec.loader.exec_module(mirror_sql)
 
 EXPOSURE = {"layers": {"a": {"source_schema": "pub"}, "b": {"source_schema": "ref"}},
             "tables": [{"layer": "b", "table": "codes"}, {"layer": "a", "table": "thing"}]}
+EXPOSURE["tables"].append({"layer": "a", "table": "unread"})
 NAMES = {"mirror": {"database": "INVENTED_MIRROR"}}
+READS = {"version": 2, "sources": [{"name": "a", "tables": [{"name": "thing"}]}, {"name": "b", "tables": [{"name": "codes"}]}]}
 
 
-def test_create_lists_each_table_under_its_layers_schema_and_names_the_configured_target():
-    sql = mirror_sql.create(EXPOSURE, NAMES, "m1", "inst", "data", "60 minutes", "ICEBERG")
+def test_create_lists_only_the_read_tables_under_their_layers_schema_and_names_the_configured_target():
+    sql = mirror_sql.create(READS, EXPOSURE, NAMES, "m1", "inst", "data", "60 minutes", "ICEBERG")
     assert "target_database => 'INVENTED_MIRROR'" in sql and "postgres_tables => ['pub.thing', 'ref.codes']" in sql
+    assert "unread" not in sql
     assert "target_table_type => 'ICEBERG'" in sql and "refresh_interval => '60 minutes'" in sql and "mirror_name => 'm1'" in sql
 
 
@@ -24,5 +28,22 @@ def test_retire_always_drops_the_target_with_the_mirror():
     assert mirror_sql.retire("old") == "CALL SNOWFLAKE.POSTGRES.DROP_MIRROR('old', TRUE);\n"
 
 
-def test_the_repository_exposure_list_makes_nineteen_table_names():
-    assert len(mirror_sql.tables(yaml.safe_load((ROOT / "rules/exposure.yaml").read_text()))) == 19
+def test_a_read_the_exposure_list_does_not_name_is_refused():
+    reads = {"sources": [{"name": "a", "tables": [{"name": "working_table"}]}]}
+    with pytest.raises(SystemExit, match="a.working_table"):
+        mirror_sql.tables(reads, EXPOSURE)
+
+
+def test_alter_adds_what_is_read_and_removes_what_nothing_reads():
+    sql = mirror_sql.alter(READS, EXPOSURE, "m1", ["pub.thing", "pub.unread"])
+    assert "add_tables => ['ref.codes']" in sql and "remove_tables => ['pub.unread']" in sql and "mirror_name => 'm1'" in sql
+
+
+def test_alter_writes_nothing_when_the_mirror_holds_exactly_the_reads():
+    assert mirror_sql.alter(READS, EXPOSURE, "m1", ["ref.codes", "pub.thing"]) == ""
+
+
+def test_the_repository_gold_project_mirrors_four_tables_and_no_working_table():
+    from edgar_warehouse.gold import views
+    names = mirror_sql.tables(views.sources(), yaml.safe_load((ROOT / "rules/exposure.yaml").read_text()))
+    assert names == ["public.mastering_identifier", "public.mastering_master", "silver.thirteenf_filing", "silver.thirteenf_holding"]

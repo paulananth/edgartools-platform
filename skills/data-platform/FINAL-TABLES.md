@@ -49,8 +49,11 @@ authorization and verification gates.
 
 ## Consumer enforcement
 
-- **Managed mirrors:** pass the resolved list as `postgres_tables` and set
-  `postgres_schemas` to NULL. A schema-wide mirror is outside this scope.
+- **Managed mirrors:** mirror only the listed tables a reader in Snowflake reads
+  (the Gold project's sources file), as `postgres_tables` with `postgres_schemas`
+  NULL ([HOSTED-MIRRORING](HOSTED-MIRRORING.md), "Mirror only what a reader in
+  Snowflake reads"). The list bounds the mirror; it does not fill it. A
+  schema-wide mirror is outside this scope.
   Compare every mirrored table to the configured list; report missing and
   unexpected tables independently. Adding a table requires configuration and
   the normal add-table procedure; never silently widen a schema selection.
