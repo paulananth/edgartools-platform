@@ -116,7 +116,15 @@ Two permissions a mirror needs beyond the sub-skill's grant sequence:
 - Snowflake's system login `snowflake_system` must hold CONNECT on each mirrored database ("permission denied for
   database"): the stores revoke it from PUBLIC, and `infra/scripts/harden-hosted-roles.py` grants it.
 
-**Plan the mirrors from the exposure list, never table by table.** Group the exposed tables by the database that holds them:
+**Mirror only what a reader in Snowflake reads.** The mirror's tables are the tables the Gold project reads, its dbt sources file
+(`models/sources.yml`, which the Gold project writes from its configuration), and no others. The exposure list is the upper bound, not
+the list: a read the exposure list does not name is refused, and an exposed table nothing in Snowflake reads stays out (the catalog
+publishes it from the stores, not the mirror). Working tables (the merge stage, reviews, decisions, lookups, progress) are never
+mirrored. Each mirrored table is a full copy kept current at the refresh interval, so its size is a cost: say each table's size in the
+plan. When the Gold project's reads change, `scripts/exposure/mirror_sql.py alter` writes the `ALTER_MIRROR` that adds and removes the
+difference; a removal needs the operator's approval.
+
+**Plan the mirrors from the read list, never table by table.** Group the read tables by the database that holds them:
 each database is one mirror, and each schema keeps its name in the target. Read the instance's publication limit and the
 publications already held; when the databases to mirror outnumber the free publications, the answer is the store layout
 (every exposed store in the data database, [Connection URLs](CONNECTIONS.md)), not a support request or a dropped mirror. The
@@ -133,8 +141,8 @@ to raise it; until then, choose the two the readers need first. Read the limit a
 **A target database cannot be renamed, and an orphan cannot be dropped.** The managed mirror owns its target: `ALTER DATABASE ... RENAME`
 and `DROP DATABASE` are refused for the administrator and for the mirror operator alike ("must have OWNERSHIP"). A target left behind
 by `DROP_MIRROR(<mirror>, FALSE)` has no mirror to drop it any more; neither role could drop it, so ask Snowflake support. So:
-- rename by recreating, with `scripts/exposure/mirror_sql.py` (it writes the `CREATE_MIRROR`, `LIST_MIRRORED_TABLES` and `DROP_MIRROR` text from
-  `rules/exposure.yaml` and `rules/snowflake.yaml`, so no call is typed by hand): `CREATE_MIRROR` (the skill's SETUP) with the new target name and a new mirror name, as the mirror operator, while
+- rename by recreating, with `scripts/exposure/mirror_sql.py` (it writes the `CREATE_MIRROR`, `ALTER_MIRROR`, `LIST_MIRRORED_TABLES` and `DROP_MIRROR`
+  text from the Gold project's sources file, `rules/exposure.yaml` and `rules/snowflake.yaml`, so no call is typed by hand): `CREATE_MIRROR` (the skill's SETUP) with the new target name and a new mirror name, as the mirror operator, while
   the old mirror still replicates (an instance holds two); when every table reads `REPLICATING` with equal counts, move the readers and
   the configuration, then `DROP_MIRROR(<old mirror>, TRUE)` so its target goes with it;
 - always drop a mirror with the second argument `TRUE`, never `FALSE`.
@@ -158,15 +166,17 @@ days. Require explicit approval for table removal, restart (full re-snapshot
 and loss of change-feed history), or mirror drop. Grant consumers read access
 only when requested; the mirror owns target writes.
 
-## After the first load: mirror only the exposed subset
+## After the first load: mirror only what Gold reads
 
-The mirror is created after the stores' first load, and again after a reset, for the tables of the repository's exposure list and
-no others (`rules/exposure.yaml`; [Final exposable tables](FINAL-TABLES.md) owns the scope). A listed table must exist before a
-mirror can take it, so the order is the load, then:
+The mirror is created after the stores' first load, and again after a reset, for the tables the Gold project reads and no others
+(its dbt sources file; each must be on `rules/exposure.yaml`, which [Final exposable tables](FINAL-TABLES.md) owns). A read table must
+exist before a mirror can take it, so the order is the load, then:
 
-1. Resolve the list against the loaded stores, read-only, with the exposure tooling ([its README](scripts/exposure/README.md):
+1. Resolve the exposure list against the loaded stores, read-only, with the exposure tooling ([its README](scripts/exposure/README.md):
    `generate`, then `check`). It refuses a listed table or column the stores lack.
-2. Follow [Readiness before changes](#readiness-before-changes) and [Creation and verification](#creation-and-verification) on exactly
+2. Write the Gold project from its configuration ([data-modeling GOLD.md](../data-modeling/GOLD.md)), then the create text from its sources file
+   (`mirror_sql.py create --reads <dbt folder>/models/sources.yml ...`).
+3. Follow [Readiness before changes](#readiness-before-changes) and [Creation and verification](#creation-and-verification) on exactly
    those tables: explicit `postgres_tables`, `postgres_schemas => NULL`, `target_table_type => 'ICEBERG'`
    ([the single-database qualification](SINGLE-DATABASE-ICEBERG.md) pins the rest).
 
