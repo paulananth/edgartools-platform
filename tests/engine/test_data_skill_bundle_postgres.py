@@ -685,9 +685,9 @@ def mastered(engine):
 
     with engine.connect() as conn:
         records = conn.execute(text("SELECT count(*) FROM mastering_record")).scalar()
-        bodies = [json.loads(body) for body, in conn.execute(text("SELECT body FROM mastering_master"))]
-    current = [body for body in bodies if body.get("status") != "alias"]
-    return records, dict(Counter(body["kind"] for body in current)), [body.get("fields", {}).get("name") for body in current]
+        rows = conn.execute(text("SELECT kind, status, body FROM mastering_master")).all()  # kind and status are columns
+    current = [(kind, json.loads(body)) for kind, status, body in rows if status != "alias"]
+    return records, dict(Counter(kind for kind, _ in current)), [body.get("fields", {}).get("name") for _, body in current]
 
 
 # Each variant is one worker path through the installed bundle. A reading feature that a
