@@ -1,0 +1,7 @@
+dev:
+  preCmds: ["uv venv --allow-existing", "uv pip install -e ."]
+  runCmd: "uv run python worker.py"
+  files:
+    - "*.py"
+    - "tests/**/*.py"
+  reload: false
