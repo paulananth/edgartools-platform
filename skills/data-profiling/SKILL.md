@@ -307,20 +307,21 @@ whose types name the kinds at each end. How a kind is matched and merged is rule
 configuration, and code lists live in reference data management (Reltio's entity types and lookup
 types). Nothing else holds a list of kinds.
 
-A master part is a **new kind** only when all of these hold, each measured on the part:
-- it is an entity other records point to: another part, or another source, links to its key;
-- it carries its own identifier, or a designed key that persists from one delivery to the next;
-- no code of `mdm-kinds` already names it: its names find no golden record of an existing kind
-  (`context <kind> --search`), and its identifiers are no existing kind's namespaces.
+For each master part, measure the three new-kind tests that
+[Data Modeling](../data-modeling/SKILL.md#2-a-master-part-its-kind) decides on:
+- whether another part, or another source, links to its key;
+- whether it carries its own identifier, or a designed key that persists from one delivery to the next;
+- whether its names find a golden record of an existing kind (`context <kind> --search`), and whether its
+  identifiers are an existing kind's namespaces.
 
-A part that fails one is a role an existing kind plays, a detail of one, or silver. A new kind is proposed in `findings.yaml` as a draft code of
+A part that is linked to, has its own key and matches no existing kind is proposed in `findings.yaml` as a draft code of
 `mdm-kinds` (code, label, definition, `golden_records: true`) beside the draft of its rules file; the operator
 approves both, and data-onboarding publishes them in one change. Its identifiers stay in its rules file.
 
 A code with `golden_records: false` has no rules file and no golden records: a classification rule labels
 held-back records with it as the kind they probably are, the evidence for onboarding it later. Before
 removing a kind, count the held-back records labelled with it and the rules that name it: it is unused only
-when both are zero. A value list that names no entity (a trading venue's MIC) is a code set, not a kind.
+when both are zero.
 
 ## An id from a name: only when no id exists
 
