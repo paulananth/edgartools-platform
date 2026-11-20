@@ -17,18 +17,25 @@ handoffs](#decisions-artifacts-and-handoffs)), and the auditor's re-run closes t
 
 ## Hard stops
 
+A shared rule keeps its home, named in its row. This table grants no approval, provider access, access change or switch-on.
+
 | Never | Instead |
 |---|---|
 | Let the auditor change anything | The audit identity is read-only. Fixing is a separate step with its own identity, owned by the platform's operations skill ([handoffs](#decisions-artifacts-and-handoffs)), then a fresh audit |
-| Use, change or disable the operator's overall administrator account (`ANANP11`), or audit through a connection that signs in as it | The audit refuses those connections; a finding about the account is reported and needs the operator's signed acceptance |
+| Use, change or disable the operator's overall administrator account (`ANANP11`), or audit through a connection that signs in as it | The audit refuses those connections ([Access identities](../aws-snowflake-operations/SKILL.md#access-identities-read-only-first)); a finding about the account is reported and needs the operator's signed acceptance |
 | Audit as an administrator and call it independent | A read-only audit identity per platform; an administrator run needs `--as-admin` and fails that platform's IND |
-| Print a password, key, token, address or a value from the data | The adapters return counts and role names only; keep it that way |
-| Mark a control PASS from reading code or a document | Test it against the live system; no live test is NOT_TESTED, and an objective an adapter lacks is a gap (`-`) |
+| Print a password, key, token, address or a value from the data | The adapters return counts and role names only; keep it that way (`CLAUDE.md`, "Commits, PRs and secrets") |
+| Mark a control PASS from reading code or a document | Test it against the live system; no live test is NOT_TESTED, and an objective an adapter lacks is a gap (`-`) (`CLAUDE.md`, "Tests") |
 | Treat what the auditor cannot see as clean | The adapter returns NOT_TESTED when its view is empty or refused |
-| Close a finding without evidence | The re-run's PASS, or a signed acceptance of the risk in the ticket |
+| Close a finding without evidence | The re-run's PASS, or the operator's signed acceptance of the risk in the ticket |
+| Accept a risk for the operator, or record an acceptance as given | A signed acceptance is the operator's own words, stamped `{{now}}` (`CLAUDE.md`, "Task checklists"), with the owner, reason and expiry date, given when asked. Accepting a risk is a new kind of decision (`CLAUDE.md`, "Talking with the operator"), never a routine approval |
 | Finalise a skill, role or login with an open FAIL that is not accepted | See the gate below |
 
 ## Run it
+
+Before a Snowflake or AWS run, open [AWS and Snowflake Operations](../aws-snowflake-operations/SKILL.md) (`CLAUDE.md`,
+"Skills and guides"). The login files and their duties belong to [Connections](../data-platform/CONNECTIONS.md). Reading a
+platform's own access records is no request to a data provider.
 
 ```bash
 set -a; . ~/.config/edgartools/hosted/reader.env; set +a     # the read-only Postgres login; never print it
@@ -66,7 +73,7 @@ platform's usage views have not shown yet (they lag). The workstation adapter al
 | LOG | Access and changes logged; transport and storage encrypted | Who did what, when |
 | CHG | Every access principal has a ticket and is defined in code; protected branch with a review | Change enablement: approver, reason, back-out |
 | SCR | No plain-text secret; secret files private; secret scanning on | Credential hygiene |
-| ROT | Credentials rotate on a dated, owned schedule | AWS keys are tested; elsewhere read the ticket |
+| ROT | Credentials rotate on a dated, owned schedule | AWS keys are tested; elsewhere NOT_TESTED, since a person reads the ticket's dated record |
 | REV | Access is reviewed on a schedule with a signed record | A person reads it: NOT_TESTED until a record exists |
 
 A database's own logins, made with the instance and used by the platform (its administrator account and application login), are left out
@@ -81,7 +88,8 @@ Add `audit_platforms/<name>.py` with `NAME`, `configured(env)`, `collect(env, as
 refuse an administrator identity), `principals(evidence)` (the roles and users to check for a change record) and
 `controls(evidence)` returning `base.control(NAME, objective, ok, evidence, fix, tested=...)` for each objective it can
 test; list it in `PLATFORMS` in `access_audit.py`, then add its clean case and one weakness per objective to
-`tests/unit/test_access_audit.py`. Databricks, OpenMetadata and any further cloud follow this contract.
+`tests/unit/test_access_audit.py`. Databricks, OpenMetadata and any further cloud follow this contract. The code and its tests
+follow `CLAUDE.md`'s "Code review" and test-writing rules.
 
 ## Decisions, artifacts and handoffs
 
@@ -104,14 +112,22 @@ recreate its report.
 
 A failing control carries the objective's severity: **high** where one credential can change or read everything or leave no
 trail (ADM, OPS, AUT, LPR, LOG, SCR), **medium** where a guard is weak (IND, NET, CST, TMO, POL, CHG, ROT, REV). Report, in
-order: scope and evidence date; counts (pass, fail, not tested) and the matrix; each finding as control, evidence numbers,
-risk in plain words and the fix; what was not tested and why. Evidence is counts, never values.
+order: scope and evidence date and time in ET; counts (pass, fail, not tested) and the matrix; each finding as control, evidence numbers,
+risk in plain words, the fix and the owner it is handed to ([handoffs](#decisions-artifacts-and-handoffs)); what was not
+tested and why. Evidence is counts, never values.
 
 ## The gate before finalising a skill, role or login
 
-The audit ran as a read-only identity on every platform the change touches; every FAIL it touches is fixed or has a signed
-acceptance (owner, reason, expiry date) in its ticket; the new principal has a ticket and is in code (CHG); its credential is a
-key or role, or a secret held outside the repository, with a rotation date; and the re-run shows no new FAIL.
+The audit ran as a read-only identity on every platform the change touches; every FAIL it touches is fixed or has the
+operator's signed acceptance ([Hard stops](#hard-stops)) in its ticket; the new principal has a ticket and is in code (CHG); its
+credential is a key or role, or a secret held outside the repository, with a rotation date; and the re-run shows no new FAIL. Each
+NOT_TESTED or `-` control on a platform the change touches is named in the report as not tested, never counted as a pass.
+
+- A change that touches no platform's access (no role, login, grant, credential, connection or audited setting) records the
+  gate as not applicable, with that reason, never as PASS.
+- An open FAIL with no acceptance stops the finalising: ask the operator one question, naming the finding, the decision and
+  your recommendation (`CLAUDE.md`, "Talking with the operator").
+- Passing the gate grants no approval, access change, activation or switch-on.
 
 ## Limits
 
