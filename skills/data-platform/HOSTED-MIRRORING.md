@@ -14,7 +14,7 @@ explicit approved tables and `target_table_type => 'ICEBERG'`; it does not
 consolidate existing production stores or create billable resources implicitly.
 
 The target flow is PostgreSQL MDM, RDM and Silver final outputs → the read-only
-`DB_EDGARTOOLS_MIRROR` Iceberg database. Approved consumers can read those
+mirror database (`mirror.database` in `rules/snowflake.yaml`). Approved consumers can read those
 tables directly; dbt is not required for replication or direct consumption.
 When requirements call for Gold joins, calculations, aggregates or reporting
 models, dbt reads approved mirror sources and writes to a separately approved
@@ -120,7 +120,7 @@ Two permissions a mirror needs beyond the sub-skill's grant sequence:
 each database is one mirror, and each schema keeps its name in the target. Read the instance's publication limit and the
 publications already held; when the databases to mirror outnumber the free publications, the answer is the store layout
 (every exposed store in the data database, [Connection URLs](CONNECTIONS.md)), not a support request or a dropped mirror. The
-data database gives one mirror, `DB_EDGARTOOLS_MIRROR`, with schemas `MDM`, `RDM` and `SILVER`; a plan with more than one target
+data database gives one mirror, the `mirror.database` of `rules/snowflake.yaml`, with one schema per source schema; a plan with more than one target
 database for the exposed stores is a defect.
 
 An instance carries at most two mirrors: each mirror needs one CDC publication and `snowflake_cdc.max_publications`

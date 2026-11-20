@@ -10,9 +10,11 @@ sys.path.insert(0, str(Path(__file__).parents[2] / "skills/data-platform/scripts
 from tests.support.exposure import invented_manifest
 from exposure_operations import (
     ExposureRunError,
-    production_policy,
     run_exposure_cycle,
 )
+
+
+TARGET = {"target": "INVENTED_TARGET", "role": "INVENTED_READER", "scope": ["INVENTED_SCHEMA"], "approval_gate": "invented gate"}
 
 
 def manifest():
@@ -28,7 +30,7 @@ def snapshots(_manifest):
 def test_cycle_is_bounded_and_receipt_is_redacted():
     seen = []
     result = run_exposure_cycle(
-        manifest(), manifest_created_at=datetime.now(timezone.utc),
+        manifest(), manifest_created_at=datetime.now(timezone.utc), target=TARGET,
         ingest=lambda value: seen.append("ingest") or {"ok": True},
         publish=lambda value: seen.append("publish") or {"ok": True},
         snapshots=snapshots,
@@ -36,18 +38,14 @@ def test_cycle_is_bounded_and_receipt_is_redacted():
     assert result["ok"] is True
     assert seen == ["ingest", "publish"]
     assert "secret" not in str(result)
-    assert production_policy() == {
-        "target": "EDGARTOOLS_PROD", "role": "EDGARTOOLS_PROD_READER",
-        "scope": ["EDGARTOOLS_GOLD", "EDGARTOOLS_SILVER"],
-        "approval_gate": "operator-approved production run",
-    }
+    assert result["target"] == TARGET
 
 
 def test_stale_manifest_fails_before_side_effects():
     called = []
     with pytest.raises(ExposureRunError, match="stale"):
         run_exposure_cycle(
-            manifest(), manifest_created_at=datetime.now(timezone.utc) - timedelta(days=2),
+            manifest(), manifest_created_at=datetime.now(timezone.utc) - timedelta(days=2), target=TARGET,
             ingest=lambda value: called.append("ingest") or {"ok": True},
             publish=lambda value: called.append("publish") or {"ok": True},
             snapshots=snapshots,
@@ -58,7 +56,7 @@ def test_stale_manifest_fails_before_side_effects():
 def test_parity_failure_is_fail_closed():
     with pytest.raises(ExposureRunError, match="parity"):
         run_exposure_cycle(
-            manifest(), manifest_created_at=datetime.now(timezone.utc),
+            manifest(), manifest_created_at=datetime.now(timezone.utc), target=TARGET,
             ingest=lambda value: {"ok": True}, publish=lambda value: {"ok": True},
             snapshots=lambda value: {"snowflake": {"tables": []}, "openmetadata": {"tables": []}, "autoontology": {"tables": []}},
         )

@@ -65,13 +65,9 @@ Local checks must use invented or approved metadata only. Never paste credential
 
 ## Production contract
 
-| Setting | Required value |
-|---|---|
-| Snowflake target | `EDGARTOOLS_PROD` |
-| Read role | `EDGARTOOLS_PROD_READER` |
-| Schema scope | `EDGARTOOLS_GOLD`, `EDGARTOOLS_SILVER` |
-| Approval gate | Operator-approved production run |
-| Cadence | At most once per 24 hours unless the operator approves a one-off run |
+`run_exposure_cycle` takes the target as an argument (database, read role, schema scope and approval gate, read from the
+configuration, never written in the script) and repeats it in the receipt. A run is operator-approved, and runs at most once per 24 hours
+unless the operator approves a one-off run.
 
 Credentials come from the approved secret store or private environment. They must not appear in command arguments, committed files, receipts, or logs.
 

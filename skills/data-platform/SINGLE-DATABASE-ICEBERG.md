@@ -193,12 +193,12 @@ effect of this test or replace the required Iceberg target with three databases.
 
 ## Examples
 
-The requested production target is `DB_EDGARTOOLS_MIRROR` with `MDM`, `RDM`
-and `SILVER` schemas. Consumers may read approved mirror tables directly.
+The requested production target is the `mirror.database` of `rules/snowflake.yaml`, with one schema per source
+schema. Consumers may read approved mirror tables directly.
 When Gold transformations are required, dbt reads the mirror and writes to a
 separately approved writable destination; no Gold database/schema name is
 approved by this example. A qualification uses a unique disposable target such as
-`DB_EDGARTOOLS_MIRROR_Q_<unique>` instead of consuming that production name.
+`<mirror database>_Q_<unique>` instead of consuming that production name.
 One source test database contains `mdm.final_data`, `rdm.final_data` and
 `silver.final_data`; only these three tables are selected. The three initial
 keys can be 1, 2 and 9007199254740993; measures can be 1.250000000,
