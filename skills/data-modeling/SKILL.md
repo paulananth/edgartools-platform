@@ -7,18 +7,23 @@ description: Decide where one profiled part of a data set sits in the model - it
 
 Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#the-seven-wastes) and drop what adds no value.
 
-The boundary is [REQUIREMENTS.md](REQUIREMENTS.md). This skill decides
-structure, with evidence and the existing language. It does not measure files
-(data-profiling), write a contract (data-onboarding, refining-rules), write a
-check (data-quality), or approve anything.
+## Decisions, artifacts and handoffs
 
-**Hand off when:**
+This skill decides where one profiled part sits, from approved findings and the
+language the platform already has, and writes that decision in plain words. Its
+scope and refusals are [REQUIREMENTS.md](REQUIREMENTS.md). It does not measure
+files, write configuration or a code set version, write a check, or approve
+anything: it proposes, and the operator rules.
 
-- there are no approved findings (`approval.status: approved` in `findings.yaml`): data-profiling (`skills/data-profiling/SKILL.md`)
-- the structure is accepted and the feed is new: data-onboarding (`skills/data-onboarding/SKILL.md`)
-- a live feed's mapping or matching should change: refining-rules (`skills/refining-rules/SKILL.md`)
-- a defect needs a check or a fix: data-quality (`skills/data-quality/SKILL.md`)
-- the Gold shape is accepted and should be built: aws-snowflake-operations (dbt). A question contract on one built fact: semantic-views (`skills/semantic-views/SKILL.md`)
+| Decision or artifact | Authoritative owner | Handoff |
+|---|---|---|
+| Approved findings (`approval.status: approved` in `findings.yaml`): class tests, new-kind tests, keys, `identifiers.pairs`, links, hierarchies, time roles, the silver spec | [Data Profiling](../data-profiling/SKILL.md#decisions-artifacts-and-handoffs) | The input. None approved, or a count the decision needs is missing: hand back to profiling; this skill does not scan the files again |
+| The part's class; its kind or a proposed new kind; which identifiers match and which are lookup only; the code set and where each code field goes; a relationship's type, ends, capacity, hierarchy rules and dates; a transaction or child part's grain, key and links; business and recorded time; the final outputs and their current/history scope; a Gold fact and its dimensions | Data Modeling: the written decision (Workflow step 5) and the proof report (section 9) | A new kind, a new identity namespace, a second type for one fact, or which field is the identity: one question to the operator |
+| `source.yaml`, a new kind's rules file and `mdm-kinds` code, a code set version drafted in RDM by [CODE-SETS.md](../data-profiling/CODE-SETS.md), the plan of parts, silver tables, the approved exposure selection | [Data Onboarding](../data-onboarding/SKILL.md) for a new feed; [Refining Rules](../refining-rules/SKILL.md) for a live one | They write configuration from the accepted decision; this skill does not restate their steps |
+| A check or a fix for a defect the decision exposes (a clash on a lookup-only identifier, a provisional start date) | [Data Quality](../data-quality/SKILL.md) | It reads the decision, the findings' `quality` items and `invalid_rows.jsonl` |
+| The data class tag, relationship assets and catalog words | [Data Catalog](../data-catalog/SKILL.md) | It projects the decision and never decides a class |
+| The proof level a merge change needs | [MDM Engineering](../mdm-engineering/SKILL.md#choose-the-cheapest-proof) | Section 9's archetypes and population counts |
+| Building the accepted Gold shape; a question contract on one built fact | [aws-snowflake-operations](../aws-snowflake-operations/SKILL.md) (dbt); [semantic-views](../semantic-views/SKILL.md) | [GOLD.md](GOLD.md) |
 
 ## Hard stops
 
@@ -30,7 +35,7 @@ check (data-quality), or approve anything.
 | Join records on a lookup-only identifier, or merge on similar names | Records join only through a kind's Identifier Contract or a matching rule the operator switched on |
 | Split one kind into loads by the identifier asked, or pair two identifiers of one master in a source's own rules | One record carries every identifier it has; the Merge Stage looks each one up in the Cross-reference and puts them on one master (operator) |
 | Name a new relationship type when an existing one, or its inverse, means the same | Use it, or ask the operator why a second type is needed |
-| Write rules, contracts, quality files, or a code set version | Hand off; drafts in RDM go through data-profiling's RDM steps |
+| Write rules, contracts, quality files, or a code set version | Hand off by the table above: Data Onboarding (a new feed) or Refining Rules (a live one) drafts a code set version in RDM by [CODE-SETS.md](../data-profiling/CODE-SETS.md) |
 | Request anything from a provider's live service | Use the captured files and this repo |
 | Propose a domain rule (a key, an order of precedence, a definition) from the captured data alone | First find how a public standard or the main vendors do it. Write it in a research note the next decision reads, mark what is unverified, and follow the standard unless the operator rules otherwise |
 | Design one Gold fact alone, or build a Gold object no named requirement needs | Design the whole bus first and build the least: [GOLD.md](GOLD.md), "Design the whole bus first" |
@@ -153,8 +158,16 @@ master file is reference data plus a master attribute that holds its codes.
 
 - The kind is one of `KINDS`. A role a thing plays (an adviser, an auditor) is
   a profile on a kind (`PROFILE_KINDS`), never a kind. A fund is a collection of securities, never a profile.
-- No kind fits: say why the part is master data, propose a name and a
-  definition, and ask the operator. Stop.
+- **A new kind only when all three hold,** each read from the findings'
+  new-kind tests ([data-profiling](../data-profiling/SKILL.md), "Identify an
+  MDM kind"): other records or another source point to the part's key; it
+  carries its own identifier, or a designed key that persists from one
+  delivery to the next; and no code of `mdm-kinds` names it (its names find no
+  golden record of an existing kind, and its identifiers are no existing
+  kind's namespace). A part that fails one is a role an existing kind plays, a
+  detail of one, or silver; a value list that names no entity (a trading
+  venue's MIC) is a code set. All three hold: say why the part is master data,
+  propose a code, a label and a definition, and ask the operator. Stop.
 - **One kind, however many identifiers.** Two identifier schemes for one
   thing (a national number and an international number) are two identifiers
   of one master, never two kinds, two contracts or two loads. A provider
@@ -364,7 +377,7 @@ where a gap hides. Before a build starts:
    waits; carry on with the parts it does not touch.
 7. **Prove the model on the data** (section 9) when it changes how records
    join or what a row is, before any build starts.
-8. **Hand off** (the list above). Do not restate that skill's steps.
+8. **Hand off** by "Decisions, artifacts and handoffs". Do not restate that skill's steps.
 
 ## Reviewing the model itself
 
