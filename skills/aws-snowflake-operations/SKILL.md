@@ -244,9 +244,9 @@ notes is not the live one. The order:
 
 ## Database ownership
 
-Every database the platform creates is owned by the platform's one owner role, `EDGARTOOLS_OWNER`, never by ACCOUNTADMIN, which holds that
+Every database the platform creates is owned by the platform's one owner role, `EDGARTOOLS`, never by ACCOUNTADMIN, which holds that
 role and so keeps control (operator, 2026-11-20: "make all the database owner to be edgartool"). A database made by an administrator's
-SQL has its ownership moved at once with `GRANT OWNERSHIP ON DATABASE <name> TO ROLE EDGARTOOLS_OWNER COPY CURRENT GRANTS` (never
+SQL has its ownership moved at once with `GRANT OWNERSHIP ON DATABASE <name> TO ROLE EDGARTOOLS COPY CURRENT GRANTS` (never
 `REVOKE CURRENT GRANTS`, above), and the role and the grant are written in the access Terraform root. The exception is a managed
 mirror's target database: the mirror owns it, no customer role may rename, move or drop it, and `DROP_MIRROR(<mirror>, TRUE)` removes it.
 
