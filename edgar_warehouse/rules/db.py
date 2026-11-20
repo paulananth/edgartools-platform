@@ -24,7 +24,7 @@ TABLE = "rules_used"
 
 
 def get_engine(url=None):
-    """The Rules Database, from the sourced duty file's `CONTROL_URL` unless a URL is given."""
+    """The Rules Database, from the sourced duty file unless a URL is given."""
     from edgar_warehouse.database_connections import connect, owner_url
 
     url = url or owner_url("rules")
