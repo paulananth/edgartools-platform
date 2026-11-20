@@ -29,7 +29,7 @@ Each rule below has one home, named beside it; this list grants no permission.
 ## Start here: route the work
 
 Inputs: the requested source and work, its configuration and retained run evidence, [Source readiness](#source-readiness), the
-[skills index](../README.md) and the variable names in [Connection setup](CONNECTIONS.md). Output: one next action, its owner
+skills index (`skills/README.md` in a checkout; an installed copy is already the chosen skill) and the variable names in [Connection setup](CONNECTIONS.md). Output: one next action, its owner
 and the environment checks it needs. A route grants no approval, provider request or switch-on.
 
 1. **Find the state.** With no `edgar-warehouse` on the path, the next action is [Setup](#0-setup), step 1. A source is
