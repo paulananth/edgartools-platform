@@ -202,6 +202,9 @@ Every load runs several worker processes. A worker holds a bounded piece of its 
 span the input (the distinct keys of a receipt and a digest of them) goes to disk in sorted runs and is read back merged
 (`silver_writer/keyset.py`), never held as a set of every key. Measure before and after with the same invented keys.
 
+## Designing master fields
+Before adding a field, column or table to the master store, or a reader of masters: [MASTER-FIELDS.md](MASTER-FIELDS.md).
+
 ## Lookups and indexes
 
 On every engine, a list of keys is one index seek per key. A plan that scans

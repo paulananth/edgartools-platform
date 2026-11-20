@@ -114,4 +114,4 @@ def test_a_steward_merge_keeps_the_older_and_the_identifiers_source_records_and_
         assert set(bound.values()) == {older}  # every source record of both golden records
         (said,) = [json.loads(b) for (b,) in db.rows("select body from mastering_decision where operation='merge'")]
         assert (said["actor"], said["reason"], said["left"]) == (BY, WHY, older)  # the history names the steward
-        assert [m for m in db.rows("select body from mastering_master") if '"alias"' in m[0]]  # the younger stays as an alias
+        assert db.rows("select entity_id from mastering_master where status='alias'")  # the younger stays as an alias

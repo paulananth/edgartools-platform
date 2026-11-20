@@ -45,7 +45,7 @@ def opened(database_factory):
 
 def masters(db):
     db.commit()
-    return {e: json.loads(b) for e, b in db.rows("select entity_id,body from mastering_master")}
+    return db.master_bodies([e for (e,) in db.rows("select entity_id from mastering_master")])
 
 
 def live(db):
@@ -195,7 +195,7 @@ def test_a_reader_stays_in_step_by_asking_what_changed(database_factory):
         for _, entity, body in db.changes(checkpoint):
             copy[entity] = body
         db.commit()
-        assert copy == dict(db.rows("select entity_id,body from mastering_master"))
+        assert {entity: json.loads(body) for entity, body in copy.items()} == masters(db)
 
 
 def test_a_reader_finds_a_master_by_source_key_by_identifier_and_after_a_merge(database_factory):
@@ -635,6 +635,46 @@ def test_a_link_reads_only_the_kind_status_and_profiles_of_its_golden_records(da
         assert not waiting
         assert [row["relationship_type"] for row in links.rows_of(edges)] == ["ISSUED_BY"]
 
+
+
+def test_every_master_assembles_to_what_survivorship_gave_through_create_join_change_merge_and_split(database_factory, monkeypatch):
+    """MASTER-FIELDS.md: the store keeps a master in columns, rows and text; assembled, it is the body survivorship wrote."""
+    from edgar_warehouse.mastering import master_row
+
+    written, split = {}, master_row.split
+
+    def recorded(body):
+        written[body["entity_id"]] = json.loads(json.dumps(body))
+        return split(body)
+
+    monkeypatch.setattr(master_row, "split", recorded)
+    with opened(database_factory) as db:
+        def check(step):
+            db.commit()
+            assert db.master_bodies(list(written)) == written, step
+
+        a, b = figi("00TSTX11"), figi("00TSTX12")
+        first, second = record(FIGI, "a", "security", figi=a), record(FIGI, "b", "security", figi=b)
+        merge.merge_file(db, SECURITY, [first])
+        check("create")
+        merge.merge_file(db, SECURITY, [record(FIGI, "a2", "security", figi=a)])
+        check("join")
+        merge.merge_file(db, SECURITY, [{**first, "fields": {"name": "INVENTED a CHANGED"}, "revision": 2}])
+        check("change")
+        merge.merge_file(db, SECURITY, [second])
+        merge.merge_file(db, SECURITY, [record(FIGI, "c", "security", figi=[a, b])])
+        check("merge and alias")
+        (merge_id, keep, gone), = db.merges()
+        db.split(keep, gone)
+        db.add_decision(decision("reverse", actor="fixture", reason="invented", at=AS_OF, target=merge_id), keep, gone)
+        db.add_identifiers([("figi", a if db.bound([first["subject"]])[first["subject"]] == gone else b, gone)])
+        db.commit()
+        merge.merge_file(db, SECURITY, [first, second], again=True)
+        check("split")
+        kept = [json.loads(t) for (t,) in db.rows("select body from mastering_master")]
+        assert not any({"entity_id", "identifiers", "subjects", "profiles", "kind", "status", "canonical_id"} & set(k) for k in kept)
+        assert not any(stamp in value for k in kept for value in (k.get("fields") or {}).values()
+                       for stamp in ("policy_digest", "kind_version"))
 
 PERSON = merge.Settings(POLICY, "invented-digest", "person", AS_OF)
 FUND = merge.Settings(POLICY, "invented-digest", "fund_structure", AS_OF)

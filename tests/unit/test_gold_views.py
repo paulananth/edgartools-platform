@@ -21,7 +21,7 @@ def body(entity, kind, name, canonical=None, status="active"):
 def db():
     conn = sqlite3.connect(":memory:")
     conn.executescript("""
-        create table mastering_master (entity_id text, body text);
+        create table mastering_master (entity_id text, canonical_id text, kind text, status text, body text);
         create table mastering_identifier (namespace text, value text, entity_id text);
         create table thirteenf_filing (accession_number text, cik text, form text, filing_date text, report_date text,
                                        primary_document text, manager_mdm_id text);
@@ -34,7 +34,9 @@ def db():
                ("c3", body("c3", "company", "Alpha Cap Old", canonical="c1", status="alias")),
                ("c4", body("c4", "company", "Delta Fund")),
                ("s1", body("s1", "security", "Alpha Common")), ("s2", body("s2", "security", "Beta Notes"))]
-    conn.executemany("insert into mastering_master values (?, ?)", masters)
+    conn.executemany("insert into mastering_master values (?, ?, ?, ?, ?)",  # the columns, and the body that holds the name
+                     [(e, b["canonical_id"], b["kind"], b["status"], json.dumps({"fields": b["fields"]})) for e, b in
+                      ((e, json.loads(text)) for e, text in masters)])
     conn.executemany("insert into mastering_identifier values (?, ?, ?)",
                      [("cik", "0000000001", "c1"), ("cik", "0000000002", "c2"), ("cusip", "AAA111", "s1")])
     conn.executemany("insert into thirteenf_filing values (?,?,?,?,?,?,?)", [
@@ -127,7 +129,8 @@ def test_the_snowflake_text_is_qualified_reads_the_mirror_and_replaces_a_view():
     text = views.render()
     assert text["master"].startswith("CREATE OR REPLACE VIEW DB_EDGARTOOLS_GOLD.GOLD.master AS")
     assert "FROM DB_EDGARTOOLS_MIRROR.MDM.mastering_master" in text["master"]
-    assert "PARSE_JSON(body):canonical_id::VARCHAR" in text["master"]
+    assert "SELECT entity_id, canonical_id, kind, status," in text["master"]  # columns, never parsed from the body
+    assert "PARSE_JSON(body):fields.name.value::VARCHAR" in text["master"] and "PARSE_JSON(body):kind" not in text["master"]
     assert "DB_EDGARTOOLS_MIRROR.SILVER.thirteenf_holding s" in text["fact_thirteenf_holding"]
     assert list(text)[0] == "master"
     assert "DATEADD(day, 1, day)" in text["dim_date"]

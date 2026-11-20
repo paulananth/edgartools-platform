@@ -15,6 +15,7 @@ DEPENDENTS = (
     ("mastering_decision", "left_id", "masters"),
     ("mastering_decision", "right_id", "masters"),
     ("mastering_identifier", "entity_id", "masters"),
+    ("mastering_profile", "entity_id", "masters"),
     ("mastering_lookup", "entity_id", "masters"),
     ("mastering_name_key", "subject", "subjects"),
     ("mastering_review", "subject", "subjects"),

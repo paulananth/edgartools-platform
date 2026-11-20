@@ -7,12 +7,14 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
+from . import master_row
+
 BLOCK = 2000
 LOCK_CLASS, FILE_KEY = 74821, 2  # advisory-lock class; file numbering is the second key
 PENDING = 0  # a changed golden record's file number until its transaction commits
 CLAIMS = 2000  # the most identifier values one batch claims beside other merges of its kind; more merge alone
 WRITTEN = ("master", "file", "delivery", "identifier", "record", "name_key", "review", "withheld", "deferred",
-           "lookup", "lookup_progress")
+           "lookup", "lookup_progress", "profile")
 
 
 class Contended(Exception):
@@ -228,12 +230,10 @@ class Store:
             self.cursor.execute("update mastering_record set body=%s where subject=%s", [json.dumps(body), subject])
 
     def kinds(self, entities) -> dict:
-        """The entity type of each golden record, read from its body."""
+        """The entity type of each golden record, read from its column."""
         found = {}
         for block in blocks(sorted(entities)):
-            for entity, body in self.rows(
-                    f"select entity_id,body from mastering_master where entity_id in ({marks(block)})", block):
-                found[entity] = json.loads(body).get("kind")
+            found.update(self.rows(f"select entity_id,kind from mastering_master where entity_id in ({marks(block)})", block))
         return found
 
     def add_identifiers(self, rows: list) -> None:
@@ -442,20 +442,62 @@ class Store:
             self.insert("mastering_deferred", ("deferred_id", "source_code", "reason", "blocking", "body"), rows)
 
     def write_masters(self, rows: list) -> None:
-        """Golden records, written or changed. Each changed one is numbered when the transaction commits."""
-        for block in blocks(rows):
-            self.cursor.execute("insert into mastering_master(entity_id,body,changed_file) values "
-                                + ",".join([f"(%s,%s,{PENDING})"] * len(block)) + self.master_upsert,
-                                [value for entity, body in block for value in (entity, body)])
+        """Golden records (entity id, the body survivorship gave), written or changed: the columns a reader selects by, each
+        profile as a row and the rest as text (master_row). Each changed one is numbered when the transaction commits."""
+        split = [(entity, *master_row.split(body)) for entity, body in rows]
+        columns = ("entity_id", *master_row.COLUMNS, "body")
+        for block in blocks(split):
+            one = "(" + ",".join(["%s"] * len(columns)) + f",{PENDING})"
+            self.cursor.execute(f"insert into mastering_master({','.join(columns)},changed_file) values "
+                                + ",".join([one] * len(block)) + self.master_upsert,
+                                [value for entity, held, _, text in block
+                                 for value in (entity, *(held[c] for c in master_row.COLUMNS), text)])
+            entities = [entity for entity, *_ in block]
+            self.cursor.execute(f"delete from mastering_profile where entity_id in ({marks(entities)})", entities)
+            profiles = [(entity, position, p.get("profile_id"), p.get("role"), p.get("valid_from"), p.get("valid_to"),
+                         json.dumps(p, sort_keys=True, separators=(",", ":")))
+                        for entity, _, held_profiles, _ in block for position, p in enumerate(held_profiles)]
+            self.insert("mastering_profile", ("entity_id", "position", "profile_id", "role", "valid_from", "valid_to", "body"), profiles)
         self.changed.update(entity for entity, _ in rows)
+
+    def keep_identifiers(self, held: dict) -> None:
+        """Delete each master's identifier rows that its new body no longer holds, so the table stays the authority."""
+        for block in blocks(sorted(held)):
+            for namespace, value, entity in self.rows(
+                    f"select namespace,value,entity_id from mastering_identifier where entity_id in ({marks(block)})", block):
+                if (namespace, value) not in held[entity]:
+                    self.cursor.execute("delete from mastering_identifier where namespace=%s and value=%s and entity_id=%s",
+                                        [namespace, value, entity])
+
+    def assembled(self, rows: list) -> dict:
+        """Whole golden records, from rows of (entity id, the columns in order, text), put back together with their
+        identifiers, members and profiles (master_row.assemble)."""
+        entities = [row[0] for row in rows]
+        identifiers, subjects, profiles = defaultdict(lambda: defaultdict(list)), defaultdict(list), defaultdict(list)
+        for block in blocks(entities):
+            for namespace, value, entity in self.rows(
+                    f"select namespace,value,entity_id from mastering_identifier where entity_id in ({marks(block)})", block):
+                identifiers[entity][namespace].append(value)
+            for subject, entity in self.rows(
+                    f"select subject,entity_id from mastering_record where entity_id in ({marks(block)})", block):
+                subjects[entity].append(subject)
+            for entity, body in self.rows(f"select entity_id,body from mastering_profile where entity_id in ({marks(block)}) "
+                                          "order by entity_id,position", block):
+                profiles[entity].append(json.loads(body))
+        return {entity: master_row.assemble(entity, dict(zip(master_row.COLUMNS, values)), text,
+                                            {ns: v for ns, v in identifiers[entity].items()}, sorted(set(subjects[entity])),
+                                            profiles[entity])
+                for entity, *values, text in rows}
 
     def changes(self, since: int, after: str = "", limit: int = 1000) -> list[tuple]:
         """One page of what changed after a reader's checkpoint: (file, master id, body)."""
-        page = "select changed_file,entity_id,body from mastering_master where {} order by changed_file,entity_id limit %s"
+        page = (f"select changed_file,entity_id,{','.join(master_row.COLUMNS)},body from mastering_master where {{}} "
+                "order by changed_file,entity_id limit %s")
         rows = self.rows(page.format("changed_file=%s and entity_id>%s"), [since, after, limit]) if after else []
         if len(rows) < limit:
             rows += self.rows(page.format("changed_file>%s"), [since, limit - len(rows)])
-        return rows
+        bodies = self.assembled([row[1:] for row in rows])
+        return [(row[0], row[1], json.dumps(bodies[row[1]])) for row in rows]
 
     def linked_records(self) -> str:
         """Every record that states a link, as one JSON array of the stored text: Rust reads it, Python never parses it."""
@@ -463,20 +505,22 @@ class Store:
             "select body from mastering_record where body like %s", ['%"relationships":[{%'])) + "]"
 
     def master_states(self, entities) -> dict:
-        """What a link reads of each golden record (its kind, status and profiles), a block at a time."""
+        """What a link reads of each golden record: its kind and status columns and its profile rows, never its text."""
         found = {}
         for block in blocks(entities):
-            for entity, body in self.rows(
-                    f"select entity_id,body from mastering_master where entity_id in ({marks(block)})", block):
-                parsed = json.loads(body)
-                found[entity] = {field: parsed[field] for field in ("kind", "status", "profiles") if field in parsed}
-        return found
+            for entity, kind, status in self.rows(
+                    f"select entity_id,kind,status from mastering_master where entity_id in ({marks(block)})", block):
+                found[entity] = {"kind": kind, "status": status, "profiles": []}
+            for entity, body in self.rows(f"select entity_id,body from mastering_profile where entity_id in ({marks(block)}) "
+                                          "order by entity_id,position", block):
+                found[entity]["profiles"].append(json.loads(body))
+        return {entity: {k: v for k, v in state.items() if v is not None} for entity, state in found.items()}
 
     def master_bodies(self, entities) -> dict:
         found = {}
         for block in blocks(entities):
-            found.update((e, json.loads(b)) for e, b in self.rows(
-                f"select entity_id,body from mastering_master where entity_id in ({marks(block)})", block))
+            found.update(self.assembled(self.rows(
+                f"select entity_id,{','.join(master_row.COLUMNS)},body from mastering_master where entity_id in ({marks(block)})", block)))
         return found
 
     def cross_referenced(self, entities) -> list[tuple]:
@@ -503,8 +547,10 @@ class Store:
     def masters_containing(self, text: str, limit: int) -> list:
         """Masters whose stored text holds this, up to the limit."""
         like = text.replace("|", "||").replace("%", "|%").replace("_", "|_")
-        return self.rows("select entity_id,body from mastering_master where lower(body) like %s escape '|' limit %s",
-                         [f"%{like}%", limit])
+        rows = self.rows(f"select entity_id,{','.join(master_row.COLUMNS)},body from mastering_master "
+                         "where lower(body) like %s escape '|' limit %s", [f"%{like}%", limit])
+        bodies = self.assembled(rows)
+        return [(row[0], json.dumps(bodies[row[0]])) for row in rows]
 
     def holding_all(self, tokens: list) -> list[str]:
         """The masters holding every token."""
@@ -543,8 +589,11 @@ class Postgres(Store):
     dialect = "postgresql"
     can_share = True
     conflict_nothing = " on conflict do nothing"
-    master_upsert = (" on conflict(entity_id) do update set body=excluded.body,changed_file=excluded.changed_file "
-                     "where mastering_master.body<>excluded.body")
+    master_upsert = (" on conflict(entity_id) do update set body=excluded.body,kind=excluded.kind,status=excluded.status,"
+                     "canonical_id=excluded.canonical_id,policy_digest=excluded.policy_digest,kind_version=excluded.kind_version,"
+                     "changed_file=excluded.changed_file where (mastering_master.body,mastering_master.kind,mastering_master.status,"
+                     "mastering_master.canonical_id,mastering_master.policy_digest,mastering_master.kind_version) is distinct from "
+                     "(excluded.body,excluded.kind,excluded.status,excluded.canonical_id,excluded.policy_digest,excluded.kind_version)")
     review_upsert = " on conflict(subject,reason) do update set assertion_id=excluded.assertion_id,open_review=1"
 
     def bulk(self, table: str, columns: tuple, rows: list) -> None:
@@ -573,8 +622,11 @@ class Postgres(Store):
 class MySQL(Store):
     dialect = "mysql"
     ignore = "ignore"
-    master_upsert = (" as new on duplicate key update changed_file="
-                     "if(mastering_master.body=new.body,mastering_master.changed_file,new.changed_file),body=new.body")
+    master_upsert = (" as new on duplicate key update changed_file=if(mastering_master.body=new.body and mastering_master.kind<=>new.kind"
+                     " and mastering_master.status<=>new.status and mastering_master.canonical_id<=>new.canonical_id"
+                     " and mastering_master.policy_digest<=>new.policy_digest and mastering_master.kind_version<=>new.kind_version,"
+                     "mastering_master.changed_file,new.changed_file),body=new.body,kind=new.kind,status=new.status,"
+                     "canonical_id=new.canonical_id,policy_digest=new.policy_digest,kind_version=new.kind_version")
     review_upsert = " as new on duplicate key update assertion_id=new.assertion_id,open_review=1"
     slots = 32
 

@@ -352,7 +352,7 @@ def merge_masters(store, settings: Settings, decision: dict, keep: str, gone: st
     store.repoint(keep, gone)
     if stored:
         alias = {"entity_id": gone, "kind": settings.kind, "canonical_id": keep, "status": "alias"}
-        store.write_masters([(gone, json.dumps(alias))])
+        store.write_masters([(gone, alias)])
     store.add_decision(decision, keep, gone)
 
 
@@ -598,7 +598,9 @@ def _write_masters(store, settings: Settings, entities: list, counts: Counter) -
         "profile_kinds": KINDS, "normalizers": NORMALIZERS})
     for review in reviews:
         counts[str(review.get("reason"))] += 1
-    store.write_masters([(e, json.dumps(body)) for e, body in masters.items()])
+    store.write_masters(list(masters.items()))
+    store.keep_identifiers({e: {(namespace, value) for namespace, values in body["identifiers"].items() for value in values}
+                            for e, body in masters.items()})
     held = sorted({(namespace, value, e) for e, body in masters.items()
                    for namespace, values in body["identifiers"].items() for value in values})
     store.add_identifiers(held)
