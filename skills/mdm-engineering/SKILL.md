@@ -20,10 +20,9 @@ data; storage holds no domain branch. Read [Storage on each database engine](ref
 provisioning, initializing or reviewing storage. A silver table spec is applied by
 [data-operations](../data-operations/SKILL.md).
 
-- **One engine, never two beside each other.** When a store is rebuilt, the old one's tables, code and commands go in
-  the same change that stops writing them; `init` installs only what a reader, command or stored record uses. An
-  install path kept for a retired engine still costs every reader: it was imported on the live path, loaded at every
-  worker start, tested on three databases, and blocked init on a changed checksum.
+- **One engine.** A store holds only the tables, code and commands its one engine uses; `init` installs only what a
+  reader, command or stored record uses. A table, module or command nothing uses is removed in the change that stops
+  using it: kept, it is loaded at every worker start, tested on every database and checked at every init.
 
 ## Database-agnostic merge logic
 

@@ -79,13 +79,13 @@ which no phase timing could name.
   (`summary`) before it, and expect the previous run's done steps to be set aside as another store's state. It deletes the
   dropped stores' run files (`<manifest root>/load`) and keeps the extracts.
 
-## Retiring objects in place
-A store's objects that nothing reads any more (a retired engine's tables, functions and views) are dropped in place on the
-operator's words, never by a reset. First copy what a reader still needs to its new home and check every row there equal
-to its source, keeping each number a stored id depends on (a reading's version is hashed into its records' ids). Then one
-owner script, refusing unless idle: in one transaction it counts every object outside the retired ones and the main
-tables' rows, drops, counts again, and commits only when both are unchanged and nothing retired is left; it records the
-operator's words in the stores folder's approvals log. Report the counts before and after.
+## Dropping objects nothing reads
+A store's objects that no code reads (tables, functions, views) are dropped in place on the operator's words, never by a
+reset. What a reader needs is first copied to where it is read and checked equal row by row, keeping each number a stored
+id depends on (a reading's version is hashed into its records' ids). Then one owner script, refusing unless idle: in one
+transaction it counts every other object and the main tables' rows, drops, counts again, and commits only when both are
+unchanged and none of the dropped objects is left; it records the operator's words in the stores folder's approvals log.
+Report the counts before and after.
 
 ## Run files
 A load writes each bundle's prepared files under `<manifest root>/load/<source>/<target>/<run>/bundle-NNN` and deletes them

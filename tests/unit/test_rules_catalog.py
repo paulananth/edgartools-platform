@@ -324,7 +324,7 @@ def test_the_plan_names_domains_glossaries_and_store_certification():
     assert cases["company_fact.one_form_per_filing"]["testDefinition"] == "edgartools-configured-column-check"
     assert all("testCaseResult" not in case for case in plan["quality_cases"])
     assert any(name.endswith("mdm.master_records.security") for name in products["security_master"]["tables"])
-    assert sum(1 for table in plan["tables"] if table["databaseSchema"].endswith(".relationships")) == 15  # the two venue types left with venue (ticket 09)
+    assert sum(1 for table in plan["tables"] if table["databaseSchema"].endswith(".relationships")) == 15  # mdm-relationship-types 6
     certified = {item["table"]: item["tag"] for item in plan["certifications"]}
     assert certified["edgartools-rules.mdm.master_records.company"] == "Certification.Gold"
     assert any(name.startswith("edgartools-rules.silver.") and tag == "Certification.Silver"
