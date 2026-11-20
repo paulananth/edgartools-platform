@@ -12,7 +12,7 @@ silver tables may be selected. Layer membership, a data-class tag or a store
 certification alone is insufficient. Identify the actual physical relation
 and its consumer contract; a logical catalog asset is not proof that relation
 exists. A table whose name includes master is not automatically eligible.
-RDM's tables hold draft versions beside published ones, so none of them is final: its final output is `rdm.published_code`, written once when
+RDM's tables hold draft versions beside published ones, so none of them is final: its final output is `rdm.published_code` (one version of each code set: a later version replaces the earlier one's rows), written once when
 a version is published (the published-only form of the `rdm.code_context` view, which a mirror cannot carry). The mirror
 carries it, and Gold publishes one view per code set over it ([data-modeling GOLD.md](../data-modeling/GOLD.md)).
 
