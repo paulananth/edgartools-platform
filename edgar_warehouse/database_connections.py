@@ -55,7 +55,13 @@ def store_url(store: str, environment=None):
     url = make_url(value)
     if not url.database:
         raise ValueError(f"{variable} must name its database")
-    return url
+    return own_database(url, store)
+
+
+def own_database(url, store: str):
+    """MySQL keeps its own database per store (a MySQL database is a schema), named after the URL's: `control_bookkeeping`.
+    Operator: "kiss, mysql keep its own database per store". Every other engine keeps the stores as schemas of the URL's database."""
+    return url.set(database=f"{url.database}_{store}") if url.get_backend_name() == "mysql" else url
 
 
 def owner_url(store: str, environment=None) -> str:

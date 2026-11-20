@@ -28,7 +28,9 @@ assert not names & set({DOMAIN!r})
     assert probe.returncode == 0, "Control installation has a workload dependency"
     with database_factory() as (_, reader, reader_role):
         with database_factory() as (owner, worker, role):
-            with store_databases(owner, "control") as (prefix, stores):  # bookkeeping and the journal share control, one login
+            # Bookkeeping and the journal share the control database; on MySQL each keeps its own (control_<store>). One login.
+            mine = ("control",) if owner.dialect.name != "mysql" else ("control_bookkeeping", "control_change_journal")
+            with store_databases(owner, *mine) as (prefix, stores):
                 if owner.dialect.name == "mysql":
                     wheel = next((root / "dist").glob("edgartools_bookkeeping-*.whl"))
                     added = subprocess.run(["uv", "pip", "install", "--python", str(python),
@@ -40,7 +42,7 @@ assert not names & set({DOMAIN!r})
                 def url(engine):  # a duty file's control URL: the login's, naming the control database
                     return engine.url.set(drivername=engine.dialect.name, database=control).render_as_string(hide_password=False)
                 environment = {k: v for k, v in os.environ.items() if k not in ("DATA_URL", "CONTROL_URL")}
-                journal_owner, journal_runtime, journal_role = stores["control"], worker, role
+                journal_owner, journal_runtime, journal_role = stores[mine[-1]], worker, role
                 reader_url = url(reader)
                 def invoke(*arguments, document=None, verifier=False, expected=0, module="edgar_warehouse.bookkeeping"):
                     owner_command = arguments[0] in {"init", "grant-profile"}
@@ -53,9 +55,9 @@ assert not names & set({DOMAIN!r})
                         (tmp_path / "private-installed-control.log").write_text(result.stdout + "\n" + result.stderr)
                     assert result.returncode == expected, "Installed control failed; private diagnostic retained"
                     return json.loads(result.stdout)
-                invoke("init", "--runtime-role", role, "--database-name", control)
-                invoke("init", "--runtime-role", reader_role, "--database-name", control)
-                invoke("init", "--runtime-role", journal_role, "--database-name", control,
+                invoke("init", "--runtime-role", role)
+                invoke("init", "--runtime-role", reader_role)
+                invoke("init", "--runtime-role", journal_role,
                        module="edgar_warehouse.change_journal.cli")
                 granted = []
                 with owner.connect() as conn:
@@ -105,11 +107,11 @@ finally: book.close()
                     assert invoke("resume", run_id, expected=3)["run"]["state"] == "running"
                     assert invoke("finalize", run_id)["run"]["state"] == "complete"
                     assert json.loads(artifacts.verified({"uri": counted, "sha256": final["items"][1]["receipt"]["sha256"]})) == {"lines": 1}
-                    invoke("init", "--runtime-role", role, "--database-name", control)
+                    invoke("init", "--runtime-role", role)
                     with journal_owner.begin() as conn:
                         conn.execute(text("DROP TABLE journal.event CASCADE" if owner.dialect.name == "postgresql" else "DROP TABLE journal_event"))
                     refused = subprocess.run([str(python), "-I", "-m", "edgar_warehouse.change_journal.cli", "init",
-                        "--runtime-role", journal_role, "--database-name", control],
+                        "--runtime-role", journal_role],
                         capture_output=True, text=True, cwd=tmp_path, timeout=30, env={**environment, "CONTROL_URL": url(owner)})
                     assert refused.returncode != 0, "Installed Journal recreated missing history"
                     assert not inspect(journal_owner).has_table("event" if owner.dialect.name == "postgresql" else "journal_event",

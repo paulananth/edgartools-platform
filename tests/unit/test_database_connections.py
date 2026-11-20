@@ -41,3 +41,17 @@ def test_a_url_that_names_no_database_is_refused():
 def test_an_unknown_store_is_refused():
     with pytest.raises(ValueError, match="unknown store"):
         connections.store_url("elsewhere", ENV)
+
+
+@pytest.mark.parametrize("store, database", [("mdm", "data_mdm"), ("silver", "data_silver"), ("bookkeeping", "control_bookkeeping"),
+                                             ("change_journal", "control_change_journal")])
+def test_mysql_keeps_its_own_database_per_store(store, database, monkeypatch):
+    """Operator: "kiss, mysql keep its own database per store"; PostgreSQL keeps them as schemas of the two databases."""
+    env = {"DATA_URL": "mysql://worker:invented@host:3306/data", "CONTROL_URL": "mysql://worker:invented@host:3306/control"}
+    assert connections.store_url(store, env).database == database
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    if store == "bookkeeping":
+        assert bookkeeping.default_url().endswith("/control_bookkeeping")
+    if store == "change_journal":
+        assert journal._default_url("change_journal").endswith("/control_change_journal")

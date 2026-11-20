@@ -20,7 +20,9 @@ def test_installed_rules_and_real_workers_complete_and_resume_one_run(installed,
         _, reader, reader_role = stack.enter_context(database_factory())
         owner, worker, role = stack.enter_context(database_factory())
         # Rules, bookkeeping and the journal share the control database; one runtime login reaches them all.
-        prefix, stores = stack.enter_context(store_databases(owner, "control"))
+        # On MySQL each keeps its own database, named after the URL's (control_<store>).
+        mine = ("control",) if owner.dialect.name != "mysql" else ("control_bookkeeping", "control_change_journal", "control_rules")
+        prefix, stores = stack.enter_context(store_databases(owner, *mine))
         control = lambda engine: engine.url.set(database=prefix + "control").render_as_string(hide_password=False)
         owner_url, worker_url = control(owner), control(worker)
         env = {"BOOKKEEPING_MANIFEST_ROOT": (root / "runs").as_uri()}

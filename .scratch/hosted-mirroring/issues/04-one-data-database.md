@@ -48,6 +48,10 @@ and the rest in another db", then "Yes, open the ticket and start, make the skil
 - [x] The Change Journal shares the control database: its PostgreSQL refusal of a database holding other tables is removed (it
       contradicted the operator's control database); the untracked-schema and checksum refusals stay. The bookkeeping and journal
       `init` default to the database their URL names. Test: `test_the_journal_shares_the_control_database_with_the_other_stores`. 2026-11-19 22:14 ET
+- [x] Operator: "kiss, mysql keep its own database per store": on MySQL a store's database is the URL's plus the store
+      (`control_bookkeeping`), from `database_connections.own_database` (Bookkeeping and the Journal, shipping alone, say the
+      same in one line); PostgreSQL keeps the stores as schemas of `data` and `control`. Asked because MySQL Bookkeeping
+      fingerprints and revokes over its whole database. Test: `test_mysql_keeps_its_own_database_per_store`. 2026-11-19 22:16 ET
 - [x] Tests move to the two URLs; the shared `databases` fixture makes `control` and `data`. Single-store adapter tests pass on
       PostgreSQL and MySQL (8 files). 2026-11-19 22:14 ET
 - [ ] ~~Mastering in schema `mdm` on PostgreSQL~~ not needed: MDM's owner owns the data database, so mastering and MDM's

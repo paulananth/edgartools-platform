@@ -27,9 +27,11 @@ def _default_url(store: str) -> str:
     value = os.environ.get("CONTROL_URL")
     if not value:
         raise KeyError("CONTROL_URL is not set: source the duty's file of the stores folder (its value is never printed)")
-    if not make_url(value).database:
+    url = make_url(value)
+    if not url.database:
         raise ValueError("CONTROL_URL must name its database")
-    return value
+    # MySQL keeps its own database per store, as edgar_warehouse.database_connections.own_database names it.
+    return url.set(database=f"{url.database}_{store}").render_as_string(hide_password=False) if url.get_backend_name() == "mysql" else value
 
 
 def get_engine(url: str | None = None):
