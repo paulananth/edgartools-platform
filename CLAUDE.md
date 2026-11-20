@@ -112,6 +112,11 @@ Operator rule, 2026-09-24.
 
 Learned the hard way; each is a standing operator rule.
 
+**Say what is, never what was** (operator, 2026-11-20: "no need to mention about anything history or deleted just
+remove and cleanup", "make it a rule"). Code, comments, tests, skills, docs and rules files state the current design
+only: never what was removed, replaced, renamed or moved, what an earlier version did, or that something is "now" so.
+Remove what is unused and clean up after it, with no note that it existed. History lives in git, tickets and PR text.
+
 **Tests**
 - No test is expected to fail: CI is green on `main`. Locally, run only the
   tests a change can affect, by [the recipes](docs/agents/watching-and-testing.md);

@@ -124,9 +124,8 @@ WORDS = {
         usage=[("mdm", "relationship", "type", "exact")],
         hints=[("meaning", "A type's properties: from and to (the kinds at each end), from_profile and to_profile, "
                            "hierarchy, cycles, one_parent, one_target, ultimate_parent and ultimate_type, keeps_start, ends_parent_links.")],
-        versions={"6": ("claude (hosted-mirroring ticket 09, venue is no MDM kind)",
-                        "Yes (remove the relationship types that name only the unused kinds); venue is RDM's "
-                        "iso-10383-mic on a Security's listing")}),
+        versions={"6": ("claude (hosted-mirroring ticket 09)",
+                        "Yes; a trading venue is RDM's iso-10383-mic on a Security's listing")}),
     "mdm-kinds": dict(
         name="MDM kinds",
         definition="The kinds of entity MDM knows. A kind that holds golden records has its merge rules; the "

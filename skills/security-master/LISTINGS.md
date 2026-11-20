@@ -76,8 +76,8 @@ index is dropped.
   it; a listing a later answer drops leaves it. No new kind of row. Built as
   configuration: `detail_lookups` in `rules/mastering/engine-v1.yaml` (kind
   `security`, detail `listings`, keys `mic` and `exchange`, each with
-  `ticker`); the engine's `detail_lookups.py` names no kind or field and
-  shares the name lookup's coverage and owner rebuild (`master_index.py`).
+  `ticker`); the engine's `detail_lookups.py` names no kind or field, and its keys are tokens in the one lookup
+  table the name search uses (`mastering_lookup`).
   A listing with a MIC is found by both keys, so a caller holding OpenFIGI's
   code needs no crosswalk.
 - **The venue is its ISO 10383 MIC** (operator, 19:12 ET: "The exchange code
@@ -110,8 +110,8 @@ Operator: "Maybe create a security detail table and keep it in
 the mdm", then "Detail rows set in config (Recommended)".
 
 - A Dataset Contract states its detail lists in configuration (OpenFIGI:
-  `listings`, keyed by FIGI), and a master's record carries them. No
-  separate detail table is written; the venue lookup above is the one
+  `listings`, keyed by FIGI), and a master's record carries them. The
+  venue lookup above is the one
   Security-only part.
 - A Security's CUSIP and ISIN answers make **one set of listings, joined by
   FIGI**; each row records which answer gave it ("One set, joined by FIGI").
