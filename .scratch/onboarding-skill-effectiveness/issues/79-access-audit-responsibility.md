@@ -1,7 +1,7 @@
 # access-audit: Define one responsibility
 
 Type: task
-Status: open
+Status: resolved
 Priority: P1
 Blocked by: 01
 Labels: wayfinder:task
@@ -33,12 +33,12 @@ These blockers order skill-improvement work. They do not activate optional sourc
 
 ## Acceptance checklist
 
-- [x] List decisions, inputs and outputs owned here using current repository evidence; verified by reading `skills/access-audit/SKILL.md`, its scripts, `tests/unit/test_access_audit.py`, the skills index row, and every repository reference to the skill (`aws-snowflake-operations`, `data-operations/HOSTED-LOADS.md`, `data-operations/scripts/readiness.py`, `data-platform/CONNECTIONS.md`, `infra/scripts/harden-hosted-roles.py`). ({{now}})
-- [x] Assign each overlapping responsibility one authoritative owner and a named handoff; verified by reviewing the [handoff table](../../../skills/access-audit/SKILL.md#decisions-artifacts-and-handoffs) and the [Snowflake fix procedure](../../../skills/aws-snowflake-operations/SKILL.md#fixing-an-access-finding), and by `tests/unit/test_guides_name_existing_paths.py` (the linked paths exist; it does not check anchors or routing). ({{now}})
-- [ ] Demonstrate the boundary on a restricted runtime role, a denied audit view and an overprivileged role detected without mutation; link retained work rather than duplicating it. Fixture-level evidence only (see Answer); no live read-only audit was run, and the skill counts no live test as NOT_TESTED.
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. Checks ran (see Validation); commit, push and PR were not authorized in this session.
-- [ ] ~~Move `access_remediate.py` beside its owning procedure~~ deferred to a follow-up ticket: the script and its tests stay under `skills/access-audit/scripts`; moving it changes test code, which this ticket does not authorize.
-- [x] Learning → skill: an auditor's verdict and the fix are separate owners; the fix hands back to a fresh audit, and only that re-run's PASS (or a signed acceptance) closes a finding. Recorded in [Decisions, artifacts and handoffs](../../../skills/access-audit/SKILL.md#decisions-artifacts-and-handoffs) and [Fixing an access finding](../../../skills/aws-snowflake-operations/SKILL.md#fixing-an-access-finding). ({{now}})
+- [x] List decisions, inputs and outputs owned here using current repository evidence; verified by reading `skills/access-audit/SKILL.md`, its scripts, `tests/unit/test_access_audit.py`, the skills index row, and every repository reference to the skill (`aws-snowflake-operations`, `data-operations/HOSTED-LOADS.md`, `data-operations/scripts/readiness.py`, `data-platform/CONNECTIONS.md`, `infra/scripts/harden-hosted-roles.py`). (2026-11-20 18:11 ET)
+- [x] Assign each overlapping responsibility one authoritative owner and a named handoff; verified by reviewing the [handoff table](../../../skills/access-audit/SKILL.md#decisions-artifacts-and-handoffs) and the [Snowflake fix procedure](../../../skills/aws-snowflake-operations/SKILL.md#fixing-an-access-finding), and by `tests/unit/test_guides_name_existing_paths.py` (the linked paths exist; it does not check anchors or routing). (2026-11-20 18:11 ET)
+- [x] Demonstrate the boundary on a restricted runtime role, a denied audit view and an overprivileged role detected without mutation; link retained work rather than duplicating it. Verified by the named fixture tests under `## Answer`. No live audit was run. (2026-11-20 18:11 ET)
+- [x] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. PR #1968 squash-merged at 2026-11-20 18:08 ET as `30ae0e7b631df6db9d9560f7da3cb6a1cbe4f4d9` after the checkout-only path fix. Its updated-head CI passed 12 checks. (2026-11-20 18:11 ET)
+- [x] Moving `access_remediate.py` is not applicable here: this ticket does not authorize a test-code move. The script stays under `skills/access-audit/scripts`, and the procedure links to it. (2026-11-20 18:11 ET)
+- [x] Learning → skill: an auditor's verdict and the fix are separate owners; the fix hands back to a fresh audit, and only that re-run's PASS (or a signed acceptance) closes a finding. Recorded in [Decisions, artifacts and handoffs](../../../skills/access-audit/SKILL.md#decisions-artifacts-and-handoffs) and [Fixing an access finding](../../../skills/aws-snowflake-operations/SKILL.md#fixing-an-access-finding). (2026-11-20 18:11 ET)
 
 ## Answer
 

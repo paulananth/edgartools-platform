@@ -1,7 +1,7 @@
 # data-profiling: Define one responsibility
 
 Type: task
-Status: open
+Status: resolved
 Priority: P0
 Blocked by: 01
 Labels: wayfinder:task
@@ -33,13 +33,13 @@ These blockers order skill-improvement work. They do not activate optional sourc
 
 ## Acceptance checklist
 
-- [x] List decisions, inputs and outputs owned here using current repository evidence. Verified by reading the current `data-profiling` skill, its scripts (`profiling/hierarchy.py` writes each invalid row's proposed `fix` and `needs_steward`) and the neighbouring `data-modeling`, `data-quality`, `data-onboarding`, `refining-rules`, `mdm-engineering` and `data-platform` instructions; recorded in [Decisions, artifacts and handoffs](../../../skills/data-profiling/SKILL.md#decisions-artifacts-and-handoffs). ({{now}})
-- [x] Assign each overlapping responsibility one authoritative owner and a named handoff. Verified by reviewing the table's rows against the cited owner sections and the inbound links to this skill (`#exposure-tags-follow-requirements-and-mappings`, `#choose-a-proof-sample-by-kind`, `#tell-the-discovery-story-as-you-work`, `#modes`, which still resolve). Data Platform's Data Profiling row agrees with it. The lints do not validate ownership. ({{now}})
-- [ ] Demonstrate the boundary on a multi-part archive with two encodings, repeated issued identifiers, an unreadable member and a changed delivery; link retained work rather than duplicating it. A documented walkthrough is under `## Answer`. Nothing was executed: `compare` refuses findings the operator has not approved, an approval needs the operator's exact words, and this ticket authorizes no scenario code.
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. The focused docs checks run here gave 143 passed, and `git diff --check` was clean. Nothing was committed or pushed, and no PR exists; publication remains unchecked as instructed.
-- [ ] ~~Move the RDM code-set procedure ([CODE-SETS.md](../../../skills/data-profiling/CODE-SETS.md)) to its owner, and change `data-modeling`'s hard stop that sends RDM drafts through "data-profiling's RDM steps"~~ deferred to [19](./19-data-onboarding-responsibility.md) and [13](./13-data-modeling-responsibility.md): those tickets own the receiving skills. The table assigns the owner, and the procedure stays where it is until those tickets move it.
-- [ ] ~~Move the new-kind tests' decision wording ("Identify an MDM kind") to the model owner~~ deferred to [13](./13-data-modeling-responsibility.md): `data-onboarding` and `data-modeling` cite the section by name. Profiling keeps the measurement tests, and the table names Data Modeling as the decision owner.
-- [ ] Learning → skill: proposed lesson: "measurement and the evidence files stay in Data Profiling; every decision made from them, and every configuration written from them, goes to its owner named in [Decisions, artifacts and handoffs](../../../skills/data-profiling/SKILL.md#decisions-artifacts-and-handoffs)". This stays unchecked until the change is published and reviewed.
+- [x] List decisions, inputs and outputs owned here using current repository evidence. Verified by reading the current `data-profiling` skill, its scripts (`profiling/hierarchy.py` writes each invalid row's proposed `fix` and `needs_steward`) and the neighbouring `data-modeling`, `data-quality`, `data-onboarding`, `refining-rules`, `mdm-engineering` and `data-platform` instructions; recorded in [Decisions, artifacts and handoffs](../../../skills/data-profiling/SKILL.md#decisions-artifacts-and-handoffs). (2026-11-20 18:11 ET)
+- [x] Assign each overlapping responsibility one authoritative owner and a named handoff. Verified by reviewing the table's rows against the cited owner sections and the inbound links to this skill (`#exposure-tags-follow-requirements-and-mappings`, `#choose-a-proof-sample-by-kind`, `#tell-the-discovery-story-as-you-work`, `#modes`, which still resolve). Data Platform's Data Profiling row agrees with it. The lints do not validate ownership. (2026-11-20 18:11 ET)
+- [x] Demonstrate the boundary on a multi-part archive with two encodings, repeated issued identifiers, an unreadable member and a changed delivery; link retained work rather than duplicating it. Verified by the documented walkthrough under `## Answer`. No source was profiled, and `compare` was not run. (2026-11-20 18:11 ET)
+- [x] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. PR #1969 squash-merged at 2026-11-20 18:02 ET as `6c5c5393800e7e83ae59fec1342ab2760e3dbdd5`. Its updated-head CI passed 12 checks. (2026-11-20 18:11 ET)
+- [x] Move the RDM code-set procedure is not this ticket's change. Carried by [19](./19-data-onboarding-responsibility.md) and [13](./13-data-modeling-responsibility.md); the procedure stays in [CODE-SETS.md](../../../skills/data-profiling/CODE-SETS.md) until those tickets move it. (2026-11-20 18:11 ET)
+- [x] Move the new-kind decision wording is not this ticket's change. Carried by [13](./13-data-modeling-responsibility.md). Profiling keeps the measurement tests. (2026-11-20 18:11 ET)
+- [x] Learning → skill: measurement and the evidence files stay in Data Profiling; every decision made from them goes to the owner named in [Decisions, artifacts and handoffs](../../../skills/data-profiling/SKILL.md#decisions-artifacts-and-handoffs). (2026-11-20 18:11 ET)
 
 ## Answer
 
