@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 
+from tests.support.duty import duty_url
 from edgar_warehouse.control_contract import Blocked
 from edgar_warehouse.silver_writer.database import migrate, register
 from edgar_warehouse.silver_writer.context import TableContext
@@ -18,7 +19,7 @@ from tests.unit.test_silver_writer import a_spec
 
 @pytest.fixture
 def silver(database_factory):
-    with database_factory() as (owner, runtime, role):
+    with database_factory(store="silver") as (owner, runtime, role):
         with pytest.raises(Blocked, match="not initialized"):
             migrate(owner, runtime_role=role, existing_only=True)
         installed = migrate(owner, runtime_role=role)
@@ -265,10 +266,10 @@ def test_normal_cli_reads_configured_connection(silver, tmp_path, monkeypatch, c
     path.write_text(json.dumps(config))
     delivered = tmp_path / "rows.jsonl"
     delivered.write_text("\n".join(json.dumps(row) for row in rows()))
-    monkeypatch.setenv("DATA_URL", owner.url.render_as_string(hide_password=False))
+    monkeypatch.setenv("DATA_URL", duty_url(owner, "silver"))
     assert main(["silver", "register", str(path), "--runtime-role", role]) == 0
     assert json.loads(capsys.readouterr().out)["created"]
-    monkeypatch.setenv("DATA_URL", runtime.url.render_as_string(hide_password=False))  # the loader file, from here on
+    monkeypatch.setenv("DATA_URL", duty_url(runtime, "silver"))  # the loader file, from here on
     assert main(["silver", "land", config["table"], str(delivered)]) == 0
     assert json.loads(capsys.readouterr().out)["inserted"] == 2
     assert main(["silver", "describe", config["table"]]) == 0

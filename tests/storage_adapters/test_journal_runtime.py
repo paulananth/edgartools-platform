@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
+from tests.support.duty import duty_url
 from edgar_warehouse.change_journal import ChangeJournal, JournalConflict, envelope
 from edgar_warehouse.change_journal.database import migrate
 from edgar_warehouse.change_journal import storage
@@ -26,8 +27,8 @@ def event(**changes):
 def test_normal_journal_cli_initializes_the_explicit_configured_database(database_factory, monkeypatch, capsys):
     import json
     from edgar_warehouse.change_journal.cli import main
-    with database_factory() as (owner, runtime, role):
-        monkeypatch.setenv("CONTROL_URL", owner.url.render_as_string(hide_password=False))
+    with database_factory(store="change_journal") as (owner, runtime, role):
+        monkeypatch.setenv("CONTROL_URL", duty_url(owner, "change_journal"))
         options = ["--runtime-role", role, "--database-name", owner.url.database]
         assert main(["init", *options]) == 0
         before = json.loads(capsys.readouterr().out)

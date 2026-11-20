@@ -113,8 +113,8 @@ def test_bounded_inspection_scopes_and_hash_rejection(databases):
 
 
 def test_migration_drift_wrong_database_and_runtime_owner_rejected(databases):
-    first = migrate(databases.ledger_admin, runtime_role="ledger_runtime")
-    assert migrate(databases.ledger_admin, runtime_role="ledger_runtime") == first
+    first = migrate(databases.ledger_admin, runtime_role="ledger_runtime", database_name="control")
+    assert migrate(databases.ledger_admin, runtime_role="ledger_runtime", database_name="control") == first
     with pytest.raises(Blocked):
         migrate(databases.admin, runtime_role="bk_runtime")
     with pytest.raises(Blocked):
@@ -128,7 +128,7 @@ def test_migration_drift_wrong_database_and_runtime_owner_rejected(databases):
         conn.exec_driver_sql('COMMENT ON SCHEMA journal IS \'{"schema.sql":"bad"}\'')
     try:
         with pytest.raises(Blocked):
-            migrate(databases.ledger_admin, runtime_role="ledger_runtime")
+            migrate(databases.ledger_admin, runtime_role="ledger_runtime", database_name="control")
     finally:
         with databases.ledger_admin.begin() as conn:
             conn.exec_driver_sql(
@@ -139,13 +139,13 @@ def test_migration_drift_wrong_database_and_runtime_owner_rejected(databases):
 def test_the_journal_shares_the_control_database_with_the_other_stores(databases):
     """The control database holds rules, bookkeeping and the journal, each in its own schema (and a hosted instance's
     `extension_base.workers`): another store's tables beside the journal never refuse its migration."""
-    first = migrate(databases.ledger_admin, runtime_role="ledger_runtime")
+    first = migrate(databases.ledger_admin, runtime_role="ledger_runtime", database_name="control")
     try:
         with databases.ledger_admin.begin() as conn:
             conn.exec_driver_sql("CREATE SCHEMA extension_base")
             conn.exec_driver_sql("CREATE TABLE extension_base.workers(id int)")
             conn.exec_driver_sql("CREATE TABLE public.another_store(id int)")
-        assert migrate(databases.ledger_admin, runtime_role="ledger_runtime") == first
+        assert migrate(databases.ledger_admin, runtime_role="ledger_runtime", database_name="control") == first
     finally:
         with databases.ledger_admin.begin() as conn:
             conn.exec_driver_sql("DROP TABLE IF EXISTS public.another_store")

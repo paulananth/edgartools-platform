@@ -5,6 +5,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
+from tests.support.duty import duty_url
 from edgar_warehouse.control_contract import Blocked
 from edgar_warehouse.rules import frozen
 from edgar_warehouse.rules.db import TABLE, Rules, migrate
@@ -20,7 +21,7 @@ def pipeline(seconds=60):
 
 
 def test_a_runs_rules_are_recorded_once_and_read_back(database_factory, monkeypatch, capsys):
-    with database_factory() as (owner, runtime, role):
+    with database_factory(store="rules") as (owner, runtime, role):
         if owner.dialect.name == "mssql":
             pytest.skip("The Rules Database is qualified on PostgreSQL and MySQL")
         assert migrate(owner, agent_role=role) == {"table": TABLE}
@@ -44,6 +45,6 @@ def test_a_runs_rules_are_recorded_once_and_read_back(database_factory, monkeypa
             conn.execute(text(f"DELETE FROM {target}"))
         from edgar_warehouse.cli import main
 
-        monkeypatch.setenv("CONTROL_URL", runtime.url.render_as_string(hide_password=False))
+        monkeypatch.setenv("CONTROL_URL", duty_url(runtime, "rules"))
         assert main(["rules", "status", "--pipeline", "invented.pipeline"]) == 0
         assert [row["digest"] for row in json.loads(capsys.readouterr().out)] == [first["digest"], changed["digest"]]
