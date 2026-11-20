@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "skills-refinement-hatchet"
+version = "0.1.0"
+description = "Hatchet orchestration for skill-refinement implementation and testing"
+requires-python = ">=3.12,<4.0"
+dependencies = [
+    "hatchet-sdk>=1.47.0",
+]
+
+[tool.setuptools]
+py-modules = ["worker", "runner", "workflows", "trigger"]
+
