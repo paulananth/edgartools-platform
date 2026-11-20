@@ -28,6 +28,12 @@ def test_retire_always_drops_the_target_with_the_mirror():
     assert mirror_sql.retire("old") == "CALL SNOWFLAKE.POSTGRES.DROP_MIRROR('old', TRUE);\n"
 
 
+def test_release_keeps_the_target_and_gives_it_to_the_owner_role_without_copying_grants():
+    sql = mirror_sql.release("m1", {"owner": "INVENTED_OWNER", "mirror": {"database": "INVENTED_MIRROR"}})
+    assert "DROP_MIRROR('m1', FALSE);" in sql and "TRUE" not in sql
+    assert "GRANT OWNERSHIP ON DATABASE INVENTED_MIRROR TO ROLE INVENTED_OWNER;" in sql and "COPY CURRENT GRANTS" not in sql
+
+
 def test_a_read_the_exposure_list_does_not_name_is_refused():
     reads = {"sources": [{"name": "a", "tables": [{"name": "working_table"}]}]}
     with pytest.raises(SystemExit, match="a.working_table"):

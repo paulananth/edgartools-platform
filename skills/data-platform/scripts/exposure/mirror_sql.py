@@ -14,6 +14,7 @@ operator's approval:
         --mirrored <JSON list of the mirrored schema.table names, read back>   # adds and removes the difference
     python mirror_sql.py verify --mirror <name>          # until every table is REPLICATING with equal counts
     python mirror_sql.py retire --mirror <old name>      # TRUE: the target database goes with the mirror
+    python mirror_sql.py release --mirror <name> --names <database names file>   # FALSE, then the owner role takes the target
 """
 from __future__ import annotations
 
@@ -67,9 +68,23 @@ def retire(mirror: str) -> str:
     return f"CALL SNOWFLAKE.POSTGRES.DROP_MIRROR('{mirror}', TRUE);\n"
 
 
+def release(mirror: str, names: dict) -> str:
+    """Stop the mirror and keep its target, owned by the platform's owner role instead of the Snowflake application.
+
+    A target is owned by the application while its mirror replicates (active or suspended), and CREATE_MIRROR refuses an
+    existing database, so ownership moves only here: the mirror operator drops the mirror without the target, then the
+    account administrator (a separately approved use) moves ownership, without COPY CURRENT GRANTS, which an
+    application-owned object refuses. The data stays but is no longer refreshed.
+    """
+    target, owner = names["mirror"]["database"], names["owner"]
+    return (f"-- as the mirror operator\nCALL SNOWFLAKE.POSTGRES.DROP_MIRROR('{mirror}', FALSE);\n"
+            f"-- as the account administrator, on the operator's words\nGRANT OWNERSHIP ON DATABASE {target} TO ROLE {owner};\n"
+            f"-- read back: the owner column says {owner}\nSHOW DATABASES LIKE '{target}';\n")
+
+
 def main(argv: list[str] | None = None) -> str:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("action", choices=["create", "alter", "verify", "retire"])
+    parser.add_argument("action", choices=["create", "alter", "verify", "retire", "release"])
     parser.add_argument("--mirror", required=True)
     parser.add_argument("--instance")
     parser.add_argument("--postgres-database")
@@ -85,6 +100,10 @@ def main(argv: list[str] | None = None) -> str:
     if args.action == "retire":
         return retire(args.mirror)
     load = lambda path: yaml.safe_load(path.read_text(encoding="utf-8"))
+    if args.action == "release":
+        if not args.names:
+            parser.error("release needs --names")
+        return release(args.mirror, load(args.names))
     if args.action == "alter":
         if not all((args.reads, args.exposure, args.mirrored)):
             parser.error("alter needs --reads, --exposure and --mirrored")
