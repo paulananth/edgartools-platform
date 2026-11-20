@@ -71,7 +71,7 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    edgar-warehouse rules init --agent-role rules_agent
    ```
    `init` is the whole step, on a fresh store and again when a later schema file arrives. Done when
-   each prints its schema file's checksum. RDM's `init` also creates `rdm.published_code`, the codes of every published version as a table
+   each prints its schema file's checksum. RDM's `init` also creates `rdm.published_code`, the codes of each code set's one published version as a table
    for the mirror; `rdm.published_code` is filled each time a version is published (step 4 publishes them), never edited.
 4. **RDM codes.** With `worker.env` sourced, `python <data-operations skill>/scripts/rdm_restore_published.py`
    (no approval is asked: the operator's standing ruling, 2026-11-19, is in the approval record, under an approver other than the drafter, since the store refuses a self-approval).
