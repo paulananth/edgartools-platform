@@ -9,7 +9,7 @@ from edgar_warehouse.rules import files, shape
 
 # The steps of every target, recorded once from the hand-written step lists.
 STEPS = json.loads(Path(__file__).with_name("load_target_steps.json").read_text())
-SOURCES = sorted(path.parent.name for path in (files.ROOT / "sources").glob("*/source.yaml"))
+SOURCES = sorted(path.parent.name for path in (files.sources_root()).glob("*/source.yaml"))
 
 
 def targets():

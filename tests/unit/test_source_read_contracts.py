@@ -10,7 +10,7 @@ import pytest
 from edgar_warehouse.rules import files
 from edgar_warehouse.workers import source_read
 
-SOURCES = Path(__file__).resolve().parents[2] / "rules" / "sources"
+SOURCES = Path(__file__).resolve().parents[2] / "sources"
 
 
 def _contracts():

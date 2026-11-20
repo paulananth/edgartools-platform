@@ -483,9 +483,9 @@ LANDS = {"execution": {"max_artifacts": 2}, "bookkeeping": {"targets": {"by_lett
 
 def landing_loader(tmp_path, monkeypatch, *, spec=True):
     rules = tmp_path / "rules"
-    (rules / "sources" / "example").mkdir(parents=True)
+    (rules.parent / "sources" / "example").mkdir(parents=True)
     if spec:
-        (rules / "sources" / "example" / "silver-letters.yaml").write_text("table: invented_letters\n")
+        (rules.parent / "sources" / "example" / "silver-letters.yaml").write_text("table: invented_letters\n")
     monkeypatch.setattr(loading.files, "ROOT", rules)
     monkeypatch.setattr(loading.files, "source", lambda name: LANDS)
     monkeypatch.setattr(loading.files, "load", lambda path: {"table": "invented_letters"})

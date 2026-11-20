@@ -1,6 +1,6 @@
 # Rules file reference
 
-What a `rules/sources/<source>/source.yaml` file may say, and how MDM
+What a `sources/<source>/source.yaml` file may say, and how MDM
 reads it (`edgar_warehouse/mdm/adapters.py`, `normalize`).
 
 ## The file
@@ -290,7 +290,7 @@ is now a data quality fix (`blank_values@1`, below).
 
 ## Data quality
 
-`rules/sources/<source>/quality.yaml` holds the checks and fixes run on each
+`sources/<source>/quality.yaml` holds the checks and fixes run on each
 record after the mapping and before the merge
 (`edgar_warehouse/mdm/quality.py`):
 
@@ -356,7 +356,7 @@ workbook cells are not an independent relationship-vocabulary authority.
 
 | Workbook | Sheets |
 |---|---|
-| `rules/sources/<source>/MAPPING.xlsx` (every configured source) | Source, Fields (MDM field or matching only), Identifiers, Critical data elements (a `present@1` check with `on_fail: exception`), Data quality, Who wins, Notes |
+| `sources/<source>/MAPPING.xlsx` (every configured source) | Source, Fields (MDM field or matching only), Identifiers, Critical data elements (a `present@1` check with `on_fail: exception`), Data quality, Who wins, Notes |
 | `rules/merge/kinds/<kind>.xlsx` | Kind, Preferred sources, Who wins each field, Classification, Matching rules (each condition in plain words), Notes |
 
 Source workbooks also contain Pipeline targets and Pipeline steps. Standalone
@@ -417,7 +417,7 @@ through `GET /api/v1/system/version`; use APIs/CLI only, never a browser.
 
 ## Examples (worked)
 
-Every file under `rules/sources/` is a worked example. Read them all before
+Every file under `sources/` is a worked example. Read them all before
 writing a new one.
 
 The examples above in plain words, from today's sources:

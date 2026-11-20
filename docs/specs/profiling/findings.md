@@ -305,7 +305,7 @@ this spec; the spec does not depend on the store.
 
 Its public summary, with the part's quality rules and the code sets, is what
 the Data Catalog shows: data-profiling's `catalog` writes it to
-`rules/sources/<source>/profile.yaml` from approved findings, names, types and
+`sources/<source>/profile.yaml` from approved findings, names, types and
 counts only (no example, top value, distribution or check argument).
 
 ```yaml

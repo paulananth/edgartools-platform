@@ -1,7 +1,7 @@
 # Native GLEIF Company evidence
 
 > **Retired (Issue 20 L6, 2026-10-10).** The code this page describes was deleted:
-> `gleif_source.py` and `native_consumption.py`, and the `native_source` manifest (now refused). GLEIF records are read by their contracts (`rules/sources/gleif/`), and a
+> `gleif_source.py` and `native_consumption.py`, and the `native_source` manifest (now refused). GLEIF records are read by their contracts (`sources/gleif/`), and a
 > publication is attested by `gleif_publication.attest_publication`. The page stays as
 > the record of what was built; the code last ran at commit `68cc1240`.
 

@@ -11,8 +11,8 @@ from tests.support.patching import checked
 def test_every_source_and_standalone_target_has_a_native_pipeline():
     plan = catalog.plan()
     expected = {}
-    for folder, scope, filename in (("sources", "source", "source.yaml"), ("pipelines", "pipeline", "pipeline.yaml")):
-        for path in sorted((files.ROOT / folder).glob("*/" + filename)):
+    for folder, scope, filename in ((files.sources_root(), "source", "source.yaml"), (files.ROOT / "pipelines", "pipeline", "pipeline.yaml")):
+        for path in sorted(folder.glob("*/" + filename)):
             body = files.load_source(path) if scope == "source" else files.load(path)
             for target, definition in (body.get("bookkeeping", {}).get("targets") or {}).items():
                 expected[f"{scope}:{path.parent.name}:{target}"] = definition
@@ -35,6 +35,7 @@ def test_every_source_and_standalone_target_has_a_native_pipeline():
 def test_new_pipeline_is_discovered_without_mdm_or_entity_code(tmp_path):
     root = tmp_path / "rules"
     shutil.copytree(files.ROOT, root)
+    shutil.copytree(files.sources_root(), root.parent / "sources")
     path = root / "pipelines" / "invented-flow" / "pipeline.yaml"
     path.parent.mkdir()
     path.write_text(files.dumps({"pipeline": "invented-flow", "bookkeeping": {"version": 1, "targets": {
@@ -92,6 +93,7 @@ def test_configuration_only_relationship_vocabulary_preserves_dataset_and_pipeli
 def test_relationship_metadata_refuses_a_changed_published_pin(tmp_path):
     root = tmp_path / "rules"
     shutil.copytree(files.ROOT, root)
+    shutil.copytree(files.sources_root(), root.parent / "sources")
     pin = files.reference_pin(files.policy(root)["relationships"]["pin"], root)
     path = root / "reference" / "published" / pin["code_set"] / str(pin["version"]) / "canonical.jsonl"
     path.write_bytes(path.read_bytes() + b"\n")
@@ -101,7 +103,7 @@ def test_relationship_metadata_refuses_a_changed_published_pin(tmp_path):
 
 def test_all_source_workbooks_include_declared_pipeline_steps():
     documents = mapdoc.documents()
-    for path in sorted((files.ROOT / "sources").glob("*/source.yaml")):
+    for path in sorted((files.sources_root()).glob("*/source.yaml")):
         body = files.load_source(path)
         sheets = documents[path.with_name("MAPPING.xlsx")][1]
         targets = (body.get("bookkeeping") or {}).get("targets") or {}
@@ -111,7 +113,7 @@ def test_all_source_workbooks_include_declared_pipeline_steps():
 
 def test_every_dataset_quality_rule_and_declared_link_is_described():
     tables = {catalog.fqn(catalog.SERVICE, "sources", p.parent.name, code): entry["contract"]
-              for p in (files.ROOT / "sources").glob("*/source.yaml")
+              for p in (files.sources_root()).glob("*/source.yaml")
               for code, entry in (files.load_source(p).get("dataset_contracts") or {}).items()}
     planned = catalog.plan()
     actual = {t["databaseSchema"] + "." + catalog.quote(t["name"]): t for t in planned["tables"]}

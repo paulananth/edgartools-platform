@@ -1292,7 +1292,7 @@ The sources this repository reads today, and where each rule above is applied.
 
 ### The SEC Company main document
 
-`rules/sources/sec.company/source.yaml` now declares a generic
+`sources/sec.company/source.yaml` now declares a generic
 `source.read` block for its main submissions document. It emits `company`,
 `filings` and `addresses` tables. Company fields retain their captured types;
 filings use the qualified parallel-array, date, numeric and first-N rules;
@@ -1310,7 +1310,7 @@ Join the resulting tables with a declared `source.combine` contract, then use
 `mdm.prepare` to write immutable input batches. The read block alone is neither a source activation nor complete mastering.
 
 For a captured continuation page, use the packaged
-`rules/sources/sec.company/pagination.yaml` contract. It reads
+`sources/sec.company/pagination.yaml` contract. It reads
 column arrays at the raw page root and emits all eighteen filing fields;
 it has no recent-limit context. Bind `cik`, `sync_run_id`, `raw_object_id`
 and `load_mode` to the page receipt. `raw_object_id` retains the caller's

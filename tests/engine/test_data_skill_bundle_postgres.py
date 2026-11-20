@@ -111,7 +111,7 @@ def test_complete_name_count_general_projection_matches_active_waterfall_without
     assert [p["pass"] for p in spec["passes"]] == ["name and city or postcode", "name and jurisdiction"]
     contract = dataset_contract("level1")
     expected = waterfall_entity(row, {"spec": spec, "gleif_contract": contract}, {"EXAMPLE"})
-    recipe = files.load(files.ROOT / "sources/gleif/name-count-cascade-record.yaml")
+    recipe = files.load(files.sources_root() / "gleif/name-count-cascade-record.yaml")
     projected = SourceEngine(recipe).read(json.dumps(row, ensure_ascii=False).encode()).tables["mapped"][0]["observation"]
     if expected is None:
         assert projected is None
@@ -147,7 +147,7 @@ raw = store.put_bytes((root / "names.json").as_uri(), json.dumps({"names":[{"nam
 context = store.put(root.as_uri(), {"version":1,"input":raw,"values":{}})
 proof = {}
 for source, first in [("sec.company", "ELECTRICITE HLDGS CORP"), ("gleif", "ELECTRICITE HLDGS CORP DE")]:
-    config = files.load(files.ROOT / "sources" / source / "name-key.yaml")
+    config = files.load(files.sources_root() / source / "name-key.yaml")
     contract = store.put(root.as_uri(), config)
     manifest = store.put(root.as_uri(), {"version":2,"contract":contract,"artifacts":[{"input":raw,"context":context}]})
     task = {"input":manifest,"output":(root / (source + ".json")).as_uri(),"checks":["source.output"]}
@@ -212,6 +212,7 @@ from edgar_warehouse.mdm import catalog
 
 folder = Path(tempfile.mkdtemp(dir=".")) / "rules"
 shutil.copytree(files.ROOT, folder)
+shutil.copytree(files.sources_root(), folder.parent / "sources")
 body = copy.deepcopy(catalog.CATALOG)
 body["kinds"].append("bundle-invented-kind")
 profile = copy.deepcopy(body["pair_comparisons"][body["default_pair_comparison"]])
@@ -578,7 +579,7 @@ def test_parsing_runs_through_the_installed_bundle(installed, databases, tmp_pat
             'recent_limit': None, 'last_synced_at': '2026-10-04T00:00:00Z'}})
         input_ref = store.put(tmp_path.as_uri(), {'version': 2, 'contract': contract, 'artifacts': [{'input': raw, 'context': context}]})
     if reading_mode == 'company-page':
-        probe = _run(python, '-c', 'import json; from edgar_warehouse.rules import files; print(json.dumps(files.load(files.ROOT / "sources/sec.company/pagination.yaml")))', cwd=root)
+        probe = _run(python, '-c', 'import json; from edgar_warehouse.rules import files; print(json.dumps(files.load(files.sources_root() / "sec.company/pagination.yaml")))', cwd=root)
         assert probe.returncode == 0, probe.stderr
         contract = store.put(tmp_path.as_uri(), json.loads(probe.stdout))
         raw = store.put_bytes((tmp_path / 'page.json').as_uri(), b'{"accessionNumber":["old","older"],"form":["20-F","10-K"],"size":["1234","1,234"]}')
@@ -586,7 +587,7 @@ def test_parsing_runs_through_the_installed_bundle(installed, databases, tmp_pat
             'cik': 1, 'sync_run_id': 'capture', 'raw_object_id': '0' * 64, 'load_mode': 'default'}})
         input_ref = store.put(tmp_path.as_uri(), {'version': 2, 'contract': contract, 'artifacts': [{'input': raw, 'context': context}]})
     if reading_mode in ('company-catalog', 'company-dictionary'):
-        probe = _run(python, '-c', 'import json; from edgar_warehouse.rules import files; print(json.dumps(files.load(files.ROOT / "sources/sec.company/catalog.yaml")))', cwd=root)
+        probe = _run(python, '-c', 'import json; from edgar_warehouse.rules import files; print(json.dumps(files.load(files.sources_root() / "sec.company/catalog.yaml")))', cwd=root)
         assert probe.returncode == 0, probe.stderr
         contract = store.put(tmp_path.as_uri(), json.loads(probe.stdout))
         payload = (b'{"fields":["ticker","exchange","cik"],"data":[["A","NYSE",1],["A-B",null,1]]}'
@@ -1042,7 +1043,7 @@ for member in ["level1", "relationships", "reporting-exceptions"]:
     for format in ["json", "xml"]:
         folder = Path(member + "-" + format).resolve()
         folder.mkdir()
-        rules = files.load(files.ROOT / "sources" / "gleif" / f"{member}-{format}.yaml")
+        rules = files.load(files.sources_root() / "gleif" / f"{member}-{format}.yaml")
         if "approved_scope" in rules["read"].get("references", {}):  # JSON Level 1 reads every record
             rules["read"]["references"]["approved_scope"] = {lei:{"selected":True}}
         row = {"LEI":{"$":lei}}
@@ -1113,7 +1114,7 @@ from edgar_warehouse.workers import source_read, source_combine, mdm_prepare
 store = Artifacts()
 folder = Path("company-composition").resolve()
 folder.mkdir()
-blueprints = files.ROOT / "sources/sec.company"
+blueprints = files.sources_root() / "sec.company"
 date = "2026-10-04T00:00:00Z"
 context = {"cik":1,"sync_run_id":"capture","raw_object_id":"0"*64,"load_mode":"default"}
 def read(name, template, payload, context):
@@ -1234,7 +1235,7 @@ def test_complete_name_count_projection_keeps_global_duplicates_and_pair_scoped_
     records[3]["Entity"]["LegalName"] = {"$": "Another"}
     records[3]["Registration"]["LastUpdateDate"] = {"$": "another-name-update"}
     records[4]["Registration"]["LastUpdateDate"] = {"$": "latest-example-update"}
-    config = files.load(files.ROOT / "sources/gleif/name-count-complete-stream.yaml")
+    config = files.load(files.sources_root() / "gleif/name-count-complete-stream.yaml")
     config["read"]["stream"]["container"] = "none"
     found = []
     receipt = Traversal(config, archive_policy="configured").scan(

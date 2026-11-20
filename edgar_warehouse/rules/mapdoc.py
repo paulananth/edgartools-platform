@@ -1,7 +1,7 @@
 """The Mapping Document: a spreadsheet generated from the rules (rules skill
 ticket 11).
 
-One workbook per source that feeds MDM (`rules/sources/<source>/MAPPING.xlsx`)
+One workbook per source that feeds MDM (`sources/<source>/MAPPING.xlsx`)
 and one per kind (`rules/merge/kinds/<kind>.xlsx`). Every sheet but Notes is
 generated from the rules; stewards change it, `diff` prints what they
 changed, cell by cell, and Claude turns that into the rules. The Notes sheet
@@ -165,7 +165,7 @@ def winners(policy: dict, root: Path, sources: dict[Path, dict] | None = None) -
     (`fields.<name>`) takes the kind's `defaults` and changes any part of
     it, its source order included; every other field takes the default."""
     if sources is None:
-        sources = {path: files.load_source(path) for path in sorted((root / "sources").glob("*/source.yaml"))}
+        sources = {path: files.load_source(path) for path in sorted(files.sources_root(root).glob("*/source.yaml"))}
     filled: dict[str, set] = defaultdict(set)
     for body in sources.values():
         for code, entry in (body.get("dataset_contracts") or {}).items():
@@ -440,7 +440,7 @@ def documents(root: Path | None = None) -> dict[Path, tuple[str, dict[str, list[
     source or kind it describes, its sheets, and the rules files behind it."""
     root = root or files.ROOT
     policy = files.policy(root)
-    sources = {path: files.load_source(path) for path in sorted((root / "sources").glob("*/source.yaml"))}
+    sources = {path: files.load_source(path) for path in sorted(files.sources_root(root).glob("*/source.yaml"))}
     by_kind = winners(policy, root, sources)
     found: dict[Path, tuple] = {}
     for path, body in sources.items():

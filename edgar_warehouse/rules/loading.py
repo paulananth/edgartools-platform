@@ -82,7 +82,7 @@ def bundles(keys: list[str], size: int) -> list[list[str]]:
 def target_of(source: str, target: str) -> dict:
     reading = files.source(source)
     if target not in ((reading.get("bookkeeping") or {}).get("targets") or {}):
-        raise RunStopped(f"{source} declares no `{target}` target: see the targets in rules/sources/{source}/source.yaml")
+        raise RunStopped(f"{source} declares no `{target}` target: see the targets in sources/{source}/source.yaml")
     return reading
 
 
@@ -93,13 +93,13 @@ def silver_specs(source: str, reading: dict, target: str) -> list[Path]:
     wanted = [((step.get("input") or {}).get("keys") or {}).get("silver") for step in steps
               if step.get("operation") in ("silver.land", "silver.derive")]
     held = {}
-    for path in [*sorted((files.ROOT / "sources" / source).glob("silver-*.yaml")),
+    for path in [*sorted((files.sources_root() / source).glob("silver-*.yaml")),
                  *sorted((files.ROOT / "silver").glob("silver-*.yaml"))]:
         held[(files.load(path) or {}).get("table")] = path
     missing = sorted(table for table in wanted if table and table not in held)
     if missing:
         raise RunStopped(f"{source} {target} lands silver table(s) {', '.join(missing)} with no silver-*.yaml spec "
-                         f"in rules/sources/{source}")
+                         f"in sources/{source}")
     return [held[table] for table in dict.fromkeys(wanted) if table]
 
 
@@ -388,7 +388,7 @@ def register(subparsers) -> None:
     parser = subparsers.add_parser(
         "load", help="Load a captured delivery through one source's target, start to finish (safe to rerun)",
         description=__doc__.split("\n\n", 1)[1], formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--source", required=True, help="The source, a folder under rules/sources/")
+    parser.add_argument("--source", required=True, help="The source, a folder under sources/")
     parser.add_argument("--target", default="mastering", help="Its Bookkeeping target (default mastering)")
     parser.add_argument("--capture", required=True, type=Path, help="The capture folder (receipts.jsonl and its files)")
     parser.add_argument("--capture-run", help="The capture's approved run ID (not needed with --plan)")

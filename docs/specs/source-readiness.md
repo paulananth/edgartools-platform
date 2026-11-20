@@ -128,7 +128,7 @@ Configuration evidence: Company `source.yaml:39-115`, Person
 `source.yaml:112-143`, GLEIF `source.yaml:5-17`, ADV `source.yaml:1-20`,
 ownership `source.yaml:1-15`, and N-PORT registrant `source.yaml:30-35`, fund
 `source.yaml:33-43`, Security `source.yaml:38-48`, all under their
-`rules/sources/<source>/` directory. The reading-only 13F pipeline is
+`sources/<source>/` directory. The reading-only 13F pipeline is
 `rules/pipelines/sec.thirteenf.extract/pipeline.yaml:1-17`.
 
 ## Checks already present and gaps to close

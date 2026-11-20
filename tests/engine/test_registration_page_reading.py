@@ -10,7 +10,7 @@ import yaml
 
 from edgar_warehouse.rules.source_engine import SourceEngine
 
-CONTRACT = yaml.safe_load((Path(__file__).parents[2] / "rules/sources/sec.registration/registration-page.yaml").read_text())
+CONTRACT = yaml.safe_load((Path(__file__).parents[2] / "sources/sec.registration/registration-page.yaml").read_text())
 
 PAGE = ("<html><head><title>Invented Holdings Inc. Form S-1</title></head><body>"
         "<p>Invented Holdings Inc.</p><p>2,500,000 Shares of Common Stock</p>"

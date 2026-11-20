@@ -1,4 +1,4 @@
-"""The fundamental measures (ticket 47): `rules/sources/sec.company-facts/measures.yaml`
+"""The fundamental measures (ticket 47): `sources/sec.company-facts/measures.yaml`
 read once, and the SQL that builds silver's `company_measure` from the line items in
 `company_line_item` (ticket 46: "CAGR and the measures are SQL on top").
 
@@ -22,7 +22,7 @@ from edgar_warehouse.rules import files
 from . import line_items, sql
 from .sql import lit
 
-DEFINITIONS = files.ROOT / "sources" / "sec.company-facts" / "measures.yaml"
+DEFINITIONS = files.sources_root() / "sec.company-facts" / "measures.yaml"
 FORMS = ("average", "beginning")
 # Values a measure reads that are not line items: computed per year below.
 DERIVED = {"fcf", "operating_income_after_tax", "invested_capital"}

@@ -70,11 +70,11 @@ made from it, never edited by hand. Read the table's columns there, or in the Da
 | Bookkeeping | `edgar_warehouse/bookkeeping/clean/migrations/schema.sql`, with `mysql-v1.sql` |
 | Change Journal | `edgar_warehouse/change_journal/migrations/schema.sql`; `native/` holds one file per dialect |
 | Silver, fixed part | `edgar_warehouse/silver_writer/migrations/schema.sql`, with `mysql-v1.sql` |
-| Silver, one table per source | `rules/sources/<source>/silver-<table>.yaml` (and `rules/silver/`): a spec stewards review, registered as DDL by `deploy-silver.sh` for every dialect |
+| Silver, one table per source | `sources/<source>/silver-<table>.yaml` (and `rules/silver/`): a spec stewards review, registered as DDL by `deploy-silver.sh` for every dialect |
 
 Then every committed silver table, with the silver owner's login:
 `bash infra/scripts/deploy-silver.sh <local environment name | path to owner.env>`. It registers each
-`rules/sources/*/silver-*.yaml` and `rules/silver/silver-*.yaml`; an unchanged spec changes nothing and a changed one
+`sources/*/silver-*.yaml` and `rules/silver/silver-*.yaml`; an unchanged spec changes nothing and a changed one
 is refused (register it as a new table).
 
 The runtime role exists, has no administrative privileges, and is not the

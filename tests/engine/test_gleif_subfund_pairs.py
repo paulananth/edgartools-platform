@@ -34,7 +34,7 @@ def test_only_an_active_subfund_record_gives_a_fund_and_its_umbrella(tmp_path):
             relation(OTHER, FUND, "IS_FUND-MANAGED_BY", "ACTIVE")]}))
     store = Artifacts()
     raw = store.put_bytes((tmp_path / "rr.zip").as_uri(), body.getvalue())
-    contract = store.put(tmp_path.as_uri(), files.load(files.ROOT / "sources/gleif/subfund-pairs.yaml"))
+    contract = store.put(tmp_path.as_uri(), files.load(files.sources_root() / "gleif/subfund-pairs.yaml"))
     context = store.put(tmp_path.as_uri(), {"version": 1, "input": raw, "values": {}})
     manifest = store.put(tmp_path.as_uri(), {"version": 2, "contract": contract,
                                              "artifacts": [{"input": raw, "context": context}]})

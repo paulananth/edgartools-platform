@@ -30,7 +30,7 @@ Every step says what differs for each target.
     own published data sets do; never repeat a line per party, or a sum over
     parties counts it several times.
   - **The spec goes in the repo.** Write the approved spec to
-    `rules/sources/<source>/silver-<table>.yaml` (comments carry the rulings),
+    `sources/<source>/silver-<table>.yaml` (comments carry the rulings),
     put the same spec in the part's `silver` in `findings.yaml`, and
     regenerate `profile.yaml` (**plan-parts**), so the catalog shows the table
     that is registered.
@@ -79,7 +79,7 @@ Every step says what differs for each target.
   Use the owner and runtime connections from [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
   On PostgreSQL the schema owner runs
   `edgar-warehouse silver init --runtime-role <runtime login>` once, and
-  `edgar-warehouse silver register rules/sources/<source>/silver-<table>.yaml --runtime-role <runtime login>`
+  `edgar-warehouse silver register sources/<source>/silver-<table>.yaml --runtime-role <runtime login>`
   for the table (or `register <findings.yaml> --part <part>`). A changed
   spec is refused for a registered table: register it as a new table.
   `edgar-warehouse load` creates no table: it checks each table it writes

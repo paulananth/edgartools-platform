@@ -1,7 +1,7 @@
 # Source publication verification
 
 > **Retired (Issue 20 L6, 2026-10-10).** The code this page describes was deleted:
-> `source_publications.py` (`PublicationVerifier`, `plan_continuity`), whose only caller was the native GLEIF path. GLEIF records are read by their contracts (`rules/sources/gleif/`), and a
+> `source_publications.py` (`PublicationVerifier`, `plan_continuity`), whose only caller was the native GLEIF path. GLEIF records are read by their contracts (`sources/gleif/`), and a
 > publication is attested by `gleif_publication.attest_publication`. The page stays as
 > the record of what was built; the code last ran at commit `68cc1240`.
 
@@ -25,7 +25,7 @@ path. Its `body.publication_contract` pins:
 | `replacement_scope` | Exact scope label shared by this family's publications |
 | `revision_versions` | Pinned contract, parser, schema and configuration versions of acquisition revisions |
 
-GLEIF's Dataset Contracts (`rules/sources/gleif/source.yaml`) are complete
+GLEIF's Dataset Contracts (`sources/gleif/source.yaml`) are complete
 examples. Golden Copy requires Level 1, relationships and reporting
 exceptions together. Mapping publications require their own contract and recovery
 plan. Several record-level dataset adapters may later consume the same aggregate.

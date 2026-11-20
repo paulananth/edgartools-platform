@@ -25,6 +25,7 @@ from edgar_warehouse.rules import files
 SKILLS = files.BUNDLE_DATA / "skills" if files.BUNDLED.is_dir() else Path(__file__).resolve().parents[1] / "skills"
 # The approved rules the bundle was built with: a folder to start from.
 RULES = files.BUNDLED if files.BUNDLED.is_dir() else Path(__file__).resolve().parents[1] / "rules"
+SOURCES = RULES.parent / "sources"  # beside the rules, where `files.sources_root` finds them
 STORES = ("rules", "bookkeeping", "change_journal", "mdm")
 MARKER = ".installed-by-edgar-warehouse"
 # A fenced line or a code span may wrap onto the next line. A shell pipe
@@ -133,6 +134,7 @@ def doctor(parser: argparse.ArgumentParser) -> dict:
         "commands_named": len(named_commands()),
         "unresolved": unresolved(parser),
         "engine": engine,
+        "sources_root": {"path": str(files.ROOT.parent / "sources"), "exists": (files.ROOT.parent / "sources").is_dir()},
         "rules_root": {"path": str(files.ROOT), "exists": files.ROOT.is_dir(),
                        # Readable, never written: set EDGAR_RULES_ROOT before any change.
                        "bundled_read_only": files.ROOT.resolve().is_relative_to(files.BUNDLE_DATA)},
@@ -142,6 +144,7 @@ def doctor(parser: argparse.ArgumentParser) -> dict:
         not report["unresolved"]
         and engine == "loads"
         and report["rules_root"]["exists"]
+        and report["sources_root"]["exists"]
         and not any(state.startswith("does not") for state in report["stores"].values())
     )
     return report
@@ -162,14 +165,14 @@ def install(home: Path, rules: Path | None = None) -> list[str]:
     nothing half-installed. A skill already there is replaced only when this
     command made it and nobody has changed it since (its marker holds the
     digest it was installed with). `rules`, when given, receives a copy of the
-    bundled rules folder to start from; an existing folder is never overwritten.
+    bundled rules folder, with the bundled `sources` folder beside it, to start from; an existing folder is never overwritten.
     """
     skills = sorted(p for p in SKILLS.iterdir() if (p / "SKILL.md").is_file())
     targets = [(skill, base / skill.name) for skill in skills
                for base in (home / ".agents" / "skills", home / ".claude" / "skills")]
     refused = []
-    if rules is not None and rules.exists():
-        refused.append(f"{rules} exists: copy the bundled rules into a new folder")
+    if rules is not None and (rules.exists() or (rules.parent / "sources").exists()):
+        refused.append(f"{rules} or the sources folder beside it exists: copy the bundled rules into a new folder")
     for _, target in targets:
         if target.is_symlink() or (target.exists() and not (target / MARKER).is_file()):
             refused.append(f"{target} was not installed by this command (remove it, or keep it)")
@@ -180,7 +183,8 @@ def install(home: Path, rules: Path | None = None) -> list[str]:
     done = []
     if rules is not None:
         shutil.copytree(RULES, rules)
-        done.append(str(rules))
+        shutil.copytree(SOURCES, rules.parent / "sources")  # sources sit beside the rules
+        done.extend([str(rules), str(rules.parent / "sources")])
     for skill, target in targets:
         if target.exists():
             shutil.rmtree(target)

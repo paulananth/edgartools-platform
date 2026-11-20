@@ -5,7 +5,7 @@ A target that takes run inputs declares them under `run:` in its source's rules 
 `--fact name=value`, `files` are given with `--file name=path`). This prints, for each source and target, those
 names and the comment block written above the target, which is where the rules say how each input is produced.
 
-    run_inputs.py [--rules rules/sources] [source ...]
+    run_inputs.py [--rules sources] [source ...]
 
 Names and comments only; a rules file holds no value from the data.
 """
@@ -75,7 +75,7 @@ def describe(source: str, text: str) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--rules", type=Path, default=Path("rules/sources"))
+    parser.add_argument("--rules", type=Path, default=Path("sources"))
     parser.add_argument("source", nargs="*", help="a source (default: every source that takes run inputs)")
     args = parser.parse_args()
     shown = 0

@@ -11,14 +11,15 @@ TARGET = files.source("sec.submissions.person")["bookkeeping"]
 
 @pytest.fixture
 def root(tmp_path):
-    shutil.copytree(files.ROOT / "merge", tmp_path / "merge")
-    shutil.copytree(files.ROOT / "identifiers", tmp_path / "identifiers")
-    return tmp_path
+    rules = tmp_path / "rules"
+    shutil.copytree(files.ROOT / "merge", rules / "merge")
+    shutil.copytree(files.ROOT / "identifiers", rules / "identifiers")
+    return rules  # the sources go beside it, in tmp_path / "sources"
 
 
 def write(root, name, text):
-    (root / "sources" / name).mkdir(parents=True)
-    (root / "sources" / name / "source.yaml").write_text(text)
+    (root.parent / "sources" / name).mkdir(parents=True)
+    (root.parent / "sources" / name / "source.yaml").write_text(text)
 
 
 def test_the_repository_rules_all_hold():
@@ -54,7 +55,7 @@ def test_named_sources_only_and_a_missing_one_is_refused(root):
 
     assert files.check(["example.good", "example.absent"], root) == {
         "source:example.good": "ok",
-        "source:example.absent": f"refused (missing): no {root}/sources/example.absent/source.yaml"}
+        "source:example.absent": f"refused (missing): no {root.parent}/sources/example.absent/source.yaml"}
 
 
 def test_a_body_that_is_not_json_is_refused():

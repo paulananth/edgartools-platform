@@ -15,7 +15,7 @@ Brings something **new** into MDM (and silver): a feed with no rules
 file yet, or a domain (a kind) with no merge rules yet.
 
 **Use the other skill when:**
-- the feed already has `rules/sources/<source>/source.yaml`, and you are
+- the feed already has `sources/<source>/source.yaml`, and you are
   changing its mapping, its data quality or the matching rules: use
   **refining-rules**;
 - Operating or recovering a configured feed: [Data Operations](../data-operations/SKILL.md); Bookkeeping owns run control and Change Journal owns receipt evidence.
@@ -67,12 +67,12 @@ them in PRs. [REFERENCE.md](REFERENCE.md) is the contract language.
 
 | File | What it holds |
 |---|---|
-| `rules/sources/<source>/source.yaml` | The feed: `source`, `bronze` and `dataset_contracts` (one Dataset Contract per source code). Its `bookkeeping` section, which runs the feed into silver and MDM, belongs to the Bookkeeping skill. |
+| `sources/<source>/source.yaml` | The feed: `source`, `bronze` and `dataset_contracts` (one Dataset Contract per source code). Its `bookkeeping` section, which runs the feed into silver and MDM, belongs to the Bookkeeping skill. |
 | `rules/source-sequence.yaml` | One line per source folder, naming its Bookkeeping target (or `null` when no target is registered yet) and preferred `after` order. Every folder needs both a `source.yaml` (even one that only names the source and reads nothing) and a sequence entry. Every source must declare its intended `bookkeeping.targets` in `source.yaml`; a missing target or `target: null` is an explicit unregistered/not-runnable gap to resolve before claiming a complete pipeline. `after` is not a runtime dependency. Suite tests walk both files. |
-| `rules/sources/<source>/quality.yaml` | The feed's data quality checks and fixes |
-| `rules/sources/<source>/silver-<table>.yaml` | A silver table spec, one file per table (silver target): reviewed in the PR, registered from this file |
+| `sources/<source>/quality.yaml` | The feed's data quality checks and fixes |
+| `sources/<source>/silver-<table>.yaml` | A silver table spec, one file per table (silver target): reviewed in the PR, registered from this file |
 | `rules/merge/kinds/<kind>.yaml` | A new domain's matching and merge rules (only when the kind is new) |
-| `rules/sources/<source>/MAPPING.xlsx`, `rules/merge/kinds/<kind>.xlsx` | The Mapping Documents, generated for stewards (**metadata**) |
+| `sources/<source>/MAPPING.xlsx`, `rules/merge/kinds/<kind>.xlsx` | The Mapping Documents, generated for stewards (**metadata**) |
 | The Data Catalog (OpenMetadata) | Every feed, dataset and MDM field, published from the files (**metadata**) |
 
 When renaming an existing source identity, update its folder and `source:`
@@ -80,9 +80,9 @@ identifier, Dataset Contract IDs, source-sequence entry, Bookkeeping bindings,
 cross-source references and generated Mapping Document together. Retain prior
 run and capture evidence under the identity that produced it.
 
-The files in `rules/sources/` show Dataset Contracts and publication rules.
+The files in `sources/` show Dataset Contracts and publication rules.
 For configured complete JSON source extract, find a feed that keeps each
-document whole (`grep -l "format: json" rules/sources/*/source.yaml`, then
+document whole (`grep -l "format: json" sources/*/source.yaml`, then
 its `read:` block) and read [data-platform READING](../data-platform/READING.md). A declared target is
 not evidence that its workers exist; check every profile before submitting.
 
@@ -263,7 +263,7 @@ sets (names and counts only, never a value from the data):
 
 ```bash
 uv run --with duckdb --with pyyaml python <data-profiling>/scripts/profile_data.py catalog \
-  --findings <folder>/findings.yaml --out rules/sources/<source>/profile.yaml
+  --findings <folder>/findings.yaml --out sources/<source>/profile.yaml
 ```
 
 `edgar-warehouse rules catalog plan` then shows them in its `silver` and `rdm`
@@ -295,7 +295,7 @@ This is the same as **init**, run again after a schema change. Rerunning it chan
 1. Look at the files: their names, formats, sizes and first records. Name
    the provider and the dataset (a provider, what the files hold, how often
    and in what format). Ask: "These look like X. Is that right?"
-2. Search `rules/sources/` and the repo for the provider's and dataset's
+2. Search `sources/` and the repo for the provider's and dataset's
    names. Leave out `.scratch/**/trials/`: those are earlier trials, not
    the repo's decisions.
    - **Its rules file exists, and you are changing what it already maps:**
@@ -364,7 +364,7 @@ its approved findings and the field each column fills (from **map**):
 new code, for a ticket), **measure** (on the records a **load** builds),
 **decide** (each `on_fail` and each fix with the operator, one at a time),
 **mark** (invalid hierarchy rows, with evidence-backed fixes, for the
-steward) and **write** (`rules/sources/<source>/quality.yaml`, never inside
+steward) and **write** (`sources/<source>/quality.yaml`, never inside
 the contract). Each `exception` check's reason `quality_<id>` goes in the
 contract's `nonblocking_deferred_reasons`.
 
@@ -447,7 +447,7 @@ These name today's sources only as examples; nothing above depends on them.
   `sec.submissions.person` and `sec.submissions.person.v1`.
 - **A record key's order:** GLEIF relationships: start, end, type.
 - **Fields:** Company's are its contract reading's `fields` column
-  (`rules/sources/sec.company/source.yaml`, and the Fields sheet
+  (`sources/sec.company/source.yaml`, and the Fields sheet
   of its `MAPPING.xlsx`); Person has none in code, so
   its consumer spec (`docs/specs/person/consumer.md`, "The Person
   projection") holds them. A list-shaped field: Person's `name_variants[]`.
@@ -460,7 +460,7 @@ These name today's sources only as examples; nothing above depends on them.
   (`rules/merge/kinds/company.yaml`). `person-cik` on `cik` is shaped like
   `company-cik`. SEC submissions carry no effective date, so Company sets
   `allow_unknown_effective`.
-- **A mastering target to copy:** `rules/sources/sec.submissions.person/source.yaml`,
+- **A mastering target to copy:** `sources/sec.submissions.person/source.yaml`,
   `bookkeeping.targets.mastering` (read, prepare, merge, with each step's
   units and input).
 - **Platform facts the SEC Company chain needs:** its code reads the

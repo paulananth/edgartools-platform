@@ -34,7 +34,7 @@ def source_body(name: str, *, record_key: str = "id") -> dict:
 
 
 def write_source(root: Path, name: str, body: dict) -> Path:
-    path = root / "sources" / name / "source.yaml"
+    path = root.parent / "sources" / name / "source.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(files.dumps(body), encoding="utf-8")
     return path
@@ -45,7 +45,7 @@ def test_main_checks_only_the_changed_source_when_legacy_rules_are_present(tmp_p
     write_source(root, "changed", {"source": "changed"})
     write_source(root, "legacy", {"source": "legacy", "mdm": {"old": True}})
     paths_file = tmp_path / "changed-paths.txt"
-    paths_file.write_text("rules/sources/changed/source.yaml\n", encoding="utf-8")
+    paths_file.write_text("sources/changed/source.yaml\n", encoding="utf-8")
 
     assert files.check(root=root)["source:legacy"].startswith("refused (RulesFileError)")
     assert guard.main(["HEAD", str(paths_file), "--root", str(root)]) == 0

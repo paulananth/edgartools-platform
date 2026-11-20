@@ -10,7 +10,7 @@ assert ref['sha256']==report['publisher_metadata']['sha256']
 meta=json.loads(publisher.read_bytes());source=report['archive'];url=meta['data']['full_file']['json']['url']
 binding=store.put(root.as_uri(),{'version':1,'archive':source,'publisher':ref,'publisher_url':url,'authority':'operator-approved pinned publication manifest binding; distinct from syntax/EOF attestation'})
 context=store.put(root.as_uri(),{'version':1,'input':ref,'values':{'source_uri':source['uri'],'source_sha':source['sha256'],'source_url':url}})
-contract=files.load(files.ROOT/'sources/gleif/publication-level1-json.yaml');contract['execution']['input_sha256s']=[ref['sha256']]
+contract=files.load(files.sources_root() / 'gleif/publication-level1-json.yaml');contract['execution']['input_sha256s']=[ref['sha256']]
 manifest=store.put(root.as_uri(),{'version':2,'contract':store.put(root.as_uri(),contract),'artifacts':[{'input':ref,'context':context}]})
 work={'input':manifest,'output':(root/'publisher-reading.json').as_uri(),'checks':['source.output']}
 reading=source_read.execute(work,store);assert source_read.verify({**work,'candidate':reading},store)==({'source.output':True},[])

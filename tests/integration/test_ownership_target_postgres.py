@@ -31,7 +31,7 @@ from tests.support.bookkeeping_protocol import drive
 from tests.support.memory_journal import MemoryJournal
 
 SOURCE = "sec.ownership"
-FOLDER = files.ROOT / "sources" / SOURCE
+FOLDER = files.sources_root() / SOURCE
 
 
 def accession(n):

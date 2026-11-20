@@ -21,7 +21,7 @@ def test_every_committed_mapping_document_equals_its_rules():
 
 def test_every_configured_source_kind_and_pipeline_has_a_workbook():
     root = files.ROOT
-    expected = {p.parent.name for p in (root / "sources").glob("*/source.yaml")}
+    expected = {p.parent.name for p in files.sources_root(root).glob("*/source.yaml")}
     expected |= {p.parent.name for p in (root / "pipelines").glob("*/pipeline.yaml")}
     expected |= set(files.policy(root)["kinds"])
     if files.policy(root).get("relationships"):
@@ -33,6 +33,7 @@ def test_every_configured_source_kind_and_pipeline_has_a_workbook():
 def rules_copy(tmp_path):
     root = tmp_path / "rules"
     shutil.copytree(files.ROOT, root)
+    shutil.copytree(files.sources_root(), root.parent / "sources")
     return root
 
 
@@ -52,7 +53,7 @@ def _edit(path, change):
 
 def test_a_steward_change_is_reported_cell_by_cell(rules_copy):
     found = _write_all(rules_copy)
-    path = rules_copy / "sources" / "gleif" / "MAPPING.xlsx"
+    path = rules_copy.parent / "sources" / "gleif" / "MAPPING.xlsx"
 
     def change(book):
         book["Critical data elements"].append(["gleif.level1.v1", "address", "The value is filled", "Exception", ""])
@@ -90,7 +91,7 @@ def test_notes_are_kept_when_the_workbook_is_regenerated(rules_copy):
 
 def test_a_new_workbook_keeps_the_decisions_the_rules_comments_hold(rules_copy):
     found = mapdoc.documents(rules_copy)
-    path = rules_copy / "sources" / "sec.company" / "MAPPING.xlsx"
+    path = rules_copy.parent / "sources" / "sec.company" / "MAPPING.xlsx"
     path.unlink(missing_ok=True)
     _, sheets, sources = found[path]
     mapdoc.write(path, sheets, sources)

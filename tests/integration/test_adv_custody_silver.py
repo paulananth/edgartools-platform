@@ -1,7 +1,7 @@
 """Form ADV custody rows in silver (ticket 01).
 
 The custody reading on invented Schedule D 5.K(3) rows, landed into `adv_custody`
-(`rules/sources/iapd.adv/silver-custody.yaml`) on a disposable PostgreSQL 16. A row lands once, with
+(`sources/iapd.adv/silver-custody.yaml`) on a disposable PostgreSQL 16. A row lands once, with
 the MDM ids of its adviser (by its filing) and its custodian (by its custodian id), and the amount it
 holds as a whole number; a repeat lands nothing. The Companies are fixture masters standing in for the
 two targets' records. Invented values only.
@@ -23,7 +23,7 @@ from tests.support import masters
 from tests.integration import test_mdm_postgres as core
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
 
-FOLDER = files.ROOT / "sources" / "iapd.adv"
+FOLDER = files.sources_root() / "iapd.adv"
 FILINGS, CUSTODIANS = "iapd.adv.filings.v2", "iapd.adv.custodians.v1"
 # Two custody rows of one filing: a broker-dealer named by its number, and a related person named by its name.
 ROWS = [

@@ -24,7 +24,7 @@ from tests.integration import test_mdm_postgres as core
 from tests.support import masters
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
 
-FOLDER = files.ROOT / "sources" / "sec.company-facts"
+FOLDER = files.sources_root() / "sec.company-facts"
 COMPANY = "sec.company.v1"
 FILING = {"accn": "0000000042-26-000001", "fy": 2025, "fp": "FY", "form": "10-K", "filed": "2026-02-01"}
 

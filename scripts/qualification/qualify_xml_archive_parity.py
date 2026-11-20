@@ -56,7 +56,7 @@ def independent_records(stream, envelope):
 
 def qualify(path, sha256, member, metadata, *, content_date):
     started = time.monotonic()
-    template = files.ROOT / 'sources' / 'gleif' / f'{member}-xml.yaml'
+    template = files.sources_root() / 'gleif' / f'{member}-xml.yaml'
     template_hash = hashlib.sha256(template.read_bytes()).hexdigest()
     implementation = implementation_evidence() + [{'path':str(Path(__file__).resolve()),
         'sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}]

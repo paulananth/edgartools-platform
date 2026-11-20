@@ -90,9 +90,20 @@ def fqn(*parts: str) -> str:
 def rules_digest(root: Path) -> str:
     """Which rules the catalog shows: one sha256 over every rules file."""
     digest = hashlib.sha256()
-    for path in sorted(root.rglob("*.yaml")):
-        digest.update(path.relative_to(root).as_posix().encode() + b"\0" + path.read_bytes() + b"\0")
+    named = [(_location(root, path), path) for folder in (root, files.sources_root(root)) for path in folder.rglob("*.yaml")]
+    for name, path in sorted(named):
+        digest.update(name.encode() + b"\0" + path.read_bytes() + b"\0")
     return digest.hexdigest()
+
+
+def _location(root: Path, path: Path) -> str:
+    """A rules or source file's name: relative to the rules folder, or (a source) as `sources/...` beside it."""
+    return (path.relative_to(root) if path.is_relative_to(root) else path.relative_to(root.parent)).as_posix()
+
+
+def _file(root: Path, location: str) -> Path:
+    """The file a `_location` names."""
+    return (root.parent if location.startswith("sources/") else root) / location
 
 
 def _kinds(adapter: dict, known: set[str]) -> list[str]:
@@ -234,14 +245,14 @@ def _profiles(root: Path) -> tuple[list[dict], list[dict], list[dict]]:
     tables, lineage = [], []
     silver_schemas, code_sets, used_by = [], {}, defaultdict(set)
     registered = {}
-    for path in sorted((root / "sources").glob("*/silver-*.yaml")):
+    for path in sorted(files.sources_root(root).glob("*/silver-*.yaml")):
         table = _registered(path.parent.name, files.load(path))
         registered[(table["databaseSchema"], table["name"])] = table
-    for path in sorted((root / "sources").glob("*/profile.yaml")):
+    for path in sorted(files.sources_root(root).glob("*/profile.yaml")):
         profile, source = files.load(path), path.parent.name
         silver_schemas.append({"name": source, "database": fqn(SERVICE, SILVER),
                                "description": f"Silver tables of `{source}`, from its approved profile "
-                                              f"(rules/sources/{source}/profile.yaml)."})
+                                              f"(sources/{source}/profile.yaml)."})
         found, uses = _profile(source, profile)
         tables += found
         for code_set in profile.get("code_sets") or []:
@@ -254,10 +265,10 @@ def _profiles(root: Path) -> tuple[list[dict], list[dict], list[dict]]:
     tables = [t for t in tables if (t["databaseSchema"], t["name"]) not in registered]
     tables += [registered[k] for k in sorted(registered)]
     profiled = {s["name"] for s in silver_schemas}
-    for source in sorted({path.parent.name for path in (root / "sources").glob("*/silver-*.yaml")} - profiled):
+    for source in sorted({path.parent.name for path in files.sources_root(root).glob("*/silver-*.yaml")} - profiled):
         silver_schemas.append({"name": source, "database": fqn(SERVICE, SILVER),
                                "description": f"Silver tables of `{source}`, as registered "
-                                              f"(rules/sources/{source}/silver-*.yaml)."})
+                                              f"(sources/{source}/silver-*.yaml)."})
     for name, known in sorted(code_sets.items()):
         tables.append({"name": name, "databaseSchema": fqn(SERVICE, RDM, CODE_SETS),
                        "description": f"RDM code set `{name}` (reference data; a code may have a Reference Hierarchy)"
@@ -281,7 +292,7 @@ NOT_PROFILED = " Not profiled yet."
 
 def _profiles_of(root: Path) -> dict[str, dict]:
     """Each source's approved profile summary (`profile.yaml`), by source; none for a source without one."""
-    return {path.parent.name: files.load(path) for path in sorted((root / "sources").glob("*/profile.yaml"))}
+    return {path.parent.name: files.load(path) for path in sorted(files.sources_root(root).glob("*/profile.yaml"))}
 
 
 def _profile_text(profile: dict | None) -> str:
@@ -320,7 +331,7 @@ def _profile_marks(profiles: dict[str, dict]) -> list[dict]:
 def _registered_names(root: Path) -> set[str]:
     """Full names of the silver tables a `silver-*.yaml` registers."""
     return {_table_name(_registered(path.parent.name, files.load(path)))
-            for path in sorted((root / "sources").glob("*/silver-*.yaml"))}
+            for path in sorted(files.sources_root(root).glob("*/silver-*.yaml"))}
 
 
 def _feeds(body: dict) -> list[tuple[str, dict]]:
@@ -403,9 +414,9 @@ def _pipelines(root: Path, sources: dict[Path, dict]) -> list[dict]:
     """Native catalog pipelines for every declared source and standalone target."""
     owners = {}
     result = []
-    for folder, scope, filename in (("sources", "source", "source.yaml"),
-                                    ("pipelines", "pipeline", "pipeline.yaml")):
-        for path in sorted((root / folder).glob("*/" + filename)):
+    for folder, scope, filename in ((files.sources_root(root), "source", "source.yaml"),
+                                    (root / "pipelines", "pipeline", "pipeline.yaml")):
+        for path in sorted(folder.glob("*/" + filename)):
             body = sources[path] if scope == "source" else files.load(path)
             catalog_metadata = body.get("catalog") or {}
             if not isinstance(catalog_metadata, dict):
@@ -445,7 +456,7 @@ def _pipelines(root: Path, sources: dict[Path, dict]) -> list[dict]:
                             "description": f"Configured {scope} `{path.parent.name}`, target `{name}`. "
                                            f"Definition only; approval, activation and runs are separate. "
                                            f"Run checks: {target.get('checks') or []}.",
-                            "pipelineLocation": path.relative_to(root).as_posix(), "tasks": tasks}
+                            "pipelineLocation": _location(root, path), "tasks": tasks}
                 result.append(pipeline)
                 if scope == "source":
                     result += _step_pipelines(pipeline, target)
@@ -482,7 +493,7 @@ def _control_feeds(root: Path, folder: str, source: str, contract: str, read: li
     """The feeds a run file is built from: each key its contract requires that
     names a source gives that source's feeds, and a key that starts this
     source's own name gives the feeds this target reads."""
-    path = root / "sources" / folder / contract
+    path = files.sources_root(root) / folder / contract
     required = ((files.load(path).get("read") or {}).get("require") or []) if path.is_file() else []
     built = []
     for key in required:
@@ -933,18 +944,18 @@ def _quality(root: Path, tables: list[dict], kinds: dict, sources: dict[Path, di
             if not table or not quality:
                 continue
             columns = {column["name"] for column in table["columns"]}
-            version, rules_path = quality.get("version") or "", path.parent.joinpath("quality.yaml").relative_to(root).as_posix()
+            version, rules_path = quality.get("version") or "", _location(root, path.parent.joinpath("quality.yaml"))
             for kind, key in (("check", "checks"), ("fix", "fixes")):
                 for rule in quality.get(key) or []:
                     cases.append(_quality_case(table_name, columns, code, kind, rule, version, rules_path))
-    for path in sorted((root / "sources").glob("*/silver-*.yaml")):
+    for path in sorted(files.sources_root(root).glob("*/silver-*.yaml")):
         spec = files.load(path)
         table_name = fqn(SERVICE, SILVER, path.parent.name, spec["table"])
         table = by_name.get(table_name)
         if not table:
             continue
         columns = {column["name"] for column in table["columns"]}
-        rules_path = path.relative_to(root).as_posix()
+        rules_path = _location(root, path)
         for rule in spec.get("checks") or []:
             cases.append(_quality_case(table_name, columns, spec["table"], "check", rule, "", rules_path))
     definitions = [
@@ -963,7 +974,7 @@ def plan(root: Path | None = None) -> dict:
     root = root or files.ROOT
     policy = files.policy(root)
     kinds = policy.get("kinds") or {}
-    bodies = {path: files.load_source(path) for path in sorted((root / "sources").glob("*/source.yaml"))}
+    bodies = {path: files.load_source(path) for path in sorted(files.sources_root(root).glob("*/source.yaml"))}
     by_kind = winners(policy, root, bodies)
     schemas, tables, lineage = [], [], []
     profiles = _profiles_of(root)
@@ -984,7 +995,7 @@ def plan(root: Path | None = None) -> dict:
         source = body.get("source") or path.parent.name
         mdm = body.get("dataset_contracts") or {}
         schemas.append({"name": source, "database": fqn(SERVICE, SOURCES),
-                        "description": f"The source `{source}`: rules/sources/{path.parent.name}/."
+                        "description": f"The source `{source}`: sources/{path.parent.name}/."
                                        + _profile_text(profiles.get(source))})
         for feed, spec in _feeds(body):
             required = (spec.get("completeness") or {}).get("required") or []
@@ -1566,7 +1577,7 @@ def pipeline_status_from_bookkeeping(plan: dict, root: Path, snapshot: dict) -> 
         relative = Path(pipeline["pipelineLocation"])
         folder = relative.parts[0] if relative.parts else None
         pipeline_scope = "source" if folder == "sources" else "pipeline" if folder == "pipelines" else None
-        path = root / relative
+        path = _file(root, relative.as_posix())
         if pipeline_scope != kind:
             continue
         if pipeline["name"].rsplit(":", 1)[-1] != target:

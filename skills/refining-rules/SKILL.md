@@ -136,7 +136,7 @@ PR.
 
 For when the operator asks about a live feed's data quality, a run's quality
 counts look wrong, or **compare** lists drift handled by data-quality:
-1. Read `rules/sources/<source>/quality.yaml`.
+1. Read `sources/<source>/quality.yaml`.
    - The counts of the last runs are in each run's report, if the operator
      has them.
    - With no run to read, measure them (step 2).

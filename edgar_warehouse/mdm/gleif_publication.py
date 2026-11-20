@@ -50,7 +50,7 @@ def validate_metadata(member: str, metadata: dict) -> None:
 def dataset_contract(member: str, *, level1_source: str | None = None) -> dict:
     """Governance input, not registration or activation. Field ranks live in policy.
 
-    Each member's mapping is data in `rules/sources/gleif/source.yaml` (rules
+    Each member's mapping is data in `sources/gleif/source.yaml` (rules
     skill ticket 01). A relationship points at the Level 1 source the file
     names, at both ends; `level1_source` replaces it for a caller that
     registers Level 1 under another code.
@@ -73,7 +73,7 @@ def attest_publication(stream, *, member, metadata, expected_sha256, on_record=N
     """Verify all captured records; authority comes from the pinned manifest."""
     validate_metadata(member, metadata)
     format_name = metadata["format"].split(".")[0]
-    contract = files.load(files.ROOT / "sources" / "gleif"
+    contract = files.load(files.sources_root() / "gleif"
                           / f"{member.replace('_', '-')}-{format_name}.yaml")
     read = contract["read"]
     spec = read["stream"]

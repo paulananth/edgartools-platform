@@ -46,7 +46,7 @@ def test_no_target_at_grain_run_names_a_setting_it_does_not_read():
     from edgar_warehouse.rules import files
 
     named = {f"{path.parent.name}/{name}": sorted(HELD_BY_THE_UNIT & set(target))
-             for path in sorted((files.ROOT / "sources").glob("*/source.yaml"))
+             for path in sorted((files.sources_root()).glob("*/source.yaml"))
              for name, target in (source(path.parent.name).get("bookkeeping", {}).get("targets") or {}).items()
              if target.get("grain") == "run"}
     assert {name: found for name, found in named.items() if found} == {}

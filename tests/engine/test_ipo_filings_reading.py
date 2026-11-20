@@ -8,7 +8,7 @@ import yaml
 
 from edgar_warehouse.rules.source_engine import SourceEngine
 
-FOLDER = Path(__file__).parents[2] / "rules/sources/sec.ipo"
+FOLDER = Path(__file__).parents[2] / "sources/sec.ipo"
 CONTRACT = yaml.safe_load((FOLDER / "ipo-filings.yaml").read_text())
 REGISTRATIONS = yaml.safe_load((FOLDER / "ipo-registrations.yaml").read_text())
 FILINGS = [  # (form, date, file number), newest first as the SEC lists them

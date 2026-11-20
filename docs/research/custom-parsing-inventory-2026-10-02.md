@@ -42,9 +42,9 @@ Dataset Contracts declares `read` at the source, contract or adapter level.
 
 | Current configuration | What is configured | Raw reading/preparation boundary |
 | --- | --- | --- |
-| [`SEC Company`](../../rules/sources/sec.company/source.yaml#L1) | Acquisition completeness, Bookkeeping stages, MDM mapping and quality | Selects `company.silver` and `company.prepare`; Python implements the extraction and joins below. |
-| [`SEC Person`](../../rules/sources/sec.submissions.person/source.yaml#L1) | Raw submissions paths for CIK and legal name, classification and quality | No dedicated Person reader is declared. This mapping does not establish an executable raw-file-to-Person pipeline. |
-| [`GLEIF`](../../rules/sources/gleif/source.yaml#L1) | Three datasets' field/identifier/relationship mappings and quality | Native bytes and intermediate relationship records are decoded by Python below. |
+| [`SEC Company`](../../sources/sec.company/source.yaml#L1) | Acquisition completeness, Bookkeeping stages, MDM mapping and quality | Selects `company.silver` and `company.prepare`; Python implements the extraction and joins below. |
+| [`SEC Person`](../../sources/sec.submissions.person/source.yaml#L1) | Raw submissions paths for CIK and legal name, classification and quality | No dedicated Person reader is declared. This mapping does not establish an executable raw-file-to-Person pipeline. |
+| [`GLEIF`](../../sources/gleif/source.yaml#L1) | Three datasets' field/identifier/relationship mappings and quality | Native bytes and intermediate relationship records are decoded by Python below. |
 
 The common configured MDM intake is
 [`mdm.ingest`](../../edgar_warehouse/bookkeeping/clean/mdm_capabilities.py#L145)
@@ -86,7 +86,7 @@ Callers: [`register_company_mdm_preparation`](../../edgar_warehouse/bookkeeping/
 
 ### 3. Native GLEIF archive decoding
 
-The source configuration explicitly documents the boundary: [`rules/sources/gleif/source.yaml`](../../rules/sources/gleif/source.yaml#L1) says parsing stays in `gleif_source.py` and has no `read` section.
+The source configuration explicitly documents the boundary: [`sources/gleif/source.yaml`](../../sources/gleif/source.yaml#L1) says parsing stays in `gleif_source.py` and has no `read` section.
 
 [`gleif_source.py`](../../edgar_warehouse/mdm/gleif_source.py#L28) contains hardcoded member/CDF versions, JSON wrapper names, XML root/header/container/record names and namespaces. Its custom decoder uses libraries as tokenizers:
 

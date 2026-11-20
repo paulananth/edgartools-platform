@@ -5,7 +5,7 @@ from edgar_warehouse.silver_writer import checks
 
 
 def spec(name):
-    return files.load(files.ROOT / "sources" / "sec.company-facts" / f"silver-company-{name}.yaml")
+    return files.load(files.sources_root() / "sec.company-facts" / f"silver-company-{name}.yaml")
 
 
 def test_a_measure_over_an_unknown_window_is_flagged():

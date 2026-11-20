@@ -132,6 +132,7 @@ def test_the_pinned_version_is_the_table(tmp_path):
     # A changed byte is refused.
     copy = tmp_path / "rules"
     shutil.copytree(files.ROOT, copy)
+    shutil.copytree(files.sources_root(), copy.parent / "sources")
     published = copy / "reference" / "published" / "sec-place-codes" / "1" / "canonical.jsonl"
     published.write_bytes(published.read_bytes().replace(b"DELAWARE", b"DELAWARR"))
     with pytest.raises(files.RulesFileError, match="differs from its pinned sha256"):

@@ -1135,7 +1135,7 @@ def finish(env: dict, state: Path, lookups: bool = False) -> None:
         note("lookups start", state)
         note(f"lookups rc={run(['mdm', 'build-lookups'], env, LOGS / f'chain-{RUN}-lookups.log')}", state)
     note(f"links rc={run(['silver', 'links'], env, LOGS / f'chain-{RUN}-links.log')}", state)
-    for spec in sorted((ROOT / "rules/sources").glob("*/silver-*.yaml")):
+    for spec in sorted((ROOT / "sources").glob("*/silver-*.yaml")):
         table = yaml.safe_load(spec.read_text())["table"]
         code = run(["silver", "refresh-ids", table], env, LOGS / f"chain-{RUN}-refresh-{table}.log")
         note(f"refresh-ids {table} rc={code}", state)

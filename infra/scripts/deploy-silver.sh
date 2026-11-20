@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploy silver to a store: migrate the silver database and register every committed
-# silver table spec (rules/sources/*/silver-*.yaml, rules/silver/silver-*.yaml) with the silver owner's connection.
+# silver table spec (sources/*/silver-*.yaml, rules/silver/silver-*.yaml) with the silver owner's connection.
 # Safe to repeat: an unchanged spec changes nothing; a changed one is refused.
 #
 #   bash infra/scripts/deploy-silver.sh <environment-name>      a local test environment
@@ -26,7 +26,7 @@ cd "$root"
 run() { uv run --no-sync edgar-warehouse "$@"; }
 
 run silver init --runtime-role silver_runtime >/dev/null
-for spec in rules/sources/*/silver-*.yaml rules/silver/silver-*.yaml; do
+for spec in sources/*/silver-*.yaml rules/silver/silver-*.yaml; do
   run silver register --runtime-role silver_runtime "$spec" | python3 -c \
     'import json,sys; r=json.load(sys.stdin); print(("created  " if r["created"] else "unchanged ")+r["table"])'
 done

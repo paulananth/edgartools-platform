@@ -1,4 +1,4 @@
-"""What approved findings put in the Data Catalog: `rules/sources/<source>/profile.yaml`.
+"""What approved findings put in the Data Catalog: `sources/<source>/profile.yaml`.
 
 The catalog is published one way from the rules files (`edgar_warehouse/rules/catalog.py`),
 so the findings reach it through a rules file. The repository is public: this

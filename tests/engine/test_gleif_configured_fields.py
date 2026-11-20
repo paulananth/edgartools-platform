@@ -25,7 +25,7 @@ def expected(key, outcome):
 
 
 def project(member, row):
-    config=files.load(files.ROOT/'sources/gleif'/f'{member.replace("_","-")}-fields.yaml')
+    config=files.load(files.sources_root() / 'gleif'/f'{member.replace("_","-")}-fields.yaml')
     # The field projection alone; the contract's record checks have their own tests.
     mapped=config['read']['tables']['mapped']
     mapped.pop('checks',None)
@@ -96,7 +96,7 @@ def test_reserved_text_alias_is_not_a_literal_dictionary_field(value):
 @pytest.mark.parametrize('member',['level1','relationships','reporting_exceptions'])
 def test_frozen_inline_reading_matches_bundled_recipe(member):
     configured=files.source('gleif')['dataset_contracts'][f'gleif.{member}.v1']['contract']['adapter']['reading']
-    recipe=files.load(files.ROOT/'sources/gleif'/f'{member.replace("_","-")}-fields.yaml')
+    recipe=files.load(files.sources_root() / 'gleif'/f'{member.replace("_","-")}-fields.yaml')
     assert digest(configured)==digest(recipe)
 
 @pytest.mark.parametrize('case',['valid','invalid_lei','non_company','bad_name','bad_address','bad_matching'])

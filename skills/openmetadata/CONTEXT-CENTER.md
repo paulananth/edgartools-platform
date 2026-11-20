@@ -58,7 +58,7 @@ tags below. It leaves each term's status to the server unless `--draft-terms` is
 descriptions this section names. Use the scoped relationship repair above for
 unsupported edges; do not change business definitions in the live catalog.
 A second write of mention edges or endpoint domain links is how overstatement
-comes back. A relationship type that no file under `rules/sources/` names gets
+comes back. A relationship type that no file under `sources/` names gets
 "(planned: no rule reads this type yet and no link is loaded)" in its asset
 description and no term. This configuration-derived suffix does not prove
 that no link is loaded; verify that claim against the authoritative store.

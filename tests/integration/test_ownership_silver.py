@@ -1,7 +1,7 @@
 """Forms 3, 4 and 5 in silver: lines and owners, as SEC keeps them (ticket 25).
 
 The SGML ownership reading on an invented joint filing, landed into
-`insider_position` and `insider_reporting_owner` (`rules/sources/sec.ownership/silver-*.yaml`)
+`insider_position` and `insider_reporting_owner` (`sources/sec.ownership/silver-*.yaml`)
 on a disposable PostgreSQL 16. A line lands once, with its issuer's MDM id and
 its as-of and filing dates; each owner lands once, found as the Person the
 ownership feed masters (its record key) or as a Company by its CIK (operator,
@@ -28,7 +28,7 @@ from tests.engine.test_sgml_container import document, submission
 from tests.integration import test_mdm_postgres as core
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
 
-FOLDER = files.ROOT / "sources" / "sec.ownership"
+FOLDER = files.sources_root() / "sec.ownership"
 LINES = ("non_derivative_transaction", "non_derivative_holding", "derivative_transaction", "derivative_holding")
 PERSON, COMPANY = "sec.ownership.reporting_owner.v1", "sec.company.v1"
 ISSUER, HOLDER, FUND = "0000000001", "0000000002", "0000000003"  # invented CIKs

@@ -65,7 +65,7 @@ THIRTEENF, THIRTEENF_CODE = "sec.thirteenf.securities", "sec.thirteenf.securitie
 def thirteenf_records(root: Path, rows: str | None = None) -> list[dict]:
     """The 13F chain over one information table (`rows`, its infoTable elements):
     by default every title is a class's evidence."""
-    folder = files.ROOT / "sources" / THIRTEENF
+    folder = files.sources_root() / THIRTEENF
     if rows is None:
         rows = "".join(f"<infoTable><nameOfIssuer>EXAMPLE CORP</nameOfIssuer><titleOfClass>{title}</titleOfClass>"
                        f"<cusip>{cusip}</cusip><value>1</value></infoTable>" for cusip, title in TITLES)

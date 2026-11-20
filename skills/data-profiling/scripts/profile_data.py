@@ -7,7 +7,7 @@
     uv run --with duckdb --with pyyaml python profile_data.py approve --findings <folder>/findings.yaml \
         --by <operator> --words "<their exact words>"
     uv run --with duckdb --with pyyaml python profile_data.py catalog --findings <folder>/findings.yaml \
-        --out <repo>/rules/sources/<source>/profile.yaml
+        --out <repo>/sources/<source>/profile.yaml
 """
 
 from __future__ import annotations
@@ -104,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
     approve.add_argument("--by", required=True)
     approve.add_argument("--words", required=True)
     public = commands.add_parser("catalog", help="Write the approved findings' names and counts for the Data Catalog "
-                                                  "(rules/sources/<source>/profile.yaml); never a data value")
+                                                  "(sources/<source>/profile.yaml); never a data value")
     public.add_argument("--findings", required=True, type=Path)
     public.add_argument("--out", required=True, type=Path)
     args = parser.parse_args(argv)

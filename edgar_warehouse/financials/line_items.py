@@ -1,4 +1,4 @@
-"""The standard line items (ticket 46): `rules/sources/sec.company-facts/line-items.yaml`
+"""The standard line items (ticket 46): `sources/sec.company-facts/line-items.yaml`
 read once, and the one SQL query that builds silver's `company_line_item` from the
 facts in silver's `company_fact` (operator, 2026-10-28: "SQL over silver").
 
@@ -23,7 +23,7 @@ from edgar_warehouse.rules import files
 from . import sql
 from .sql import lit as _lit, values as _values
 
-MAP = files.ROOT / "sources" / "sec.company-facts" / "line-items.yaml"
+MAP = files.sources_root() / "sec.company-facts" / "line-items.yaml"
 PUBLISHED = files.ROOT / "reference" / "published"
 TAXONOMIES = ("us-gaap", "ifrs-full")
 ANNUAL_REPORTS = ("10-K", "20-F", "40-F")

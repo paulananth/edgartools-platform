@@ -104,7 +104,7 @@ This skill creates no table, and neither does a load. A store's schemas and ever
 ## Operationalize every domain
 
 Do this after the five schemas are current, for every domain. A domain is one
-source directory under `rules/sources` together with every entity kind that
+source directory under `sources` together with every entity kind that
 source's merge policy names. Walk all of them. Two named kinds are not
 the whole list.
 

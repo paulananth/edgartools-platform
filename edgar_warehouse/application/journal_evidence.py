@@ -12,7 +12,7 @@ from pathlib import Path
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.bookkeeping.clean.config import Blocked, digest, validate, worklist
 from edgar_warehouse.bookkeeping.clean.feeds import resolve_feed
-from edgar_warehouse.rules.files import load
+from edgar_warehouse.rules.files import load, sources_root
 from edgar_warehouse.rules.shape import expand_source
 
 
@@ -21,7 +21,7 @@ def plan(
 ) -> dict:
     binding = resolve_feed(rules_root, source, feed)
     feed = binding["feed"]
-    document = expand_source(load(rules_root / "sources" / binding["source"] / "source.yaml"), rules_root / "sources" / binding["source"])
+    document = expand_source(load(sources_root(rules_root) / binding["source"] / "source.yaml"), sources_root(rules_root) / binding["source"])
     configuration = validate(document, target)
     manifest = Artifacts().json(inputs)
     items = worklist(manifest, configuration)

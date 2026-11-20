@@ -134,7 +134,7 @@ def test_every_capacity_a_contract_states_is_one_its_type_has():
     types = relationships.types_of(files.policy())
     stated = [
         (link["type"], link["capacity"])
-        for folder in sorted((files.ROOT / "sources").iterdir()) if (folder / "source.yaml").exists()
+        for folder in sorted((files.sources_root()).iterdir()) if (folder / "source.yaml").exists()
         for entry in (files.source(folder.name).get("dataset_contracts") or {}).values()
         for link in entry["contract"]["adapter"].get("relationships") or []
         if "capacity" in link

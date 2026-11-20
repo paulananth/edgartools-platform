@@ -24,7 +24,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
 
     capture = mdm_sub.add_parser("prepare-capture", help="Write a declared target's input manifest for one bundle of "
                                  "captured documents, from the source's Bookkeeping section (version 2)")
-    capture.add_argument("--source", required=True, help="The source under rules/sources/")
+    capture.add_argument("--source", required=True, help="The source under sources/")
     capture.add_argument("--target", default="mastering", help="The source's Bookkeeping target (default mastering)")
     capture.add_argument("--capture", required=True, help="A capture folder: receipts.jsonl and bronze/")
     capture.add_argument("--documents", required=True, help="JSON file: this bundle's documents by receipt key (at most 512)")

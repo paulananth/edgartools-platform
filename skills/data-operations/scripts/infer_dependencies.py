@@ -40,7 +40,7 @@ def walk(node):
 
 
 def infer() -> dict:
-    names = sorted(p.parent.name for p in (ROOT / "sources").glob("*/source.yaml"))
+    names = sorted(p.parent.name for p in files.sources_root().glob("*/source.yaml"))
     bodies = {name: files.source(name) for name in names}
     owner = {code: name for name, body in bodies.items() for code in (body.get("dataset_contracts") or {})}
     # Each target: the dataset it prepares (if any) and the silver tables it lands.
@@ -91,7 +91,7 @@ def infer() -> dict:
             if node.get("target_source") in owner:
                 states.add(owner[node["target_source"]])
         silver_links = set()
-        for spec in sorted((ROOT / "sources" / item["source"]).glob("silver-*.yaml")):
+        for spec in sorted((files.sources_root() / item["source"]).glob("silver-*.yaml")):
             body = yaml.safe_load(spec.read_text()) or {}
             if body.get("table") in item["silver"]:
                 silver_links |= {owner[link["source_code"]] for link in body.get("links") or [] if link.get("source_code") in owner}

@@ -150,7 +150,7 @@ Do not ask:
 - whether a defect blocks (it does);
 - which value fills a shared field, when the kind file already says.
 
-**Write** `rules/sources/<source>/source.yaml`, following REFERENCE.md and
+**Write** `sources/<source>/source.yaml`, following REFERENCE.md and
 starting from its "Defaults".
 - Write the values with `files.dumps`, or both files at once with
   `files.write_source(body, folder)`. In that body, each contract's quality

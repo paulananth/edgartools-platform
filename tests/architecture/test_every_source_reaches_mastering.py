@@ -17,7 +17,7 @@ KNOWN_GAPS = {"gleif.relationships.v1", "gleif.reporting_exceptions.v1"}
 
 
 def sources() -> dict[str, dict]:
-    return {path.name: files.source(path.name) for path in sorted((files.ROOT / "sources").iterdir()) if path.is_dir()}
+    return {path.name: files.source(path.name) for path in sorted((files.sources_root()).iterdir()) if path.is_dir()}
 
 
 def typed_contracts(source: dict) -> set[str]:

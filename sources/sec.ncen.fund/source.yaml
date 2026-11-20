@@ -24,7 +24,7 @@
 # advisers-combine.yaml's `fund` table is one record; mdm.prepare and the merge follow.
 # The advisers of each series' latest filing (advisers.yaml, ADVISER.tsv) join
 # it in advisers-combine.yaml: each is a link INVESTMENT_ADVISER_TO from the
-# adviser's own record (rules/sources/sec.ncen.adviser) to the series, in
+# adviser's own record (sources/sec.ncen.adviser) to the series, in
 # capacity `advisor` or `subadvisor`, N-CEN's own adviser types (RDM
 # mdm-relationship-types 5; operator, 2026-11-14: "yes"). A "Terminated" type
 # is the capacity dropped. Over four quarters 398 series file twice in one

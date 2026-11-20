@@ -34,7 +34,7 @@ from tests.integration import test_mdm_postgres as core
 from tests.mdm import policy_layers
 from tests.support import source_chain as chain
 
-FOLDER = files.ROOT / "sources" / "openfigi"
+FOLDER = files.sources_root() / "openfigi"
 CODE = "openfigi.security.v4"
 THIRTEENF = "sec.thirteenf.securities.v2"
 NPORT_ISIN = "sec.nport.security.v2"  # its ISIN-only Securities (ticket 120: one Dataset Contract)

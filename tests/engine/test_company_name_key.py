@@ -27,7 +27,7 @@ SAMPLES = [None, '', False, 123, ['THE Inc'], {'name': 'A&B'},
 
 
 def contract(source):
-    return files.load(ROOT / f'rules/sources/{source}/name-key.yaml')
+    return files.load(ROOT / f'sources/{source}/name-key.yaml')
 
 
 def keys(config, samples):

@@ -27,7 +27,7 @@ from tests.support import masters, source_chain as chain
 
 
 NAME, CODE, GLEIF, ADV = "sec.nport.security", "sec.nport.security.v2", "gleif.level1.v1", "iapd.adv.custodians.v1"
-FOLDER = files.ROOT / "sources" / NAME
+FOLDER = files.sources_root() / NAME
 LEI = "9999000000EXAMPLE016"  # invented, check digits valid
 COLUMNS = ["ACCESSION_NUMBER", "HOLDING_ID", "ISSUER_NAME", "ISSUER_LEI", "ISSUER_TITLE", "ISSUER_CUSIP"]
 HOLDINGS = [["A-1", "1", "Example Corp", LEI, "Common", "ZZ0000013"],

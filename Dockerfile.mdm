@@ -5,6 +5,7 @@ WORKDIR /app
 
 COPY edgar_warehouse /app/edgar_warehouse
 COPY rules /app/rules
+COPY sources /app/sources
 
 ENTRYPOINT ["python", "-m", "edgar_warehouse"]
 CMD ["--help"]

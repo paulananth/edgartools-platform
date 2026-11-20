@@ -186,7 +186,7 @@ def loads(path: Path, source_code: str) -> set[str]:
 
 
 def write(plan: dict, source_code: str, path: Path) -> Path:
-    """`rules/sources/<source>/quality.yaml` shape: version, then quality per source code."""
+    """`sources/<source>/quality.yaml` shape: version, then quality per source code."""
     block = plan["block"]
     body = {"version": block["version"], "quality": {source_code: {k: v for k, v in block.items() if k != "version"}}}
     path.write_text(yaml.safe_dump(body, sort_keys=False, allow_unicode=True), encoding="utf-8")

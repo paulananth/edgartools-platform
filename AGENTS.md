@@ -41,7 +41,7 @@ Grok need beyond it.
 ## Data and parser notes
 
 - Raw provider download (capture) and bronze persistence are implemented by this repo, not by `edgartools`: a capture is a Bookkeeping worker (`edgar_warehouse/workers/provider_capture.py`).
-- Every feed is read by the source engine from its rules (`rules/sources/<source>/`), with zero provider requests at read time; the old per-form parsers are deleted. The data skills (`skills/data-platform/`, `skills/data-onboarding/`) hold the how-to.
+- Every feed is read by the source engine from its rules (`sources/<source>/`), with zero provider requests at read time; the old per-form parsers are deleted. The data skills (`skills/data-platform/`, `skills/data-onboarding/`) hold the how-to.
 - Retain immutable captures for verification and replay.
 
 ## Safety rules

@@ -67,3 +67,4 @@ bypass-selection = true
 "../../edgar_warehouse/rules/steps.py" = "edgar_warehouse/rules/steps.py"
 "../../skills" = "edgar_warehouse/bundle_data/skills"
 "../../rules" = "edgar_warehouse/bundle_data/rules"
+"../../sources" = "edgar_warehouse/bundle_data/sources"

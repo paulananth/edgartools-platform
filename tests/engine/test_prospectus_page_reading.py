@@ -8,7 +8,7 @@ import yaml
 from edgar_warehouse.rules.source_engine import SourceEngine
 from tests.engine.test_registration_page_reading import snapshot
 
-CONTRACT = yaml.safe_load((Path(__file__).parents[2] / "rules/sources/sec.prospectus/prospectus-page.yaml").read_text())
+CONTRACT = yaml.safe_load((Path(__file__).parents[2] / "sources/sec.prospectus/prospectus-page.yaml").read_text())
 
 PAGE = ("<html><head><title>Invented Rockets Inc. 424(b)(4)</title></head><body>"
         "<p>Filed Pursuant to Rule 424(b)(4)</p><p>12,000,000 Shares</p><p>Invented Rockets Inc.</p>"

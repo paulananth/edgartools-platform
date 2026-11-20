@@ -314,7 +314,7 @@ the lookup that fills that id.
 
 | Silver grain | Fact on the bus | Why it is its own fact |
 |---|---|---|
-| `company_fact`: one row per filed fact (company, taxonomy, concept, unit, period, filing). `rules/sources/sec.company-facts/silver-company-fact.yaml` | Transaction fact. Every filed copy stays. | The event grain. Line items and measures are built from it and do not replace it. |
+| `company_fact`: one row per filed fact (company, taxonomy, concept, unit, period, filing). `sources/sec.company-facts/silver-company-fact.yaml` | Transaction fact. Every filed copy stays. | The event grain. Line items and measures are built from it and do not replace it. |
 | `company_line_item`: one row per company, line item and fiscal year. | Periodic snapshot. | Latest-filed standard line item. A different grain from the filed fact, and a different grain from a registration page's stated lines. Definitions stay in the company-financials skill. |
 | `company_measure`: one row per company, measure, fiscal year and window. | Periodic snapshot. | A measure over the line items, including a multi-year window. Semi-additive: one period at a time. |
 | `relationship`: one row per relationship and period start. Rebuilt (`load_mode: snapshot`). `rules/silver/silver-relationship.yaml` | Factless bridge. | The link and its period. Parent, adviser or issuer attributes stay on the masters. A holding fact does not grow a parent column. |

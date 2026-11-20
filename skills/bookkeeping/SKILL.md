@@ -85,7 +85,7 @@ version's test-run proof and approval. Read documents through
 ### Source registration and pipeline discovery
 
 For a source inventory or source-to-domain trace, account for every folder in
-`rules/sources/`: each needs its matching `source.yaml`, a `bookkeeping`
+`sources/`: each needs its matching `source.yaml`, a `bookkeeping`
 declaration with the intended target and step graph, and an entry in
 `rules/source-sequence.yaml`. Treat a missing declaration or sequence entry as
 an onboarding gap, not an implicit default. A sequence entry with

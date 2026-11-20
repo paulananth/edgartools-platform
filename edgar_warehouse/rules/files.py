@@ -32,6 +32,17 @@ ROOT = Path(os.environ.get("EDGAR_RULES_ROOT")
             or (BUNDLED if BUNDLED.is_dir() else Path(__file__).resolve().parents[2] / "rules"))
 
 
+def sources_root(root: Path | None = None) -> Path:
+    """The sources folder: the folder `sources` beside the rules folder (the repository's `sources/`, the bundle's, or the
+    one beside an `EDGAR_RULES_ROOT` or a root a caller passes). Sources and their mappings are not rules, so they live
+    beside them; `skill install --rules <folder>` copies `sources/` beside the copied folder. The one place that
+    names the folder: refuses when it is missing, since a glob over a missing folder finds nothing without a word."""
+    folder = Path(root or ROOT).parent / "sources"
+    if not folder.is_dir():
+        raise RulesFileError(f"No sources folder beside the rules folder: expected {folder}")
+    return folder
+
+
 def kinds(root: Path | None = None) -> list[dict]:
     """The codes of RDM code set mdm-kinds, at the version the engine catalog pins."""
     pin = load((root or ROOT) / "mastering" / "engine-v1.yaml").get("kinds")
@@ -173,9 +184,9 @@ def contract(path: Path) -> Any:
 
 
 def source(name: str, root: Path | None = None, *, steps: bool = True) -> dict:
-    """One source's document: `rules/sources/<name>/source.yaml`, with its
+    """One source's document: `sources/<name>/source.yaml`, with its
     `quality.yaml` beside it when there is one."""
-    return load_source((root or ROOT) / "sources" / name / "source.yaml", steps=steps)
+    return load_source(sources_root(root) / name / "source.yaml", steps=steps)
 
 
 def load_source(path: Path, *, steps: bool = True) -> dict:
@@ -433,8 +444,9 @@ def documents(root: Path | None = None) -> list[tuple[str, str, Path]]:
     """Every rules document under the root: (kind, name, path)."""
     root = root or ROOT
     found = [(kind, path.parent.name, path)
-             for kind, folder, filename in (("source", "sources", "source.yaml"), ("pipeline", "pipelines", "pipeline.yaml"))
-             for path in sorted((root / folder).glob(f"*/{filename}"))]
+             for kind, folder, filename in (("source", sources_root(root), "source.yaml"),
+                                            ("pipeline", root / "pipelines", "pipeline.yaml"))
+             for path in sorted(folder.glob(f"*/{filename}"))]
     if (root / "merge/policy.yaml").exists():
         found.append(("merge", "platform", root / "merge/policy.yaml"))
     return found
@@ -460,5 +472,5 @@ def check(names: list[str] | None = None, root: Path | None = None) -> dict:
             results[f"{kind}:{name}"] = f"refused ({type(error).__name__}): {error}: {path}"
     missing = sorted(set(names or ()) - {key.split(":", 1)[1] for key in results if key.startswith("source:")})
     for name in missing:
-        results[f"source:{name}"] = f"refused (missing): no {root or ROOT}/sources/{name}/source.yaml"
+        results[f"source:{name}"] = f"refused (missing): no {sources_root(root)}/{name}/source.yaml"
     return results
