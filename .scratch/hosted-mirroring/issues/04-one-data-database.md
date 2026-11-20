@@ -71,7 +71,20 @@ and the rest in another db", then "Yes, open the ticket and start, make the skil
 - [ ] Readiness: `discovery_reader` (the catalog reader) held no connection limit (audit CST); the role guards hold it.
       `tests/unit/test_harden_hosted_roles.py::test_every_login_the_platform_makes_holds_a_connection_limit` failed before
       ("Extra items in the left set"). Apply after merge, then the gate.
-- [ ] Hosted: the reload (hours; said before it starts)
+- [x] Hosted: the reload. Times (ET, 2026-11-19 to 11-20): PR merged 22:52; readiness passed 00:15 (about 1 h 20 min of reset, provisioning,
+      inits, RDM, registration and the gate, with a 3 min false start); the 43 steps ran 00:21 to 04:23 (4 h 02 min); the finish ran 04:24 to
+      04:56 (32 min: links 19 min, the refresh of the nport holdings alone 12.5 min); the whole load 4 h 35 min against a first projection of 16 h.
+      The critical path was GLEIF's merge (ended 04:06), the last step waited behind it and ended 04:23. Result: 3.33 M masters
+      (company 2.86 M, security 423 k, person 31 k, fund structure 13 k), 4.17 M records, 5.31 M identifiers, 31 k profile rows, 16 silver tables
+      (largest 5.3 M rows). 2026-11-20 06:03 ET
+- [x] Learnings (each now in the runbook or the guide): (1) the gate passed with init steps 5 to 7 skipped and every step stopped at once, so a
+      `REGISTERED` check reads the policy, Dataset Contracts and worker profiles (`tests/unit/test_readiness.py`, four rows failed before the check);
+      (2) the runbook says to run steps 1 to 9 in order and say which ran; (3) a step with no CPU, session or rows was waiting for the mastering
+      lease, not stalled, so the guide says how to read the leases first; (4) `lsof` printed the instance's hostname, so the guide says to mask
+      and count; (5) a second RDM restore is refused at its first insert and changes nothing, so the runbook says to run it once and count;
+      (6) the finish is full-size on a fresh store and took 32 min against its 5, so the faster links build (branch `claude/links-reads-one-pass`)
+      must merge and be proved on this store. 2026-11-20 06:03 ET
+- [ ] Finish under five minutes on this store: rebase `claude/links-reads-one-pass`, merge, rerun `--finish` (hosted is loaded, so the proof is real)
 - [ ] Hosted: drop the old six databases and their two mirrors (approval), once the new mirror reads back
 - [ ] Hosted: the two mirrors dropped (approval) and one mirror of the data database created and read back
 - [ ] Follow-up ticket: master ids and links as joins inside the data database

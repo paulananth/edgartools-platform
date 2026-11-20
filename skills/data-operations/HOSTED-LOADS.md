@@ -3,7 +3,7 @@
 Read before starting or resuming a load on the hosted instance. Each item is a cause met on a real load and its rule.
 
 ## The gate: nothing loads until the infrastructure is ready and tested
-`scripts/readiness.py` reads twelve facts and writes `readiness.json` in the stores folder only on a full pass; `load_chain.py`
+`scripts/readiness.py` reads thirteen facts and writes `readiness.json` in the stores folder only on a full pass; `load_chain.py`
 refuses to start, resume or finish a load without it (the read-only `--plan`, `--list`, `--status` and `--catalog-status` still
 run). A pass belongs to one store generation (a reset of the databases closes the gate), one commit (any new commit closes it)
 and one day. The checks: the code is committed, contains `main` and its commit has green CI (tested means CI, never a local run
@@ -11,7 +11,7 @@ alone); the compiled engine was built from this checkout's source (`readiness.py
 and timeouts; RDM holds its codes and silver a table per spec; every step has a capture; no load runs and the loader has no
 session; disk and load average have room; the access audit of the database has no failing control; every duty file's login connects to the databases of its duty (names only, a
 driver's text is never kept); the chain's state file is this store's, or is shown as one that will be set aside, with its count of done
-steps; and the catalog, when one is configured, matches the rules. The gate is not the init runbook: after a reset, walk every runbook step,
+steps; the catalog, when one is configured, matches the rules; and the merge policy, every Dataset Contract and every worker profile are registered and granted (init steps 5 to 7). The gate is not the init runbook: after a reset, walk every runbook step,
 say in the report which ran and which did not, and never write a step off without reading why (a catalog step was once called
 unconfigured when its file existed). A fact that cannot be
 read is a failure. Fix what it names and run it again; there is no switch to skip it. A rehearsal of the first lane on a
@@ -51,10 +51,20 @@ disposable store is the next check to add.
 
   A step that shows `attempt 1 start` again and again with `scheduler moves` lines between is losing its work: stop the scheduler (not
   the steps), let the step finish, then run what follows with `--only` and `--finish`.
+- **A step that shows no CPU, no session and no rows may be waiting, not stalled.** The mastering lease serializes steps that write the same
+  masters: a step behind the GLEIF merge sat silent for hours and wrote at full rate within minutes of that merge ending. Before stopping a step
+  with no sign of work, read Bookkeeping's open runs and leases (`bookkeeping.pipeline_run` where the state is not complete, and `bookkeeping.lease`)
+  and the sessions that are working (`db_monitor.py sessions`); stop a step only when nothing holds what it waits for. A stop abandons the
+  bundle in flight.
+- **Read a running load without printing where it connects.** `lsof`, `ps` and `sample` print the instance's hostname and addresses; mask them
+  (`<ip>`, the hostname) in the same command, as the database-monitoring commands already do, and count sockets instead of listing them.
 - **A scheduler that "stopped" has usually finished everything it could**: it names the failed steps and what waits on them.
   Fix the cause (engine, memory, a login), then start it again; done steps cost one call each.
 
 ## The finish takes at most five minutes
+On a fresh store every master id is empty, so the first finish is the full-size one: the links build reads every master, and the refresh of the
+largest silver table reads and writes every one of its rows. A finish that takes minutes more than five is the measure of the slowest phase
+still left (time each phase, below), never a reason to skip it: Gold and the links read what it writes.
 `--finish` builds the links table once and fills each silver table's empty master ids. It is bounded by the operator at five minutes, and
 a longer one is a defect, not a wait. `silver refresh-ids` reads and writes only rows whose id is empty: a row that has an id is never read
 or written again (an id whose master merged away still resolves to the survivor through `mastering.reads.master`). A refresh that looks up
