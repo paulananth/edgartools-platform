@@ -16,7 +16,7 @@ Publishing the same manifest again changes no entity's version: that is what ide
 `verify` reads it back.
 
     uv run --no-project --with pyyaml python exposure_publish.py --manifest <manifest.json> \\
-        --config rules/exposure.yaml [--root .] [--service <name>] [--check]
+        --config rules/exposure.yaml [--root .] --service <name> [--check]
 
 It reads `OPENMETADATA_URL` and `OPENMETADATA_TOKEN` from the environment (a private file, never an argument).
 """
@@ -39,7 +39,6 @@ from exposure_manifest import validate_manifest  # noqa: E402
 from edgar_warehouse.rules import catalog  # noqa: E402
 from edgar_warehouse.rules.catalog import fqn  # noqa: E402
 
-SERVICE = "edgartools-exposure"
 QUALIFIED_VERSIONS = frozenset({"2.0.7"})
 EXPOSURE = "exposure"
 APPROVED = EXPOSURE + ".approved"
@@ -78,7 +77,7 @@ def _identity(physical: dict) -> tuple[str, str, str]:
     return physical["database"], physical["schema"], physical["table"]
 
 
-def exposure_plan(manifest: dict, *, service: str = SERVICE) -> dict:
+def exposure_plan(manifest: dict, *, service: str) -> dict:
     """The catalog plan for the manifest's tables, and the tags each must carry."""
     validate_manifest(manifest)
     tables = {_identity(t["physical"]): t for t in manifest["tables"]}
@@ -161,7 +160,7 @@ def _require_qualified(call: Call) -> None:
         raise PublishError(f"OpenMetadata {version} is not a qualified version")
 
 
-def publish(manifest: dict, call: Call, *, service: str = SERVICE) -> dict:
+def publish(manifest: dict, call: Call, *, service: str) -> dict:
     """Make the service equal to the manifest, tags exactly, then read it all back."""
     _require_qualified(call)
     plan = exposure_plan(manifest, service=service)
@@ -178,7 +177,7 @@ def publish(manifest: dict, call: Call, *, service: str = SERVICE) -> dict:
     return {"published": published, "tags_set": changed, "verified": verify(manifest, call, service=service)}
 
 
-def verify(manifest: dict, call: Call, *, service: str = SERVICE) -> dict:
+def verify(manifest: dict, call: Call, *, service: str) -> dict:
     """Read back the service, lineage and exact tags, and that no table outside it carries the exposure tag."""
     _require_qualified(call)
     plan = exposure_plan(manifest, service=service)
@@ -201,7 +200,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--config", required=True, type=Path, help="The exposure list, to refuse a stale manifest")
     parser.add_argument("--root", type=Path, default=Path.cwd(), help="The folder requirement paths are under")
-    parser.add_argument("--service", default=SERVICE)
+    parser.add_argument("--service", required=True, help="The catalog database service this publication owns")
     parser.add_argument("--check", action="store_true", help="Read back only; write nothing")
     args = parser.parse_args(argv)
     try:

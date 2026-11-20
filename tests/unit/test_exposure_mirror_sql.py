@@ -15,7 +15,7 @@ NAMES = {"mirror": {"database": "INVENTED_MIRROR"}}
 
 
 def test_create_lists_each_table_under_its_layers_schema_and_names_the_configured_target():
-    sql = mirror_sql.create(EXPOSURE, NAMES, "m1", "inst", "data")
+    sql = mirror_sql.create(EXPOSURE, NAMES, "m1", "inst", "data", "60 minutes", "ICEBERG")
     assert "target_database => 'INVENTED_MIRROR'" in sql and "postgres_tables => ['pub.thing', 'ref.codes']" in sql
     assert "target_table_type => 'ICEBERG'" in sql and "refresh_interval => '60 minutes'" in sql and "mirror_name => 'm1'" in sql
 

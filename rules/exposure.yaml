@@ -17,7 +17,7 @@ approval:
 # skill, mirror), in one database with MDM, RDM and SILVER schemas (data-platform
 # SINGLE-DATABASE-ICEBERG.md). It is not built yet, so every Snowflake identity is planned, not read back.
 target:
-  # database: the mirror's name is `mirror` in rules/snowflake.yaml
+  names: snowflake.yaml       # the file beside this one that holds the mirror's database name (`mirror.database`)
   verified: false
 
 # Each layer: the store's connection setting (its name, never its value), its PostgreSQL schema, the

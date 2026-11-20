@@ -38,7 +38,7 @@ def test_each_table_carries_the_exposure_tag_and_its_layers_data_class_and_nothi
 
 
 def test_no_glossary_term_certification_or_classification_is_planned():
-    plan = exposure_plan(manifest())
+    plan = exposure_plan(manifest(), service="s")
     assert not {"glossary_terms", "glossaries", "certifications", "classifications", "data_class_marks"} & set(plan)
 
 
@@ -69,7 +69,7 @@ def test_a_store_type_with_no_catalog_type_is_refused():
 def test_an_unknown_layer_is_refused_not_dropped():
     with pytest.raises(PublishError, match="no data class"):
         exposure_plan(invented_manifest({"layer": "gold", "table": "x", "description": "Invented.",
-                                         "columns": [("id", "text", "The id.")]}))
+                                         "columns": [("id", "text", "The id.")]}), service="s")
 
 
 def test_only_the_tags_of_the_two_owned_classifications_are_this_publications():
@@ -97,5 +97,5 @@ def test_a_readback_on_an_unqualified_version_is_refused_before_it_reads_anythin
         return {"version": "9.9.9"} if path == "/system/version" else {}
 
     with pytest.raises(PublishError, match="not a qualified version"):
-        verify(manifest(), call)
+        verify(manifest(), call, service="s")
     assert asked == ["/system/version"]

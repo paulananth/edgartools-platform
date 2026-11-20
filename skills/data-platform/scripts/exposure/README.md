@@ -20,7 +20,7 @@ SQLAlchemy addresses (`postgresql+psycopg2://`); the script drops the driver for
 
 ## The OpenMetadata publication (qualified)
 
-`exposure_publish.py` projects a manifest into one database service it owns (default `edgartools-exposure`)
+`exposure_publish.py` projects a manifest into one database service it owns (named by `--service`)
 through the repository's catalog publisher, then reads it back. Inside that service it is the whole truth:
 a table the manifest drops is deleted there. Each table gets exactly `exposure.approved` and its layer's data
 class among the two classifications this publication owns; any other tag, such as a steward's, is kept. The

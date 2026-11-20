@@ -134,9 +134,10 @@ def load_config(path: Path) -> dict:
     import yaml
 
     config = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
-    names = Path(path).parent / "snowflake.yaml"  # the database names are kept in one file
-    if names.exists() and isinstance(config.get("target"), dict):
-        config["target"].setdefault("database", yaml.safe_load(names.read_text(encoding="utf-8"))["mirror"]["database"])
+    target = config.get("target")
+    if isinstance(target, dict) and "names" in target:  # the list says which file holds the mirror's database name
+        names = yaml.safe_load((Path(path).parent / target.pop("names")).read_text(encoding="utf-8"))
+        target.setdefault("database", names["mirror"]["database"])
     return config
 
 
