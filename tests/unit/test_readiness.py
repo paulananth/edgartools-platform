@@ -57,7 +57,8 @@ def facts(**changes):
             "doctor": True, "loader": {"limit": 300, "settings": {"work_mem": "64MB", "statement_timeout": "4h", "idle_in_transaction_session_timeout": "10min"}},
             "reference": {"codes": 7000, "specs": 20, "silver_tables": 20}, "plan_missing": 0, "loads_running": 0, "loader_sessions": 0,
             "disk_gib": 500, "load1": 1.0, "cores": 8, "audit": [],
-            "logins": {"worker.env": "answers", "reader.env": "answers"}, "state": {"verdict": "fresh", "done_steps": 0}, "catalog": "confirmed"}
+            "logins": {"worker.env": "answers", "reader.env": "answers"}, "state": {"verdict": "fresh", "done_steps": 0}, "catalog": "confirmed",
+            "registered": {"policies": 1, "datasets": 18, "profiles": 10, "profiles_granted": 10}}
     base.update(changes)
     return base
 
@@ -91,6 +92,12 @@ def test_ready_infrastructure_passes_every_check():
     ("ROOM", {"load1": 9.0}),
     ("AUDIT", {"audit": ["LOG.postgres"]}),
     ("AUDIT", {"audit": None}),
+    # The gate once passed on a freshly initialized store with steps 5 to 7 of the init runbook not run, and every load step
+    # then stopped at once ("permission denied for schema mdm").
+    ("REGISTERED", {"registered": None}),
+    ("REGISTERED", {"registered": {"policies": 0, "datasets": 18, "profiles": 10, "profiles_granted": 10}}),
+    ("REGISTERED", {"registered": {"policies": 1, "datasets": 0, "profiles": 10, "profiles_granted": 10}}),
+    ("REGISTERED", {"registered": {"policies": 1, "datasets": 18, "profiles": 10, "profiles_granted": 0}}),
 ])
 def test_each_unready_fact_fails_its_own_check(check, change):
     assert check in failed(facts(**change))

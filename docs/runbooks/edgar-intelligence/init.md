@@ -10,6 +10,10 @@ order, by skills and their own commands only. Use
 files, roles and credential handling. The commands below are the whole procedure; each prints names and checksums, never
 a connection value.
 
+**Run every step, 1 to 9, in order, and say which ran.** The readiness gate (step 9) reads the result of steps 2b to 8 (steps 5 to 7 by its
+`REGISTERED` check) but does not run them: a store reset and given its schemas, with the registration, rules and worker grants skipped, passed an
+earlier gate, and every load step then stopped within seconds at "permission denied for schema mdm".
+
 The stores folder is `~/.config/edgartools/hosted/`, one folder for the store: `owner.env` (the owner login, `DATA_URL` and `CONTROL_URL`),
 `worker.env` (the runtime logins and the manifest root), `governance.env` (the registration login). `load --stores`
 takes it. A second copy of these files elsewhere goes stale, and a stale copy fails `doctor` with a login error.
@@ -71,7 +75,8 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    for the mirror; `rdm.published_code` is filled each time a version is published (step 4 publishes them), never edited.
 4. **RDM codes.** With `worker.env` sourced, `python <data-operations skill>/scripts/rdm_restore_published.py`
    (no approval is asked: the operator's standing ruling, 2026-11-19, is in the approval record, under an approver other than the drafter, since the store refuses a self-approval).
-   A half-restored RDM cannot be edited (published and approved versions are guarded): drop the `rdm` schema as its owner and run `rdm init` again. Done when every pin reads `pin ok` and
+   A half-restored RDM cannot be edited (published and approved versions are guarded): drop the `rdm` schema as its owner and run `rdm init` again.
+   Run it once: a second run is refused at its first insert, since every version exists, and changes nothing; to check, count `rdm.code_set_version` (one per pin) and `rdm.published_code`. Done when every pin reads `pin ok` and
    `SELECT count(*) FROM rdm.published_code` equals the codes of the published versions.
 5. **Registration login.** With the owner connection, `edgar-warehouse mdm grant-registration --role mdm_governance` with `owner.env` sourced. It lets the restricted login read the stored records and write the
    policy and dataset tables, and nothing else.
@@ -93,7 +98,7 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    The statuses it already holds for the steps are the previous load's history; the new load's statuses supersede them (see
    [data-operations](../../../skills/data-operations/SKILL.md#publish-a-steps-status-to-the-catalog)).
 
-9. **Ready.** `python <data-operations skill>/scripts/readiness.py` reads the infrastructure and writes `readiness.json` only when every check passes (code with green CI, engine built from this source, `doctor`, guards, reference data, captures, quiet instance, room, audit, each duty file's login, the chain's state file, the catalog). Done when it prints `READY`. The gate is not this runbook: say which steps ran and which did not before a load starts. A load does not start without it, and any reset of the databases or new commit closes it again.
+9. **Ready.** `python <data-operations skill>/scripts/readiness.py` reads the infrastructure and writes `readiness.json` only when every check passes (code with green CI, engine built from this source, `doctor`, guards, reference data, captures, quiet instance, room, audit, each duty file's login, the chain's state file, the catalog). Done when it prints `READY` (thirteen checks, the last `REGISTERED`: the merge policy, the Dataset Contracts and every worker profile). The gate is not this runbook: say which steps ran and which did not before a load starts. A load does not start without it, and any reset of the databases or new commit closes it again.
 
 A missing grant or login that a command names is a gap to fix through the central connection section, not to work around.
 
@@ -134,6 +139,12 @@ another store, another generation of this one, or no store at all (an old run's 
 again) sets it aside beside it (`chain-<RUN>.log.<store>`, `.<store>-<generation>`, `.unmarked`; never deleted, never overwritten) and starts a fresh one,
 so an earlier load's lines never satisfy a wait and never stop a run. A generation that cannot be read changes nothing, and a file written without one (from before generations, or while it was unreadable) is trusted and learns it the next time it can be read; only from then is a reset of the stores caught for that file, so a label used again right after a reset should be a new one when the file is older than the generations. `--status` prints when the next run would set the file aside, and does not count its done lines.
 `--adopt-state` is for the operator who says an unmarked file is this store's and keeps it.
+
+A fresh store takes hours, and the shape is the same each time. The longest step is the GLEIF merge, which holds the mastering lease, so a step that
+writes silver for the same masters shows no CPU, no session and no rows until that merge ends, then runs at once: `--status` says "no sign of work"
+for it, and the log of a step with one document stays silent. That is a wait, not a stall; read the leases (below) before stopping anything. The finish
+(`--finish`) follows the last step and, on a fresh store where every master id is empty, does the full-size work once: the links build and a refresh of
+every silver table.
 
 Masters come first and each source's silver target last, so silver rows find their masters as they land; a silver step
 needs none before it (a row lands with its link key, and `--finish` fills the master ids). A source's later
