@@ -43,9 +43,9 @@ def test_alter_writes_nothing_when_the_mirror_holds_exactly_the_reads():
     assert mirror_sql.alter(READS, EXPOSURE, "m1", ["ref.codes", "pub.thing"]) == ""
 
 
-def test_the_repository_gold_project_mirrors_the_masters_and_every_silver_table_and_no_working_table():
+def test_the_repository_gold_project_mirrors_the_masters_the_published_codes_and_every_silver_table_and_no_working_table():
     from edgar_warehouse.gold import views
     exposure = yaml.safe_load((ROOT / "rules/exposure.yaml").read_text())
     names = mirror_sql.tables(views.sources(), exposure)
     silver = sorted(f"silver.{t['table']}" for t in exposure["tables"] if t["layer"] == "silver")
-    assert names == ["public.mastering_identifier", "public.mastering_master"] + silver and len(names) == 18
+    assert names == ["public.mastering_identifier", "public.mastering_master", "rdm.published_code"] + silver and len(names) == 19

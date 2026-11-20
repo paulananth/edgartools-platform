@@ -27,12 +27,23 @@ master:
 requirements:
   holdings: "A manager's holdings by security and quarter (operator, Approved, ticket 05 section 7)"
   silver_spec: "The silver table's approved spec (operator, 2026-11-20: \"Silver spec = requirement\")"
+  rdm_code_set: "A published code set (operator, 2026-11-20: \"Rdm has to publish views on types\"; \"One per code set, in Gold\")"
 
 # Every silver table on the exposure list gets a fact view made from its spec (data-modeling GOLD.md, "No silver table
 # is silver-only"); an object below that reads the table as its source replaces the generated one.
 silver_facts:
   exposure: exposure.yaml
   requirement: silver_spec
+
+# RDM publishes one view per code set (data-modeling GOLD.md, "RDM publishes one view per code set"): each folder of
+# `published` is a code set, and its view holds the latest published version's codes from `source`.
+code_sets:
+  source: rdm.published_code
+  published: reference/published
+  name: "ref_{code_set}"
+  columns: [code, label, definition, parent_code, path, label_path, level, depth, value, unit, properties, synonyms,
+            crosswalk, code_status, code_valid_from, code_valid_to, version, published_at]
+  requirement: rdm_code_set
 
 objects:
 - name: master

@@ -36,8 +36,25 @@ def load(path: Path = CONFIG) -> dict:
     config, names = files.load(path), files.load(files.ROOT / "snowflake.yaml")
     config["destination"] = dict(names["gold"])
     config["mirror"]["database"] = names["mirror"]["database"]
-    config["objects"] += silver_facts(config)
+    config["objects"] += silver_facts(config) + code_set_views(config)
     return config
+
+
+def code_set_views(config: dict) -> list[dict]:
+    """One view per published code set: each folder of the published reference data names one, and holds its one
+    version (a code set keeps no history; a retired code set has no folder, so no view)."""
+    rule = config.get("code_sets")
+    if not rule:
+        return []
+    items = []
+    for folder in sorted(p for p in (files.ROOT / rule["published"]).iterdir() if p.is_dir()):
+        versions = sorted(v.name for v in folder.iterdir() if v.is_dir())
+        if len(versions) != 1:
+            raise ValueError(f"code set {folder.name} holds {len(versions)} versions; a code set keeps exactly one")
+        items.append({"name": rule["name"].format(code_set=re.sub(r"\W", "_", folder.name)), "kind": "code_set",
+                      "code_set": folder.name, "version": versions[0], "source": rule["source"], "columns": rule["columns"],
+                      "requirement": rule["requirement"], "grain": "one row per code of the code set's one published version"})
+    return items
 
 
 def silver_facts(config: dict) -> list[dict]:
@@ -169,7 +186,14 @@ def render_fact(item: dict, ctx: Context) -> str:
     return f"SELECT {', '.join(select)}\nFROM {ctx.mirror(item['source'])} s\n" + "\n".join(joins)
 
 
-RENDERERS = {"base": render_base, "dimension": render_dimension, "calendar": render_calendar, "fact": render_fact}
+def render_code_set(item: dict, ctx: Context) -> str:
+    """The codes of one code set's one published version."""
+    return (f"SELECT {', '.join(item['columns'])}\nFROM {ctx.mirror(item['source'])}\n"
+            f"WHERE code_set = {literal(item['code_set'])} AND version = {literal(item['version'])}")
+
+
+RENDERERS = {"base": render_base, "dimension": render_dimension, "calendar": render_calendar, "fact": render_fact,
+             "code_set": render_code_set}
 
 
 def render(config: dict | None = None, dialect: str = "snowflake", qualify: bool = True) -> dict[str, str]:

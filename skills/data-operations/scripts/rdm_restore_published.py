@@ -6,7 +6,7 @@ Usage (source the store's worker.env first):
 
 Each version under rules/reference/published/<code set>/<version> is drafted from its
 canonical.jsonl, approved under the operator's standing ruling (no approval is asked), published, and its sha256 compared with
-its pin.json. Versions run in order, so a later version supersedes the one before. Run it
+its pin.json. A code set holds one version, so none supersedes another. Run it
 on an empty RDM: a version already published stops the run at that version. A hash that
 differs from its pin exits 1 after naming it.
 """
@@ -39,8 +39,6 @@ def draft_body(name: str, version: str) -> dict:
         "crosswalk": [{"from_code": r["code"], "to_set": t, "to_version": v, "to_code": c, "match_type": m}
                       for r in rows for t, v, c, m in r["crosswalk"]],
     }
-    if int(version) > 1:
-        body["supersedes"] = str(int(version) - 1)
     return body
 
 
