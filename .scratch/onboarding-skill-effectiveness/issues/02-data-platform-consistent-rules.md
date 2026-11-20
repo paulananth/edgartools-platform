@@ -1,7 +1,7 @@
 # data-platform: Reconcile shared rules
 
 Type: task
-Status: open
+Status: resolved
 Priority: P0
 Blocked by: 01
 Labels: wayfinder:task
@@ -33,12 +33,12 @@ These blockers order skill-improvement work. They do not activate optional sourc
 
 ## Acceptance checklist
 
-- [x] Inventory each duplicated or conflicting instruction with its authoritative source and proposed disposition; verified by document review of `CLAUDE.md`, `CONTEXT.md`, the data-platform, data-onboarding, refining-rules and data-onboarding `LOAD.md` texts, recorded under [Inventory](#inventory). ({{now}})
-- [x] Align the local phase with the shared rule decision while preserving explicit operator boundaries; verified by document review of the diff to `skills/data-platform/SKILL.md`, `CONNECTIONS.md` and `LOCAL-TESTING.md` against the inventory. ({{now}})
-- [x] Trace a routine path and a blocked path; confirm no new approval, provider access or switch-on authority was inferred; verified by document review under [Traces](#traces). No source operation was run. ({{now}})
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. Checks ran (see [Validation](#validation)); not yet committed, pushed or opened as a PR.
-- [ ] Open decisions recorded below are answered by the operator or carried by tickets 08 and 20.
-- [ ] Learning → skill: proposed lesson in [Data Platform hard stops](../../../skills/data-platform/SKILL.md#hard-stops): a skill's rule list names each rule's home and grants no permission. Not ticked until the change is published and reviewed.
+- [x] Inventory each duplicated or conflicting instruction with its authoritative source and proposed disposition; verified by document review of `CLAUDE.md`, `CONTEXT.md`, the data-platform, data-onboarding, refining-rules and data-onboarding `LOAD.md` texts, recorded under [Inventory](#inventory). (2026-11-20 18:11 ET)
+- [x] Align the local phase with the shared rule decision while preserving explicit operator boundaries; verified by document review of the diff to `skills/data-platform/SKILL.md`, `CONNECTIONS.md` and `LOCAL-TESTING.md` against the inventory. (2026-11-20 18:11 ET)
+- [x] Trace a routine path and a blocked path; confirm no new approval, provider access or switch-on authority was inferred; verified by document review under [Traces](#traces). No source operation was run. (2026-11-20 18:11 ET)
+- [x] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. PR #1966 squash-merged at 2026-11-20 17:46 ET as `e166fa56aabb2ceb0d180402b93fa4c292925310`. The focused skill checks on that head passed 147 tests before the merge. (2026-11-20 18:11 ET)
+- [x] Open decisions recorded below are answered by the operator or carried by tickets 08 and 20. Decision A is not ruled here; it is carried by tickets 08 and 20, as recorded under [Open decisions](#open-decisions). (2026-11-20 18:11 ET)
+- [x] Learning → skill: a skill's rule list names each rule's home and grants no permission. Recorded in [Data Platform hard stops](../../../skills/data-platform/SKILL.md#hard-stops). (2026-11-20 18:11 ET)
 
 ## Inventory
 
