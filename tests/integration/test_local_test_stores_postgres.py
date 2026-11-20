@@ -89,25 +89,27 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
         assert "acquisition" not in person
         files.write_source(person, root / "sources" / "sec.submissions.person")
         files.write_source({**person, "source": "invented.other"}, root / "sources" / "invented.other")
-        governance_mdm = engine("data", "mdm_governance")
-        with governance_mdm.begin() as conn:
+        # The registry is the Rules Database's (the control database): governance adds to it.
+        governance = engine("control", "rules_governance")
+        with governance.begin() as conn:
             first = frozen.register(conn, ["sec.submissions.person"], root)
-        with governance_mdm.begin() as conn:
+        with governance.begin() as conn:
             assert frozen.register(conn, ["sec.submissions.person"], root) == first  # again changes nothing
-        with governance_mdm.connect() as conn:
-            assert conn.scalar(text("SELECT count(*) FROM mdm.dataset_mapping WHERE source_code=:c"),
+        with governance.connect() as conn:
+            assert conn.scalar(text("SELECT count(*) FROM rules.dataset_reading WHERE source_code=:c"),
                                {"c": "sec.submissions.person.v1"}) == 1
         # Another source cannot register over a dataset Person owns.
-        with pytest.raises(Blocked, match="belongs to source sec.submissions.person"), governance_mdm.begin() as conn:
+        with pytest.raises(Blocked, match="belongs to source sec.submissions.person"), governance.begin() as conn:
             frozen.register(conn, ["invented.other"], root)
-        for login in ("mdm_runtime", "mdm_governance"):
-            reader = engine("data", login)
+        # The runtime reads the registry; neither login changes or deletes a row.
+        for login in ("rules_runtime", "rules_governance"):
+            reader = engine("control", login)
             with reader.connect() as conn:
-                assert conn.scalar(text("SELECT count(*) FROM mdm.policy")) == 1
-                assert not conn.scalar(text("SELECT has_schema_privilege(current_user,'mdm','CREATE')"))
+                assert conn.scalar(text("SELECT count(*) FROM rules.policy")) == 1
+                assert not conn.scalar(text("SELECT has_schema_privilege(current_user,'rules','CREATE')"))
             with pytest.raises(DBAPIError):
                 with reader.begin() as conn:
-                    conn.execute(text("DELETE FROM mdm.policy WHERE false"))
+                    conn.execute(text("DELETE FROM rules.policy WHERE false"))
         # Run a real offline copy using the generated worker file.
         artifacts = Artifacts()
         inp = artifacts.put(tmp_path.as_uri() + "/inputs", {"invented": 1})

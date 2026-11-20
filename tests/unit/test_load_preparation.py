@@ -212,8 +212,8 @@ def test_delta_partial_and_unrecognized_filenames_are_refused_even_with_matching
 
 
 def test_registered_preparation_uses_the_selected_worker_environment_and_disposes_on_refusal(monkeypatch):
-    from edgar_warehouse import database_connections
     from edgar_warehouse.mdm import connections
+    from edgar_warehouse.rules import registry
 
     seen = []
 
@@ -228,14 +228,18 @@ def test_registered_preparation_uses_the_selected_worker_environment_and_dispose
     selected = {"selected-worker": "invented"}
     monkeypatch.setattr(connections, "mdm_engine_from",
                         lambda environment, restricted: seen.append((environment, restricted)) or Engine())
-    monkeypatch.setattr(database_connections, "storage_adapter",
-                        lambda: type("Adapter", (), {"registered_policy": lambda self, conn, digest: None})())
+    class Rules(Engine):
+        def dispose(self):
+            seen.append("rules disposed")
+
+    monkeypatch.setattr(registry, "engine", lambda environment: Rules())
+    monkeypatch.setattr(registry, "policy", lambda conn, digest: None)
     # The value is only a presence marker: connection construction is stubbed above.
     selected["DATA_URL"] = "invented-present"
     with pytest.raises(RunStopped, match="registered mastering policy"):
         with preparation.registered_store("invented-policy", selected):
             pytest.fail("unregistered policy was admitted")
-    assert seen == [(selected, True), "disposed"]
+    assert seen == [(selected, True), "rules disposed", "disposed"]
 
 
 def test_an_explicit_connection_environment_overrides_ambient_values(monkeypatch):

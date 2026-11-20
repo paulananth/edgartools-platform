@@ -275,6 +275,8 @@ class LocalStores:
                         key = "application_role" if store == "mdm" else "agent_role" if store == "rules" else "runtime_role"
                         role = "bookkeeping_control" if store == "bookkeeping" else runtime_login(store)
                         named = {"database_name": database_of(store)} if store in ("rdm", "bookkeeping", "change_journal") else {}
+                        if store == "rules":
+                            named = {"registrar_role": "rules_governance"}
                         migrations[store](engine, **{key: role}, **named)
                     finally:
                         engine.dispose()
@@ -292,13 +294,6 @@ class LocalStores:
                 grant_profile(book, profile=profile, worker="bookkeeping_runtime")
         finally:
             book.dispose()
-        mdm = self.engine(name, database_of("mdm"))
-        try:
-            from edgar_warehouse.mdm.registration import grant_registrar
-
-            grant_registrar(mdm, "mdm_governance")
-        finally:
-            mdm.dispose()
 
     def contents(self, name: str):
         """Private checksums, never row values, prove what a restored copy holds."""

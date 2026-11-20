@@ -542,7 +542,7 @@ def empty_rules_database():
             if time.monotonic() > deadline:
                 pytest.fail("PostgreSQL 16 did not finish initializing")
             time.sleep(0.2)
-        for statement in ("CREATE ROLE rules_agent LOGIN PASSWORD 'test'",
+        for statement in ("CREATE ROLE rules_agent LOGIN PASSWORD 'test'", "CREATE ROLE rules_governance LOGIN PASSWORD 'test'",
                           "CREATE DATABASE rules"):
             subprocess.run(["docker", "exec", name, "psql", "-U", "postgres", "-v", "ON_ERROR_STOP=1",
                             "-c", statement], capture_output=True, check=True)
@@ -724,7 +724,7 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
     mdm_admin = create_engine(databases.admin.url.set(database=mdm_name))
     mdm_app = create_engine(mdm_admin.url.set(username="clean_application", password="test"))
     migrate(mdm_admin, application_role="clean_application")
-    with mdm_admin.begin() as conn:
+    with databases.admin.begin() as conn:  # the registry is the Rules Database's, in the control database
         policy = register_policy(conn, {"version": 1, "required_consumers": ["export"], "automatic_rules": [],
                                         "kinds": {"company": {"version": "1", "defaults": {"sources": ["fixture.filers"]},
                                                               "fields": {"name": {"sources": ["fixture.filers"]}}}}})
@@ -733,7 +733,7 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
             "reading": mapped_reading({"name": "name"})}))
 
     if trial_mode == "raw-person":
-        with mdm_admin.begin() as conn:
+        with databases.admin.begin() as conn:
             policy = register_policy(conn, files.policy())
             register_dataset(conn, "sec.submissions.person.v1", "1",
                              files.mdm_contract("sec.submissions.person", "sec.submissions.person.v1"))

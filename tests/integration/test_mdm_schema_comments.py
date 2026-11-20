@@ -48,12 +48,12 @@ def test_migrating_a_store_that_holds_data_changes_nothing(database):
     """A second `mdm init` over a store with rows installs nothing, keeps
     the rows, and leaves the application login its read access."""
     with database.admin.connect() as conn:
-        before = {t: conn.scalar(text(f"SELECT count(*) FROM mdm.{t}"))
-                  for t in ("policy", "dataset", "dataset_mapping", "migration")}
-    assert before["policy"] and before["dataset"]
+        before = conn.scalar(text("SELECT count(*) FROM mdm.migration"))
+        policies = conn.scalar(text("SELECT count(*) FROM rules.policy"))
+    assert before and policies
     assert not migrate(database.admin, application_role="clean_application")["installed"]
     with database.admin.connect() as conn:
-        after = {t: conn.scalar(text(f"SELECT count(*) FROM mdm.{t}")) for t in before}
-    assert after == before
+        assert conn.scalar(text("SELECT count(*) FROM mdm.migration")) == before
+        assert conn.scalar(text("SELECT count(*) FROM rules.policy")) == policies
     with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm.policy")) == before["policy"]
+        assert conn.scalar(text("SELECT count(*) FROM mdm.migration")) == before

@@ -26,7 +26,7 @@ def _handle(args):
 
         owner = get_engine(owner_url("rules"))
         try:
-            result = migrate(owner, agent_role=args.agent_role)
+            result = migrate(owner, agent_role=args.agent_role, registrar_role=args.registrar_role)
         finally:
             owner.dispose()
     elif args.rules_command == "entity-types":
@@ -38,7 +38,7 @@ def _handle(args):
         # The store owner's connection: the runtime login cannot add to MDM's registry.
         from edgar_warehouse.database_connections import owner_url
 
-        owner = get_engine(owner_url("mdm"))  # the governance file: the registration login reads MDM's registry
+        owner = get_engine(owner_url("rules"))  # the governance file: the registration login adds to the registry
         try:
             with owner.begin() as conn:
                 result = frozen.register(conn, args.source or None, Path(args.root))
@@ -538,9 +538,11 @@ def register(subparsers):
                             ("migrate", "Upgrade the Rules Database's table after a schema change")):
         schema = commands.add_parser(name, help=help_text)
         schema.add_argument("--agent-role", default="rules_agent")
+        schema.add_argument("--registrar-role", default="rules_governance",
+                            help="The login that registers rules for MDM (`rules register`)")
         schema.set_defaults(handler=_handle)
     registering = commands.add_parser("register", help="Register the merge rules and the sources' Dataset Contracts "
-                                      "in MDM from the files (rerunning changes nothing)")
+                                      "for MDM from the files (rerunning changes nothing)")
     registering.add_argument("--source", action="append", help="Only this source (repeatable); default every source")
     registering.add_argument("--root", default=str(files.ROOT))
     registering.set_defaults(handler=_handle)

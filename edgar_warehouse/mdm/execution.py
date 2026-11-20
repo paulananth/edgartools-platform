@@ -17,7 +17,7 @@ from . import limits
 from .activation import check_policy
 from .adapters import UnsupportedRecord, normalize
 from .evidence import deferred_record
-from .store import Conflict, Store, current_reading, reading_at, storage_adapter
+from .store import Conflict, current_reading, reading_at
 
 
 def runtime_files() -> list[Path]:
@@ -61,7 +61,7 @@ def _finite_json_float(value):
 def batch_input(
     batch: dict,
     root: Path,
-    store: Store,
+    rules,
     *,
     policy_digest: str | None = None,
     mapping_versions: dict[str, int] | None = None,
@@ -96,7 +96,7 @@ def batch_input(
     if hashlib.sha256(raw).hexdigest() != spec["sha256"]:
         raise Conflict("Source artifact digest mismatch")
     code = spec["source_code"]
-    with store.engine.connect() as conn:
+    with rules.connect() as conn:  # the Rules Database: the registered readings
         if mapping_versions is None:
             reading = current_reading(conn, code)
             if reading is None:
@@ -110,8 +110,10 @@ def batch_input(
     # rule: every other contract states its kind and needs no policy to read.
     policy = None
     if contract["adapter"].get("classification"):
-        with store.engine.connect() as conn:
-            policy = storage_adapter().registered_policy(conn, policy_digest)
+        from edgar_warehouse.rules import registry
+
+        with rules.connect() as conn:
+            policy = registry.policy(conn, policy_digest)
         if policy is None:
             # Fail before reading a record, not on the first one.
             raise Conflict(
