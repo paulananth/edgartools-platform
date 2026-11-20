@@ -36,7 +36,7 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] List decisions, inputs and outputs owned here using current repository evidence; verified against current `data-platform`, `data-profiling`, `data-onboarding`, `refining-rules`, `data-operations`, `bookkeeping`, `change-journal` and `mdm-engineering` instructions by reviewing the ownership map and links. (2026-11-20 14:40 ET)
 - [x] Assign each overlapping responsibility one authoritative owner and a named handoff; verified by reviewing the ownership table, flow table and linked owner paths in `skills/data-platform/SKILL.md`, plus the reconciled run/recovery handoffs in `skills/data-onboarding/SKILL.md` and `skills/refining-rules/SKILL.md`. (2026-11-20 14:40 ET)
 - [x] Demonstrate the boundary on a new captured source, an already configured source and a restart after a completed phase; link retained work rather than duplicating it. Verified by reviewing the documented handoffs, named artifacts and destination anchors; the genericity check does not validate routing behavior, and no source operation was performed. (2026-11-20 14:40 ET)
-- [x] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. PR #1956 opened as a draft; verified by 145 passing genericity tests and `git diff --check`. (2026-11-20 14:44 ET)
+- [x] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. PR #1956 opened as a draft; verified by the 151-pass focused check and `git diff --check`. (2026-11-20 15:20 ET)
 - [x] Learning → skill: source routing and artifact ownership belong in Data Platform; downstream procedures and their evidence stay with their owning skill. Recorded in [Decisions, artifacts and handoffs](../../../skills/data-platform/SKILL.md#decisions-artifacts-and-handoffs). (2026-11-20 14:40 ET)
 
 ## Answer
@@ -63,10 +63,9 @@ installed copy was read or changed.
 
 ## Validation and remaining work
 
-- `UV_CACHE_DIR=/private/tmp/uv-cache-ticket01 uv run --with pytest pytest tests/unit/test_profiling_genericity.py` — **145 passed**. This documentation genericity check does not validate routing behavior.
-- The PR/publish checklist item remains open because this implementation run's
-  scope excludes commit, push and PR publication. The scoped change and check
-  evidence are recorded here; publication remains incomplete.
+- CI run `44805083623` failed `tests/unit/test_skills_cite_no_ticket.py::test_every_skill_file_is_short_enough_to_read_whole`: `data-onboarding/SKILL.md` was 504 lines against the under-500-line limit. Condensed the ownership handoffs.
+- `uv run --no-project --with pytest -- pytest -q -p no:cacheprovider tests/unit/test_skills_cite_no_ticket.py tests/unit/test_profiling_genericity.py` — **151 passed**.
+- PR #1956 remains draft pending updated CI; no merge was authorized or performed.
 
 ## Completion evidence
 
