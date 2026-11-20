@@ -2,8 +2,9 @@
 # its scripts, the Gold views, the dbt profile (written by `python -m edgar_warehouse.gold.views write infra/dbt/gold`)
 # and the Terraform access grants. A renamed database is a change to one line here. Logins, roles and warehouses are
 # never here: they come from the private environment.
+owner: EDGARTOOLS              # the role that owns every database the platform creates (a managed mirror's target excepted)
 mirror:                          # the managed mirror of the exposed tables (schemas MDM, RDM, SILVER)
-  database: DB_EDGARTOOLS_MIRROR
+  database: EDGARTOOLS_MIRROR
 gold:                            # where dbt writes the Gold views
-  database: DB_EDGARTOOLS_GOLD
+  database: EDGARTOOLS_GOLD
   schema: GOLD

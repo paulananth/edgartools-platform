@@ -132,7 +132,7 @@ def test_the_calendar_has_one_row_per_day(db):
 def test_the_snowflake_text_is_qualified_reads_the_mirror_and_replaces_a_view():
     text = views.render()
     assert text["master"].startswith(f"CREATE OR REPLACE VIEW {DEST}.GOLD.master AS")
-    assert f"FROM {MIRROR}.MDM.mastering_master" in text["master"]
+    assert f"FROM {MIRROR}.PUBLIC.mastering_master" in text["master"]
     assert "SELECT entity_id, canonical_id, kind, status," in text["master"]  # columns, never parsed from the body
     assert "PARSE_JSON(body):fields.name.value::VARCHAR" in text["master"] and "PARSE_JSON(body):kind" not in text["master"]
     assert f"{MIRROR}.SILVER.thirteenf_holding s" in text["fact_thirteenf_holding"]
@@ -152,7 +152,7 @@ def test_each_object_is_one_dbt_view_that_reads_the_mirror_through_source_and_go
 def test_the_dbt_sources_name_the_mirror_database_and_only_the_tables_the_views_read():
     found = {s["name"]: (s["database"], s["schema"], [t["name"] for t in s["tables"]]) for s in views.sources()["sources"]}
     assert found["silver"] == (MIRROR, "SILVER", ["thirteenf_filing", "thirteenf_holding"])
-    assert found["mdm"] == (MIRROR, "MDM", ["mastering_identifier", "mastering_master"])
+    assert found["mdm"] == (MIRROR, "PUBLIC", ["mastering_identifier", "mastering_master"])
 
 
 def test_the_project_is_written_from_the_configuration_and_a_dropped_view_is_dropped(tmp_path):
@@ -181,3 +181,7 @@ def test_the_exposure_scripts_take_the_mirror_name_from_the_same_file():
     sys.path.insert(0, str(files.ROOT.parent / "skills" / "data-platform" / "scripts" / "exposure"))
     import exposure_manifest
     assert exposure_manifest.load_config(files.ROOT / "exposure.yaml")["target"]["database"] == MIRROR
+
+
+def test_the_one_names_file_also_names_the_owner_role():
+    assert NAMES["owner"] and set(NAMES) == {"owner", "mirror", "gold"}
