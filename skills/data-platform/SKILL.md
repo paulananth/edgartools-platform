@@ -72,6 +72,51 @@ an implementation gap before calling a source ready.
   processing path with valid approved inputs, and let unrelated work continue.
   Never silently repin or clear shared data to repair affected work.
 
+## Decisions, artifacts and handoffs
+
+Data Platform owns the routing decision and the shared entry conditions, not
+the procedures performed by the next skill. Resolve the source and requested
+work from current configuration and retained evidence, then hand off the
+existing artifact and its location to the owner below. Do not recreate an
+artifact merely to cross a skill boundary.
+
+| Decision or artifact | Authoritative owner | Handoff |
+|---|---|---|
+| Is this setup/connection discovery, new-source onboarding, a live-rule change, recurring operation, or recovery? | Data Platform routes from current source configuration and retained run evidence. | Follow the matching row below; use [Connection setup](CONNECTIONS.md) for connection discovery. |
+| Private service addresses, environment files and database duty | Data Platform, [Connection setup](CONNECTIONS.md). | The owning procedure receives only the selected duty and connection variable names; credentials stay in private configuration. |
+| Capture inventory, profile findings, field evidence and the profile report | [Data Profiling](../data-profiling/SKILL.md), which reads data and writes findings. | New data set: pass the captured inputs to [Data Onboarding](../data-onboarding/SKILL.md), which consumes the retained `REPORT.md` and `findings.yaml`. A changed delivery to a live feed goes to [Refining Rules](../refining-rules/SKILL.md)'s compare path. |
+| New feed/domain decisions, source/merge/pipeline rules, mappings, checks, metadata and target registration | [Data Onboarding](../data-onboarding/SKILL.md). | Start from its retained discovery and profile artifacts; it owns the new configuration and the scoped checks/load handoff. |
+| Changes to a live feed's mapping, quality or matching rules; comparison against approved findings | [Refining Rules](../refining-rules/SKILL.md). | Keep the approved configuration and compare report with the rule change; return to its check-and-load path when ready. |
+| Repeated loads, operational readiness, run status, recovery and operational handoff | [Data Operations](../data-operations/SKILL.md). | Use the existing source runbook, Bookkeeping/Journal evidence and retained delivery; do not restart completed work just to recreate its evidence. |
+| Execution contract and run-control semantics, including unit state, completion and recovery | [Bookkeeping](../bookkeeping/SKILL.md) and [Change Journal](../change-journal/SKILL.md) define those contracts; Data Operations owns their operational use. | Carry the run identifier, completed-unit evidence and Journal receipt to Data Operations; use the owning contract skill to interpret or change semantics. |
+| Changes to MDM engine behavior, persistence or merge implementation | [MDM Engineering](../mdm-engineering/SKILL.md). | Carry the demonstrated behavior gap and qualification evidence; source onboarding and run execution do not own engine changes. |
+| Shared source readiness requirements and the route to the owning phase | Data Platform, [Source readiness](#source-readiness). | The phase owner records its own evidence; Data Platform does not certify operational readiness from instructions or fixture tests. |
+
+Apply the routing to the current state, not only to the source's age:
+
+- **New captured source:** for example, hand the retained capture location and
+  provenance receipt to [Data Onboarding](../data-onboarding/SKILL.md#the-files-are-the-rules).
+  It invokes [Data Profiling](../data-profiling/SKILL.md#modes) and carries
+  forward that phase's `REPORT.md` and `findings.yaml` into the source's
+  discovery/configuration record. These names describe artifacts to retain;
+  they are not evidence that a source was processed.
+- **Already configured source:** route a repeat delivery/run to Data
+  Operations with the existing source runbook, delivery location and latest
+  Bookkeeping/Journal status ([live-state handoff](../data-operations/SKILL.md#start-with-live-state)).
+  Route a proposed live-rule change to [Refining Rules](../refining-rules/SKILL.md#modes)
+  with the approved configuration, changed delivery and compare report; its
+  compare mode consumes approved profiling findings without replacing them.
+- **Restart after a completed phase:** for example, after profiling, carry its
+  existing `REPORT.md` and `findings.yaml`, plus current configuration/run
+  state, to the first incomplete phase's owner. After a run phase, carry its
+  existing run identifier and verified-unit/Journal evidence to Data
+  Operations ([resume from retained state](../data-operations/SKILL.md#start-with-live-state)).
+  Resume there; do not repeat a completed phase to recreate its artifact.
+  These are generic artifact handoffs, not claims of live evidence.
+
+These are routing examples, not source qualifications. A phase is complete
+only under its owning skill's evidence and acceptance rules.
+
 ## The flow
 
 For recurring loads, backlog/resource sizing, renamed files, run monitoring and
@@ -91,12 +136,12 @@ alerting integration or replace the normal run verifier.
 | 0 | Setup, once per machine | this file |
 | 1 | Onboard a new feed or kind | [data-onboarding](../data-onboarding/SKILL.md) |
 | 1b | Change a live feed's rules | [refining-rules](../refining-rules/SKILL.md) |
-| 2 | Parse: read captured files with the configured engine | this file, then [bookkeeping RUN](../bookkeeping/RUN.md) |
+| 2 | Parse: read captured files with the configured engine | [data-operations](../data-operations/SKILL.md) owns the run procedure; [bookkeeping RUN](../bookkeeping/RUN.md) owns execution contract semantics. The Parse section below is reference only. |
 | 2b | Combine keyed collections and join configured source extracts | [COMBINING.md](COMBINING.md) |
-| 3 | Master: the parsed records into MDM | this file |
-| 4 | Check the rules files and load | [LOAD](../data-onboarding/LOAD.md) |
-| 5 | Recover a run | [bookkeeping RECOVERY](../bookkeeping/RECOVERY.md), [change-journal](../change-journal/SKILL.md) |
-| 6 | Custom parsing, only when the engine cannot state a field | this file |
+| 3 | Master: the parsed records into MDM | [data-operations](../data-operations/SKILL.md) owns the run procedure; [MDM Engineering](../mdm-engineering/SKILL.md) owns engine behavior and persistence. The Master section below is reference only. |
+| 4 | Check the rules files and load | [data-onboarding](../data-onboarding/LOAD.md) owns onboarding checks; [data-operations](../data-operations/SKILL.md) owns recurring loads. |
+| 5 | Recover a run | [data-operations](../data-operations/SKILL.md) owns operational recovery, using [Bookkeeping recovery](../bookkeeping/RECOVERY.md) and [Change Journal](../change-journal/SKILL.md) contracts. |
+| 6 | Custom parsing, only when the engine cannot state a field | [data-onboarding](../data-onboarding/SKILL.md) owns the source-specific change workflow; [MDM Engineering](../mdm-engineering/SKILL.md) owns reusable engine primitives. |
 | 7 | Self-check | this file |
 
 ## Connection URLs and environment
