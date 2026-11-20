@@ -143,7 +143,7 @@ replicates (active or suspended) `GRANT OWNERSHIP` on its target is refused ("ca
 database that already exists (even one the mirror operator owns, so ownership cannot be arranged in advance), and `ALTER DATABASE ... RENAME` and
 `DROP DATABASE` are refused for the administrator and for the mirror operator ("must have OWNERSHIP"). A target left by
 `DROP_MIRROR(<mirror>, FALSE)` has no mirror, and the administrator can then `GRANT OWNERSHIP ON DATABASE <name> TO ROLE <owner role>` (without `COPY CURRENT GRANTS`, which
-is refused for an application-owned object; the mirror operator alone gets "Insufficient privileges") and the owner role drops it: no support request. So:
+is refused for an application-owned object; the mirror operator alone gets "Insufficient privileges") and the owner role drops it: no support request. `scripts/exposure/mirror_sql.py release` writes both steps for a mirror whose target the owner role should own: the data stays, but nothing refreshes it. So:
 - rename by recreating, with `scripts/exposure/mirror_sql.py` (it writes the `CREATE_MIRROR`, `ALTER_MIRROR`, `LIST_MIRRORED_TABLES` and `DROP_MIRROR`
   text from the Gold project's sources file, `rules/exposure.yaml` and `rules/snowflake.yaml`, so no call is typed by hand): `CREATE_MIRROR` (the skill's SETUP) with the new target name and a new mirror name, as the mirror operator, while
   the old mirror still replicates (an instance holds two); when every table reads `REPLICATING` with equal counts, move the readers and
