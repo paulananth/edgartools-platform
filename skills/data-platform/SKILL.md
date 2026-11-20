@@ -13,12 +13,18 @@ checkout.
 
 ## Hard stops
 
-The [data-onboarding hard stops](../data-onboarding/SKILL.md#hard-stops) apply
-to every mode here. In short: never approve or switch on for the operator;
-never approve without a test run; never ask approval of a digest the operator cannot read; no
-request to a provider the operator ruled out; never read or print a secret; no value from the data
-in a public repository; never guess an identifier; never invent a command; ask one
-question at a time, with your recommendation.
+Each rule below has one home, named beside it; this list grants no permission.
+
+- **Approval and activation:** Data Platform approves nothing; each approval belongs to the phase that asks for it.
+  Never activate or switch on a rules version for the operator: that consent is theirs, given only when asked
+  (`CONTEXT.md`, "Rule Activation Approval"), on a passing test run ("Proving Run"), with a digest shown beside its
+  plain-words explanation (`CLAUDE.md`, "Talking with the operator").
+- **Provider access:** no request to a provider (its site, API or documentation) without the operator's permission
+  for that request (`CLAUDE.md`, "Commits, PRs and secrets").
+- **Secrets:** read a credential from configuration, never print it; the operator sets a missing one in their own
+  terminal ([Connection URLs and environment](#connection-urls-and-environment)).
+- **Configuration only, no data value in public, no guessed identifier, no invented command, one question at a
+  time:** the [data-onboarding hard stops](../data-onboarding/SKILL.md#hard-stops).
 
 ## The seven wastes
 
@@ -53,8 +59,8 @@ an implementation gap before calling a source ready.
 
 - Qualify retained local captures through genuine provenance, completeness
   evidence. Local processing qualification can
-  precede AWS capture qualification. Provider requests retain their separate
-  authorization; missing evidence blocks affected processing.
+  precede AWS capture qualification. A provider request needs its own
+  permission ([Hard stops](#hard-stops)); missing evidence blocks affected processing.
 - Require the common configuration-driven path through dependencies, reading,
   mastering, merge, independent verification and Journal recording. Run declared
   approved dependencies from available local captures before freezing consumer
@@ -79,6 +85,11 @@ the procedures performed by the next skill. Resolve the source and requested
 work from current configuration and retained evidence, then hand off the
 existing artifact and its location to the owner below. Do not recreate an
 artifact merely to cross a skill boundary.
+
+The route's output is one selected next action, its owner, and the environment checks that action needs: the
+connection duty and variable names ([Connection setup](CONNECTIONS.md)) and `edgar-warehouse doctor`. A route grants
+no approval, provider request or switch-on; each stays behind its owner's gate. A missing input, permission or check
+is itself the next action: name the blocker to its owner and stop.
 
 | Decision or artifact | Authoritative owner | Handoff |
 |---|---|---|
@@ -148,14 +159,8 @@ alerting integration or replace the normal run verifier.
 
 Before discovering or configuring any service URL, `.env`, connection profile
 or database duty, read [Connection setup](CONNECTIONS.md). Data Platform is
-the sole owner of these instructions; other skills link here.
-
-Every load uses one login, `edgar_loader`, a member of each store's runtime role that can create nothing
-(`provision_hosted_store.py --loader` makes it and checks it); only a store's owner login changes a schema.
-
-No agent, reviewer or subagent opens the stores folder or prints a connection URL: a reviewer that needs to know
-what a login can do asks for the login's name and reads the database's own grants. A review that reads the folder puts every
-password in its transcript.
+the sole owner of these instructions, including the one loader login and who may open the stores folder; other
+skills link here.
 
 ## 0. Setup
 
@@ -358,9 +363,8 @@ atomic commits, freshness/fencing, leases, durable history and recovery. The
 database independently derives the commit's expected publication hash; program
 preparation does not replace that authority. New executions pin the payload
 adapter, facade and native binary; frozen runs retain their original runtime.
-Future kernel migrations require parity and caller-path qualification before
-changing operational instructions; this slice does not change approval or
-activation steps.
+A kernel change needs parity and caller-path qualification before operational
+instructions change.
 
 Three worker profiles take parsed records into MDM; a feed's rules
 file names them in its `mdm` target (or a pipeline's), after its `source.read`
@@ -446,13 +450,6 @@ MDM never merges or publishes a batch twice. After a stop, run the same
 `edgar-warehouse load` again; by hand, use `edgar-warehouse bookkeeping resume
 <run_id>` and run the workers again.
 
-### Examples: current source qualification
-
-Company's last installed proof (a killed worker
-resumed, a second pass changed nothing) and
-Person's installed trial are the evidence their versions carry forward. Use
-only pipelines whose every profile resolves with `workers describe`.
-
 ## 6. Custom parsing
 
 Only when the engine cannot state what a field needs. First check
@@ -460,8 +457,10 @@ Only when the engine cannot state what a field needs. First check
 custom step is the last resort (operator: "Write a step, then
 stop").
 
-This mode needs a checkout of the repository on your own branch, since a step
-is code reviewed in a PR.
+A step is code, so it starts only after the operator says to write it: while
+onboarding, write the ticket and ask first (configuration only,
+[data-onboarding hard stops](../data-onboarding/SKILL.md#hard-stops)). It needs
+a checkout on your own branch and is reviewed in a PR.
 
 1. Write one plain function of one value in `edgar_warehouse/rules/steps.py`,
    registered in `STEPS` as `<name>@<version>`. It names no source or kind

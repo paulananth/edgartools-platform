@@ -1,8 +1,12 @@
 # Local testing: independent copies
 
-A baseline is a known starting copy of test data. Each agent gets its own
-writable copy. Refresh the starting copy after checks pass; retain a backup
-so it can be restored. This is local testing, not a production deployment.
+Routine loads, lookups and development use the one shared `local-test-server`
+([Setup](SKILL.md#0-setup), step 6; `CLAUDE.md`, "Shared local data"). An
+independent copy is for a test that could disrupt shared data, such as deleting
+records, testing recovery or an experimental schema change. A baseline is a
+known starting copy of test data; such a test gets its own writable copy.
+Refresh the starting copy after checks pass; retain a backup so it can be
+restored. This is local testing, not a production deployment.
 
 ## Agent rules
 

@@ -85,6 +85,10 @@ one database and one mirror; the control stores stay apart, so their churn and t
 | Reader | `reader.env` | `ops_reader` (`pg_monitor`, no store) | monitoring, profiling, the access audit |
 
 The selected stores folder is authoritative (a hosted store's is `~/.config/edgartools/hosted/`, the only copy of its files).
+Every load uses the one loader login, which `provision_hosted_store.py --loader` makes and checks; only a store's owner
+login changes a schema. No agent, reviewer or subagent opens the stores folder or prints a connection URL: a reviewer that
+needs to know what a login can do asks for the login's name and reads the database's own grants, since a review that
+reads the folder puts every password in its transcript.
 Source the duty's file in a command-scoped subshell with `set -a` and disable tracing; a command that needs a second duty reads
 that file from `--stores` by path, never from the environment. `infra/scripts/local-test-stores.py` makes the local files and
 `provision_hosted_store.py` the hosted ones. Never leave the owner file sourced for work: an owner connection is never a runtime
