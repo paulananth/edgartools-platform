@@ -44,6 +44,7 @@ CHECKS = {
     "LOGINS": "Every duty file's login connects to the databases of its duty",
     "STATE": "The chain's state file is this store's, or will be set aside, before any step runs",
     "CATALOG": "The catalog, when configured, matches the rules",
+    "REGISTERED": "The merge policy and every Dataset Contract are registered, and every worker profile is granted",
 }
 DUTY_DATABASES = {"owner.env": ("postgres",), "worker.env": ("data", "control"), "governance.env": ("data", "control"),
                   "reader.env": ("data", "control")}
@@ -85,6 +86,7 @@ def evaluate(facts: dict) -> list[dict]:
         return {"id": cid, "title": CHECKS[cid], "ok": bool(ok), "evidence": evidence}
     g, e, loader, ref = facts["git"], facts["engine"], facts["loader"], facts["reference"]
     audit, logins, state, catalog = facts["audit"], facts["logins"], facts["state"], facts["catalog"]
+    reg = facts["registered"]
     return [
         check("CODE", g["clean"] and g["contains_main"] and g["ci"] == "success", {k: g[k] for k in ("clean", "contains_main", "ci")}),
         check("ENGINE", e["applicable"] is False or (e["built"] is not None and e["built"] == e["source"]),
@@ -102,6 +104,7 @@ def evaluate(facts: dict) -> list[dict]:
         check("LOGINS", bool(logins) and all(v == "answers" for v in logins.values()), logins),
         check("STATE", state is not None and state["verdict"] in ("fresh", "set aside", "same"), state),
         check("CATALOG", catalog in ("confirmed", "not configured"), {"catalog": catalog}),
+        check("REGISTERED", reg is not None and reg["policies"] > 0 and reg["datasets"] > 0 and reg["profiles_granted"] >= reg["profiles"] > 0, reg),
     ]
 
 
@@ -204,6 +207,29 @@ def sql_facts(reader_env: dict, env: dict) -> tuple[dict | None, dict | None, in
     return loader, reference, sessions
 
 
+def registration_facts(reader_env: dict, env: dict) -> dict | None:
+    """What init's steps 5 to 7 leave: the policies and Dataset Contracts the loader reads in MDM, and the worker profiles Bookkeeping
+    has granted (the reader's login sees the memberships). None when a fact cannot be read."""
+    sys.path.insert(0, str(HERE))
+    import load_chain
+
+    try:
+        import psycopg2
+        from edgar_warehouse.workers import PROFILES
+
+        def one(source: dict, database: str, sql: str) -> int:
+            with psycopg2.connect(load_chain.in_database(load_chain.data_url(source), database), connect_timeout=10) as conn, conn.cursor() as cur:
+                cur.execute(sql)
+                return cur.fetchone()[0]
+        return {"policies": one(env, "data", "select count(*) from mdm.policy"),
+                "datasets": one(env, "data", "select count(*) from mdm.dataset_mapping"),
+                "profiles": len(PROFILES),
+                "profiles_granted": one(reader_env, "control", "select count(*) from pg_auth_members m join pg_roles r on r.oid = m.roleid "
+                                        "join pg_roles u on u.oid = m.member where u.rolname = 'bookkeeping_runtime' and r.rolname like 'bk\\_worker\\_%'")}
+    except Exception:  # noqa: BLE001  a driver error can quote the address
+        return None
+
+
 def loads_running() -> int:
     listing = subprocess.run(["ps", "-Ao", "args"], capture_output=True, text=True, check=False).stdout
     return sum(1 for line in listing.splitlines() if re.search(r"load_chain\.py|edgar-warehouse load ", line) and "readiness.py" not in line)
@@ -294,7 +320,8 @@ def gather(stores: Path, repo: Path = REPO) -> dict:
     return {"git": git_facts(repo), "engine": engine_facts(repo), "doctor": doctor_ok(stores, env), "loader": loader, "reference": reference,
             "plan_missing": plan_missing(env), "loads_running": loads_running(), "loader_sessions": sessions,
             "disk_gib": usage.free / 2**30, "load1": os.getloadavg()[0], "cores": os.cpu_count() or 1, "audit": audit_failures(reader),
-            "logins": login_facts(stores), "state": state_facts(env), "catalog": catalog_state(repo)}
+            "logins": login_facts(stores), "state": state_facts(env), "catalog": catalog_state(repo),
+            "registered": registration_facts(reader, env)}
 
 
 def main(argv: list[str] | None = None) -> int:
