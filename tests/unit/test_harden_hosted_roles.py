@@ -40,3 +40,13 @@ def test_the_repository_guards_name_every_audit_control():
     loader = harden.GUARDS["edgar_loader"]
     assert loader["limit"] > 0 and loader["settings"]["work_mem"] and "pgaudit.log" in loader["settings"]
     assert all(g["limit"] > 0 and "statement_timeout" in g["settings"] for n, g in harden.GUARDS.items())
+
+
+def test_snowflakes_mirror_login_gets_connect_on_each_mirrored_database_and_nothing_else():
+    """PUBLIC holds no CONNECT on the stores, so a managed mirror fails with "permission denied for database" until its system
+    login holds it."""
+    acls = {"mdm": ["owner=CTc/owner", "mdm_runtime=Tc/owner"], "rdm": ["owner=CTc/owner", "snowflake_system=c/owner"],
+            "silver": None, "bookkeeping": ["owner=CTc/owner"]}
+    assert harden.mirror_access(acls) == [
+        ("snowflake_system", "connect on mdm", 'GRANT CONNECT ON DATABASE "mdm" TO "snowflake_system"'),
+        ("snowflake_system", "connect on silver", 'GRANT CONNECT ON DATABASE "silver" TO "snowflake_system"')]
