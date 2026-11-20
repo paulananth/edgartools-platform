@@ -90,6 +90,10 @@ _Avoid_: Reading, a prediction, Bronze Artifact, Source Capture, Logical Source 
 What one source says now about one entity, per field, before any survivorship is applied — read per kind. It holds one record per source record, its newest source extract; a newer source extract replaces it and an older one arriving late does not. A record names the bronze object it was read from, and bronze is the only history of what a source said before. A record waits in the Stage, unbound, until a matching rule links it to an identity.
 _Avoid_: Confusing it with the Merge Stage, which is the step that reads it; a history of every source extract (bronze is that); the surviving value, which is the master record's
 
+**Kind**:
+The category of a golden record, such as Company, Person, Security or Fund Structure: a code of the RDM code set `mdm-kinds`, with its definition there. How records of a kind are matched and merged is that kind's merge rules, one file per code.
+_Avoid_: entity type, domain, a kind kept as a list in code or in a table
+
 **Probable Kind**:
 The kind that a rule step gives to a record it holds in the Stage. It sorts the Stage and never creates an identity; the rule of that kind decides.
 _Avoid_: hint, candidate kind, a decided kind

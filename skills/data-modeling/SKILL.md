@@ -49,8 +49,9 @@ Read these before deciding, and use their words:
   a member of every permitted endpoint domain. For actual facts and their
   evidence layers, follow data-catalog's **Confirm relationships before showing
   them**. Metadata lineage describes data flow, not a link between masters.
-- `edgar_warehouse/mdm/evidence.py`: `KINDS` (the master kinds) and
-  `PROFILE_KINDS` (a profile and the kinds it may hang on).
+- RDM code set `mdm-kinds`: the master kinds, one code each with its definition
+  ([data-profiling](../data-profiling/SKILL.md), "Identify an MDM kind").
+- `edgar_warehouse/mdm/evidence.py`: `PROFILE_KINDS` (a profile and the kinds it may hang on).
 - `rules/merge/kinds/<kind>.yaml`, `identifiers`: the kind's Identifier
   Contract, the namespaces that decide identity.
 - RDM code set `mdm-relationship-types`, at the version and sha256 pinned in
