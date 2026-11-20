@@ -249,9 +249,9 @@ type, and cite what it showed in your question to the operator.
   then, of those holding now; names as MDM holds them now, said in
   `trust.current_parts`). Follow `next_step` in each answer.
 
-What each kind means is in `rules/context/definitions.yaml`; what each
+What each kind means is its code's `definition` in `mdm-kinds`; what each
 relationship type means is its code's `definition` in `mdm-relationship-types`.
-A new kind adds its line there in the same PR; a test fails until it does.
+A new kind adds its code there and its rules file in the same PR; a test fails until both exist.
 
 ## Merge rules
 

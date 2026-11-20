@@ -14,7 +14,7 @@ missing, go on and log it.
   codes before you map onto them.
 - `docs/specs/mdm/`: start with `source-evidence.md` and the policy
   spec of the kind you map onto.
-- MDM kinds: `KINDS` in `edgar_warehouse/mdm/evidence.py`.
+- MDM kinds: the RDM code set `mdm-kinds` ([data-profiling](../data-profiling/SKILL.md), "Identify an MDM kind").
 - **Declare the entity type first** (step 0 of mastering). Every Dataset Contract states where its records' entity
   type comes from, in `adapter`: `kind` when the source states one type, `classification` when a measured rule
   decides it, or `kind_field` with `kind_values` when the source's own category field does. A record whose type cannot
