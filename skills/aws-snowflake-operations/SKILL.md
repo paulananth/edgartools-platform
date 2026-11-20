@@ -245,7 +245,7 @@ notes is not the live one. The order:
 ## Database ownership
 
 Every database the platform creates is owned by the platform's one owner role (`owner` in `rules/snowflake.yaml`), never by ACCOUNTADMIN, which holds that
-role and so keeps control (operator, 2026-11-20: "make all the database owner to be edgartool"). A database made by an administrator's
+role and so keeps control. A database made by an administrator's
 SQL has its ownership moved at once with `GRANT OWNERSHIP ON DATABASE <name> TO ROLE <owner> COPY CURRENT GRANTS` (never
 `REVOKE CURRENT GRANTS`, above); `scripts/database_owner_sql.py` writes the statements from the names file and the databases named, and the
 role and the grants belong in the access Terraform root. The exception is a managed
