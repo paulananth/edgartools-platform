@@ -1,0 +1,44 @@
+# data-quality: Make progress resumable
+
+Type: task
+Status: open
+Priority: P0
+Blocked by: 04, 10, 16, 27
+Labels: wayfinder:task
+Map: [Make source-onboarding skills effective](../map.md)
+Skill: [data-quality](../../../skills/data-quality/SKILL.md)
+Step: 4 of 6
+Skill dependencies: data-profiling, data-modeling
+Applicability: Every source with field constraints, defects or downstream quality obligations.
+
+## Question
+
+What evidence allows another session to resume this phase without repeating completed work or trusting stale results?
+
+## Scope and evidence
+
+Use the existing onboarding log or task record as the common progress record, not a new independent state store per skill. Record check definitions and versions, measured corpus, disposition decisions and unresolved defects. Define when unchanged evidence is reused, invalidated or blocked; retain unfinished work explicitly.
+
+A handoff must identify the next owning skill: data-onboarding or refining-rules; data-catalog owns the checks' business meaning.
+
+Start from skills/data-quality/SKILL.md: plan, measure, decide, write, Publish quality meaning to the business catalog. Read current main and installed skill provenance before changing anything; repository and installed copies may differ.
+
+## Prerequisites
+
+[data-platform: Make progress resumable](./04-data-platform-resume.md); [data-profiling: Make progress resumable](./10-data-profiling-resume.md); [data-modeling: Make progress resumable](./16-data-modeling-resume.md); [data-quality: Make the entrypoint executable](./27-data-quality-entrypoint.md)
+
+Priority rationale: Measured checks and dispositions prevent unsafe mappings.
+
+These blockers order skill-improvement work. They do not activate optional source phases or grant operational permission.
+
+## Acceptance checklist
+
+- [ ] Specify resume, invalidate and blocked conditions for check definitions and versions, measured corpus, disposition decisions and unresolved defects.
+- [ ] Resume a staged interruption from the recorded artifacts and identify exactly the first unfinished action.
+- [ ] Show changed inputs cannot reuse stale proof and unchanged inputs do not repeat completed work.
+- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md.
+- [ ] Learning → skill: name the verified reusable lesson and its owning skill section, or record none.
+
+## Completion evidence
+
+Record the answer and artifact links under `## Answer` when resolved. Keep private values out of the public record. A not-applicable phase needs evidence and an explicit applicability disposition, not a false PASS. Do not mark this ticket resolved while a checklist item remains open.
