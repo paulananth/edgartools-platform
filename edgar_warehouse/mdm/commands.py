@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import sys
 from datetime import datetime, timezone
-from pathlib import Path
 
 from sqlalchemy import text
 
@@ -113,37 +112,10 @@ def _print_mdm_report(read) -> int:
 
 def check_connectivity(args) -> int:
     def report(conn):
-        from sqlalchemy import func, select
-
-        adapter = _inspection_adapter(conn)
-        return {
-            "sql": conn.scalar(text("SELECT 1")) == 1,
-            "migrations": conn.scalar(
-                select(func.count()).select_from(adapter.tables["migration"])
-            ),
-        }
+        return {"sql": conn.scalar(text("SELECT 1")) == 1,
+                "migrations": conn.scalar(text("SELECT count(*) FROM mdm.migration"))}
 
     return _print_mdm_report(report)
-
-
-def _inspection_adapter(conn):
-    from .record_reads import for_connection
-
-    return for_connection(conn).adapter
-
-
-
-
-def rebuild_name_index(args) -> int:
-    from .master_search import rebuild
-
-    engine = mdm_engine(restricted=False)
-    try:
-        report = rebuild(engine, limit=args.limit, page_size=args.page_size, restart=args.restart)
-    finally:
-        engine.dispose()
-    print(json.dumps(report, sort_keys=True))
-    return 0
 
 
 def build_lookups(args) -> int:
@@ -161,35 +133,3 @@ def build_lookups(args) -> int:
     return 0
 
 
-def rebuild(args) -> int:
-    from functools import cache
-
-    from edgar_warehouse.mastering import rebuild as mastering
-    from edgar_warehouse.mastering.store import open_store
-    from edgar_warehouse.workers.mastering_merge import _quiet, _settings
-
-    engine = mdm_engine(restricted=True)
-    db = open_store(engine)
-    manifest = {"policy_digest": args.policy_digest, "as_of": datetime.now(timezone.utc).isoformat()}
-    settings_of = cache(lambda kind: _settings(engine, manifest, kind))
-    try:
-        report = mastering.compare(engine, db) if args.check else mastering.replay(
-            db, settings_of, mastering.stored(engine, "source-reading"), mastering.stored(engine, "deferred-record"),
-            lambda chunk: _quiet(engine, chunk))
-    finally:
-        db.close()
-        engine.dispose()
-    print(json.dumps(report, sort_keys=True))
-    return 0
-
-
-def rebuild_detail_lookup(args) -> int:
-    from .detail_lookups import rebuild
-
-    engine = mdm_engine(restricted=False)
-    try:
-        report = rebuild(engine, limit=args.limit, page_size=args.page_size, restart=args.restart)
-    finally:
-        engine.dispose()
-    print(json.dumps(report, sort_keys=True))
-    return 0

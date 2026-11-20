@@ -116,10 +116,6 @@ def _migrate(
         # Saves take this lock before touching master tables. Take it before
         # migration DDL too, so table locks cannot invert that order.
         conn.execute(text("SELECT pg_advisory_xact_lock(730234)"))
-        if conn.scalar(text("SELECT to_regclass('mdm.batch')")) and conn.scalar(
-            text("SELECT EXISTS(SELECT 1 FROM mdm.batch)")
-        ):
-            raise Conflict("This store holds batches outside governed storage; use an empty store")
         if conn.scalar(text("SELECT current_user")) == application_role:
             raise ValueError("Migration owner and runtime role must differ")
         role = rows(
@@ -166,8 +162,6 @@ def _migrate(
                 )
             elif saved != extra_hash:
                 raise Conflict("Installed migration checksum differs")
-        from .schema import configure_kinds
-        configure_kinds(conn)
         storage_adapter().verify_native_registry(conn)
         for inherited in ("PUBLIC", application_role, "snowflake_write"):
             if inherited == "PUBLIC" or conn.scalar(

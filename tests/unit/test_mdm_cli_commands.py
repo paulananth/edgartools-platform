@@ -9,8 +9,6 @@ from edgar_warehouse.mdm import commands as commands
 
 @pytest.mark.parametrize("argv,function", [
     (["mdm", "check-connectivity"], "check_connectivity"),
-    (["mdm", "rebuild-name-index", "--limit", "1"], "rebuild_name_index"),
-    (["mdm", "rebuild-detail-lookup", "--limit", "1"], "rebuild_detail_lookup"),
     (["mdm", "steward", "split", "--merge", "m", "--by", "Sam", "--reason", "wrong", "--policy-digest", "d"], "steward_split"),
     (["mdm", "steward", "resolve", "--subject", "s", "--result", "merge", "--by", "Sam", "--reason", "same",
       "--policy-digest", "d"], "steward_resolve"),

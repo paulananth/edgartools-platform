@@ -36,10 +36,6 @@ def _uncommented(conn) -> list[str]:
 def test_every_table_view_column_and_function_has_a_comment(database):
     with database.admin.connect() as conn:
         assert _uncommented(conn) == []
-        # The per-kind views are generated, and commented, for every kind.
-        kinds = conn.scalar(text(
-            "SELECT count(*) FROM pg_views WHERE schemaname='mdm' AND viewname LIKE '%\\_stage'"))
-        assert kinds == conn.scalar(text("SELECT count(*) FROM mdm.master_kind"))
 
 
 def test_only_governed_storage_is_installed(database):

@@ -91,10 +91,3 @@ def find(adapter, conn, name, values):
         answer.append({"entity_id": identity, "kind": spec["kind"], "status": body.get("status")})
     return answer
 
-
-def rebuild(engine, *, limit=None, page_size=200, restart=False):
-    """Quiescent, resumable owner pass. Overtaking requires explicit restart."""
-    spec = configuration()
-    if spec is None:
-        raise Conflict("Detail lookup has no configured index")
-    return master_index.rebuild(engine, index_for(spec), limit=limit, page_size=page_size, restart=restart)

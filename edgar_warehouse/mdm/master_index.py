@@ -5,7 +5,6 @@ groups); its readers stay with it."""
 from dataclasses import dataclass
 from typing import Callable
 
-from sqlalchemy import select
 
 from .record_reads import RecordReader
 from .store import Conflict, canonical
@@ -97,50 +96,3 @@ def normal_changes(adapter, conn, objects, generation, indexes):
                                     "ready": True, "cursor": None})}]
     return changes
 
-
-def rebuild(engine, index, *, limit=None, page_size=200, restart=False):
-    """Quiescent, resumable owner pass. Overtaking requires explicit restart."""
-    from .prepared import _changes
-    from .prepared_registry import installed
-
-    if limit is not None and (type(limit) is not int or limit < 1):
-        raise ValueError("Rebuild limit must be a positive integer")
-    if type(page_size) is not int or not 1 <= page_size <= 1000:
-        raise ValueError("Rebuild page size must be 1 to 1000")
-    if type(restart) is not bool:
-        raise ValueError("Rebuild restart must be a boolean")
-    processed, pinned_generation = 0, None
-    while True:
-        with engine.begin() as conn:
-            adapter = installed(conn)
-            if adapter is None:
-                raise Conflict(f"{index.title} rebuilding requires governed prepared storage")
-            gate = adapter.tables["gate"]
-            generation = conn.scalar(select(gate.c.generation).where(gate.c.id == 1).with_for_update())
-            if pinned_generation is not None and generation != pinned_generation:
-                raise Conflict(f"{index.title} rebuild was overtaken; restart the quiescent pass")
-            pinned_generation = generation
-            coverage = state(adapter, conn, index, generation)
-            if coverage["ready"] and coverage["generation"] == generation:
-                return {"generation": generation, "processed": processed, "ready": True}
-            if coverage["cursor"] is not None and coverage["generation"] != generation and not restart:
-                raise Conflict(f"{index.title} rebuild progress is stale; use --restart")
-            cursor = coverage["cursor"] if coverage["generation"] == generation and not restart else None
-            restart = False
-            size = min(page_size, limit - processed) if limit is not None else page_size
-            keys = adapter.record_keys("entity", after=cursor or "", limit=size + 1, connection=conn)
-            more, selected = len(keys) > size, keys[:size]
-            objects = {key: RecordReader._body(row) for key, row in adapter.read(
-                [("entity", key) for key in selected], connection=conn).items()}
-            if len(objects) != len(selected):
-                raise Conflict(f"{index.title} rebuild lost an authoritative master")
-            kind, key = state_key(index)
-            updated = {"config": index.pin, "generation": generation, "ready": not more,
-                       "cursor": selected[-1] if more else None}
-            additions = [*entries(adapter, conn, objects, index),
-                         {"type": kind, "id": key, "body_json": canonical(updated)}]
-            adapter.maintain_lookups(conn, expected_generation=generation,
-                                    changes=_changes(adapter, conn, additions))
-            processed += len(selected)
-        if not more or limit is not None and processed >= limit:
-            return {"generation": generation, "processed": processed, "ready": not more}

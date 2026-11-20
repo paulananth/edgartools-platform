@@ -314,7 +314,7 @@ location: `Path(__file__).parents[N]` and `.parent`. Before the move, grep `pare
   bulk parameter or temporary-table mechanism.
 - A run reads what it started with. Anything the store registers anew while
   the run is part way through (a source's mapping today) is chosen once when
-  the run first starts, kept in its frozen scope (`mdm.run.scope`), and read
+  the run first starts, kept in its frozen scope, and read
   back on every later call and resume, never resolved again per batch. The
   commit still checks it.
 - A store call that takes the lock does not commit. A step that must be all or nothing (a split, a reversal)

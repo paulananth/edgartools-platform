@@ -9,7 +9,7 @@ from threading import Barrier
 
 import pytest
 
-from edgar_warehouse.mastering import links, lookups, merge, reads, rebuild, store as stores
+from edgar_warehouse.mastering import links, lookups, merge, reads, store as stores
 from edgar_warehouse.mdm.evidence import assertion, decision, subject_key
 from edgar_warehouse.rules import files
 from edgar_warehouse.mastering.store import open_store
@@ -283,30 +283,6 @@ LEI = "INVENTEDLEI000000017"
 
 
 
-
-
-def test_a_replay_masters_every_source_and_a_second_run_changes_nothing(database_factory):
-    filer = record(SEC, "filer", cik="0000000123")
-    twin = record(GLEIF, "twin", cik="0000000123", fields={"name": "INVENTED TWIN"})
-    fund = record(FIGI, "fund", kind="security", figi=figi("00000000"))
-    with opened(database_factory) as db:
-        first = rebuild.replay(db, {"company": COMPANY, "security": SECURITY, "": COMPANY}.get, [filer, fund, twin])
-        before = masters(db)
-        again = rebuild.replay(db, {"company": COMPANY, "security": SECURITY, "": COMPANY}.get, [filer, fund, twin])
-        assert (first["merged"], again["skipped"], again.get("merged", 0)) == (3, 3, 0)
-        assert masters(db) == before
-
-
-def test_each_kind_of_difference_between_two_masters_is_named():
-    field = {"value": "A", "winner": {"source_code": "s", "assertion_id": "a"}, "conflicts": [{"source_code": "t"}]}
-    old = {"subjects": ["x"], "identifiers": {"cik": ["1"]}, "fields": {"name": field}}
-    assert rebuild.differences(old, old) == []
-    assert rebuild.differences(old, {**old, "subjects": ["y"]}) == ["members"]
-    assert rebuild.differences(old, {**old, "identifiers": {}}) == ["identifiers"]
-    assert rebuild.differences(old, {**old, "fields": {}}) == ["absent:name"]
-    for change, seen in (({"value": "B"}, "value:name"), ({"winner": {"source_code": "t"}}, "winner:name"),
-                         ({"conflicts": []}, "conflicts:name")):
-        assert rebuild.differences(old, {**old, "fields": {"name": {**field, **change}}}) == [seen]
 
 
 def test_install_drops_a_mastering_table_the_code_no_longer_uses(database_factory):

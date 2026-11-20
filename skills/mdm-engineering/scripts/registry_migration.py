@@ -42,13 +42,11 @@ def verify_postgres_registry(conn):
             "registry_version": "UUID",
             "registered_at": "TIMESTAMP WITH TIME ZONE",
         },
-        "master_kind": {"kind": "TEXT", "enabled": "BOOLEAN"},
     }
     keys = {
         "policy": ["digest"],
         "dataset": ["source_code"],
         "dataset_mapping": ["source_code", "mapping_version"],
-        "master_kind": ["kind"],
     }
     inspector = inspect(conn)
     for name, fields in expected.items():
