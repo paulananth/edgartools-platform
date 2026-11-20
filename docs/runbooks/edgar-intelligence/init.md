@@ -78,8 +78,8 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    A half-restored RDM cannot be edited (published and approved versions are guarded): drop the `rdm` schema as its owner and run `rdm init` again.
    Run it once: a second run is refused at its first insert, since every version exists, and changes nothing; to check, count `rdm.code_set_version` (one per pin) and `rdm.published_code`. Done when every pin reads `pin ok` and
    `SELECT count(*) FROM rdm.published_code` equals the codes of the published versions.
-5. **Registration login.** With the owner connection, `edgar-warehouse mdm grant-registration --role mdm_governance` with `owner.env` sourced. It lets the restricted login read the stored records and write the
-   policy and dataset tables, and nothing else.
+5. **Registration login.** With `owner.env` sourced, `edgar-warehouse rules init` (its `--registrar-role`, `rules_governance`, may add to
+   the registry, `rules.policy` and `rules.dataset_reading`, and nothing else; the loader's role reads it).
 6. **Source configurations.** `edgar-warehouse rules check` (every source, offline), then, with `governance.env`
    sourced, `edgar-warehouse rules register`. Done when it prints a digest for the merge rules and every Dataset Contract.
    Then the silver tables (data-platform's step; a load creates none and stops when one is missing):

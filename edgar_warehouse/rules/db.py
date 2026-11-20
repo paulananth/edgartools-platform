@@ -9,11 +9,10 @@ rows are only added, never changed (the logins hold SELECT and INSERT only).
 
 from __future__ import annotations
 
-import os
 import re
 from datetime import UTC, datetime
 
-from sqlalchemy import BigInteger, Column, MetaData, String, Table, Text, create_engine, select
+from sqlalchemy import BigInteger, Column, MetaData, String, Table, Text, select
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
@@ -25,17 +24,11 @@ TABLE = "rules_used"
 
 
 def get_engine(url=None):
-    if url is None:
-        from edgar_warehouse.database_connections import owner_url
+    """The Rules Database, from the sourced duty file's `CONTROL_URL` unless a URL is given."""
+    from edgar_warehouse.database_connections import connect, owner_url
 
-        url = owner_url("rules")
-    target = make_url(url)
-    drivers = {"postgresql": "postgresql+psycopg2", "mysql": "mysql+pymysql"}
-    if target.drivername in drivers:
-        target = target.set(drivername=drivers[target.drivername])
-    # A connection older than the bound is replaced at checkout, which finds one the server dropped while it sat
-    # idle; a ping on every checkout is three round trips (BEGIN, SELECT 1, ROLLBACK), each a delay on a hosted store.
-    return create_engine(target, pool_recycle=30, hide_parameters=True)
+    url = url or owner_url("rules")
+    return connect(url, make_url(url).get_backend_name())
 
 
 def tables(dialect: str) -> dict[str, Table]:
