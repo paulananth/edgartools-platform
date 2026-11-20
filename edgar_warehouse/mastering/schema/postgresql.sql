@@ -1,4 +1,5 @@
-create table if not exists mastering_master(entity_id char(36) primary key, changed_file bigint not null default 0, body text not null, created_at timestamptz not null default clock_timestamp());
+create table if not exists mastering_master(entity_id char(36) primary key, changed_file bigint not null default 0, kind varchar(64), status varchar(32), canonical_id char(36), policy_digest varchar(128), kind_version varchar(128), body text not null, created_at timestamptz not null default clock_timestamp());
+create table if not exists mastering_profile(entity_id char(36) not null, position bigint not null, profile_id varchar(255), role varchar(64), valid_from varchar(40), valid_to varchar(40), body text not null, primary key(entity_id, position));
 create index if not exists mastering_master_changed on mastering_master(changed_file, entity_id);
 create table if not exists mastering_file(file_key char(64) primary key, records bigint not null);
 create table if not exists mastering_delivery(file_key char(64) not null, source_code varchar(64) not null, records bigint not null, repeated bigint not null, deferred bigint not null, primary key(file_key, source_code));

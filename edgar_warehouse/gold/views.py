@@ -64,13 +64,11 @@ def literal(text: str) -> str:
 
 
 def render_base(item: dict, ctx: Context) -> str:
-    """Every master once: the body read here and nowhere else; an alias row names the master it became."""
+    """Every master once: its kind, status and surviving id are columns; the name is read from the body here and nowhere
+    else; an alias row names the master it became."""
     master = ctx.config["master"]
     names = ", ".join(ctx.body(master["name_value_path"].format(field=f)) for f in master["name_fields"])
-    return (f"SELECT entity_id,\n"
-            f"       {ctx.body('canonical_id')} AS canonical_id,\n"
-            f"       {ctx.body('kind')} AS kind,\n"
-            f"       {ctx.body('status')} AS status,\n"
+    return (f"SELECT entity_id, canonical_id, kind, status,\n"
             f"       COALESCE({names}) AS name\n"
             f"FROM {ctx.mirror(master['source'])}")
 

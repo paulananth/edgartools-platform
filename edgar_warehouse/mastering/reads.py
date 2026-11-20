@@ -130,9 +130,13 @@ def explained(store, *, page: int = 20_000) -> dict:
 def counts(store) -> dict:
     """What a store holds, in counts and one digest: `rules test` compares two passes with it."""
     masters, holders, digest = Counter(), defaultdict(set), hashlib.sha256()
-    for entity, text in store.rows("select entity_id,body from mastering_master order by entity_id"):
-        digest.update(f"{entity}:{text}\n".encode())
-        body = json.loads(text)
+    from .master_row import COLUMNS
+
+    rows = store.rows(f"select entity_id,{','.join(COLUMNS)},body from mastering_master order by entity_id")
+    bodies = store.assembled(rows)
+    for entity in [row[0] for row in rows]:
+        body = bodies[entity]
+        digest.update(f"{entity}:{json.dumps(body, sort_keys=True)}\n".encode())
         if body["canonical_id"] == entity:
             masters[body["kind"]] += 1
             for namespace, values in body.get("identifiers", {}).items():

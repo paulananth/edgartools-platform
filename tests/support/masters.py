@@ -51,7 +51,7 @@ def seed(engine, records: list[dict], policy: dict | None = None) -> dict[str, s
 def bodies(engine) -> dict[str, dict]:
     """Every master row, merged-away ones included, by id."""
     with opened(engine) as store:
-        return {entity: json.loads(body) for entity, body in store.rows("select entity_id,body from mastering_master")}
+        return store.master_bodies([entity for (entity,) in store.rows("select entity_id from mastering_master")])
 
 
 def reviews(engine) -> list[str]:
