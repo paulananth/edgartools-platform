@@ -139,7 +139,7 @@ by `DROP_MIRROR(<mirror>, FALSE)` has no mirror to drop it any more; neither rol
   the configuration, then `DROP_MIRROR(<old mirror>, TRUE)` so its target goes with it;
 - always drop a mirror with the second argument `TRUE`, never `FALSE`.
 
-A mirror's target schema takes the source schema's name in upper case (`rdm` gives `RDM`, `public` gives `PUBLIC`), so
+A mirror's target schema takes the source schema's name in upper case (`rdm` gives `RDM`, `public` gives `PUBLIC`: the exposure list and the Gold configuration name `PUBLIC`, read back from the mirror), so
 the readers of a mirror name the target database and that schema.
 
 On permission or extension errors, stop without retrying and direct the

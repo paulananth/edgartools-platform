@@ -4,7 +4,8 @@ The tables come from rules/exposure.yaml (each table's layer gives its PostgreSQ
 rules/snowflake.yaml, and the call is the mirror skill's SETUP step 5 for a Snowflake-managed Iceberg target. Run the
 output as the mirror operator, after the skill's read-only pre-flight and the operator's approval:
 
-    python mirror_sql.py create --mirror <name> --instance <instance> --postgres-database <database> > create.sql
+    python mirror_sql.py create --mirror <name> --instance <instance> --postgres-database <database> \\
+        --exposure <exposure list> --names <database names file> > create.sql
     snow sql -c <connection> -f create.sql
     python mirror_sql.py verify --mirror <name>          # until every table is REPLICATING with equal counts
     python mirror_sql.py retire --mirror <old name>      # TRUE: the target database goes with the mirror
@@ -16,8 +17,6 @@ import sys
 from pathlib import Path
 
 import yaml
-
-RULES = Path(__file__).resolve().parents[4] / "rules"
 
 
 def tables(exposure: dict) -> list[str]:
@@ -51,16 +50,17 @@ def main(argv: list[str] | None = None) -> str:
     parser.add_argument("--instance")
     parser.add_argument("--postgres-database")
     parser.add_argument("--interval", default="60 minutes")
-    parser.add_argument("--rules", type=Path, default=RULES)
+    parser.add_argument("--exposure", type=Path, help="the exposure list (create)")
+    parser.add_argument("--names", type=Path, help="the file naming the mirror database (create)")
     args = parser.parse_args(argv)
     if args.action == "verify":
         return verify(args.mirror)
     if args.action == "retire":
         return retire(args.mirror)
-    if not (args.instance and args.postgres_database):
-        parser.error("create needs --instance and --postgres-database")
-    load = lambda name: yaml.safe_load((args.rules / name).read_text(encoding="utf-8"))
-    return create(load("exposure.yaml"), load("snowflake.yaml"), args.mirror, args.instance, args.postgres_database, args.interval)
+    if not (args.instance and args.postgres_database and args.exposure and args.names):
+        parser.error("create needs --instance, --postgres-database, --exposure and --names")
+    load = lambda path: yaml.safe_load(path.read_text(encoding="utf-8"))
+    return create(load(args.exposure), load(args.names), args.mirror, args.instance, args.postgres_database, args.interval)
 
 
 if __name__ == "__main__":

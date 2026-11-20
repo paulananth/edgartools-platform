@@ -242,6 +242,14 @@ notes is not the live one. The order:
 - An access change made by an account owner's SQL, before the access-admin identity exists, is the same objects as the Terraform
   and is written there too; import them (`terraform import`) before the first apply, or the plan tries to create them again.
 
+## Database ownership
+
+Every database the platform creates is owned by the platform's one owner role, `EDGARTOOLS_OWNER`, never by ACCOUNTADMIN, which holds that
+role and so keeps control (operator, 2026-11-20: "make all the database owner to be edgartool"). A database made by an administrator's
+SQL has its ownership moved at once with `GRANT OWNERSHIP ON DATABASE <name> TO ROLE EDGARTOOLS_OWNER COPY CURRENT GRANTS` (never
+`REVOKE CURRENT GRANTS`, above), and the role and the grant are written in the access Terraform root. The exception is a managed
+mirror's target database: the mirror owns it, no customer role may rename, move or drop it, and `DROP_MIRROR(<mirror>, TRUE)` removes it.
+
 ## Credentials on the command line
 
 - Never pipe `snow sql ... RESET ACCESS` or `aws secretsmanager get-secret-value` output to

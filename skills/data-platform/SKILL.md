@@ -121,6 +121,10 @@ for both consumers, projected into OpenMetadata.
 Reusable workflow helpers live in the owning skill's `scripts/` directory or
 the application package, not `infra/`. Keep only deployment wiring under
 `infra/`; pass deployment configuration explicitly to generic helpers.
+A skill's script is generic and decoupled: it takes every input (a configuration file, a name, an instance) as an
+argument, holds no name, path or constant of one deployment, and does one thing. The skill's procedure comes first, in
+words; a script exists only to run a step of that procedure the same way every time, never to do work the procedure
+does not describe. A step with no script yet is written into the skill before it is done by hand or by one-off code.
 Before shipping a skill, verify its links in an isolated installed skill tree:
 a checkout can hide a missing helper by resolving a link back into `infra/`.
 

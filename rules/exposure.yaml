@@ -31,7 +31,7 @@ layers:
   mdm:
     connection: DATA_URL
     source_schema: public
-    target_schema: MDM
+    target_schema: PUBLIC
     authority: mdm
   rdm:
     connection: DATA_URL

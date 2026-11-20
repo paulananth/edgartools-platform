@@ -100,8 +100,10 @@ and the rest in another db", then "Yes, open the ticket and start, make the skil
 - [x] ANANP11 used once (operator, 2026-11-20: "use ANANP11 once, move forward if you need to recreate mirror or gold if rename is not possible"; words in the approvals log): `DB_EDGARTOOLS_GOLD` renamed to `EDGARTOOLS_GOLD` (it was empty). 2026-11-20 07:10 ET
 - [x] Mirror target rename refused (owner is the managed mirror); `edgartools_mirror` created into `EDGARTOOLS_MIRROR` beside `edgartools_mirror_data` (19 tables, Iceberg, 60 min, same as the old). 2026-11-20 07:10 ET
 - [x] The procedure is encoded: `skills/data-platform/scripts/exposure/mirror_sql.py` (operator, 2026-11-20 07:10 ET: "encode it in skill"), tested by `tests/unit/test_exposure_mirror_sql.py`; its table list equals the live mirror's 19
-- [ ] All 19 tables of `edgartools_mirror` `REPLICATING` with counts equal to PostgreSQL's and to the old mirror's
-- [ ] `rules/snowflake.yaml` names `EDGARTOOLS_MIRROR` and `EDGARTOOLS_GOLD`; then `DROP_MIRROR('edgartools_mirror_data', TRUE)`
+- [x] All 19 tables of `edgartools_mirror` `REPLICATING` (07:25 ET, 20 min after the create); row counts equal to the old mirror's in every table (20,092,367 rows in each; the old mirror had equalled PostgreSQL's). 2026-11-20 07:27 ET
+- [x] `rules/snowflake.yaml` names `EDGARTOOLS_MIRROR` and `EDGARTOOLS_GOLD`; a finding read back from the mirror: PostgreSQL's `public` arrives as schema `PUBLIC`, not the planned `MDM`, so the exposure list and the Gold configuration now say `PUBLIC`. 2026-11-20 07:27 ET
+- [ ] `DROP_MIRROR('edgartools_mirror_data', TRUE)` after this merges
+- [ ] Database ownership: every platform database owned by one role, `EDGARTOOLS_OWNER` (operator, 2026-11-20 07:27 ET: "make all the database owner to be edgartool make this part of skill"): rule is in the operations skill; the role, the grant on `EDGARTOOLS_GOLD` and `EDGARTOOLS_GOVERNANCE`, and the Terraform need the operator's words to use ANANP11 and the role name confirmed
 - [ ] The orphan targets `DB_EDGARTOOLS_MIRROR_MDM` and `DB_EDGARTOOLS_MIRROR_SILVER` (neither role may drop them): a Snowflake support request, which the operator sends
 - [ ] Follow-up ticket: master ids and links as joins inside the data database
 - [ ] Merge the PR when CI is green
