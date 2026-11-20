@@ -69,7 +69,7 @@ def test_pinned_relationship_types_and_endpoints_are_explicit_in_catalog_and_wor
         assert term["table"] == catalog.fqn(catalog.SERVICE, "mdm", "relationships", row["code"])
         assert {c["name"] for c in table["columns"]} == set(row["properties"])
         for value in row["properties"]["from"] + row["properties"]["to"]:
-            shown = catalog._display(catalog.ENDPOINT_CATALOG_NAME.get(value, value))
+            shown = catalog._display(value)
             assert shown in table["description"]
     sheets = mapdoc.documents(root)[root / "merge" / "relationships.xlsx"][1]
     assert {row[0] for row in sheets["Relationship types"][1:]} == {r["code"] for r in definitions}

@@ -49,13 +49,6 @@
           "fixture.representative"
         ]
       }
-    },
-    "venue": {
-      "name": {
-        "sources": [
-          "fixture.representative"
-        ]
-      }
     }
   },
   "reference_pins": {

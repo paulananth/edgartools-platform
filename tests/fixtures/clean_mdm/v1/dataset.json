@@ -110,14 +110,6 @@
       },
       {
         "target_key": [
-          "operator"
-        ],
-        "target_source": "fixture.representative",
-        "type": "VENUE_OPERATOR",
-        "valid_from": "valid_from"
-      },
-      {
-        "target_key": [
           "holding"
         ],
         "target_source": "fixture.representative",
