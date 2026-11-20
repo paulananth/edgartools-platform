@@ -1,7 +1,7 @@
 # data-platform: Define one responsibility
 
 Type: task
-Status: open
+Status: resolved
 Priority: P0
 Blocked by: none
 Labels: wayfinder:task
@@ -65,7 +65,7 @@ installed copy was read or changed.
 
 - CI run `44805083623` failed `tests/unit/test_skills_cite_no_ticket.py::test_every_skill_file_is_short_enough_to_read_whole`: `data-onboarding/SKILL.md` was 504 lines against the under-500-line limit. Condensed the ownership handoffs.
 - `uv run --no-project --with pytest -- pytest -q -p no:cacheprovider tests/unit/test_skills_cite_no_ticket.py tests/unit/test_profiling_genericity.py` — **151 passed**.
-- PR #1956 remains draft pending updated CI; no merge was authorized or performed.
+- PR #1956 squash-merged at 2026-11-20 17:07 ET as `f8233ff25e6e61933568121d8fa5dd6e883e0862`. The updated-head CI run `44823311625` passed 12 checks before that merge.
 
 ## Completion evidence
 
