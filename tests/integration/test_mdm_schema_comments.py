@@ -38,10 +38,16 @@ def test_every_table_view_column_and_function_has_a_comment(database):
         assert _uncommented(conn) == []
 
 
-def test_only_governed_storage_is_installed(database):
+def test_init_installs_one_stamp_and_the_mastering_tables_only(database):
+    """The data database holds MDM's init stamp and the mastering tables: no other MDM table, view or function."""
     with database.admin.connect() as conn:
-        from edgar_warehouse.mdm.prepared_registry import require_installed
-        assert require_installed(conn).protocol == 7
+        assert conn.execute(text("SELECT name FROM mdm.migration")).scalars().all() == ["schema.sql"]
+        assert conn.execute(text("SELECT tablename FROM pg_tables WHERE schemaname='mdm'")).scalars().all() == ["migration"]
+        others = conn.execute(text("""SELECT tablename FROM pg_tables WHERE schemaname='public'
+            AND tablename NOT LIKE 'mastering\\_%'""")).scalars().all()
+        assert others == []
+        assert conn.scalar(text("""SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+            WHERE n.nspname IN ('mdm', 'public')""")) == 0
 
 
 def test_migrating_a_store_that_holds_data_changes_nothing(database):

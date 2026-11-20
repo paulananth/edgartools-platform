@@ -246,8 +246,7 @@ def test_an_explicit_connection_environment_overrides_ambient_values(monkeypatch
     from edgar_warehouse.mdm import connections
 
     calls = []
-    adapter = type("Adapter", (), {"connect": lambda self, *a, **k: calls.append((a, k)) or "engine"})()
-    monkeypatch.setattr(connections, "storage_adapter", lambda: adapter)
+    monkeypatch.setattr("edgar_warehouse.database_connections.connect", lambda *a, **k: calls.append((a, k)) or "engine")
     monkeypatch.setenv("DATA_URL", "not-a-connection")
     selected = {"DATA_URL": "postgresql://invented:invented@localhost/data",
                 "MDM_APPLICATION_ROLE": "invented_worker"}

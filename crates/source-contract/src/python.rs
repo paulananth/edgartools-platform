@@ -282,9 +282,7 @@ fn reading_to_py(py: Python<'_>, reading: &crate::Reading) -> PyResult<PyObject>
 fn source_contract(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyEngine>()?;
     m.add_class::<PyReduction>()?;
-    m.add_function(wrap_pyfunction!(rank_claims, m)?)?;
     m.add_function(wrap_pyfunction!(crate::combination::combine_tables, m)?)?;
-    m.add_function(wrap_pyfunction!(replay_identity, m)?)?;
     m.add_function(wrap_pyfunction!(replay_record_decisions, m)?)?;
     m.add_function(wrap_pyfunction!(prepare_master_records, m)?)?;
     m.add_function(wrap_pyfunction!(compare_matching_values, m)?)?;
@@ -292,11 +290,6 @@ fn source_contract(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(plan_record_matches, m)?)?;
     m.add_function(wrap_pyfunction!(link_matching_records, m)?)?;
     m.add_function(wrap_pyfunction!(compare_record_pairs, m)?)?;
-    m.add_function(wrap_pyfunction!(prepare_record_history, m)?)?;
-    m.add_function(wrap_pyfunction!(plan_affected_records, m)?)?;
-    m.add_function(wrap_pyfunction!(prepare_record_lookups, m)?)?;
-    m.add_function(wrap_pyfunction!(prepare_scope_lookups, m)?)?;
-    m.add_function(wrap_pyfunction!(resolve_record_bindings, m)?)?;
     m.add_function(wrap_pyfunction!(prepare_current_records, m)?)?;
     m.add_function(wrap_pyfunction!(identify_profile, m)?)?;
     m.add_function(wrap_pyfunction!(choose_field_values, m)?)?;
@@ -306,29 +299,11 @@ fn source_contract(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(prepare_relationship_periods, m)?)?;
     m.add("SourceRejected", m.py().get_type::<SourceRejected>())?;
     m.add_function(wrap_pyfunction!(scan_json_array, m)?)?;
-    m.add_function(wrap_pyfunction!(postgres_jsonb_text, m)?)?;
-    m.add_function(wrap_pyfunction!(postgres_jsonb_object, m)?)?;
-    m.add_function(wrap_pyfunction!(postgres_jsonb_object_bytes, m)?)?;
     Ok(())
 }
 
-#[pyfunction]
-fn postgres_jsonb_text(py: Python<'_>, raw: &str) -> PyResult<String> {
-    py.allow_threads(|| crate::postgres_jsonb::text(raw)).map_err(PyValueError::new_err)
-}
 
-#[pyfunction]
-#[pyo3(signature = (fields, *, canonical_inputs=false))]
-fn postgres_jsonb_object(py: Python<'_>, fields: std::collections::HashMap<String, String>, canonical_inputs: bool) -> PyResult<String> {
-    py.allow_threads(|| crate::postgres_jsonb::object(fields, canonical_inputs)).map_err(PyValueError::new_err)
-}
 
-#[pyfunction]
-#[pyo3(signature = (fields, *, canonical_inputs=false))]
-fn postgres_jsonb_object_bytes(py: Python<'_>, fields: std::collections::HashMap<String, String>, canonical_inputs: bool) -> PyResult<Py<PyBytes>> {
-    let raw = py.allow_threads(|| crate::postgres_jsonb::object(fields, canonical_inputs)).map_err(PyValueError::new_err)?;
-    Ok(PyBytes::new(py, raw.as_bytes()).unbind())
-}
 
 // Only selected text columns cross this boundary. Input history is never
 // retained; bounded conversion batches release the GIL for native accumulation.
@@ -465,13 +440,6 @@ fn scan_json_array(py: Python<'_>, stream: Py<PyAny>, wrapper: Option<String>, o
     Ok((result.records, result.bytes))
 }
 
-#[pyfunction]
-fn rank_claims(
-    py: Python<'_>, sources: Vec<String>, clear_sources: Vec<String>,
-    allow_unknown_effective: bool, candidates: Vec<crate::survivorship::Candidate>,
-) -> (Vec<usize>, Vec<usize>) {
-    py.allow_threads(|| crate::survivorship::rank(&sources, &clear_sources, allow_unknown_effective, &candidates))
-}
 
 #[pyfunction]
 fn prepare_current_records(py: Python<'_>, readings: &str, as_of: &str, retired: Vec<String>) -> PyResult<String> {
@@ -509,14 +477,6 @@ fn prepare_relationship_periods(py: Python<'_>, sightings: &str) -> PyResult<Str
     py.allow_threads(|| crate::relationships::prepare_relationship_periods(sightings)).map_err(PyValueError::new_err)
 }
 
-#[pyfunction]
-fn replay_identity(py: Python<'_>, identities: &str, decisions: &str, clock: i64) -> PyResult<String> {
-    let identities = serde_json::from_str(identities).map_err(|e| PyValueError::new_err(e.to_string()))?;
-    let decisions = serde_json::from_str(decisions).map_err(|e| PyValueError::new_err(e.to_string()))?;
-    let state = py.allow_threads(|| crate::identity::replay(identities, decisions, clock))
-        .map_err(PyValueError::new_err)?;
-    serde_json::to_string(&state).map_err(|e| PyValueError::new_err(e.to_string()))
-}
 
 #[pyfunction]
 fn replay_record_decisions(py: Python<'_>, command: &str) -> PyResult<String> {
@@ -553,27 +513,7 @@ fn compare_record_pairs(py: Python<'_>, command: &str) -> PyResult<String> {
     py.allow_threads(|| crate::record_pairs::compare_record_pairs(command)).map_err(PyValueError::new_err)
 }
 
-#[pyfunction]
-fn prepare_record_history(py: Python<'_>, command: &str) -> PyResult<String> {
-    py.allow_threads(|| crate::record_history::prepare_record_history(command)).map_err(PyValueError::new_err)
-}
 
-#[pyfunction]
-fn plan_affected_records(py: Python<'_>, command: &str) -> PyResult<String> {
-    py.allow_threads(|| crate::affected_records::plan_affected_records(command)).map_err(PyValueError::new_err)
-}
 
-#[pyfunction]
-fn prepare_record_lookups(py: Python<'_>, command: &str) -> PyResult<String> {
-    py.allow_threads(|| crate::record_lookups::prepare_record_lookups(command)).map_err(PyValueError::new_err)
-}
 
-#[pyfunction]
-fn prepare_scope_lookups(py: Python<'_>, command: &str) -> PyResult<String> {
-    py.allow_threads(|| crate::record_lookups::prepare_scope_lookups(command)).map_err(PyValueError::new_err)
-}
 
-#[pyfunction]
-fn resolve_record_bindings(py: Python<'_>, command: &str) -> PyResult<String> {
-    py.allow_threads(|| crate::decisions::resolve_record_bindings(command)).map_err(PyValueError::new_err)
-}

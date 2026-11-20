@@ -5,8 +5,6 @@ progress  Units per step and state of the running runs (or one run), and how lon
           (the worker.env sourced).
 failures  Units that hold an error, grouped by step, state and error shape, with counts
           (the worker.env sourced).
-quality   The data quality counts each merge run retained: records, records set aside by a failed check,
-          open reviews and the fields that have empty values (the worker.env sourced).
 steps   Time per step of one Bookkeeping run, from its journal (the worker.env sourced).
 sample  What the database was running, once a second: statements ranked by seconds seen, so the
         dominating statement shows (the reader.env sourced, a login that may read pg_stat_activity).
@@ -16,14 +14,11 @@ Counts, times and normalized statement shapes only: no value from the data is pr
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import re
 import sys
 import time
 from collections import Counter
-from datetime import datetime
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import create_engine, text
 
@@ -47,10 +42,6 @@ FAILURES = text("""
     WHERE w.error IS NOT NULL
       AND CASE WHEN :run IS NULL THEN r.state = 'running' ELSE r.run_id = CAST(:run AS uuid) END
     GROUP BY w.step, w.state, w.error""")
-REPORTS = text("""
-    SELECT convert_from(id_bytes, 'UTF8') AS run, recorded_at, convert_from(body, 'UTF8') AS report
-    FROM public.mdm_store_metadata WHERE type_bytes = convert_to('run_report', 'UTF8')
-    ORDER BY recorded_at DESC LIMIT :limit""")
 ACTIVE = text("""
     SELECT datname, query FROM pg_stat_activity
     WHERE state = 'active' AND pid <> pg_backend_pid() AND datname IS NOT NULL""")
@@ -92,33 +83,6 @@ def progress_table(rows) -> list[tuple[str, int, dict, float]]:
         total = sum(entry["states"].values())
         table.append((step, total, entry["states"], entry["states"].get("verified", 0) / total))
     return table
-
-
-def quality_rows(reports) -> list[dict]:
-    """One row per source of each retained run report: its counts and the fields that have empty values."""
-    rows = []
-    for run, recorded_at, report in reports:
-        body = json.loads(report)
-        when = datetime.fromtimestamp(recorded_at / 1_000_000, ZoneInfo("America/New_York"))
-        for source, counts in sorted((body.get("checks") or {}).items()):
-            rows.append({
-                "run": run[:8], "at": when.strftime("%Y-%m-%d %H:%M"), "source": source,
-                "records": counts.get("records"), "set_aside": counts.get("set_aside"),
-                "reviews": body.get("unresolved_reviews"), "complete": body.get("end_to_end_complete"),
-                "empty": {field: rate for field, rate in sorted((counts.get("empty_rate") or {}).items()) if rate}})
-    return rows
-
-
-def quality(url: str, limit: int) -> None:
-    engine = create_engine(url)
-    with engine.connect() as conn:
-        rows = quality_rows(conn.execute(REPORTS, {"limit": limit}).all())
-    if not rows:
-        print("No run report retained")
-    for row in rows:
-        empty = ", ".join(f"{field} {100 * rate:.1f}%" for field, rate in row["empty"].items()) or "none"
-        print(f"{row['at']} {row['run']} {row['source']:<22} records {row['records']} set aside {row['set_aside']} "
-              f"open reviews {row['reviews']} complete {row['complete']}  empty: {empty}")
 
 
 def failure_table(rows) -> list[tuple[str, str, str, int]]:
@@ -191,8 +155,6 @@ def main() -> None:
     sub = parser.add_subparsers(dest="view", required=True)
     zero = sub.add_parser("progress")
     zero.add_argument("--run", help="a run id (default: every running run)")
-    good = sub.add_parser("quality")
-    good.add_argument("--limit", type=int, default=10, help="how many of the latest run reports")
     bad = sub.add_parser("failures")
     bad.add_argument("--run", help="a run id (default: every running run)")
     one = sub.add_parser("steps")
@@ -204,8 +166,6 @@ def main() -> None:
     args = parser.parse_args()
     if args.view == "progress":
         progress(in_database("bookkeeping"), args.run)
-    elif args.view == "quality":
-        quality(in_database("mdm"), args.limit)
     elif args.view == "failures":
         failures(in_database("bookkeeping"), args.run)
     elif args.view == "steps":

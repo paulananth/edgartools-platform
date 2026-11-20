@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import importlib
 import os
 import secrets
 import subprocess
-import sys
 import tempfile
 import time
 from dataclasses import dataclass, field
@@ -19,9 +17,8 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import URL
 from sqlalchemy.exc import DBAPIError
 
-SCRIPTS = Path(__file__).resolve().parents[2] / "skills/mdm-engineering/scripts"
-sys.path.insert(0, str(SCRIPTS))
-api = importlib.import_module("database_adapter")
+from edgar_warehouse.database_connections import connect
+from tests.support.principals import provision_runtime
 
 
 @dataclass(frozen=True)
@@ -107,7 +104,7 @@ def server_connection():
                 port=int(binding.rsplit(":", 1)[1]),
                 database=initial_database,
             ).render_as_string(hide_password=False)
-            engine = api.connect(url, selected)
+            engine = connect(url, selected)
             deadline = time.monotonic() + 90
             try:
                 while True:
@@ -140,7 +137,7 @@ def server_connection():
 @contextmanager
 def _isolated_database(server_connection, store=None):
     selected, url = server_connection.engine, server_connection.url
-    owner = api.connect(url, selected)
+    owner = connect(url, selected)
     suffix = uuid4().hex[:12]
     # On MySQL a store keeps its own database, `<URL database>_<store>`: a test of one store names it (tests/support/duty.py).
     name, role = "adapter_proof_" + suffix + ("_" + store if store else ""), "adapter_rt_" + suffix
@@ -166,10 +163,10 @@ def _isolated_database(server_connection, store=None):
                 )
             absent_verified = True
         admin = create_engine(owner.url.set(database=name), hide_parameters=True)
-        provisioned = api.provision_runtime(admin, runtime_role=role, password=password)
+        provisioned = provision_runtime(admin, runtime_role=role, password=password)
         created_role = provisioned["created"]
         assert created_role
-        assert not api.provision_runtime(admin, runtime_role=role, password=password)[
+        assert not provision_runtime(admin, runtime_role=role, password=password)[
             "created"
         ]
         runtime = create_engine(
@@ -241,17 +238,3 @@ def database_factory(server_connection):
 def database(database_factory):
     with database_factory() as value:
         yield value
-
-
-@pytest.fixture
-def adapters(database):
-    admin, runtime, role = database
-    prefix = "proof_" + uuid4().hex[:10]
-    result = api.migrate(admin, runtime_role=role, prefix=prefix)
-    assert result["initialized"]
-    yield api.Adapter(admin, prefix=prefix), api.Adapter(runtime, prefix=prefix), role
-
-
-@pytest.fixture
-def storage_api():
-    return api

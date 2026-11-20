@@ -9,19 +9,16 @@ with valid check digits.
 
 from __future__ import annotations
 
-import json
 from uuid import uuid4
 
 import pytest
 
 from edgar_warehouse.mdm.evidence import assertion
 from edgar_warehouse.mdm.identifier_types import TYPES
-from edgar_warehouse.mdm.matching import candidate_routes
 from edgar_warehouse.rules.source_engine import (
     link_matching_records,
     plan_record_matches,
     prepare_master_records,
-    prepare_record_lookups,
 )
 
 AS_OF = "2026-10-25T12:00:00+00:00"
@@ -308,37 +305,6 @@ def test_a_caller_bound_list_holds_each_value():
     plan, result = match([caller, record("two", F2, F4)], decisions=[decision])
     assert {(h["value"], *h["records"]) for h in plan["caller_holders"]} == {(F1, HELD), (F2, HELD)}
     assert [d["entity_id"] for d in result["decisions"]] == [HELD]
-
-
-def lookups(item, bindings=None):
-    return prepare_record_lookups({
-        "readings": [item], "previous": {}, "subjects": [item["subject"]],
-        "bindings": bindings or {}, "quarantined": {}, "batch_id": "b",
-        "occurrences": {}, "normalizers": NORMALIZERS,
-        "candidate_routes": candidate_routes(), "policy": POLICY,
-    })
-
-
-def test_the_lookup_index_holds_each_value_of_a_list():
-    item = record("one", F2.lower(), F1)
-    current, changes = lookups(item, {item["subject"]: HELD})
-    assert current[item["subject"]]["normalized_identifiers"] == {"figi": [F2, F1]}
-    groups = [json.loads(c["type"].split("/", 2)[2]) for c in changes
-              if c["type"].startswith("lookup/identifier_records/")]
-    assert sorted(g[1] for g in groups) == sorted([F1, F2])
-
-
-def test_a_single_value_is_still_indexed_as_one_value():
-    item = assertion(source_code=SOURCE, record_key="one", publication_key="p1", revision=1,
-                     effective_at=None, kind="security", fields={}, identifiers={"figi": F1})
-    current, _ = lookups(item)
-    assert current[item["subject"]]["normalized_identifiers"] == {"figi": F1}
-
-
-@pytest.mark.parametrize("bad", [[F1, None], [F1, 7], []])
-def test_a_list_holds_strings_only_and_is_not_empty(bad):
-    with pytest.raises(ValueError, match="identifier"):
-        match([record("one", *bad)])
 
 
 def masters(reverse, kind="security"):

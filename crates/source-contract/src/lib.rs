@@ -48,10 +48,6 @@ pub mod matching_values;
 pub mod record_tests;
 pub mod record_matches;
 pub mod record_pairs;
-pub mod record_history;
-pub mod affected_records;
-pub mod record_lookups;
-pub mod postgres_jsonb;
 #[cfg(feature = "python")]
 mod python;
 #[cfg(feature = "python")]

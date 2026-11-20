@@ -9,12 +9,11 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
-from edgar_warehouse.database_connections import storage_adapter
 
 
 class Conflict(ValueError):
@@ -58,51 +57,18 @@ BASELINE = "schema.sql"
 MIGRATIONS: tuple[str, ...] = ()
 
 
-def migrate(
-    engine: Engine,
-    *,
-    application_role: str,
-    application_host: str = "%",
-    prepared: bool = True,
-) -> dict:
-    """The stores' tables, then the mastering tables every merge writes."""
-    result = _migrate(engine, application_role=application_role, application_host=application_host, prepared=prepared)
+def migrate(engine: Engine, *, application_role: str) -> dict:
+    """The init stamp (PostgreSQL's `mdm` schema), then the mastering tables every merge writes."""
+    result = _stamp(engine, application_role=application_role) if engine.dialect.name == "postgresql" else {}
     from edgar_warehouse.mastering import store as mastering
 
     mastering.install(engine, runtime_role=application_role)
     return result
 
 
-def _migrate(
-    engine: Engine,
-    *,
-    application_role: str,
-    application_host: str = "%",
-    prepared: bool = True,
-) -> dict:
-    """Explicit isolated migration with checksum validation.
-
-    Role provisioning stays outside this function; deployments provide the
-    restricted login role.
-    """
-    if type(prepared) is not bool:
-        raise ValueError("prepared must be a boolean")
-    if not prepared:
-        raise Conflict(
-            "MDM installs governed storage only"
-        )
-    if engine.dialect.name == "mysql":
-        from . import catalog
-        catalog.assert_current()
-        from .prepared_registry import PROTOCOL, finish_indexes, PREFIX
-        result = storage_adapter().migrate_registry(engine,runtime_role=application_role,
-            runtime_host=application_host,configuration=catalog.CATALOG,kinds=catalog.CATALOG["kinds"],
-            prepared=prepared, prepared_protocol=PROTOCOL, runtime_execute=not prepared)
-        if prepared:
-            finish_indexes(engine)
-            storage_adapter().Adapter(engine, prefix=PREFIX, protocol=PROTOCOL).enable_runtime(
-                application_role, runtime_host=application_host)
-        return result
+def _stamp(engine: Engine, *, application_role: str) -> dict:
+    """Record once which schema init installed, by its checksum; a store holding another one is refused.
+    Role provisioning stays outside this function; deployments provide the restricted login role."""
     if engine.dialect.name != "postgresql":
         raise ValueError("MDM requires PostgreSQL 16")
     path = Path(__file__).parent / "migrations" / BASELINE
@@ -193,18 +159,7 @@ def _migrate(
         )
         if leaked:
             raise ValueError("Runtime role inherits direct MDM writes")
-    result = {
-        "migration": path.name,
-        "checksum": checksum,
-        "installed": not bool(installed),
-    }
-    if prepared:
-        from .prepared_registry import initialize
-
-        result["prepared_storage"] = initialize(
-            engine, application_role=application_role, application_host=application_host
-        )["migration"]
-    return result
+    return {"migration": path.name, "checksum": checksum, "installed": not bool(installed)}
 
 
 def register_policy(conn: Connection, body: dict) -> str:
@@ -462,59 +417,3 @@ def protected_change(current: dict, proposed: dict) -> None:
             "Dataset identity is immutable within one source code; "
             f"register a new source code: {', '.join(sorted(moved))}"
         )
-
-
-class Publisher(Protocol):
-    def publish(self, key: str, payload: dict, expected_hash: str) -> None: ...
-    def verify(self, key: str, payload: dict, expected_hash: str) -> str: ...
-
-
-class Store:
-    def __init__(self, engine: Engine, *, read_only: bool = False):
-        if type(read_only) is not bool:
-            raise ValueError("read_only must be a boolean")
-        if engine.dialect.name not in ("postgresql", "mysql"):
-            raise ValueError("MDM requires PostgreSQL")
-        with engine.connect() as conn:
-            from .prepared_registry import require_installed
-
-            self.protocol = require_installed(conn).protocol
-        self.prepared = True
-        self.engine = engine
-        self.read_only = read_only
-
-    def commit(self, conn: Connection, request: dict, run_id: str) -> dict:
-        if self.read_only:
-            raise Conflict("A read-only MDM store cannot admit writes or publication")
-        from .prepared import commit
-
-        return commit(self, request, run_id)
-
-    def deliver_one(
-        self,
-        consumer: str,
-        worker: str,
-        publisher: Publisher,
-        *,
-        lease_seconds: int = 300,
-        batch_id: str | None = None,
-    ) -> bool:
-        if self.read_only:
-            raise Conflict("A read-only MDM store cannot admit writes or publication")
-        from .prepared_publication import deliver
-
-        return deliver(self, consumer, worker, publisher,
-                       lease_seconds=lease_seconds, batch_id=batch_id)
-
-    def run_status(self, run_id: str) -> dict:
-        """Observation for Bookkeeping; never declares an empty run complete."""
-        from .prepared_publication import adapter, publication_rows
-
-        api = adapter(self)
-        with self.engine.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
-            observed = api.observed_batches(run_id, connection=conn)
-            _, publications = publication_rows(api,observed,connection=conn,light=True)
-        batches = len({row["batch_key"] for row in publications})
-        pending = sum(not row["verified"] for row in publications)
-        return {"batches": batches, "pending": pending,
-                "publication_complete": batches > 0 and pending == 0}

@@ -14,24 +14,16 @@ Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#
 It answers: **is this change to the MDM store lean, fast on the engine it
 runs on, safe to migrate, and proved by the cheapest check that proves it?**
 
-The operator chooses PostgreSQL, MySQL or SQL Server Express. This skill owns
-one Merge Stage contract across those engines and the engineering needed to
-support their storage differences. Its executable adapter persists prepared
-effects without interpreting entity or source policy. The application's
-native owner migration installs governed registry storage on PostgreSQL and
-MySQL. Normal saves, readers and worker recovery have separate selected-engine
-qualification gates; complete support requires the full installed caller matrix. Read [governed owner installation](references/storage-adapters.md#governed-owner-installation)
-before installing or recovering that registry. A silver table spec is applied by
+The operator chooses PostgreSQL, MySQL or SQL Server Express. MDM has **one engine**: the mastering tables every merge
+writes, and the rules it runs by, registered in the Rules Database. Entity and source names and field policies arrive as
+data; storage holds no domain branch. Read [Storage on each database engine](references/storage-adapters.md) before
+provisioning, initializing or reviewing storage. A silver table spec is applied by
 [data-operations](../data-operations/SKILL.md).
 
-Adapter implementation belongs under this skill's `scripts/`, with
-[database_adapter.py](scripts/database_adapter.py) as its entry point.
-Entity/source names and field policies arrive as data from the shared engine;
-the adapter contains no domain branches or application imports. Read
-[Storage adapter contract and execution](references/storage-adapters.md)
-before provisioning, migrating, applying prepared effects or reviewing the
-boundary. Apply its GoF review before recommending a change and again
-against the resulting work.
+- **One engine, never two beside each other.** When a store is rebuilt, the old one's tables, code and commands go in
+  the same change that stops writing them; `init` installs only what a reader, command or stored record uses. An
+  install path kept for a retired engine still costs every reader: it was imported on the live path, loaded at every
+  worker start, tested on three databases, and blocked init on a changed checksum.
 
 ## Database-agnostic merge logic
 

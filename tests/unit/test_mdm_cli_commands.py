@@ -57,5 +57,7 @@ def test_clearing_a_source_previews_unless_confirmed_and_needs_the_source():
         parser.parse_args(["mdm", "clear-source"])
 
 
-def test_owner_migration_defaults_to_governed_storage():
-    assert build_parser().parse_args(["mdm", "init"]).prepared_store is True
+def test_init_takes_only_the_runtime_role():
+    args = build_parser().parse_args(["mdm", "init", "--application-role", "invented"])
+    assert args.application_role == "invented"
+    assert not hasattr(args, "prepared_store") and not hasattr(args, "application_host")

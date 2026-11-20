@@ -32,32 +32,6 @@ def runtime_files() -> list[Path]:
     return [Path(__file__), Path(steps.__file__), Path(source_contract.source_contract.__file__)]
 
 
-def postgres_jsonb_text(raw: str) -> str:
-    """PostgreSQL 16 JSONB text/hash bytes from raw JSON, bounded to 64 MiB.
-
-    Retains arbitrary numeric precision/scale. This protocol is separate from
-    compact Python JSON. Preparation never replaces destination validation.
-    """
-    return source_contract.postgres_jsonb_text(raw)
-
-
-def postgres_jsonb_object(fields: Mapping[str, str], *, canonical_inputs: bool = False) -> str:
-    """Shape a JSONB object without numeric conversion.
-
-    canonical_inputs=True reuses authenticated PostgreSQL JSONB text verbatim;
-    the caller must compare the result to its committed hash before use. It
-    checks each part's JSON syntax, not the canonicality of that trusted text.
-    Its output budget derives from those stored parts, preserving the original
-    publication bounds. The general normalization mode is bounded to 64 MiB.
-    """
-    return source_contract.postgres_jsonb_object(dict(fields), canonical_inputs=canonical_inputs)
-
-
-def postgres_jsonb_object_bytes(fields: Mapping[str, str], *, canonical_inputs: bool = False) -> bytes:
-    """Same JSONB object protocol as above, without a wide Python Unicode copy."""
-    return source_contract.postgres_jsonb_object_bytes(dict(fields), canonical_inputs=canonical_inputs)
-
-
 class SourceRejected(Exception):
     """The artifact, or the contract, failed. `code` is stable; `detail` is for people."""
 
@@ -302,29 +276,6 @@ def prepare_relationship_periods(sightings: list[dict]) -> tuple[list[dict], lis
     return periods, reviews
 
 
-def rank_claims(sources: list[str], clear_sources: list[str], allow_unknown_effective: bool,
-                candidates: list[tuple[str, str, float | None, bool, str, str]]) -> tuple[list[int], list[int]]:
-    """Rank opaque claim references by configured authority and recency.
-
-    Candidate metadata is (source, operation, effective timestamp, fresh, record
-    key, assertion id). Return eligible indices and unauthorized-clear indices.
-    Timestamp/age preparation preserves Python's existing datetime semantics;
-    native ranking releases the GIL and never converts field payload values.
-    """
-    return source_contract.rank_claims(sources, clear_sources, allow_unknown_effective, candidates)
-
-
-def replay_identity(identities: list[dict], decisions: list[dict], clock: int) -> dict:
-    """Replay accepted identity commands with integer microsecond timestamps.
-
-    Only graph/decision metadata crosses this boundary. Override indices refer
-    to the original caller list; arbitrary evidence and values stay Python.
-    """
-    return json.loads(source_contract.replay_identity(
-        json.dumps(identities, ensure_ascii=False, separators=(",", ":")),
-        json.dumps(decisions, ensure_ascii=False, separators=(",", ":")), clock))
-
-
 def replay_record_decisions(command: Mapping) -> dict:
     """Carry retained decisions and exact values to the shared Rust replay."""
     return json.loads(source_contract.replay_record_decisions(
@@ -365,43 +316,6 @@ def link_matching_records(command: Mapping) -> dict:
 def compare_record_pairs(command: Mapping) -> list[list[bool]]:
     """Compare a batch of candidate pairs, transferring its pinned rules once."""
     return json.loads(source_contract.compare_record_pairs(
-        json.dumps(dict(command), ensure_ascii=False, separators=(",", ":"), allow_nan=False)))
-
-
-def prepare_record_history(command: Mapping) -> tuple[list[dict], list[dict]]:
-    """Prepare exact retained inputs and references for indexed scope reads."""
-    evidence, indexes = json.loads(source_contract.prepare_record_history(
-        json.dumps(dict(command), ensure_ascii=False, separators=(",", ":"), allow_nan=False)))
-    return evidence, indexes
-
-
-def plan_affected_records(command: Mapping) -> dict:
-    """Let Rust request the indexed records that make affected identities whole."""
-    return json.loads(source_contract.plan_affected_records(
-        json.dumps(dict(command), ensure_ascii=False, separators=(",", ":"), allow_nan=False)))
-
-
-def prepare_record_lookups(command: Mapping) -> tuple[dict, list[dict]]:
-    """Prepare latest pointers and lookup changes with supplied pinned candidate_routes.
-
-    The caller supplies opaque route names and typed field/array paths. No
-    domain namespace or metadata field is selected inside the native engine.
-    """
-    records, changes = json.loads(source_contract.prepare_record_lookups(
-        json.dumps(dict(command), ensure_ascii=False, separators=(",", ":"), allow_nan=False)))
-    return records, changes
-
-
-def prepare_scope_lookups(command: Mapping) -> tuple[dict, list[dict]]:
-    """Prepare indexed link/review references and retained publication floors."""
-    publications, changes = json.loads(source_contract.prepare_scope_lookups(
-        json.dumps(dict(command), ensure_ascii=False, separators=(",", ":"), allow_nan=False)))
-    return publications, changes
-
-
-def resolve_record_bindings(command: Mapping) -> dict[str, str | None]:
-    """Carry explicit current bindings, including unbound owned records, from Rust."""
-    return json.loads(source_contract.resolve_record_bindings(
         json.dumps(dict(command), ensure_ascii=False, separators=(",", ":"), allow_nan=False)))
 
 
