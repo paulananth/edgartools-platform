@@ -1075,10 +1075,11 @@ def test_a_catch_up_publishes_the_status_of_every_step_already_done_from_its_own
 
 def test_the_status_command_gets_a_short_environment_the_bookkeeping_login_and_the_catalog_and_nothing_else():
     base = {"PATH": "/bin", "HOME": "/h", "AWS_SECRET_ACCESS_KEY": "no", "SOME_DATABASE_URL": "no", "OPENMETADATA_ADMIN_PASSWORD": "no"}
-    worker = {"DB_URL": "postgresql://b:p@h", "BOOKKEEPING_MANIFEST_ROOT": "file:///x", "OTHER_SECRET": "no"}
+    worker = {"DATA_URL": "postgresql://b:p@h/data", "CONTROL_URL": "postgresql://b:p@h/control", "BOOKKEEPING_MANIFEST_ROOT": "file:///x",
+              "OTHER_SECRET": "no"}
     catalog = {"OPENMETADATA_URL": "http://127.0.0.1:8587/api", "OPENMETADATA_TOKEN": "t"}
     given = chain.status_env(base, worker, catalog)
-    assert set(given) == {"PATH", "HOME", "DB_URL", "OPENMETADATA_URL", "OPENMETADATA_TOKEN"}
+    assert set(given) == {"PATH", "HOME", "DATA_URL", "CONTROL_URL", "OPENMETADATA_URL", "OPENMETADATA_TOKEN"}
     assert "no" not in given.values()  # no other login, key or password reaches it
 
 
@@ -1185,8 +1186,8 @@ def test_bookkeepings_runs_are_asked_for_within_the_commands_own_maximum_and_a_f
 def test_a_missing_worker_env_means_no_bookkeeping_login_not_a_crash(monkeypatch, tmp_path):
     monkeypatch.setattr(chain, "STORES", tmp_path)  # a machine with no stores folder: CI, or a fresh checkout
     assert chain.worker_env() == {}
-    (tmp_path / "worker.env").write_text("export DB_URL='postgresql://b:p@h'\n")
-    assert chain.worker_env() == {"DB_URL": "postgresql://b:p@h"}
+    (tmp_path / "worker.env").write_text("export DATA_URL='postgresql://b:p@h/data'\n")
+    assert chain.worker_env() == {"DATA_URL": "postgresql://b:p@h/data"}
     monkeypatch.setattr(chain, "_RUNS", None)
     monkeypatch.setattr(chain, "run_catalog_status", lambda command, env, timeout=60: ("[]", ""))
     (tmp_path / "worker.env").unlink()
@@ -1234,8 +1235,9 @@ def test_the_verdict_on_a_state_file_is_the_same_pure_answer_status_and_the_run_
     assert chain.state_verdict("", "aaaa1111", "7") == "fresh"
 
 
-def test_the_reader_reads_the_mdm_databases_generation_whatever_database_its_address_names():
-    assert chain.mdm_url_of("postgresql+psycopg2://ops:pw@host.invalid:5432/bookkeeping") == "postgresql+psycopg2://ops:pw@host.invalid:5432/mdm"
+def test_a_duty_files_data_database_names_the_store_and_a_file_without_one_names_none():
+    assert chain.data_url({"DATA_URL": "postgresql+psycopg2://ops:pw@host.invalid:5432/data"}) == "postgresql://ops:pw@host.invalid:5432/data"
+    assert chain.data_url({"CONTROL_URL": "postgresql://ops:pw@host.invalid:5432/control"}) is None
 
 
 def test_full_swap_with_memory_to_spare_is_not_pressure_and_a_short_memory_is():

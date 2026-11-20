@@ -8,9 +8,9 @@ beyond MDM's own storage (companies keep their own versioned table): the kinds
 come from MDM, their meanings from `rules/context/definitions.yaml`.
 
 A subject that is no master kind and not `relationship` is a code set: it is
-read from RDM (`edgar_warehouse/rdm/context.py`, the rdm schema of `DATA_URL`'s database). The
+read from RDM (`edgar_warehouse/rdm/context.py`, the rdm schema of the data database). The
 subject `silver` is a silver table's spec (`edgar_warehouse/silver_writer/context.py`,
-the silver schema of `DATA_URL`'s database).
+the silver schema of the data database).
 """
 
 from __future__ import annotations

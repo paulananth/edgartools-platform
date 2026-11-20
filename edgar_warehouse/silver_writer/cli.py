@@ -2,8 +2,8 @@
 spec as a table, land a part's rows into it, and describe a table for an agent.
 
 Connections come from the environment and are never printed:
-DATA_URL of the owner file (the schema owner, for init and register),
-DATA_URL of the loader file (the restricted runtime login, for created, land and describe; its MDM database is read, for the MDM ids of a table that links to masters, and the
+the owner file (the schema owner, for init and register),
+the loader file (the restricted runtime login, for created, land and describe; its MDM schema is read, for the MDM ids of a table that links to masters, and the
 statement format and country the measures read from each Company).
 """
 

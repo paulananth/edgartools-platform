@@ -2,8 +2,8 @@
 draft, record the operator's approval, publish, and compare two versions.
 
 Connections come from the environment and are never printed:
-DATA_URL of the owner file (the schema owner, for init) and
-DATA_URL of the loader file (the restricted runtime login, for everything else).
+the owner file (the schema owner, for init) and
+the loader file (the restricted runtime login, for everything else).
 """
 
 from __future__ import annotations

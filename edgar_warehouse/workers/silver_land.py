@@ -8,8 +8,8 @@ step). Its keys say what to take from it:
 
 The worker calls the existing silver writer (`land`) once for each artifact
 of the reading, so a table with `append` load mode lands each filer's rows
-exactly once, and a retry lands the same rows again with no change. DATA_URL
-names the loader login and the data database; its MDM schema
+exactly once, and a retry lands the same rows again with no change. The loader
+file names the data database; its MDM schema
 finds each linked master's id. Its output is a receipt naming what the
 reading held: rows, distinct keys and a digest of the keys. The check reads
 the reading again, rebuilds the receipt, and reads silver to

@@ -13,7 +13,7 @@ def mdm_engine(*, restricted: bool = True):
 
 
 def mdm_engine_from(environment, *, restricted: bool = True):
-    """The MDM schema under the selected duty's `DATA_URL`, without changing the process environment."""
+    """The MDM schema in the data database of the selected duty's file, without changing the process environment."""
     from edgar_warehouse.database_connections import owner_url
 
     value = owner_url("mdm", environment)

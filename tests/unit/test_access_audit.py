@@ -143,7 +143,7 @@ def test_a_non_audit_aws_identity_is_refused_without_the_flag(monkeypatch):
 
 
 def test_exit_code_follows_failures_and_the_json_report_parses(monkeypatch, capsys):
-    monkeypatch.setenv("DB_URL", "postgresql://x")
+    monkeypatch.setenv("DATA_URL", "postgresql://x@h/data")
     state = {"ev": postgres_clean()}
     monkeypatch.setattr(postgres, "collect", lambda env, as_admin=False: state["ev"])
     assert audit.main(["--platform", "postgres", "--json"]) == 0
@@ -244,5 +244,5 @@ def test_the_connection_limit_control_leaves_out_the_platforms_own_logins_and_co
     fake.Error = Exception
     fake.connect = lambda *a, **k: Connection()
     monkeypatch.setitem(sys.modules, "psycopg2", fake)
-    found = postgres.collect({"DB_URL": "postgresql://invented@h/x"})["logins"]
+    found = postgres.collect({"DATA_URL": "postgresql://invented@h/data"})["logins"]
     assert found == [("governance", 10), ("edgar_loader", -1)]
