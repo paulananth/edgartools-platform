@@ -181,3 +181,7 @@ def test_the_exposure_scripts_take_the_mirror_name_from_the_same_file():
     sys.path.insert(0, str(files.ROOT.parent / "skills" / "data-platform" / "scripts" / "exposure"))
     import exposure_manifest
     assert exposure_manifest.load_config(files.ROOT / "exposure.yaml")["target"]["database"] == MIRROR
+
+
+def test_the_one_names_file_also_names_the_owner_role():
+    assert NAMES["owner"] and set(NAMES) == {"owner", "mirror", "gold"}
