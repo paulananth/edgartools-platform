@@ -26,6 +26,30 @@ Each rule below has one home, named beside it; this list grants no permission.
 - **Configuration only, no data value in public, no guessed identifier, no invented command, one question at a
   time:** the [data-onboarding hard stops](../data-onboarding/SKILL.md#hard-stops).
 
+## Start here: route the work
+
+Inputs: the requested source and work, its configuration and retained run evidence, [Source readiness](#source-readiness), the
+[skills index](../README.md) and the variable names in [Connection setup](CONNECTIONS.md). Output: one next action, its owner
+and the environment checks it needs. A route grants no approval, provider request or switch-on.
+
+1. **Find the state.** With no `edgar-warehouse` on the path, the next action is [Setup](#0-setup), step 1. A source is
+   configured when the rules folder (`EDGAR_RULES_ROOT`, else the bundle's read-only copy) holds `sources/<source>/source.yaml`;
+   a run id with Bookkeeping status is retained run evidence.
+2. **Pick the owner** in [Decisions, artifacts and handoffs](#decisions-artifacts-and-handoffs) whose row fits that state; its
+   handoff names the artifact to carry. Open no other reference to choose.
+3. **Name the duty** in the [duty table](CONNECTIONS.md#database-connections-and-duties) (none to read captured files; a load
+   or a worker: Loader, `worker.env`). Check, without printing a value, that its file exists and sets `DATA_URL` and `CONTROL_URL`.
+4. **Run `edgar-warehouse doctor`**, with that file, if any, sourced in a command-scoped subshell. Expected: exit 0 with `"ok": true`,
+   `unresolved` empty, `engine` `loads`, `rules_root.exists` true, and `answers` for each of `rules`, `bookkeeping`,
+   `change_journal` and `mdm` under `stores` (`not set` passes for a store the action does not use; RDM and silver are not probed).
+5. **Hand off** the existing artifact and its location to the owner; never recreate it to cross a skill boundary.
+
+**Stop** and name the blocker to its owner when the state fits no owner or two (one question to the operator); the duty file or a
+variable is missing (the operator sets it in their own terminal); doctor prints `"ok": false` (an `unresolved` line is the
+[Self-check](#7-self-check)'s fix; a store that `does not answer` is reported by name and error kind); a rules change finds
+`rules_root.bundled_read_only` true ([Setup](#0-setup), step 2); the action needs a provider request, approval or switch-on not
+given ([Hard stops](#hard-stops)); or the processing asked lacks the evidence [Source readiness](#source-readiness) requires.
+
 ## The seven wastes
 
 Every skill works lean (operator: "make all skills understand 7
@@ -80,16 +104,7 @@ an implementation gap before calling a source ready.
 
 ## Decisions, artifacts and handoffs
 
-Data Platform owns the routing decision and the shared entry conditions, not
-the procedures performed by the next skill. Resolve the source and requested
-work from current configuration and retained evidence, then hand off the
-existing artifact and its location to the owner below. Do not recreate an
-artifact merely to cross a skill boundary.
-
-The route's output is one selected next action, its owner, and the environment checks that action needs: the
-connection duty and variable names ([Connection setup](CONNECTIONS.md)) and `edgar-warehouse doctor`. A route grants
-no approval, provider request or switch-on; each stays behind its owner's gate. A missing input, permission or check
-is itself the next action: name the blocker to its owner and stop.
+Data Platform owns the route and its entry checks ([Start here](#start-here-route-the-work)), not the next skill's procedure.
 
 | Decision or artifact | Authoritative owner | Handoff |
 |---|---|---|
@@ -103,30 +118,18 @@ is itself the next action: name the blocker to its owner and stop.
 | Changes to MDM engine behavior, persistence or merge implementation | [MDM Engineering](../mdm-engineering/SKILL.md). | Carry the demonstrated behavior gap and qualification evidence; source onboarding and run execution do not own engine changes. |
 | Shared source readiness requirements and the route to the owning phase | Data Platform, [Source readiness](#source-readiness). | The phase owner records its own evidence; Data Platform does not certify operational readiness from instructions or fixture tests. |
 
-Apply the routing to the current state, not only to the source's age:
+Route by the current state, not only the source's age:
 
-- **New captured source:** for example, hand the retained capture location and
-  provenance receipt to [Data Onboarding](../data-onboarding/SKILL.md#the-files-are-the-rules).
-  It invokes [Data Profiling](../data-profiling/SKILL.md#modes) and carries
-  forward that phase's `REPORT.md` and `findings.yaml` into the source's
-  discovery/configuration record. These names describe artifacts to retain;
-  they are not evidence that a source was processed.
-- **Already configured source:** route a repeat delivery/run to Data
-  Operations with the existing source runbook, delivery location and latest
-  Bookkeeping/Journal status ([live-state handoff](../data-operations/SKILL.md#start-with-live-state)).
-  Route a proposed live-rule change to [Refining Rules](../refining-rules/SKILL.md#modes)
-  with the approved configuration, changed delivery and compare report; its
-  compare mode consumes approved profiling findings without replacing them.
-- **Restart after a completed phase:** for example, after profiling, carry its
-  existing `REPORT.md` and `findings.yaml`, plus current configuration/run
-  state, to the first incomplete phase's owner. After a run phase, carry its
-  existing run identifier and verified-unit/Journal evidence to Data
-  Operations ([resume from retained state](../data-operations/SKILL.md#start-with-live-state)).
-  Resume there; do not repeat a completed phase to recreate its artifact.
-  These are generic artifact handoffs, not claims of live evidence.
+- **New captured source:** the retained capture location and provenance receipt go to
+  [Data Onboarding](../data-onboarding/SKILL.md#the-files-are-the-rules), which invokes
+  [Data Profiling](../data-profiling/SKILL.md#modes) and keeps its `REPORT.md` and `findings.yaml`.
+- **Configured source:** a repeat delivery or run goes to Data Operations with the source runbook, delivery location and
+  latest Bookkeeping/Journal status ([live state](../data-operations/SKILL.md#start-with-live-state)); a live-rule change
+  goes to [Refining Rules](../refining-rules/SKILL.md#modes) with the approved configuration, changed delivery and compare report.
+- **Restart after a completed phase:** that phase's artifacts (profiling's `REPORT.md` and `findings.yaml`; a run's
+  identifier and verified-unit/Journal evidence) go to the first incomplete phase's owner; a completed phase is not repeated.
 
-These are routing examples, not source qualifications. A phase is complete
-only under its owning skill's evidence and acceptance rules.
+These are routing examples, not qualifications or evidence: a phase is complete only under its owning skill's rules.
 
 ## The flow
 
