@@ -16,8 +16,11 @@ with merge rules.
 
 **Use the other skill when:**
 - the feed or domain has no rules file yet: use **data-onboarding**;
-- you are running a feed, or recovering a run: use **bookkeeping**;
-- you are recording or recovering journal evidence: use **change-journal**.
+- you are carrying out or operationally recovering a configured feed: use
+  **data-operations**; it uses Bookkeeping for run-control semantics and
+  Change Journal for receipt evidence;
+- you are changing run-control or completion semantics: use **bookkeeping**;
+- you are changing or interpreting journal receipts/events: use **change-journal**.
 
 A failure, a surprise or two readings that disagree: find the root cause first, by the [five whys](../data-platform/ROOT-CAUSE.md), silently, and report the conclusion.
 
@@ -262,7 +265,9 @@ A test that merges runs a policy with every kind it loads: each kind has its
 through `register_policy`, which checks it. A policy handed straight to the
 merge skips that check and passes where the real load refuses.
 
-A changed rules file applies to new batches only. Running the feed is the Bookkeeping skill's **run** mode.
+A changed rules file applies to new batches only. Data Operations carries out
+the feed run and operational recovery; Bookkeeping owns run-control and
+completion semantics, and Change Journal owns receipt evidence.
 
 ## When a command is missing
 

@@ -18,8 +18,11 @@ file yet, or a domain (a kind) with no merge rules yet.
 - the feed already has `rules/sources/<source>/source.yaml`, and you are
   changing its mapping, its data quality or the matching rules: use
   **refining-rules**;
-- you are running a feed, or recovering a run: use **bookkeeping**;
-- you are recording or recovering journal evidence: use **change-journal**.
+- you are carrying out or operationally recovering a configured feed: use
+  **data-operations**; it uses Bookkeeping for run-control semantics and
+  Change Journal for receipt evidence;
+- you are changing run-control or completion semantics: use **bookkeeping**;
+- you are changing or interpreting journal receipts/events: use **change-journal**.
 
 ## Hard stops
 
@@ -415,9 +418,11 @@ contradictory publications.
 Follow [LOAD.md](LOAD.md): check the changed source with
 `rules check --source <source>` and run owner-specific tests for changed
 Source Extracts. The local guard checks changed merge and pipeline documents;
-CI validates the full Rules tree. Then load into a disposable store and the
-shared one. Running and recovering a run is the **bookkeeping** skill's
-**run** mode.
+CI validates the full Rules tree. For the initial source check-and-load
+handoff, use Data Operations' existing `edgar-warehouse load` command to carry
+out the run; Bookkeeping owns its run-control and completion semantics, and
+Change Journal owns its receipt evidence. Data Operations also owns subsequent
+operational use and recovery of configured feeds.
 
 ## When a command is missing
 

@@ -33,11 +33,40 @@ These blockers order skill-improvement work. They do not activate optional sourc
 
 ## Acceptance checklist
 
-- [ ] List decisions, inputs and outputs owned here using current repository evidence.
-- [ ] Assign each overlapping responsibility one authoritative owner and a named handoff.
-- [ ] Demonstrate the boundary on a new captured source, an already configured source and a restart after a completed phase; link retained work rather than duplicating it.
+- [x] List decisions, inputs and outputs owned here using current repository evidence; verified against current `data-platform`, `data-profiling`, `data-onboarding`, `refining-rules`, `data-operations`, `bookkeeping`, `change-journal` and `mdm-engineering` instructions by reviewing the ownership map and links. (2026-11-20 14:40 ET)
+- [x] Assign each overlapping responsibility one authoritative owner and a named handoff; verified by reviewing the ownership table, flow table and linked owner paths in `skills/data-platform/SKILL.md`, plus the reconciled run/recovery handoffs in `skills/data-onboarding/SKILL.md` and `skills/refining-rules/SKILL.md`. (2026-11-20 14:40 ET)
+- [x] Demonstrate the boundary on a new captured source, an already configured source and a restart after a completed phase; link retained work rather than duplicating it. Verified by reviewing the documented handoffs, named artifacts and destination anchors; the genericity check does not validate routing behavior, and no source operation was performed. (2026-11-20 14:40 ET)
 - [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md.
-- [ ] Learning → skill: name the verified reusable lesson and its owning skill section, or record none.
+- [x] Learning → skill: source routing and artifact ownership belong in Data Platform; downstream procedures and their evidence stay with their owning skill. Recorded in [Decisions, artifacts and handoffs](../../../skills/data-platform/SKILL.md#decisions-artifacts-and-handoffs). (2026-11-20 14:40 ET)
+
+## Answer
+
+Data Platform owns the decision about the next phase, shared source-readiness
+acceptance rules, and connection discovery/setup. It does not own profiling,
+new-source configuration, live-rule changes, or recurring execution. The
+authoritative owners and the artifacts they retain are listed in [Decisions,
+artifacts and handoffs](../../../skills/data-platform/SKILL.md#decisions-artifacts-and-handoffs).
+
+The three routing cases are documented there: new captured work goes through
+Data Onboarding and retains the profiling report/findings; an already
+configured source goes to Data Operations for a repeat run or Refining Rules
+for a live-rule change; restart reads the completed phase's retained output
+and resumes at the first incomplete phase. These are documented handoffs,
+not operational qualification evidence.
+
+Current checkout baseline: `HEAD` is `f5ada4dfa9486b3869574c99e7eceb6f16aa2cb0`.
+Installed skill provenance could not be validated: both
+`~/.agents/skills/data-platform` and `~/.claude/skills/data-platform` are
+symlinks to the missing
+`~/.local/share/edgartools/skill-source/skills/data-platform` target. No
+installed copy was read or changed.
+
+## Validation and remaining work
+
+- `UV_CACHE_DIR=/private/tmp/uv-cache-ticket01 uv run --with pytest pytest tests/unit/test_profiling_genericity.py` — **145 passed**. This documentation genericity check does not validate routing behavior.
+- The PR/publish checklist item remains open because this implementation run's
+  scope excludes commit, push and PR publication. The scoped change and check
+  evidence are recorded here; publication remains incomplete.
 
 ## Completion evidence
 
