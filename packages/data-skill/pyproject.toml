@@ -55,6 +55,7 @@ bypass-selection = true
 "../../edgar_warehouse/rules/cli.py" = "edgar_warehouse/rules/cli.py"
 "../../edgar_warehouse/rules/db.py" = "edgar_warehouse/rules/db.py"
 "../../edgar_warehouse/rules/frozen.py" = "edgar_warehouse/rules/frozen.py"
+"../../edgar_warehouse/rules/registry.py" = "edgar_warehouse/rules/registry.py"
 "../../edgar_warehouse/rules/driving.py" = "edgar_warehouse/rules/driving.py"
 "../../edgar_warehouse/rules/error_log.py" = "edgar_warehouse/rules/error_log.py"
 "../../edgar_warehouse/rules/loading.py" = "edgar_warehouse/rules/loading.py"

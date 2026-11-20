@@ -19,7 +19,7 @@ def test_installed_rules_cli_records_and_reports_the_rules_a_run_used(installed,
         init = '''
 import sys
 from edgar_warehouse.cli import main
-assert main(["rules", "init", "--agent-role", sys.argv[1]]) == 0
+assert main(["rules", "init", "--agent-role", sys.argv[1], "--registrar-role", sys.argv[1]]) == 0
 '''
         use = '''
 import json, sys
