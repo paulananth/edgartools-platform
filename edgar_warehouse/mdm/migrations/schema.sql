@@ -1,6 +1,6 @@
--- MDM's own schema: the record of what init installed. `mdm init` creates it in an empty database, then
--- installs governed storage, the registration function (registration_authority.sql) and the mastering tables,
--- which hold the golden records. The rules MDM runs by are registered in the Rules Database (control).
+-- MDM's own schema: the init stamp, the record of what init installed. `mdm init` creates it in an empty database,
+-- then installs the mastering tables, which hold the golden records. The rules MDM runs by are registered in the
+-- Rules Database (control).
 SET LOCAL check_function_bodies = false;
 
 CREATE SCHEMA mdm;

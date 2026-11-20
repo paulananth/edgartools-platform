@@ -76,8 +76,8 @@ index is dropped.
   it; a listing a later answer drops leaves it. No new kind of row. Built as
   configuration: `detail_lookups` in `rules/mastering/engine-v1.yaml` (kind
   `security`, detail `listings`, keys `mic` and `exchange`, each with
-  `ticker`); the engine's `detail_lookups.py` names no kind or field and
-  shares the name lookup's coverage and owner rebuild (`master_index.py`).
+  `ticker`); the engine's `detail_lookups.py` names no kind or field, and its keys are tokens in the one lookup
+  table the name search uses (`mastering_lookup`).
   A listing with a MIC is found by both keys, so a caller holding OpenFIGI's
   code needs no crosswalk.
 - **The venue is its ISO 10383 MIC** (operator, 19:12 ET: "The exchange code
