@@ -1,0 +1,14 @@
+{
+  "implementation": {
+    "provider": "anthropic-cli",
+    "model": "opus"
+  },
+  "testing": {
+    "provider": "codex-cli",
+    "model": "gpt-6.1-sol"
+  },
+  "fallback_agent": {
+    "provider": "codex-cli",
+    "model": "gpt-6-luna"
+  }
+}
