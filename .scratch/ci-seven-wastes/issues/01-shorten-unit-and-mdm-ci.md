@@ -1,7 +1,7 @@
 # Shorten Unit and MDM CI without reducing behavior coverage
 
 Type: task
-Status: claimed
+Status: resolved
 
 ## Scope
 
@@ -19,7 +19,7 @@ load-chain configuration cross-checks. New test scenarios require operator appro
 - [x] Verify all affected test files locally (2026-11-20 15:01 ET): 116 passed in 51.02s using testmon with selection disabled on final code.
 - [x] Compare complete CI execution and job times against the baseline (2026-11-20 15:01 ET): run 44806172228 passed all 12 jobs; 2,989 passed / one skipped in 231.38s.
 - [x] Review Standards, Spec and GoF; publish a PR with evidence (2026-11-20 15:01 ET): three independent reviews, no actionable findings; PR #1957.
-- [ ] Remove the two requested static cross-checks, verify their surviving runtime guards, and rerun full CI.
+- [x] Remove the two requested static cross-checks, verify their surviving runtime guards, and rerun full CI (2026-11-20 15:26 ET): 195 local tests passed; run 44810103863 passed all 12 jobs, 2,985 passed / one skipped in 129.70s.
 - [x] Learning → skill (2026-11-20 15:01 ET): none; the data-platform seven-wastes rule already requires measured cheap proof and carrying computed inputs forward.
 
 ## Baseline
@@ -85,7 +85,7 @@ and nested custom parsing. No new tests were added. Two static chain cross-check
 ## Standards
 
 No actionable findings. Configuration stays generic and operation-local;
-required CI inventory and validation remain unchanged.
+required runtime CI validation remains enabled; only the two operator-named static configuration checks are removed.
 
 ## Spec
 
@@ -169,3 +169,26 @@ revised scope receives its own full CI gate.
 
 The follow-up Standards, Spec and GoF reviews found no actionable issues in
 the retirement, with the unique static configuration protection lost stated above.
+
+## Final qualification after the requested removals
+
+Implementation head `1f610034882a70929f82be5f128c1fabfeccac03`,
+[run 44810103863](https://github.com/paulananth/edgartools-platform/actions/runs/44810103863):
+all 12 CI jobs passed. Unit/architecture/MDM: 2,985 passed, one skipped, four
+warnings in 129.70s; dependency step 61s; complete Unit/MDM job 203s.
+
+Compared with the original baseline, observed test execution fell from 398.83s
+to 129.70s (67%); the complete job fell from 455s to 203s (55%). Runner
+performance varies, so the earlier identical-inventory 42% reduction and the
+component read-count reductions isolate the production improvement separately
+from the requested retirement.
+
+Count reconciliation: original main and initial production optimization each
+ran 2,989 cases. Upstream PR #1955 removed the `rules` factory from two
+parametrized engine-checkout tests; the rebased pre-retirement run 44807682761
+therefore passed 2,987. This branch deletes exactly the two named load-chain
+checks, producing 2,985 in run 44810103863. No additional tests are deleted by
+this branch. The original single skip is unchanged.
+
+The final documentation commit contains this evidence only. Its current-head
+CI gate must pass before the PR is marked ready and merged.
