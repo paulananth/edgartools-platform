@@ -28,7 +28,10 @@ Data-profiling supplies the measured evidence; data-modeling defines the final
 outputs and each output's current/history scope from requirements and mappings.
 Include the exact exposure list in the existing requirements-and-mapping
 approval, backed by the profiling report, before recording it in configuration.
-There is no separate table-tagging approval round. Record the exact reviewed
+There is no separate table-tagging approval round. Show each table's purpose,
+requirement and mapping versions, final physical output, mapped fields,
+current/history scope, sensitivity/quality findings and exclusions. An approval
+that did not include the table list does not approve exposure. Record the exact reviewed
 requirements, mapping and list versions and operator words;
 pending or declined entries cannot enter either consumer. Metadata publication
 and billable mirror creation retain their separate gates.
