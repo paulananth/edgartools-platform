@@ -4,7 +4,7 @@
 Usage: db_monitor.py summary | locks | sessions [--min-seconds N] | statements [--top N] [--by total|mean|calls]
                      | tables [--top N] | memory | databases | logs [--minutes N] | all   (--database NAME, --json)
 
-The login is the DB_URL of the stores folder's reader.env: a member of pg_monitor, never the owner or a runtime
+The login is the stores folder's reader.env: a member of pg_monitor, never the owner or a runtime
 login. Every connection is a read-only session with a statement timeout; the script refuses a superuser. It prints no
 address, and shows a statement with its literals replaced, cut short, so no value from the data reaches the terminal.
 
@@ -97,14 +97,14 @@ def plain(text: str | None, width: int = 70) -> str:
 
 
 def url(database: str | None) -> str:
-    """The reader file's `DB_URL` (it names no database) with the database asked for, else the `postgres` one."""
-    from urllib.parse import urlsplit, urlunsplit
+    """The reader file's login on the database asked for (`data`, `control`), else the `postgres` one."""
+    from edgar_warehouse.database_connections import instance_url
 
-    value = os.environ.get("DB_URL")
-    if not value:
-        sys.exit("DB_URL is not set: source the stores folder's reader.env (it is never printed)")
-    value = value.replace("postgresql+psycopg2", "postgresql")
-    return urlunsplit(urlsplit(value)._replace(path="/" + (database or "postgres")))
+    try:
+        value = instance_url(database=database or "postgres")
+    except KeyError as missing:
+        sys.exit(f"{missing.args[0]} (source the stores folder's reader.env)")
+    return value.set(drivername="postgresql").render_as_string(hide_password=False)
 
 
 def connect(database: str | None = None):
@@ -163,9 +163,10 @@ def scrub(text: str | None) -> str:
 
 def instance_id() -> str:
     """The instance's id: the first part of the diagnostic login's host name. Never printed."""
-    found = re.search(r"@([a-z0-9]+)[.:/]", os.environ.get("DB_URL", ""))
+    host = (url(None).split("@", 1) + [""])[1]
+    found = re.match(r"([a-z0-9]+)[.:/]", host)
     if not found:
-        sys.exit("DB_URL does not name an instance: source the stores folder's reader.env")
+        sys.exit("the reader file names no instance: source the stores folder's reader.env")
     return found.group(1)
 
 

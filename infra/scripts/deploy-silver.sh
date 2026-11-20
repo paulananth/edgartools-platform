@@ -20,8 +20,7 @@ fi
 [ -f "$env_file" ] || { echo "No environment or connection file named $name" >&2; exit 2; }
 
 set -a; . "$env_file"; set +a
-[ -n "${DB_URL:-}" ] || {
-  echo "$name holds no owner login (DB_URL)" >&2; exit 2; }
+# A file without the data database's URL stops at `silver init`, which names the setting.
 
 cd "$root"
 run() { uv run --no-sync edgar-warehouse "$@"; }

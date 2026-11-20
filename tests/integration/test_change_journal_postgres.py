@@ -113,8 +113,8 @@ def test_bounded_inspection_scopes_and_hash_rejection(databases):
 
 
 def test_migration_drift_wrong_database_and_runtime_owner_rejected(databases):
-    first = migrate(databases.ledger_admin, runtime_role="ledger_runtime")
-    assert migrate(databases.ledger_admin, runtime_role="ledger_runtime") == first
+    first = migrate(databases.ledger_admin, runtime_role="ledger_runtime", database_name="control")
+    assert migrate(databases.ledger_admin, runtime_role="ledger_runtime", database_name="control") == first
     with pytest.raises(Blocked):
         migrate(databases.admin, runtime_role="bk_runtime")
     with pytest.raises(Blocked):
@@ -128,7 +128,7 @@ def test_migration_drift_wrong_database_and_runtime_owner_rejected(databases):
         conn.exec_driver_sql('COMMENT ON SCHEMA journal IS \'{"schema.sql":"bad"}\'')
     try:
         with pytest.raises(Blocked):
-            migrate(databases.ledger_admin, runtime_role="ledger_runtime")
+            migrate(databases.ledger_admin, runtime_role="ledger_runtime", database_name="control")
     finally:
         with databases.ledger_admin.begin() as conn:
             conn.exec_driver_sql(
@@ -136,22 +136,19 @@ def test_migration_drift_wrong_database_and_runtime_owner_rejected(databases):
             )
 
 
-def test_a_hosted_database_holding_the_platforms_extension_table_still_migrates_the_journal(databases):
-    """A hosted instance puts `extension_base.workers` in every database it creates; the journal's own database
-    holds nothing else but that and the journal, and a table of any other schema still refuses."""
-    first = migrate(databases.ledger_admin, runtime_role="ledger_runtime")
+def test_the_journal_shares_the_control_database_with_the_other_stores(databases):
+    """The control database holds rules, bookkeeping and the journal, each in its own schema (and a hosted instance's
+    `extension_base.workers`): another store's tables beside the journal never refuse its migration."""
+    first = migrate(databases.ledger_admin, runtime_role="ledger_runtime", database_name="control")
     try:
         with databases.ledger_admin.begin() as conn:
             conn.exec_driver_sql("CREATE SCHEMA extension_base")
             conn.exec_driver_sql("CREATE TABLE extension_base.workers(id int)")
-        assert migrate(databases.ledger_admin, runtime_role="ledger_runtime") == first
-        with databases.ledger_admin.begin() as conn:
-            conn.exec_driver_sql("CREATE TABLE public.stray(id int)")
-        with pytest.raises(Blocked, match="only the journal"):
-            migrate(databases.ledger_admin, runtime_role="ledger_runtime")
+            conn.exec_driver_sql("CREATE TABLE public.another_store(id int)")
+        assert migrate(databases.ledger_admin, runtime_role="ledger_runtime", database_name="control") == first
     finally:
         with databases.ledger_admin.begin() as conn:
-            conn.exec_driver_sql("DROP TABLE IF EXISTS public.stray")
+            conn.exec_driver_sql("DROP TABLE IF EXISTS public.another_store")
             conn.exec_driver_sql("DROP SCHEMA IF EXISTS extension_base CASCADE")
 
 
@@ -160,7 +157,8 @@ def test_cli_inspection_and_receipt_verification(
 ):
     from edgar_warehouse.cli import main
 
-    monkeypatch.setenv("DB_URL", databases.loader)
+    for key, value in databases.loader.items():
+        monkeypatch.setenv(key, value)
     value = event()
     receipt = databases.ledger.append(value)
     path = tmp_path / "receipt.json"
@@ -193,7 +191,7 @@ def test_journal_cli_init_uses_the_owner_and_preserves_events(databases, monkeyp
     with databases.ledger_admin.connect() as conn:
         before = conn.scalar(text("SELECT count(*) FROM journal.event"))
     monkeypatch.setenv(
-        "DB_URL",
+        "CONTROL_URL",
         databases.ledger_admin.url.render_as_string(hide_password=False),
     )
     assert main(["change-journal", "init", "--runtime-role", "ledger_runtime"]) == 0
@@ -207,7 +205,7 @@ def test_journal_cli_init_uses_the_owner_and_preserves_events(databases, monkeyp
 def test_the_journal_uses_only_its_own_connection(monkeypatch):
     from edgar_warehouse.change_journal.store import get_engine
 
-    monkeypatch.delenv("DB_URL", raising=False)
+    monkeypatch.delenv("CONTROL_URL", raising=False)
     monkeypatch.setenv("CHANGE_LEDGER_DATABASE_URL", "postgresql://other/ledger")
     with pytest.raises(KeyError):
         get_engine()
@@ -274,7 +272,8 @@ def test_cli_delivery_recovery_reports_pending_without_executing_work(
 
     book, rid, _, _ = submit(databases, tmp_path, count=1)
     complete(book, rid)
-    monkeypatch.setenv("DB_URL", databases.loader)
+    for key, value in databases.loader.items():
+        monkeypatch.setenv(key, value)
     original = databases.ledger.append
 
     def unavailable(*args, **kwargs):

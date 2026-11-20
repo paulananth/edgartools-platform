@@ -146,18 +146,18 @@ def test_a_failed_command_keeps_its_message_off_the_screen(tmp_path, monkeypatch
 
 
 def test_a_key_the_file_unsets_is_removed_from_the_duty_process(tmp_path, monkeypatch):
-    write(tmp_path, worker="unset OTHER_DATABASE_URL DB_URL\nexport DB_URL='postgresql://w@h/mdm'\n")
+    write(tmp_path, worker="unset OTHER_DATABASE_URL DATA_URL\nexport DATA_URL='postgresql://w@h/data'\n")
     monkeypatch.setenv("OTHER_DATABASE_URL", "postgresql://shell@elsewhere/db")
 
     found = driving.duties(tmp_path)
 
-    assert found["worker"] == {"OTHER_DATABASE_URL": None, "DB_URL": "postgresql://w@h/mdm"}
+    assert found["worker"] == {"OTHER_DATABASE_URL": None, "DATA_URL": "postgresql://w@h/data"}
     seen = {}
     monkeypatch.setattr(driving.subprocess, "run", lambda command, env, **_: seen.update(env) or
                         type("Done", (), {"returncode": 0, "stdout": "{}", "stderr": ""})())
     commands(found, tmp_path)("worker", "bookkeeping", "status", "1")
     assert "OTHER_DATABASE_URL" not in seen
-    assert seen["DB_URL"] == "postgresql://w@h/mdm"
+    assert seen["DATA_URL"] == "postgresql://w@h/data"
 
 
 def test_a_missing_duty_file_names_the_command_that_makes_it(tmp_path):
@@ -184,7 +184,7 @@ class Book:
 def test_a_status_read_starts_no_process_and_gives_what_the_command_prints(tmp_path, monkeypatch):
     """The driver asks for status twice a step; a process and a database session each time cost a hosted store
     about twelve sessions a bundle."""
-    found = {"worker": {"DB_URL": "postgresql://invented"}}
+    found = {"worker": {"CONTROL_URL": "postgresql://invented/control"}}
     reads = commands(found, tmp_path)
     book = Book()
     monkeypatch.setattr(reads, "book", lambda: book)
@@ -200,13 +200,13 @@ def test_a_status_read_opens_the_worker_connection_once(tmp_path, monkeypatch):
     import edgar_warehouse.bookkeeping.clean.engine as engine
     monkeypatch.setattr(database, "get_engine", lambda url: opened.append(url) or object())
     monkeypatch.setattr(engine, "Bookkeeping", lambda built: Book())
-    reads = commands({"worker": {"DB_URL": "postgresql://invented"}}, tmp_path)
+    reads = commands({"worker": {"CONTROL_URL": "postgresql://invented/control"}}, tmp_path)
     reads.status("run-1"), reads.status("run-1", "read")
-    assert opened == ["postgresql://invented/bookkeeping"]
+    assert opened == ["postgresql://invented/control"]
 
 
 def test_a_failed_status_read_keeps_its_message_off_the_screen(tmp_path, monkeypatch):
-    reads = commands({"worker": {"DB_URL": "postgresql://invented"}}, tmp_path)
+    reads = commands({"worker": {"CONTROL_URL": "postgresql://invented/control"}}, tmp_path)
     monkeypatch.setattr(reads, "book", lambda: Book(error=RuntimeError("could not connect to 127.0.0.1")))
     with pytest.raises(driving.RunStopped) as caught:
         reads.status("run-1")

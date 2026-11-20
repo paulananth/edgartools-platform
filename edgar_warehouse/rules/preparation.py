@@ -29,8 +29,9 @@ def registered_store(policy_digest, environment):
     from edgar_warehouse.mastering.store import open_store
     from edgar_warehouse.mdm.connections import mdm_engine_from
 
-    value = environment.get("DB_URL")
-    if not value:
+    from edgar_warehouse.database_connections import configured
+
+    if not configured("mdm", environment):
         raise RunStopped("Automatic preparation needs the selected stores' worker MDM login")
     engine = mdm_engine_from(environment, restricted=True)
     store = None

@@ -10,7 +10,7 @@ The unit's input names the build (`input.keys.build`):
 Each build rebuilds its whole table: both tables are snapshots, and the writer
 removes any row a delivery lacks, so a delivery of some companies would remove
 the rest. The step runs only when the Change Journal names a changed file.
-DB_URL is the loader login: its silver database lands the rows and its MDM database finds the master ids
+The loader file's data database: its silver schema lands the rows and its MDM schema finds the master ids
 (both tables link to the Company masters, so it is required). The output is a receipt naming the table's
 rows and a digest of its keys; the check reads the table back and compares.
 It does not recompute the query: the builds' own tests prove the arithmetic.
@@ -79,7 +79,7 @@ def execute(envelope: dict, artifacts) -> dict:
     silver, mdm = engines()
     try:
         if mdm is None:  # both tables link to the Company masters
-            raise ValueError("silver.derive reads each company's master: set DB_URL")
+            raise ValueError("silver.derive reads each company's master: source the loader file")
         sink = DatabaseSink(silver)
         if build == "line_items":
             line_items.build(silver, sink, MdmIds(mdm))

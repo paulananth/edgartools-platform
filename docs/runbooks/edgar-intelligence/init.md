@@ -10,7 +10,7 @@ order, by skills and their own commands only. Use
 files, roles and credential handling. The commands below are the whole procedure; each prints names and checksums, never
 a connection value.
 
-The stores folder is `~/.config/edgartools/hosted/`, one folder for the store: `owner.env` (the owner login, `DB_URL`),
+The stores folder is `~/.config/edgartools/hosted/`, one folder for the store: `owner.env` (the owner login, `DATA_URL` and `CONTROL_URL`),
 `worker.env` (the runtime logins and the manifest root), `governance.env` (the registration login). `load --stores`
 takes it. A second copy of these files elsewhere goes stale, and a stale copy fails `doctor` with a login error.
 
@@ -33,8 +33,8 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    The drop also deletes the dropped stores' run files (`<manifest root>/load`, the root `worker.env` names): no store refers
    to them once Bookkeeping is dropped. Extracts (`<manifest root>/extracts`) stay, since a load reuses one by its content. A
    load deletes each bundle's files once its run is verified, so only a run that stopped keeps files, to resume.
-   A fresh instance gets its six databases (`mdm`, `rdm`, `rules`, `bookkeeping`, `change_journal`, `silver`) and their
-   restricted logins from the stores folder's own files, each login with the password its URL already holds (no login
+   A fresh instance gets its two databases (`data`: mdm, rdm and silver; `control`: rules, bookkeeping and the change journal,
+   each store a schema) and their restricted logins from the stores folder's own files, each login with the password its URL already holds (no login
    is rotated; the first confirmed run also makes the diagnostic login `ops_reader`, with `pg_monitor` and no store, and its
    `reader.env`). Each login gets CONNECT and TEMPORARY on its databases and PUBLIC gets nothing: a load stages its rows in a
    temporary table, and without that right a silver load stops with SQLSTATE 42501 in its step's message. Every URL then
@@ -57,7 +57,7 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    a connection limit per login, statement and idle-transaction timeouts, a `work_mem` ceiling for the loader and the audit classes
    for the logins that change schemas, policy or approvals. Done when it prints that every login role holds its guards. The guards belong to
    the roles, which a reset of the databases keeps, so the step is safe to run again. Read [HOSTED-LOADS.md](../../../skills/data-operations/HOSTED-LOADS.md) before a load.
-3. **Schemas** (data-platform's step, [STORES.md](../../../skills/data-platform/STORES.md)), each by the owner login, in one shell that holds `owner.env`. Each command adds its own store's database to `DB_URL`:
+3. **Schemas** (data-platform's step, [STORES.md](../../../skills/data-platform/STORES.md)), each by the owner login, in one shell that holds `owner.env`. Each command finds its store's database by its group: `DATA_URL` for mdm, rdm and silver, `CONTROL_URL` for rules, bookkeeping and the change journal:
    ```bash
    edgar-warehouse mdm init --application-role mdm_runtime
    edgar-warehouse rdm init --runtime-role rdm_runtime

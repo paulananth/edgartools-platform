@@ -53,8 +53,8 @@ print("minimal wheel installed")
 
 def test_isolated_journal_migrations_append_reconcile_and_cli_with_restricted_role(databases, tmp_path, journal_python):
     root = tmp_path
-    owner_env = {"DB_URL": databases.ledger_admin.url.render_as_string(hide_password=False)}  # the owner file
-    environment = {"DB_URL": databases.ledger.engine.url.render_as_string(hide_password=False)}  # the loader file
+    owner_env = {"CONTROL_URL": databases.ledger_admin.url.render_as_string(hide_password=False)}  # the owner file
+    environment = {"CONTROL_URL": databases.ledger.engine.url.render_as_string(hide_password=False)}  # the loader file
     # This module owns a fresh disposable fixture. Require the installed wheel
     # to initialize an empty store, rather than relying on fixture migrations.
     with databases.ledger_admin.begin() as conn:

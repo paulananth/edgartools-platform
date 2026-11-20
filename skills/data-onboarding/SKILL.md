@@ -308,7 +308,7 @@ This is the same as **init**, run again after a schema change. Rerunning it chan
 3. Check registration:
    `edgar-warehouse rules status --source <name>`.
    - An empty list `[]` means no run has used it yet.
-   - `KeyError: 'DB_URL'` means no database is configured. Log
+   - `KeyError` naming `DATA_URL` or `CONTROL_URL` means no database is configured. Log
      it and go on; it is only needed at **load**.
    - An error saying `rules.rules_used` does not exist means the Rules
      Database needs **init**.

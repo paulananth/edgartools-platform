@@ -314,7 +314,7 @@ and refuses to adopt databases owned by another workstream.
 
 Change an existing control database only when explicitly authorized, using
 `bookkeeping init --runtime-role <role>` and `rules init` under the owner
-duty (`DB_URL` of the owner file); each is the whole step, on a fresh store and again when a
+duty (`CONTROL_URL` of the owner file); each is the whole step, on a fresh store and again when a
 later schema file arrives. `change-journal init`
 remains a separate owner-authorized operations. They do not populate business or
 source data. Resource checkpoint and request authorization migrations retain

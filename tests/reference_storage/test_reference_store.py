@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 
+from tests.support.duty import duty_url
 from edgar_warehouse.control_contract import Blocked
 from edgar_warehouse.rdm.database import migrate
 from edgar_warehouse.rdm.storage import scope
@@ -16,7 +17,7 @@ from edgar_warehouse.rdm.store import RDM, read_published
 
 @pytest.fixture(scope="module")
 def reference(database_factory):
-    with database_factory() as (owner, runtime, role):
+    with database_factory(store="rdm") as (owner, runtime, role):
         arguments = {"runtime_role": role, "database_name": owner.url.database}
         with pytest.raises(Blocked, match="not initialized"):
             migrate(owner, existing_only=True, **arguments)
@@ -239,7 +240,7 @@ def test_normal_cli_and_read_only_context_use_the_selected_connection(reference,
     name = draft(store)
     approve(store, name)
     store.publish(name, "1", out=tmp_path)
-    monkeypatch.setenv("DB_URL", store.engine.url.render_as_string(hide_password=False))
+    monkeypatch.setenv("DATA_URL", duty_url(store.engine, "rdm"))
     assert cli._handle(Namespace(rdm_command="list")) == 0
     listed = json.loads(capsys.readouterr().out)
     assert name in {row["code_set"] for row in listed}

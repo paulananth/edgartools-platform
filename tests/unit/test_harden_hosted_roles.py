@@ -45,8 +45,7 @@ def test_the_repository_guards_name_every_audit_control():
 def test_snowflakes_mirror_login_gets_connect_on_each_mirrored_database_and_nothing_else():
     """PUBLIC holds no CONNECT on the stores, so a managed mirror fails with "permission denied for database" until its system
     login holds it."""
-    acls = {"mdm": ["owner=CTc/owner", "mdm_runtime=Tc/owner"], "rdm": ["owner=CTc/owner", "snowflake_system=c/owner"],
-            "silver": None, "bookkeeping": ["owner=CTc/owner"]}
+    acls = {"data": ["owner=CTc/owner", "edgar_loader=Tc/owner"], "control": ["owner=CTc/owner"]}
     assert harden.mirror_access(acls) == [
-        ("snowflake_system", "connect on mdm", 'GRANT CONNECT ON DATABASE "mdm" TO "snowflake_system"'),
-        ("snowflake_system", "connect on silver", 'GRANT CONNECT ON DATABASE "silver" TO "snowflake_system"')]
+        ("snowflake_system", "connect on data", 'GRANT CONNECT ON DATABASE "data" TO "snowflake_system"')]
+    assert harden.mirror_access({"data": ["snowflake_system=c/owner"], "control": None}) == []  # held already; control is never mirrored

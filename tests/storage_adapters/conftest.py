@@ -138,11 +138,12 @@ def server_connection():
 
 
 @contextmanager
-def _isolated_database(server_connection):
+def _isolated_database(server_connection, store=None):
     selected, url = server_connection.engine, server_connection.url
     owner = api.connect(url, selected)
     suffix = uuid4().hex[:12]
-    name, role = "adapter_proof_" + suffix, "adapter_rt_" + suffix
+    # On MySQL a store keeps its own database, `<URL database>_<store>`: a test of one store names it (tests/support/duty.py).
+    name, role = "adapter_proof_" + suffix + ("_" + store if store else ""), "adapter_rt_" + suffix
     password = "Aa7!" + secrets.token_urlsafe(24)
     quote = owner.dialect.identifier_preparer.quote
     role_sql = quote(role)
@@ -204,8 +205,8 @@ def _isolated_database(server_connection):
 
 @contextmanager
 def _store_databases(owner, *stores):
-    """One database per store, each named for its store behind a unique prefix (what `DB_PREFIX` selects), owned as the owner
-    login owns the factory's. Yields the prefix and an admin engine per store; every database is dropped on exit."""
+    """Databases named behind a unique prefix (`control`, `data`), owned as the owner login owns the factory's. Yields the
+    prefix and an admin engine per database; every database is dropped on exit."""
     prefix = "t" + uuid4().hex[:8] + "_"
     quote = owner.dialect.identifier_preparer.quote
     made, engines = [], {}
@@ -233,7 +234,7 @@ def store_databases():
 @pytest.fixture(scope="session")
 def database_factory(server_connection):
     """Create an isolated store with its own restricted principal and cleanup."""
-    return lambda: _isolated_database(server_connection)
+    return lambda store=None: _isolated_database(server_connection, store)
 
 
 @pytest.fixture(scope="session")

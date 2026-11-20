@@ -116,6 +116,13 @@ Two permissions a mirror needs beyond the sub-skill's grant sequence:
 - Snowflake's system login `snowflake_system` must hold CONNECT on each mirrored database ("permission denied for
   database"): the stores revoke it from PUBLIC, and `infra/scripts/harden-hosted-roles.py` grants it.
 
+**Plan the mirrors from the exposure list, never table by table.** Group the exposed tables by the database that holds them:
+each database is one mirror, and each schema keeps its name in the target. Read the instance's publication limit and the
+publications already held; when the databases to mirror outnumber the free publications, the answer is the store layout
+(every exposed store in the data database, [Connection URLs](CONNECTIONS.md)), not a support request or a dropped mirror. The
+data database gives one mirror, `DB_EDGARTOOLS_MIRROR`, with schemas `MDM`, `RDM` and `SILVER`; a plan with more than one target
+database for the exposed stores is a defect.
+
 An instance carries at most two mirrors: each mirror needs one CDC publication and `snowflake_cdc.max_publications`
 is 2, which `POSTGRES_SETTINGS` does not accept ("Unrecognized Postgres setting"). A third mirror needs Snowflake support
 to raise it; until then, choose the two the readers need first. Read the limit and the publications held before a create

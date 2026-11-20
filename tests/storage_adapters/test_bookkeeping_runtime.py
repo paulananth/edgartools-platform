@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import create_engine, text
 
+from tests.support.duty import duty_url
 from edgar_warehouse.bookkeeping.clean.database import migrate, grant_profile
 from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
@@ -20,7 +21,7 @@ pytestmark = pytest.mark.skipif(os.environ.get("SKILL_ADAPTER_TEST_ENGINE") == "
 @pytest.fixture
 def control(database_factory):
     with database_factory() as (_, verifier_login, verifier_role):
-        with database_factory() as (owner, worker, worker_role):
+        with database_factory(store="bookkeeping") as (owner, worker, worker_role):
             verifier = create_engine(verifier_login.url.set(database=owner.url.database), hide_parameters=True)
             try:
                 checksums = migrate(owner, runtime_role=worker_role, database_name=owner.url.database)
@@ -108,7 +109,7 @@ def test_normal_cli_uses_configured_database_and_default_driver(control, monkeyp
             assert conn.scalar(text("SELECT 1")) == 1
     finally:
         engine.dispose()
-    monkeypatch.setenv("DB_URL", owner.url.render_as_string(hide_password=False))
+    monkeypatch.setenv("CONTROL_URL", duty_url(owner, "bookkeeping"))
     assert main(["bookkeeping", "init", "--runtime-role", role, "--database-name", owner.url.database]) == 0
     assert json.loads(capsys.readouterr().out)
 

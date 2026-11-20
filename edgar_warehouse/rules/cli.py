@@ -38,7 +38,7 @@ def _handle(args):
         # The store owner's connection: the runtime login cannot add to MDM's registry.
         from edgar_warehouse.database_connections import owner_url
 
-        owner = get_engine(owner_url("mdm"))  # the governance file's DB_URL: the registration login reads MDM's registry
+        owner = get_engine(owner_url("mdm"))  # the governance file: the registration login reads MDM's registry
         try:
             with owner.begin() as conn:
                 result = frozen.register(conn, args.source or None, Path(args.root))
@@ -372,7 +372,7 @@ def _catalog(args):
                   "plan": {"status": "ready", "counts": counts},
                   "publish": {"status": "not_run"}, "readback": {"status": "not_run"},
                   "cause": "Bookkeeping could not be read",
-                  "next_action": "Check the DB_URL login's access to Bookkeeping, then retry with --bookkeeping-run."}
+                  "next_action": "Check the loader file's access to Bookkeeping, then retry with --bookkeeping-run."}
         report["summary"] = "FAILED: cannot read Bookkeeping quality evidence. Check Bookkeeping access and retry."
         return _catalog_output(report)
 

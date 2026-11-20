@@ -53,7 +53,7 @@ def test_existing_verified_reader_is_reused_without_owner_connection(
         "role": "reader",
     }
     actual, report = readers.provision(
-        source, {"DB_URL": url}, path, exposure=EXPOSURE_FILE
+        source, {"DATA_URL": url}, path, exposure=EXPOSURE_FILE
     )
     assert actual == url
     assert report == {"writable_relations": 0}
@@ -148,7 +148,7 @@ def test_saved_reader_cannot_silently_select_a_different_source(readers, tmp_pat
         readers.provision(
             source,
             {
-                "DB_URL": "postgresql://owner:invented@localhost/new?sslmode=require"
+                "DATA_URL": "postgresql://owner:invented@localhost/new?sslmode=require"
             },
             path,
             exposure=EXPOSURE_FILE,
@@ -179,7 +179,7 @@ def test_a_reader_is_granted_select_on_each_exposed_table_and_nothing_wider(read
     monkeypatch.setattr(readers.psycopg, "connect", lambda *a, **k: Connection())
     monkeypatch.setattr(readers, "verify", lambda value, expected=None: {"expected": expected})
     source = {"variable": "RDM_DATABASE_URL", "store": "rdm", "role": "discovery_reader_rdm"}
-    url, report = readers.provision(source, {"DB_URL": "postgresql://owner:x@h:5432"}, tmp_path / "reader.env", exposure=EXPOSURE_FILE)
+    url, report = readers.provision(source, {"DATA_URL": "postgresql://owner:x@h:5432/data"}, tmp_path / "reader.env", exposure=EXPOSURE_FILE)
     joined = "\n".join(str(s) for s in statements)
     assert report == {"expected": ["rdm.published_code"]}
     assert 'GRANT SELECT ON TABLE "rdm"."published_code"' in joined
@@ -221,14 +221,14 @@ def test_one_reader_login_serves_every_store_and_is_made_once(readers, monkeypat
     monkeypatch.setattr(readers.psycopg, "connect", lambda *a, **k: Connection())
     monkeypatch.setattr(readers, "verify", lambda value, expected=None: {"expected": expected})
     reader = tmp_path / "reader.env"
-    owner = {"DB_URL": "postgresql://owner:x@h:5432"}
+    owner = {"DATA_URL": "postgresql://owner:x@h:5432/data"}
     first = {"variable": "MDM_DATABASE_URL", "store": "mdm", "role": "discovery_reader"}
     second = {"variable": "RDM_DATABASE_URL", "store": "rdm", "role": "discovery_reader"}
     url1, _ = readers.provision(first, owner, reader, exposure=EXPOSURE_FILE)
     url2, _ = readers.provision(second, owner, reader, exposure=EXPOSURE_FILE)
     assert sum(s.startswith("CREATE ROLE") for s in statements) == 1  # one login
     a, b = readers.urlsplit(url1), readers.urlsplit(url2)
-    assert (a.username, a.password) == (b.username, b.password) and (a.path, b.path) == ("/mdm", "/rdm")  # one credential, each store's database
+    assert (a.username, a.password) == (b.username, b.password) and (a.path, b.path) == ("/data", "/data")  # one credential; mdm and rdm share the data database
     joined = "\n".join(statements)
     assert 'GRANT SELECT ON TABLE "rdm"."published_code"' in joined and 'GRANT SELECT ON TABLE "public"."mastering_master"' in joined
     assert "ALL TABLES" not in joined
@@ -255,4 +255,4 @@ def test_a_login_that_exists_with_no_saved_credentials_is_still_refused(readers,
     monkeypatch.setattr(readers.psycopg, "connect", lambda *a, **k: Connection())
     source = {"variable": "RDM_DATABASE_URL", "store": "rdm", "role": "discovery_reader"}
     with pytest.raises(ValueError, match="without saved credentials"):
-        readers.provision(source, {"DB_URL": "postgresql://owner:x@h:5432"}, tmp_path / "reader.env", exposure=EXPOSURE_FILE)
+        readers.provision(source, {"DATA_URL": "postgresql://owner:x@h:5432/data"}, tmp_path / "reader.env", exposure=EXPOSURE_FILE)

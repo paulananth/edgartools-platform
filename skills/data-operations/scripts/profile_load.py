@@ -2,14 +2,14 @@
 """How far is a load, and where did its time go? Read-only views, for any source, with no knowledge of the source.
 
 progress  Units per step and state of the running runs (or one run), and how long they have run
-          (`DB_URL` of worker.env).
+          (the worker.env sourced).
 failures  Units that hold an error, grouped by step, state and error shape, with counts
-          (`DB_URL` of worker.env).
+          (the worker.env sourced).
 quality   The data quality counts each merge run retained: records, records set aside by a failed check,
-          open reviews and the fields that have empty values (`DB_URL` of worker.env).
-steps   Time per step of one Bookkeeping run, from its journal (`DB_URL` of worker.env).
+          open reviews and the fields that have empty values (the worker.env sourced).
+steps   Time per step of one Bookkeeping run, from its journal (the worker.env sourced).
 sample  What the database was running, once a second: statements ranked by seconds seen, so the
-        dominating statement shows (`DB_URL` of reader.env, a login that may read pg_stat_activity).
+        dominating statement shows (the reader.env sourced, a login that may read pg_stat_activity).
 
 Counts, times and normalized statement shapes only: no value from the data is printed.
 """
@@ -178,11 +178,12 @@ def sample(url: str, seconds: int, top: int) -> None:
         print(f"{count:>5} s  {database:<14} {statement}")
 
 
-def in_database(database: str) -> str:
-    """The sourced duty file's `DB_URL` with a database: it names none."""
-    from urllib.parse import urlsplit, urlunsplit
+def in_database(store: str) -> str:
+    """The sourced duty file's database for a store (`postgres`: the instance), with the plain driver."""
+    from edgar_warehouse.database_connections import instance_url, store_url
 
-    return urlunsplit(urlsplit(os.environ["DB_URL"])._replace(path="/" + database))
+    url = instance_url() if store == "postgres" else store_url(store)
+    return url.set(drivername="postgresql").render_as_string(hide_password=False)
 
 
 def main() -> None:

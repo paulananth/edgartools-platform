@@ -1,6 +1,6 @@
 ---
 name: change-journal
-description: Initialize or migrate the independent Change Journal, plan or validate journal event delivery, inspect receipts and coordinate owner-controlled delivery recovery, or when change-journal init refuses with Journal database must hold only the journal. Enforce a journal-only dependency boundary; loaders, source interpretation, Rules approval, work execution and producer outboxes remain outside the journal.
+description: Initialize or migrate the independent Change Journal, plan or validate journal event delivery, inspect receipts and coordinate owner-controlled delivery recovery. Enforce a journal-only dependency boundary; loaders, source interpretation, Rules approval, work execution and producer outboxes remain outside the journal.
 ---
 
 # Change Journal
@@ -87,12 +87,10 @@ must target that exact database. Driver setup is in the central connection secti
 
 Select the command matching store state. Read back migration checksums, the
 engine's Journal-owned event storage/readback objects, restricted grants and event count.
-Checksum drift, the wrong database, or a leftover business table refuse.
-A hosted instance ships its own extension schemas in every empty database
-(`extension_base`, `extension_updater`, with `extension_base.workers`). Those
-schemas are the instance's: `change-journal init` proceeds and leaves them.
-Occupancy is a table outside `journal` and those schemas; that case refuses with
-"Journal database must hold only the journal."
+Checksum drift, the wrong database, or an untracked `journal` schema refuse.
+The journal shares the control database with Rules and Bookkeeping, each in its
+own schema ([CONNECTIONS](../data-platform/CONNECTIONS.md)); their tables, and a
+hosted instance's own extension schemas, sit beside it and never refuse it.
 Import no legacy events, checkpoints or pending delivery; preserve old archives.
 An initialized store whose event table disappeared requires restoration;
 rerunning migration must refuse rather than create apparently fresh history.

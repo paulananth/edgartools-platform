@@ -135,8 +135,8 @@ def test_the_audit_runs_with_the_readers_login_so_it_can_read_the_database(monke
         return type("Done", (), {"stdout": json.dumps([{"id": "CST.postgres", "result": "FAIL"}, {"id": "IND.postgres", "result": "PASS"}])})()
 
     monkeypatch.setattr(readiness.subprocess, "run", run)
-    assert readiness.audit_failures({"DB_URL": "postgresql://invented@h"}) == ["CST.postgres"]
-    assert seen["DB_URL"] == "postgresql://invented@h"
+    assert readiness.audit_failures({"DATA_URL": "postgresql://invented@h/data"}) == ["CST.postgres"]
+    assert seen["DATA_URL"] == "postgresql://invented@h/data"
 
 
 @pytest.mark.parametrize("change", [

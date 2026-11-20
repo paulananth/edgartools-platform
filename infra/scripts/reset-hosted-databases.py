@@ -5,7 +5,7 @@
     python infra/scripts/reset-hosted-databases.py            # lists what it would drop: sizes, no values
     python infra/scripts/reset-hosted-databases.py --words "<the operator's exact words>"  # drops and creates them again
 
-Uses the owner login's connection (DB_URL of owner.env, the instance's administrator), which must be able to
+Uses the owner login's connection (owner.env, the instance's administrator), which must be able to
 create databases. The roles stay (they belong to the instance), so no password changes and no login is rotated.
 Each database's owner and CONNECT list are read before it is dropped and put back after, so the runtime, registration
 and any read-only logins reach it as before. Refuses while another session is connected to one of them.
@@ -33,7 +33,7 @@ from zoneinfo import ZoneInfo
 import sqlalchemy as sa
 from sqlalchemy.engine import make_url
 
-DATABASES = ("mdm", "rdm", "rules", "bookkeeping", "change_journal", "silver")
+DATABASES = ("data", "control")  # the data database (mdm, rdm, silver) and the control database (rules, bookkeeping, change_journal)
 PRIVILEGES = {"C": "CREATE", "T": "TEMPORARY", "c": "CONNECT"}
 
 
@@ -86,11 +86,14 @@ def main() -> int:
     if args.words is not None and not args.words.strip():
         print("--words must hold the operator's exact approval.", file=sys.stderr)
         return 2
-    url = os.environ.get("DB_URL")
-    if not url:
-        print("Source the stores folder's owner.env first (its DB_URL is the owner login).", file=sys.stderr)
+    from edgar_warehouse.database_connections import instance_url
+
+    try:
+        url = instance_url()
+    except KeyError as missing:
+        print(f"{missing.args[0]} (source the stores folder's owner.env first).", file=sys.stderr)
         return 2
-    engine = sa.create_engine(make_url(url).set(database="postgres"), isolation_level="AUTOCOMMIT")
+    engine = sa.create_engine(url, isolation_level="AUTOCOMMIT")
     quote = engine.dialect.identifier_preparer.quote
     try:
         with engine.connect() as conn:

@@ -154,13 +154,13 @@ def test_a_code_set_id_never_takes_a_kind_name(published):
 
 def test_the_command_reads_a_code_set_from_rdm_and_never_prints_the_address(published, monkeypatch, capsys):
     engine, *_ = published
-    monkeypatch.setenv("DB_URL", engine.url.render_as_string(hide_password=False))
+    monkeypatch.setenv("DATA_URL", engine.url.render_as_string(hide_password=False))
     assert context._handle(args("sec-place-codes", "DE")) == 0
     out = capsys.readouterr().out
     assert json.loads(out)["name"] == "DELAWARE" and "test@" not in out
     assert context._handle(args("no-such-set", "X")) == 2
     assert json.loads(capsys.readouterr().out)["try"] == "edgar-warehouse rdm list"
-    monkeypatch.delenv("DB_URL")
+    monkeypatch.delenv("DATA_URL")
     assert context._handle(args("compnay", "X")) == 2
     error = json.loads(capsys.readouterr().out)["error"]
-    assert "is not a master kind (branch, company" in error and "DB_URL is not set" in error
+    assert "is not a master kind (branch, company" in error and "DATA_URL is not set" in error

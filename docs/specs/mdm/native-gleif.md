@@ -90,7 +90,7 @@ Explicit governed decisions remain the existing Merge Stage interface.
 
 Set `MDM_SOURCE_ARTIFACT_ROOT` to the approved local directory, or an S3 prefix for
 AWS operation. Acquisition references outside that root are refused. Existing
-`DB_URL` (the mdm, bookkeeping and change-ledger databases) and
+`DATA_URL` and `CONTROL_URL` (the data database for mdm, the control database for bookkeeping and the change journal) and
 runtime role settings apply. The acquisition reader uses processor read privileges.
 
 ```bash

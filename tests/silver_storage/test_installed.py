@@ -3,6 +3,7 @@ import json
 
 import pytest
 
+from tests.support.duty import duty_url
 from tests.engine.test_data_skill_bundle_postgres import installed, _run  # noqa: F401
 from tests.unit.test_silver_writer import a_spec
 
@@ -10,7 +11,7 @@ from tests.unit.test_silver_writer import a_spec
 @pytest.mark.parametrize("mode", ["append", "upsert", "snapshot"])
 def test_installed_normal_silver_caller(installed, database_factory, mode):
     python, root = installed
-    with database_factory() as (owner, runtime, role):
+    with database_factory(store="silver") as (owner, runtime, role):
         config = a_spec(table="invented_installed_rows", links=[], load_mode=mode)
         config["columns"][2]["type"] = "DECIMAL(30,8)"
         config["columns"].append({"name": "duration", "type": "INTERVAL", "nullable": True})
@@ -20,8 +21,8 @@ def test_installed_normal_silver_caller(installed, database_factory, mode):
         rows.write_text('{"visit_id":1,"member_id":"invented","amount":12345678901234567890.12345678,'
                         '"visited_on":"2026-10-01","duration":"2 days 01:02:03.123456",'
                         '"tags":{"fraction":0.123456789012345678901234567890123,"tiny":1e-600}}\n')
-        owner_env = {"DB_URL": owner.url.render_as_string(hide_password=False)}
-        environment = {"DB_URL": runtime.url.render_as_string(hide_password=False)}
+        owner_env = {"DATA_URL": duty_url(owner, "silver")}
+        environment = {"DATA_URL": duty_url(runtime, "silver")}
         program = '''
 import json, sys
 from edgar_warehouse.cli import main

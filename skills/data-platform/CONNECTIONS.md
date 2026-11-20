@@ -56,11 +56,17 @@ environment's ownership checks; do not adopt another workstream's databases.
 Missing store configuration never falls back to a legacy store, another
 store's URL, or a guessed database name.
 
-A store is one database with a fixed name (`mdm`, `rdm`, `rules`, `bookkeeping`, `change_journal`, `silver`). A duty is one
-login and one file in the stores folder, and every file holds one variable, `DB_URL`, with no database: the file you source is the
-duty, and each store command adds its own store's database. A `DB_URL` that already names a database keeps it (one database for one
-store, as a test uses); `DB_PREFIX` (optional) puts a prefix on every store's name for an isolated copy. Nothing in the product is
-called a migration: a store has one `init`, which makes the schema or brings it to current.
+Six stores live in two databases, each store in its own schema: the **data database** holds `mdm`, `rdm` and `silver` (what
+consumers read and one mirror carries), the **control database** holds `rules`, `bookkeeping` and `change_journal` (what runs
+the platform). A duty is one login and one file in the stores folder, and every file holds two variables and no more: `DATA_URL`
+and `CONTROL_URL`, each naming its database (operator: "mdm, rdm, silver is data_url, others are control_db, control_url do
+not have too many urls"). Each store takes the URL of its group in one place (`edgar_warehouse.database_connections.store_url`);
+a missing URL or one that names no database is refused by name, never guessed. A script that needs the instance and no store
+(monitoring, role guards, the reset, the audit) uses `DATA_URL`. Nothing in the product is called a migration: a store has one
+`init`, which makes its schema or brings it to current.
+
+Why two: a managed mirror reads one database, and the instance allows two CDC publications, so the stores consumers read share
+one database and one mirror; the control stores stay apart, so their churn and their grants never reach a consumer.
 
 | Duty | File | Login | Used by |
 |---|---|---|---|

@@ -36,6 +36,8 @@ from edgar_warehouse.control_contract import digest
 from edgar_warehouse.mdm import raw_capture
 
 from . import files
+from edgar_warehouse.database_connections import configured
+
 from .driving import Commands, RunStopped, duties, manifest_root, run_steps
 from .preparation import prepare_load
 
@@ -114,7 +116,7 @@ class Loader:
         env = self.env = duties(stores)
         lands = [step["name"] for step in self.reading["bookkeeping"]["targets"][target]["steps"]
                  if step.get("operation") in ("silver.land", "silver.derive")]
-        bare = [duty for duty in ("worker",) if lands and not env[duty].get("DB_URL")]
+        bare = [duty for duty in ("worker",) if lands and not configured("silver", env[duty])]
         if bare:
             raise RunStopped(f"{source} {target} lands silver (steps {', '.join(lands)}) but the {' and '.join(bare)} "
                              f"env file has no silver login: start the stores with infra/scripts/local-test-stores.py up <name>")
@@ -270,7 +272,7 @@ class Loader:
         steps = self.reading["bookkeeping"]["targets"][self.target]["steps"]
         if not any(step.get("operation") == "mastering.merge" for step in steps):
             return None
-        if not self.env["worker"].get("DB_URL"):
+        if not configured("silver", self.env["worker"]):
             self.say("Links are not built: the stores folder has no silver login")
             return None
         self.created([files.ROOT / "silver" / "silver-relationship.yaml"])

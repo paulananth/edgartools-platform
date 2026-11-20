@@ -41,7 +41,7 @@ class Databases:
     rules: Rules
     ledger: ChangeJournal
     ledger_admin: object
-    loader: str  # the DB_URL of one login that holds every store's runtime privileges, with no database
+    loader: dict  # a duty file: the data and the control URL of one login that holds every store's runtime privileges
 
 
 @pytest.fixture(scope="module")
@@ -63,26 +63,27 @@ def databases():
                 conn.exec_driver_sql("CREATE ROLE bk_control NOLOGIN")
                 conn.exec_driver_sql("GRANT bk_control TO bk_runtime")
                 conn.exec_driver_sql("GRANT bk_runtime, rules_agent, ledger_runtime, clean_application TO loader")
-                for db in ("bookkeeping", "rules", "change_journal", "mdm"):
+                # The two databases of a store (skills/data-platform/CONNECTIONS.md): bookkeeping, rules and the journal share
+                # control, each in its own schema; mdm, rdm and silver share data.
+                for db in ("control", "data"):
                     conn.exec_driver_sql(f"CREATE DATABASE {db}")
-            admin = engine("bookkeeping")
-            runtime = engine("bookkeeping", "bk_runtime")
-            rules_admin = engine("rules")
-            ledger_admin = engine("change_journal")
+            admin = engine("control")
+            runtime = engine("control", "bk_runtime")
+            rules_admin = engine("control")
+            ledger_admin = engine("control")
             with pytest.raises(Blocked, match="not initialized"):
-                migrate(admin, runtime_role="bk_control", existing_only=True)
+                migrate(admin, runtime_role="bk_control", existing_only=True, database_name="control")
             with pytest.raises(Blocked, match="not initialized"):
-                migrate_journal(ledger_admin, runtime_role="ledger_runtime", existing_only=True)
-            migrate(admin, runtime_role="bk_control")
+                migrate_journal(ledger_admin, runtime_role="ledger_runtime", existing_only=True, database_name="control")
+            migrate(admin, runtime_role="bk_control", database_name="control")
             for profile in PROFILES:
                 grant_profile(admin, profile=profile, worker="bk_runtime")
             migrate_rules(rules_admin, agent_role="rules_agent")
-            migrate_journal(ledger_admin, runtime_role="ledger_runtime")
-            from sqlalchemy.engine import make_url
-
-            loader = make_url(server.url("postgres", "loader", driver="postgresql"))._replace(database=None).render_as_string(hide_password=False)
-            yield Databases(admin, runtime, Rules(engine("rules", "rules_agent")),
-                            ChangeJournal(engine("change_journal", "ledger_runtime")), ledger_admin, loader)
+            migrate_journal(ledger_admin, runtime_role="ledger_runtime", database_name="control")
+            loader = {variable: server.url(database, "loader", driver="postgresql")
+                      for variable, database in (("DATA_URL", "data"), ("CONTROL_URL", "control"))}
+            yield Databases(admin, runtime, Rules(engine("control", "rules_agent")),
+                            ChangeJournal(engine("control", "ledger_runtime")), ledger_admin, loader)
         finally:
             for value in engines:
                 value.dispose()
@@ -136,7 +137,7 @@ def test_exact_five_tables_restricted_runtime_and_migrations(databases):
         tables = set(conn.scalars(text("SELECT tablename FROM pg_tables WHERE schemaname='bookkeeping'")))
         assert tables == {"pipeline_run", "work_item", "lease", "checkpoint", "journal_outbox"}
         assert str(conn.scalar(text("SHOW server_version"))).startswith("16.")
-    migrate(databases.admin, runtime_role="bk_control")
+    migrate(databases.admin, runtime_role="bk_control", database_name="control")
     for sql in ("UPDATE bookkeeping.lease SET token=0", "DELETE FROM bookkeeping.pipeline_run",
                 "CREATE TABLE bookkeeping.bad(x text)", "SELECT bookkeeping.compact(30)"):
         with pytest.raises(DBAPIError), databases.runtime.begin() as conn:
@@ -156,7 +157,7 @@ def test_bookkeeping_cli_init_and_migrate_use_owner_and_preserve_empty_control(m
                 conn.exec_driver_sql("CREATE DATABASE bookkeeping")
                 conn.exec_driver_sql("CREATE ROLE bk_control NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE")
             owner = create_engine(server.url("bookkeeping", driver="postgresql"))
-            monkeypatch.setenv("DB_URL", owner.url.render_as_string(hide_password=False))
+            monkeypatch.setenv("CONTROL_URL", owner.url.render_as_string(hide_password=False))
             assert main(["bookkeeping", "init", "--runtime-role", "bk_control"]) == 0
             assert "schema.sql" in capsys.readouterr().out
             assert main(["bookkeeping", "init", "--runtime-role", "bk_control"]) == 0
@@ -846,7 +847,7 @@ def test_two_workers_in_their_own_processes_complete_a_cli_submitted_run(databas
                "input": {"from": {"step": "s0", "key": str(n)}}, "output": (tmp_path / f"count-{n}").as_uri(),
                "cursor": {"offset": n}} for n in range(2)]
     inputs = book.artifacts.put(tmp_path.as_uri() + "/manifests", {"version": 2, "steps": {"s0": copies, "s1": counts}})
-    environment = {"DB_URL": databases.loader,
+    environment = {**databases.loader,
                    "BOOKKEEPING_MANIFEST_ROOT": (tmp_path / "cli-manifests").as_uri()}
     for key, value in environment.items():
         monkeypatch.setenv(key, value)
@@ -898,46 +899,6 @@ def test_source_configs_use_same_control_contract():
     for name in ("sec.company",):
         selected = validate(source(name), "capture")
         assert selected["lease_seconds"] == 120 and selected["heartbeat_seconds"] == 30
-
-
-def test_provisioning_uses_nologin_owners_and_empty_stores(monkeypatch):
-    import runpy
-    with pg16.server() as server:
-        _provision(server, monkeypatch, runpy)
-
-
-def _provision(server, monkeypatch, runpy):
-    engines = []
-    try:
-        url = server.url(driver="postgresql")
-        admin = create_engine(url, connect_args={"connect_timeout": 3})
-        engines.append(admin)
-        monkeypatch.setenv("BOOKKEEPING_RUNTIME_PASSWORD", "test")
-        monkeypatch.setenv("RULES_AGENT_PASSWORD", "test")
-        script = Path(__file__).parents[2] / "infra/scripts/provision-clean-bookkeeping.py"
-        provision = runpy.run_path(str(script))["provision"]
-        monkeypatch.setenv("CHANGE_JOURNAL_RUNTIME_PASSWORD", "test")
-        result = provision(url, rules=True, journal=True)
-        assert set(result) == {"bookkeeping", "rules", "change_journal"}
-        assert provision(url, rules=True, journal=True) == result
-        for database, role, table in (("bookkeeping", "bookkeeping_runtime", "bookkeeping.pipeline_run"),
-                                      ("rules", "rules_agent", "rules.rules_used")):
-            runtime = create_engine(server.url(database, role, driver="postgresql"))
-            engines.append(runtime)
-            with runtime.connect() as conn:
-                assert conn.scalar(text(f"SELECT count(*) FROM {table}")) == 0
-            with pytest.raises(DBAPIError), runtime.begin() as conn:
-                conn.execute(text(f"DELETE FROM {table}"))
-        journal_admin = create_engine(server.url("change_journal", driver="postgresql"))
-        engines.append(journal_admin)
-        with journal_admin.connect() as conn:
-            assert conn.scalar(text("SELECT count(*) FROM journal.event")) == 0
-            assert conn.scalars(text("SELECT schemaname||'.'||tablename FROM pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema')")).all() == ["journal.event"]
-        with admin.connect() as conn:
-            assert conn.scalar(text("SELECT count(*) FROM pg_roles WHERE rolname IN ('rules_owner','bookkeeping_owner','change_journal_owner') AND NOT rolcanlogin AND NOT rolsuper")) == 3
-    finally:
-        for engine in engines:
-            engine.dispose()
 
 
 def test_a_claim_of_one_passes_a_unit_another_attempt_holds(databases, tmp_path):
@@ -1002,7 +963,7 @@ def test_rules_run_submits_a_source_with_acquisition_over_captured_files(databas
         {"keys": {"id": "0", "destination": (tmp_path / "out-0").as_uri()},
          "input": book.artifacts.put(tmp_path.as_uri() + "/inputs", {"row": 0}),
          "output": (tmp_path / "out-0").as_uri(), "cursor": {"offset": 0}}]})
-    for key, value in {"DB_URL": databases.loader,
+    for key, value in {**databases.loader,
                        "BOOKKEEPING_MANIFEST_ROOT": (tmp_path / "cli-manifests").as_uri()}.items():
         monkeypatch.setenv(key, value)
     from edgar_warehouse.rules import files

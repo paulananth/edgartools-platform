@@ -14,16 +14,18 @@ PLATFORM_LOGINS = PLATFORM_SUPERUSERS | {"application"}
 
 
 def configured(env) -> bool:
-    return bool(env.get("DB_URL"))
+    from edgar_warehouse.database_connections import configured as named
+
+    return named("mdm", env)
 
 
 def collect(env, as_admin: bool = False) -> dict:
     import psycopg2
 
     try:
-        from urllib.parse import urlsplit, urlunsplit
+        from edgar_warehouse.database_connections import instance_url
 
-        url = urlunsplit(urlsplit(re.sub(r"^postgresql\+\w+", "postgresql", env["DB_URL"]))._replace(path="/postgres"))
+        url = instance_url(env).set(drivername="postgresql").render_as_string(hide_password=False)
         conn = psycopg2.connect(url, connect_timeout=10)
     except psycopg2.Error:
         sys.exit("cannot connect as the diagnostic login")

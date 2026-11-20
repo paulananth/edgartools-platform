@@ -15,6 +15,8 @@ import shlex
 import subprocess
 import sys
 
+from edgar_warehouse.database_connections import url_variable
+
 
 def read_environment(path):
     values={}
@@ -75,10 +77,10 @@ def main(argv=None):
             # Save before provisioning, so interruption cannot strand a created login.
             private_write(credentials,"JOURNAL_RUNTIME_PASSWORD="+shlex.quote(password)+"\n"+
                 "CHANGE_JOURNAL_DATABASE_URL="+shlex.quote(runtime_url)+"\n"+
-                "DB_URL="+shlex.quote(owner_values["CHANGE_JOURNAL_DATABASE_URL"])+"\n")
+                url_variable("change_journal")+"="+shlex.quote(owner_values["CHANGE_JOURNAL_DATABASE_URL"])+"\n")
         result=storage.provision_runtime(owner,runtime_role=role,password=password)
         environment={**os.environ,"CHANGE_JOURNAL_DATABASE_URL":runtime_url,
-            "DB_URL":owner_values["CHANGE_JOURNAL_DATABASE_URL"]}
+            url_variable("change_journal"):owner_values["CHANGE_JOURNAL_DATABASE_URL"]}
         for mode in ("init",):
             done=subprocess.run([str(args.journal_python),"-I","-m","edgar_warehouse.change_journal.cli",mode,"--runtime-role",role],
                 env=environment,capture_output=True,text=True,timeout=60,cwd=args.evidence_dir)

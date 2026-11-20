@@ -4,13 +4,13 @@ from edgar_warehouse.mdm import changed_files
 
 
 def test_the_journal_is_opened_once_for_a_database(monkeypatch, tmp_path):
-    monkeypatch.setenv("DB_URL", f"sqlite:///{tmp_path}/one.db")
+    monkeypatch.setenv("CONTROL_URL", f"sqlite:///{tmp_path}/one.db")
     first = changed_files.journal()
     assert changed_files.journal() is first
 
 
 def test_another_database_is_another_journal(monkeypatch, tmp_path):
-    monkeypatch.setenv("DB_URL", f"sqlite:///{tmp_path}/one.db")
+    monkeypatch.setenv("CONTROL_URL", f"sqlite:///{tmp_path}/one.db")
     first = changed_files.journal()
-    monkeypatch.setenv("DB_URL", f"sqlite:///{tmp_path}/two.db")
+    monkeypatch.setenv("CONTROL_URL", f"sqlite:///{tmp_path}/two.db")
     assert changed_files.journal() is not first

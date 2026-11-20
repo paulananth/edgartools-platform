@@ -182,7 +182,7 @@ def test_a_link_names_either_a_dataset_contract_or_an_identifier(finds):
 def test_a_field_the_spec_does_not_name_or_a_missing_mdm_database_is_refused():
     with pytest.raises(Blocked, match="does not name"):
         writer.land(FakeSink(a_spec()), "visit", [{"visit_id": 1, "member_id_mdm_id": "forged"}], lambda *a: {})
-    with pytest.raises(Blocked, match="DB_URL"):
+    with pytest.raises(Blocked, match="MDM ids need the MDM schema"):
         writer.land(FakeSink(a_spec()), "visit", [{"visit_id": 1}], None)
 
 

@@ -45,8 +45,8 @@ CHECKS = {
     "STATE": "The chain's state file is this store's, or will be set aside, before any step runs",
     "CATALOG": "The catalog, when configured, matches the rules",
 }
-DUTY_DATABASES = {"owner.env": ("postgres",), "worker.env": ("mdm", "rdm", "rules", "bookkeeping", "change_journal", "silver"),
-                  "governance.env": ("mdm", "rules"), "reader.env": ("mdm", "rdm", "rules", "bookkeeping", "change_journal", "silver")}
+DUTY_DATABASES = {"owner.env": ("postgres",), "worker.env": ("data", "control"), "governance.env": ("data", "control"),
+                  "reader.env": ("data", "control")}
 
 
 def now() -> datetime:
@@ -174,16 +174,13 @@ def doctor_ok(stores: Path, env: dict) -> bool:
 
 
 def sql_facts(reader_env: dict, env: dict) -> tuple[dict | None, dict | None, int]:
-    """(the loader's guards, the reference counts, the loader's sessions), read with the reader's and the loader's logins
-    (each file's `DB_URL`, a database added per read)."""
-    from urllib.parse import urlsplit, urlunsplit
-
-    def url(value: str, database: str) -> str:
-        return urlunsplit(urlsplit(re.sub(r"^postgresql\+\w+", "postgresql", value))._replace(path="/" + database))
+    """(the loader's guards, the reference counts, the loader's sessions), read with the reader's and the loader's logins."""
+    sys.path.insert(0, str(HERE))
+    import load_chain
 
     try:
         import psycopg2
-        reader = url(reader_env["DB_URL"], "postgres")
+        reader = load_chain.in_database(load_chain.data_url(reader_env), "postgres")
         with psycopg2.connect(reader, connect_timeout=10) as conn, conn.cursor() as cur:
             cur.execute("select rolconnlimit from pg_roles where rolname = %s", (LOADER,))
             limit = cur.fetchone()[0]
@@ -196,12 +193,12 @@ def sql_facts(reader_env: dict, env: dict) -> tuple[dict | None, dict | None, in
         return None, None, 1
     try:
         def count(database: str, sql: str) -> int:
-            with psycopg2.connect(url(env["DB_URL"], database), connect_timeout=10) as conn, conn.cursor() as cur:
+            with psycopg2.connect(load_chain.in_database(load_chain.data_url(env), database), connect_timeout=10) as conn, conn.cursor() as cur:
                 cur.execute(sql)
                 return cur.fetchone()[0]
         specs = len(list((REPO / "rules" / "sources").glob("*/silver-*.yaml")))
-        reference = {"codes": count("rdm", "select count(*) from rdm.published_code"), "specs": specs,
-                     "silver_tables": count("silver", "select count(*) from information_schema.tables where table_schema = 'silver'")}
+        reference = {"codes": count("data", "select count(*) from rdm.published_code"), "specs": specs,
+                     "silver_tables": count("data", "select count(*) from information_schema.tables where table_schema = 'silver'")}
     except Exception:  # noqa: BLE001
         reference = None
     return loader, reference, sessions
@@ -238,7 +235,9 @@ def login_facts(stores: Path) -> dict:
     found = {}
     for name, databases in DUTY_DATABASES.items():
         try:
-            url = re.sub(r"^postgresql\+\w+", "postgresql", load_chain.load_env(stores / name)["DB_URL"])
+            url = load_chain.data_url(load_chain.load_env(stores / name))
+            if url is None:
+                raise KeyError("no data database")
         except Exception as exc:  # noqa: BLE001
             found[name] = f"unreadable ({type(exc).__name__})"
             continue
@@ -258,8 +257,8 @@ def state_facts(env: dict) -> dict | None:
     steps it holds, so a surprise is seen before a step runs."""
     import load_chain
     try:
-        url = env["DB_URL"]
-        generation = load_chain.database_generation(load_chain.mdm_url_of(url))
+        url = load_chain.data_url(env)
+        generation = load_chain.database_generation(url)
         path = load_chain.LOGS / f"chain-{load_chain.RUN}.log"
         text = path.read_text() if path.exists() else ""
         return {"verdict": load_chain.state_verdict(text, load_chain.store_id(url), generation),
@@ -317,7 +316,7 @@ def main(argv: list[str] | None = None) -> int:
     for r in results:
         print(f"{'PASS' if r['ok'] else 'FAIL':5} {r['id']:10} {r['title']}\n      evidence: {r['evidence']}")
     env = load_chain.load_env(stores / "worker.env")
-    generation = load_chain.database_generation(load_chain.mdm_url_of(env["DB_URL"])) if env.get("DB_URL") else ""
+    generation = load_chain.database_generation(load_chain.data_url(env)) if load_chain.data_url(env) else ""
     passed = all(r["ok"] for r in results) and bool(generation)
     (stores / READY).write_text(json.dumps({"passed": passed, "at": now().isoformat(), "generation": generation, "sha": current_sha(),
                                             "checks": {r["id"]: r["ok"] for r in results}}))

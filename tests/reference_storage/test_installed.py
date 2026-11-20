@@ -1,14 +1,15 @@
 """Installed normal RDM commands on the selected engine, outside the checkout."""
 import json
 
+from tests.support.duty import duty_url
 from tests.engine.test_data_skill_bundle_postgres import installed, _run  # noqa: F401
 
 
 def test_installed_reference_lifecycle_and_search(installed, database_factory):
     python, root = installed
-    with database_factory() as (owner, runtime, role):
-        owner_env = {"DB_URL": owner.url.render_as_string(hide_password=False)}
-        runtime_env = {"DB_URL": runtime.url.render_as_string(hide_password=False)}
+    with database_factory(store="rdm") as (owner, runtime, role):
+        owner_env = {"DATA_URL": duty_url(owner, "rdm")}
+        runtime_env = {"DATA_URL": duty_url(runtime, "rdm")}
         name = "invented-installed-reference"
         body = {"code_set": {"code_set": name, "name": "Invented reference"}, "version": "1",
                 "created_by": "drafter", "codes": [{"code": "a", "label": "AI the well-known reference"}],

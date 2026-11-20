@@ -103,7 +103,7 @@ def migrate_storage(engine, *, runtime_role, existing_only=False, database_name=
                 raise Blocked("Journal migration lock unavailable")
             release=("EXEC sys.sp_releaseapplock @Resource='journal_migration',@LockOwner='Session'",{})
             exists=inspect(conn).has_table("migrations",schema="journal")
-            tables={(row[0],row[1]) for row in conn.execute(text("SELECT TABLE_SCHEMA,TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE'"))}
+            tables={(row[0],row[1]) for row in conn.execute(text("SELECT TABLE_SCHEMA,TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE' AND TABLE_SCHEMA='journal'"))}
             allowed={("journal","migrations"),("journal","event")}
             ddl="CREATE TABLE journal.migrations(id SMALLINT PRIMARY KEY,checksum CHAR(64) NOT NULL,complete SMALLINT NOT NULL)"
         try:
