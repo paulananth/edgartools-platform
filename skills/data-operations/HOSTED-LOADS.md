@@ -52,7 +52,7 @@ disposable store is the next check to add.
   A step that shows `attempt 1 start` again and again with `scheduler moves` lines between is losing its work: stop the scheduler (not
   the steps), let the step finish, then run what follows with `--only` and `--finish`.
 - **A step that shows no CPU, no session and no rows may be waiting, not stalled.** The mastering lease serializes steps that write the same
-  masters: a step behind the GLEIF merge sat silent for hours and wrote at full rate within minutes of that merge ending. Before stopping a step
+  masters: a step behind another source's merge sat silent for hours and wrote at full rate within minutes of that merge ending. Before stopping a step
   with no sign of work, read Bookkeeping's open runs and leases (`bookkeeping.pipeline_run` where the state is not complete, and `bookkeeping.lease`)
   and the sessions that are working (`db_monitor.py sessions`); stop a step only when nothing holds what it waits for. A stop abandons the
   bundle in flight.
