@@ -32,11 +32,39 @@ DIALECTS = {
 
 
 def load(path: Path = CONFIG) -> dict:
-    """The Gold configuration, with the database names of rules/snowflake.yaml."""
+    """The Gold configuration, with the database names of rules/snowflake.yaml and a fact made from each silver spec."""
     config, names = files.load(path), files.load(files.ROOT / "snowflake.yaml")
     config["destination"] = dict(names["gold"])
     config["mirror"]["database"] = names["mirror"]["database"]
+    config["objects"] += silver_facts(config)
     return config
+
+
+def silver_facts(config: dict) -> list[dict]:
+    """One fact per silver table on the exposure list, made from its approved spec (its requirement): the spec's key,
+    a dimension key per link, its business (as_of), event and recorded (as_at) time, and every other column carried. A table
+    an explicit object already reads gives way to that object."""
+    rule = config.get("silver_facts")
+    if not rule:
+        return []
+    exposure = files.load(files.ROOT / rule["exposure"])
+    dimensions = {item["master_kind"]: item["name"] for item in config["objects"] if item["kind"] == "dimension"}
+    taken = {item.get("source") for item in config["objects"]}
+    facts = []
+    for entry in exposure["tables"]:
+        source = f"{entry['layer']}.{entry['table']}"
+        if entry["layer"] != "silver" or source in taken:
+            continue
+        spec = files.load(files.ROOT.parent / entry["requirement"])
+        links = [{"column": link["mdm_id_column"], "dimension": dimensions[link["kind"]],
+                  "role": link.get("to_part") or link["kind"]} for link in spec.get("links") or []]
+        time = spec.get("time") or {}
+        times = {"business": time.get("as_of"), "event": time.get("event_time"), "recorded": time.get("as_at")}
+        used = set(spec["key"]) | {v for v in times.values() if v}
+        facts.append({"name": f"fact_{entry['table']}", "kind": "fact", "source": source, "key": list(spec["key"]),
+                      "links": links, "times": times, "carry": [c["name"] for c in spec["columns"] if c["name"] not in used],
+                      "requirement": rule["requirement"], "spec": entry["requirement"], "grain": spec["grain"]})
+    return facts
 
 
 class Context:
@@ -136,7 +164,7 @@ def render_fact(item: dict, ctx: Context) -> str:
                    f"CASE WHEN p.managers = 1 THEN COALESCE(pm.canonical_id, {literal(ctx.unknown)}) "
                    f"WHEN p.managers > 1 THEN {literal(ctx.not_applicable)} ELSE {literal(ctx.unknown)} END AS {link['role']}_key"]
     elif item.get("times"):
-        select += [f"s.{item['times']['business']} AS business_date", f"s.{item['times']['recorded']} AS recorded_date"]
+        select += [f"s.{column} AS {role}_date" for role, column in item["times"].items() if column]
     select += [f"s.{c}" for c in item.get("measures", []) + item.get("carry", [])]
     return f"SELECT {', '.join(select)}\nFROM {ctx.mirror(item['source'])} s\n" + "\n".join(joins)
 

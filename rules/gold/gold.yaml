@@ -26,6 +26,13 @@ master:
 # The questions that justify an object. An object names one here; an object with none is not built.
 requirements:
   holdings: "A manager's holdings by security and quarter (operator, Approved, ticket 05 section 7)"
+  silver_spec: "The silver table's approved spec (operator, 2026-11-20: \"Silver spec = requirement\")"
+
+# Every silver table on the exposure list gets a fact view made from its spec (data-modeling GOLD.md, "No silver table
+# is silver-only"); an object below that reads the table as its source replaces the generated one.
+silver_facts:
+  exposure: exposure.yaml
+  requirement: silver_spec
 
 objects:
 - name: master
@@ -46,6 +53,20 @@ objects:
   identifiers: [cusip]
   requirement: holdings
   grain: one row per canonical security master, plus the unknown and not-applicable members
+
+- name: dim_person
+  kind: dimension
+  master_kind: person
+  identifiers: [cik]
+  requirement: silver_spec
+  grain: one row per canonical person master, plus the unknown and not-applicable members
+
+- name: dim_fund_structure
+  kind: dimension
+  master_kind: fund_structure
+  identifiers: [sec_series_id, lei]
+  requirement: silver_spec
+  grain: one row per canonical fund master, plus the unknown and not-applicable members
 
 - name: dim_date
   kind: calendar

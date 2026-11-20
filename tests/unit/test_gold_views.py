@@ -151,7 +151,8 @@ def test_each_object_is_one_dbt_view_that_reads_the_mirror_through_source_and_go
 
 def test_the_dbt_sources_name_the_mirror_database_and_only_the_tables_the_views_read():
     found = {s["name"]: (s["database"], s["schema"], [t["name"] for t in s["tables"]]) for s in views.sources()["sources"]}
-    assert found["silver"] == (MIRROR, "SILVER", ["thirteenf_filing", "thirteenf_holding"])
+    exposed = sorted(t["table"] for t in files.load(files.ROOT / "exposure.yaml")["tables"] if t["layer"] == "silver")
+    assert found["silver"] == (MIRROR, "SILVER", exposed)   # every exposed silver table has its fact
     assert found["mdm"] == (MIRROR, "PUBLIC", ["mastering_identifier", "mastering_master"])
 
 
@@ -185,3 +186,38 @@ def test_the_exposure_scripts_take_the_mirror_name_from_the_same_file():
 
 def test_the_one_names_file_also_names_the_owner_role():
     assert NAMES["owner"] and set(NAMES) == {"owner", "mirror", "gold"}
+
+
+def test_each_exposed_silver_table_gets_a_fact_made_from_its_spec_and_an_explicit_object_wins():
+    config = views.load()
+    facts = {item["source"]: item for item in config["objects"] if item["kind"] == "fact"}
+    exposed = {f"silver.{t['table']}" for t in files.load(files.ROOT / "exposure.yaml")["tables"] if t["layer"] == "silver"}
+    assert exposed <= set(facts)
+    nport = facts["silver.nport_holding"]
+    assert nport["key"] == ["accession_number", "holding_id"] and nport["requirement"] == "silver_spec"
+    assert {(l["role"], l["dimension"]) for l in nport["links"]} == {
+        ("fund", "dim_fund_structure"), ("registrant", "dim_company"), ("security", "dim_security")}
+    assert nport["times"] == {"business": "period", "event": None, "recorded": "filed"} and "balance" in nport["carry"]
+    assert "parent" in facts["silver.thirteenf_holding"]   # the configured 13F fact, not a generated one
+
+
+def test_a_generated_fact_resolves_its_links_and_dates_on_rows():
+    config = views.load()
+    item = next(i for i in config["objects"] if i["name"] == "fact_ipo_filing")
+    conn = sqlite3.connect(":memory:")
+    conn.executescript("""
+        create table mastering_master (entity_id text, canonical_id text, kind text, status text, body text);
+        create table mastering_identifier (namespace text, value text, entity_id text);
+        create table ipo_filing (accession_number text, cik text, form text, stage text, filing_date text,
+                                 file_number text, observed_at text, filer_mdm_id text);
+    """)
+    conn.executemany("insert into mastering_master values (?, ?, ?, ?, ?)", [
+        ("c1", "c1", "company", "active", "{}"), ("c3", "c1", "company", "alias", "{}")])
+    conn.executemany("insert into ipo_filing values (?,?,?,?,?,?,?,?)", [
+        ("a1", "1", "S-1", "initial", "2026-01-02", "333-1", "2026-01-03", "c3"),   # a merged-away id
+        ("a2", "2", "S-1", "initial", "2026-01-04", "333-2", "2026-01-05", None)])  # never mastered
+    statements = views.render(dialect="sqlite", qualify=False)
+    for name in ("master", item["name"]):
+        conn.execute(statements[name])
+    rows = conn.execute(f"select accession_number, filer_key, event_date, recorded_date from {item['name']} order by 1").fetchall()
+    assert rows == [("a1", "c1", "2026-01-02", "2026-01-03"), ("a2", config["members"]["unknown"], "2026-01-04", "2026-01-05")]
