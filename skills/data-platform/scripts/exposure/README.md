@@ -35,6 +35,12 @@ uv run --no-project --with pyyaml python <SKILL_DIR>/scripts/exposure/exposure_p
 
 An expired token answers HTTP 401 on every call but `/system/version`: renew the token, and never print it.
 
+## The mirror SQL (qualified)
+
+`mirror_sql.py create|verify|retire` prints the mirror skill's `CREATE_MIRROR` (Iceberg, Snowflake-managed storage), `LIST_MIRRORED_TABLES` and
+`DROP_MIRROR(<mirror>, TRUE)` text from the exposure list and `rules/snowflake.yaml`. It connects to nothing; run its output as the mirror
+operator after the pre-flight and the operator's approval ([HOSTED-MIRRORING](../../HOSTED-MIRRORING.md)).
+
 ## The other scripts (unqualified)
 
 `autoontology.py`, `exposure_parity.py` and `exposure_operations.py` are not qualified yet.
