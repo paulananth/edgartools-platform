@@ -5,7 +5,6 @@ import os
 
 from sqlalchemy.engine import make_url
 
-from .store import storage_adapter
 
 
 def mdm_engine(*, restricted: bool = True):
@@ -14,10 +13,10 @@ def mdm_engine(*, restricted: bool = True):
 
 def mdm_engine_from(environment, *, restricted: bool = True):
     """The MDM schema in the data database of the selected duty's file, without changing the process environment."""
-    from edgar_warehouse.database_connections import owner_url
+    from edgar_warehouse.database_connections import connect, owner_url
 
     value = owner_url("mdm", environment)
-    return storage_adapter().connect(
+    return connect(
         value, make_url(value).get_backend_name(),
         runtime_role=(environment.get("MDM_APPLICATION_ROLE") or "application") if restricted else None,
     )

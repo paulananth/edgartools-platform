@@ -24,27 +24,21 @@ def runtime_files() -> list[Path]:
     """The execution module owns the code its caller must pin."""
     from edgar_warehouse.bookkeeping.clean import config
     from edgar_warehouse.mdm import (
-        activation, adapters, assessment, binding, catalog, classification,
-        correction, evidence, identifier_types, identity, matching, registration,
-        names, prepared, prepared_registry, prepared_publication, master_index, master_search, detail_lookups, record_reads, primitives, quality, relationships, scope, store, survivorship, waterfall_passes,
+        activation, adapters, binding, catalog, classification, correction, evidence, identifier_types, identity,
+        matching, names, master_search, detail_lookups, primitives, quality, relationships, store, survivorship,
+        waterfall_passes,
     )
-    from edgar_warehouse.rules import files, source_engine
+    from edgar_warehouse.rules import files, registry, source_engine
     from edgar_warehouse.workers import source_mapping
 
     # Explicit execution dependencies.
     # CLI presentation is not executable merge behavior. This is not
     # the separately tracked complete environment/reproducibility fingerprint.
-    modules = (activation, adapters, assessment, binding, catalog, classification, config,
-               correction, evidence, files, identifier_types,
-               identity, limits, matching, names, prepared, prepared_registry, prepared_publication, master_index, master_search, detail_lookups, record_reads, primitives, quality,
-               relationships, registration, scope, source_mapping, store, survivorship, waterfall_passes)
-    adapter = store.storage_adapter()
-    adapter_files = [Path(getfile(adapter)).with_name(name) for name in
-                     ("database_adapter.py", "adapter_model.py", "adapter_sql.py", "registry_migration.py")]
+    modules = (activation, adapters, binding, catalog, classification, config, correction, evidence, files,
+               identifier_types, identity, limits, matching, names, master_search, detail_lookups, primitives, quality,
+               registry, relationships, source_mapping, store, survivorship, waterfall_passes)
     return [Path(__file__), *[Path(getfile(module)) for module in modules],
-            *source_engine.runtime_files(), catalog.path(), *adapter_files,
-            *[Path(store.__file__).parent / "migrations" / module.MIGRATION
-              for module in (registration,)]]
+            *source_engine.runtime_files(), catalog.path()]
 
 
 def _reject_json_constant(value):

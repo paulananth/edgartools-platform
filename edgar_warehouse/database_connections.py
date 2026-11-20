@@ -1,17 +1,47 @@
 """Configuration-selected database connections, independent of any store."""
 import os
-from importlib import import_module
 
+from sqlalchemy import create_engine, event
 from sqlalchemy.engine import make_url
 
+DRIVERS = {"postgresql": "postgresql+psycopg2", "mysql": "mysql+pymysql", "mssql": "mssql+pymssql"}
 
-def storage_adapter():
-    """Locate the canonical SQL adapter in a checkout or installed bundle."""
-    from edgar_warehouse.rules.files import BUNDLE_DATA
 
-    path = BUNDLE_DATA / "skills" / "mdm-engineering" / "scripts" / "database_adapter.py"
-    package = "edgar_warehouse.bundle_data.skills" if path.is_file() else "skills"
-    return import_module(f"{package}.mdm-engineering.scripts.database_adapter")
+def connect(value: str, selected: str, *, runtime_role: str | None = None):
+    """An engine for one URL on the selected database engine. With `runtime_role`, every connection acts as that role:
+    PostgreSQL sets it; MySQL and SQL Server must have logged in as it, and a connection that did not is refused."""
+    url = make_url(value)
+    if selected not in DRIVERS or url.get_backend_name() != selected:
+        raise ValueError("Connection does not match the selected database engine")
+    if "+" not in url.drivername:
+        url = url.set(drivername=DRIVERS[selected])
+    # A connection older than the bound is replaced at checkout, which finds one the server dropped while it sat
+    # idle; a ping on every checkout is three round trips (BEGIN, SELECT 1, ROLLBACK), each a delay on a hosted store.
+    engine = create_engine(url, hide_parameters=True, pool_recycle=30)
+    if runtime_role is not None:
+        quoted = engine.dialect.identifier_preparer.quote(runtime_role)
+
+        @event.listens_for(engine, "connect")
+        def select_runtime_principal(dbapi_connection, _):
+            try:
+                with dbapi_connection.cursor() as cursor:
+                    if selected == "postgresql":
+                        cursor.execute(f"SET ROLE {quoted}")
+                    else:
+                        # These stores authenticate the runtime login directly; never emulate SET ROLE.
+                        cursor.execute("SELECT CURRENT_USER()" if selected == "mysql"
+                                       else "SELECT USER_NAME(), ORIGINAL_LOGIN()")
+                        principal = cursor.fetchone()
+                        valid = (principal[0].rsplit("@", 1)[0] == runtime_role if selected == "mysql"
+                                 else principal == (runtime_role, runtime_role))
+                        if not valid:
+                            raise ValueError("Authenticate as the configured runtime principal")
+                dbapi_connection.commit()
+            except BaseException:
+                # The pool has not adopted this connection yet: a rejected login keeps no session.
+                dbapi_connection.close()
+                raise
+    return engine
 
 
 STORES = ("mdm", "rdm", "rules", "bookkeeping", "change_journal", "silver")
@@ -71,7 +101,7 @@ def owner_url(store: str, environment=None) -> str:
 def store_engine(store: str, *, runtime_role=None, environment=None):
     """An engine for one store, from its group's URL in whichever duty's file was sourced; credentials are never rendered."""
     value = owner_url(store, environment)
-    return storage_adapter().connect(value, make_url(value).get_backend_name(), runtime_role=runtime_role)
+    return connect(value, make_url(value).get_backend_name(), runtime_role=runtime_role)
 
 
 owner_engine = store_engine  # the owner file's URLs are read the same way: the duty is the file, not the function

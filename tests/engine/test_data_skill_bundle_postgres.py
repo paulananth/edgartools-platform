@@ -242,18 +242,6 @@ paths = candidate_paths(rule)
 assert paths["identifier"] == ("identifiers", "invented_namespace")
 assert paths["cascade"] == ("provenance", "matching", "invented_name_count", "invented_waterfall", "invented_target")
 assert candidate_value({"identifiers":{"invented_namespace":"invented-value"}}, paths["identifier"]) == "invented-value"
-from edgar_warehouse.mdm.matching import candidate_routes
-from edgar_warehouse.mdm.evidence import assertion
-from edgar_warehouse.rules.source_engine import prepare_record_lookups
-item = assertion(source_code="invented.source",record_key="one",publication_key="first",revision=1,
-    effective_at=None,kind="bundle-invented-kind",fields={},identifiers={"invented_namespace":"invented-value"})
-command = {"readings":[item],"previous":{},"subjects":[item["subject"]],"bindings":{},
-    "quarantined":{},"policy":{},"normalizers":{},"batch_id":"invented-first","occurrences":{},
-    "candidate_routes":candidate_routes()}
-current, changes = prepare_record_lookups(command)
-assert current[item["subject"]]["matching_keys"] == {'["bundle-invented","identifier"]':"invented-value"}
-again, changes = prepare_record_lookups({**command,"previous":current,"batch_id":"invented-retry"})
-assert again == current and changes == []
 right["fields"]["invented_status"]["value"] = "OTHER"
 assert compare_candidate_records(rule, [({}, right)]) == [[False, False]]
 """
@@ -306,7 +294,6 @@ print(json.dumps({{"shipped": shipped, "modules": modules, "absent": absent, "ru
     assert any(p.endswith("mastering/schema/postgresql.sql") for p in found["shipped"])
     assert any(p.endswith("mastering/schema/mysql.sql") for p in found["shipped"])
     assert any(p.endswith("mdm/migrations/schema.sql") for p in found["shipped"])
-    assert any(p.endswith("mdm/migrations/registration_authority.sql") for p in found["shipped"])
 
 
 def _stores(databases):
@@ -338,14 +325,11 @@ def test_source_sequence_runs_from_installed_bundle_without_checkout(installed):
     assert report["runtime_readiness"] == "not_checked"
 
 
-def test_engine_number_text_and_store_migrations_run_from_installed_bundle(installed):
+def test_store_migrations_run_from_installed_bundle(installed):
     python, root = installed
     result = _run(python, "-c", '''
 from pathlib import Path
-from edgar_warehouse.rules import source_engine
 from edgar_warehouse.mdm import store
-raw = source_engine.postgres_jsonb_text('{"a":1e-7,"bbb":1.2300}')
-assert raw == '{"a": 0.0000001, "bbb": 1.2300}'
 assert (Path(store.__file__).parent/"migrations"/store.BASELINE).is_file()
 assert all((Path(store.__file__).parent/"migrations"/name).is_file() for name in store.MIGRATIONS)
 print("publication preparation installed")

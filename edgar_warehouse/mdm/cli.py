@@ -19,9 +19,6 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
 
     migrate = mdm_sub.add_parser("init", help="Create the MDM schema, or bring it to current")
     migrate.add_argument("--application-role", default="application")
-    migrate.add_argument("--application-host", default="%", help="MySQL runtime account host")
-    migrate.add_argument("--prepared-store", action="store_true", default=True,
-                         help="Install governed prepared storage on a fresh PostgreSQL or MySQL target")
     migrate.set_defaults(handler=_logged_handler("init", _handle_migrate))
 
 
@@ -82,9 +79,7 @@ def _handle_migrate(args: argparse.Namespace) -> int:
 
     engine = owner_engine("mdm")
     try:
-        payload = migrate(engine, application_role=args.application_role,
-                          application_host=args.application_host,
-                          prepared=args.prepared_store)
+        payload = migrate(engine, application_role=args.application_role)
     finally:
         engine.dispose()
     print(json.dumps(payload, indent=2, sort_keys=True))
