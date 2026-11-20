@@ -38,18 +38,21 @@ def steward_split(args) -> int:
 
     from edgar_warehouse.mastering import steward
     from edgar_warehouse.mastering.store import open_store
+    from edgar_warehouse.rules import registry
     from edgar_warehouse.workers.mastering_merge import _settings
 
     at = datetime.now(timezone.utc).isoformat()
     engine = mdm_engine(restricted=True)
+    rules = registry.engine()
     db = open_store(engine)
     manifest = {"policy_digest": args.policy_digest, "as_of": at}
     try:
-        report = steward.split(db, cache(lambda kind: _settings(engine, manifest, kind)), merge_id=args.merge,
+        report = steward.split(db, cache(lambda kind: _settings(rules, manifest, kind)), merge_id=args.merge,
                                actor=args.by, reason=args.reason, at=at, confirm=args.confirm)
     finally:
         db.close()
         engine.dispose()
+        rules.dispose()
     print(json.dumps(report, sort_keys=True))
     return 0
 
@@ -60,18 +63,21 @@ def steward_resolve(args) -> int:
 
     from edgar_warehouse.mastering import steward
     from edgar_warehouse.mastering.store import open_store
+    from edgar_warehouse.rules import registry
     from edgar_warehouse.workers.mastering_merge import _settings
 
     at = datetime.now(timezone.utc).isoformat()
     engine = mdm_engine(restricted=True)
+    rules = registry.engine()
     db = open_store(engine)
     manifest = {"policy_digest": args.policy_digest, "as_of": at}
     try:
-        report = steward.resolve(db, cache(lambda kind: _settings(engine, manifest, kind)), subject=args.subject,
+        report = steward.resolve(db, cache(lambda kind: _settings(rules, manifest, kind)), subject=args.subject,
                                  result=args.result, actor=args.by, reason=args.reason, at=at, confirm=args.confirm)
     finally:
         db.close()
         engine.dispose()
+        rules.dispose()
     print(json.dumps(report, sort_keys=True))
     return 0
 

@@ -251,7 +251,7 @@ type, and cite what it showed in your question to the operator.
 
 What each kind means is its code's `definition` in `mdm-kinds`; what each
 relationship type means is its code's `definition` in `mdm-relationship-types`.
-A new kind adds its code there and its rules file in the same PR; a test fails until both exist.
+A new kind adds its code there (`golden_records: true`) and its rules file in the same PR; a test fails until both exist.
 
 ## Merge rules
 

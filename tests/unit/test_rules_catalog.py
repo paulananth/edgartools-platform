@@ -302,7 +302,7 @@ class _Server:
 def test_the_plan_names_domains_glossaries_and_store_certification():
     plan = catalog.plan()
     names = {domain["name"] for domain in plan["domains"]}
-    assert "company" in names and "market_venue" in names and "venue" not in names
+    assert "company" in names and "government" in names and not {"venue", "market_venue"} & names
     assert not [item for item in plan["memberships"] if item["table"].startswith("edgartools-rules.mdm.relationships.")]
     assert not [edge for edge in plan["lineage"] if edge["to"].startswith("edgartools-rules.mdm.relationships.")]
     products = {product["name"]: product for product in plan["products"]}
@@ -324,7 +324,7 @@ def test_the_plan_names_domains_glossaries_and_store_certification():
     assert cases["company_fact.one_form_per_filing"]["testDefinition"] == "edgartools-configured-column-check"
     assert all("testCaseResult" not in case for case in plan["quality_cases"])
     assert any(name.endswith("mdm.master_records.security") for name in products["security_master"]["tables"])
-    assert sum(1 for table in plan["tables"] if table["databaseSchema"].endswith(".relationships")) == 17  # RELATED_PERSON (2026-11-08) is the 17th
+    assert sum(1 for table in plan["tables"] if table["databaseSchema"].endswith(".relationships")) == 15  # mdm-relationship-types 6
     certified = {item["table"]: item["tag"] for item in plan["certifications"]}
     assert certified["edgartools-rules.mdm.master_records.company"] == "Certification.Gold"
     assert any(name.startswith("edgartools-rules.silver.") and tag == "Certification.Silver"
@@ -584,12 +584,12 @@ def test_publish_updates_existing_vocabulary_without_clearing_curated_relations(
 def test_only_entity_terms_are_published_as_draft_terms():
     plan = catalog.plan()
     names = {term["name"] for term in plan["glossary_terms"]}
-    assert {"Company Identity", "Adviser", "Audit Firm", "Fund", "Fund Series", "Market/Venue"} <= names
+    assert {"Company Identity", "Adviser", "Audit Firm", "Fund", "Fund Series"} <= names
     for platform in ("Merge Stage", "Source Extract", "Relationship Capacity", "Master Data", "Holdings", "Discretion"):
         assert platform not in names
     assert not [name for name in names if name.endswith("Profile")]
     placed = {f"{term['glossary']}.{term['name']}" for term in plan["glossary_terms"]}
-    assert {"company.Adviser", "fund_structure.Fund", "fund_structure.Fund Series", "market_venue.Market/Venue"} <= placed
+    assert {"company.Adviser", "fund_structure.Fund", "fund_structure.Fund Series"} <= placed
     assert "company.Fund" not in placed  # a fund is a collection of securities, not a company
     domains = {domain["name"] for domain in plan["domains"]}
     assert {glossary["name"] for glossary in plan["glossaries"]} == domains

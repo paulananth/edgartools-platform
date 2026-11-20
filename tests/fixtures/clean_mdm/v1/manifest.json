@@ -93,18 +93,6 @@
         {
           "actor": "synthetic-fixture",
           "at": "2026-01-01T00:00:00+00:00",
-          "decision_id": "3e66d41285830ccfb1fa99635a276aef5c2ca1dbde0ccb22f6326e0e489061c1",
-          "entity_id": "e4edd14f-83ce-556a-88f0-109b5ea307da",
-          "evidence": [
-            "a281d822a6b6e2c26c3efd93d85b8329154fef0674d645a3d204878682176ef5"
-          ],
-          "operation": "bind",
-          "reason": "Fixture expected identity, not real-world calibration evidence",
-          "subject": "2868b6e80ca5272d1802d0ce2e669612fa4b72ed1d8f9a9a865d811511eb5fb9"
-        },
-        {
-          "actor": "synthetic-fixture",
-          "at": "2026-01-01T00:00:00+00:00",
           "decision_id": "bca3146d99762e6d965b9b04fda203ea03cce679ed1865fd53473654170b1b9e",
           "entity_id": "5c1691e0-b36c-535f-b1f7-8c5150af1d68",
           "evidence": [
@@ -165,11 +153,6 @@
           "published_at": "2026-01-01T00:00:00+00:00"
         },
         {
-          "entity_id": "e4edd14f-83ce-556a-88f0-109b5ea307da",
-          "kind": "venue",
-          "published_at": "2026-01-01T00:00:00+00:00"
-        },
-        {
           "entity_id": "5c1691e0-b36c-535f-b1f7-8c5150af1d68",
           "kind": "international_organization",
           "published_at": "2026-01-01T00:00:00+00:00"
@@ -187,12 +170,12 @@
           "publication_key": "synthetic-v1",
           "revision": 1
         },
-        "sha256": "7920d565b95194eee8b084b5dd52e9febbe283f880490cf6803fab20bd0449d9",
+        "sha256": "b62767648d451ebed3f02fd0901d2e076612546ec5431febed7cb7ca6f1c1982",
         "source_code": "fixture.representative"
       },
       "stage": "mastering"
     }
   ],
   "contract_version": 2,
-  "policy_digest": "b309eaae5bde77dea2fbe7d4c9600600704b1f02dcbc6cb0950b6629195295b3"
+  "policy_digest": "bd2b9c9f17b2718da1032cebe6a6cdf09aae444e70256751a435920e7565a37c"
 }

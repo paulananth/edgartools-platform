@@ -74,9 +74,11 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False, database_
             f"ON rdm.code_set_version TO {runtime}")
         for table in CONTENT:  # a draft's content; the triggers refuse it after approval
             conn.exec_driver_sql(f"GRANT INSERT, UPDATE, DELETE ON rdm.{table} TO {runtime}")
-        conn.exec_driver_sql(f"GRANT INSERT ON rdm.code_path TO {runtime}")
+        conn.exec_driver_sql(f"GRANT INSERT, DELETE ON rdm.code_path TO {runtime}")
+        conn.exec_driver_sql(f"GRANT DELETE ON rdm.code_set_version TO {runtime}")  # the trigger allows only a closed version
         if conn.scalar(text("SELECT to_regclass('rdm.published_code') IS NOT NULL")):
             conn.exec_driver_sql(f"GRANT EXECUTE ON FUNCTION rdm.write_published_codes(text,text) TO {runtime}")
+            conn.exec_driver_sql(f"GRANT EXECUTE ON FUNCTION rdm.delete_published_codes(text,text) TO {runtime}")
         if conn.scalar(text("SELECT to_regprocedure('rdm.code_search(text,text,text,integer)') IS NOT NULL")):
             conn.exec_driver_sql(f"GRANT EXECUTE ON FUNCTION rdm.code_search(text,text,text,integer) TO {runtime}")
         tables = ["code_set", "code_set_version", "code_path", *CONTENT]
@@ -85,8 +87,7 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False, database_
         if conn.scalar(text(
                 "SELECT has_schema_privilege(:r,'rdm','CREATE') "
                 "OR has_table_privilege(:r,'rdm.code_set','UPDATE,DELETE') "
-                "OR has_table_privilege(:r,'rdm.code_set_version','DELETE') "
-                "OR has_table_privilege(:r,'rdm.code_path','UPDATE,DELETE') "
+                "OR has_table_privilege(:r,'rdm.code_path','UPDATE') "
                 "OR coalesce(has_table_privilege(:r,'rdm.published_code','INSERT,UPDATE,DELETE'),false) "
                 "OR EXISTS(SELECT 1 FROM unnest(CAST(:t AS text[])) t "
                 "WHERE has_table_privilege(:r,'rdm.'||t,'TRUNCATE,TRIGGER,REFERENCES'))"),

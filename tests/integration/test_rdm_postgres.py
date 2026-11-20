@@ -121,8 +121,8 @@ def test_place_codes_import_approve_publish_and_read_by_pin(rdm, tmp_path):
     with pytest.raises(DBAPIError, match="Only a draft"):  # published content never changes
         with rdm.engine.begin() as conn:
             conn.execute(text("DELETE FROM rdm.code_label WHERE code_set='sec-place-codes'"))
-    with pytest.raises(DBAPIError, match="history is retained"):
-        with owner.begin() as conn:  # not even the owner deletes a version
+    with pytest.raises(DBAPIError, match="Only a replaced or retired version is deleted"):
+        with owner.begin() as conn:  # not even the owner deletes the version a code set keeps
             conn.execute(text("DELETE FROM rdm.code_set_version WHERE code_set='sec-place-codes'"))
     with pytest.raises(DBAPIError, match="permission denied"):
         with rdm.engine.begin() as conn:
@@ -204,13 +204,19 @@ def test_a_hierarchy_publishes_paths_and_a_new_version_supersedes(rdm, tmp_path)
     rdm.approve("test-industry", "3", **OPERATOR)
     third = rdm.publish("test-industry", "3", out=tmp_path)
     assert third["superseded"] == "1" and third["sha256"] != first["sha256"]
-    old, new = rdm.version("test-industry", "1"), rdm.version("test-industry", "3")
-    assert old["valid_to"] == new["valid_from"] and new["valid_to"] is None
+    new = rdm.version("test-industry", "3")
+    assert new["supersedes"] == "1" and new["valid_to"] is None
+    with pytest.raises(Blocked, match="Unknown reference data version"):  # a code set keeps one version
+        rdm.version("test-industry", "1")
+    with rdm.engine.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM rdm.code WHERE code_set='test-industry' AND version='1'")) == 0
     retired = rdm.retire("test-industry", "3")
     assert retired["status"] == "retired" and retired["valid_to"] is not None
-    _industry(rdm, "4", supersedes="3")
+    with pytest.raises(Blocked, match="Unknown reference data version"):  # a retired code set keeps none
+        rdm.version("test-industry", "3")
+    _industry(rdm, "4", supersedes=None)
     rdm.approve("test-industry", "4", **OPERATOR)
-    assert rdm.publish("test-industry", "4", out=tmp_path)["superseded"] is None  # it replaces the retired 3
+    assert rdm.publish("test-industry", "4", out=tmp_path)["superseded"] is None  # nothing to replace
 
 
 def test_an_agent_drafts_from_a_file(rdm, tmp_path):

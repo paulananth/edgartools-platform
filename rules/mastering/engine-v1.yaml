@@ -22,15 +22,13 @@ detail_lookups:
   keys:
     mic: [mic, ticker]
     exchange: [exchange, ticker]
+# The kinds MDM knows: the RDM code set mdm-kinds (operator, 2026-11-20: "RDM code set (Recommended)").
+# A code marked golden_records has a rules/merge/kinds/<kind>.yaml; the others only label held-back records
+# with the kind they probably are (operator, 2026-11-20: "Keep the 3 (Recommended)").
 kinds:
-- branch
-- company
-- fund_structure
-- government
-- international_organization
-- person
-- security
-- venue
+  code_set: mdm-kinds
+  version: '1'
+  sha256: 30d70ec41fe58f18814235fe1aef35ae57885587bf194a4c052360cd5cb79bc7
 profiles:
   adviser:
   - company

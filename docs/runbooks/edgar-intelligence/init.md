@@ -71,15 +71,15 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    edgar-warehouse rules init --agent-role rules_agent
    ```
    `init` is the whole step, on a fresh store and again when a later schema file arrives. Done when
-   each prints its schema file's checksum. RDM's `init` also creates `rdm.published_code`, the codes of every published version as a table
+   each prints its schema file's checksum. RDM's `init` also creates `rdm.published_code`, the codes of each code set's one published version as a table
    for the mirror; `rdm.published_code` is filled each time a version is published (step 4 publishes them), never edited.
 4. **RDM codes.** With `worker.env` sourced, `python <data-operations skill>/scripts/rdm_restore_published.py`
    (no approval is asked: the operator's standing ruling, 2026-11-19, is in the approval record, under an approver other than the drafter, since the store refuses a self-approval).
    A half-restored RDM cannot be edited (published and approved versions are guarded): drop the `rdm` schema as its owner and run `rdm init` again.
    Run it once: a second run is refused at its first insert, since every version exists, and changes nothing; to check, count `rdm.code_set_version` (one per pin) and `rdm.published_code`. Done when every pin reads `pin ok` and
    `SELECT count(*) FROM rdm.published_code` equals the codes of the published versions.
-5. **Registration login.** With the owner connection, `edgar-warehouse mdm grant-registration --role mdm_governance` with `owner.env` sourced. It lets the restricted login read the stored records and write the
-   policy and dataset tables, and nothing else.
+5. **Registration login.** With `owner.env` sourced, `edgar-warehouse rules init` (its `--registrar-role`, `rules_governance`, may add to
+   the registry, `rules.policy` and `rules.dataset_reading`, and nothing else; the loader's role reads it).
 6. **Source configurations.** `edgar-warehouse rules check` (every source, offline), then, with `governance.env`
    sourced, `edgar-warehouse rules register`. Done when it prints a digest for the merge rules and every Dataset Contract.
    Then the silver tables (data-platform's step; a load creates none and stops when one is missing):
@@ -272,7 +272,7 @@ serverless apply, a refresh every 10 minutes, created after the load ends so the
 would also work and replicate as the load runs). A target name cannot be reused, so a mirror that is dropped and made again takes a new name (add a suffix).
 The reset of 2026-11-19 found no mirror in the account, so none had to be dropped first.
 
-The Snowflake database names are in `rules/snowflake.yaml`, nowhere else. A target database cannot be renamed (the managed mirror owns it), so a new
+The Snowflake database names are in `rules/snowflake.yaml`, nowhere else. A target database cannot be renamed, and while its mirror replicates the Snowflake application owns it (the owner role can own it only after `DROP_MIRROR(<mirror>, FALSE)`, [HOSTED-MIRRORING](../../../skills/data-platform/HOSTED-MIRRORING.md)), so a new
 name means a new mirror: create it beside the old one, wait until every table reads `REPLICATING` with equal counts, change the name in
 `rules/snowflake.yaml`, then `DROP_MIRROR(<old mirror>, TRUE)` ([HOSTED-MIRRORING](../../../skills/data-platform/HOSTED-MIRRORING.md)).
 

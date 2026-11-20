@@ -67,7 +67,8 @@ a missing URL or one that names no database is refused by name, never guessed. A
 
 **The data database holds data; anything that says how data is processed is in the control database.** The registered
 rules (the merge rules and the Dataset Contracts under their digests, and their pins) live in the control database's `rules`
-schema, beside `rules_used`, and the merge reads them there by digest; run evidence and build records live in `bookkeeping`.
+schema, beside `rules_used`, and the merge reads them there by digest (a policy by its digest, a contract by its
+reading number, which is hashed into every record id, so a move between databases keeps every number as it was); run evidence and build records live in `bookkeeping`.
 The data database keeps its golden records, reference codes and silver rows, the merge's working tables, and the merge's
 progress per file (`mastering_file`, `mastering_delivery`), since a file is marked merged in the same transaction that writes
 its masters. One init stamp records the data database's schema; it keeps no migration history. A table nothing reads or
@@ -78,7 +79,7 @@ one database and one mirror; the control stores stay apart, so their churn and t
 
 | Duty | File | Login | Used by |
 |---|---|---|---|
-| Owner | `owner.env` | the instance's administrator | each store's `init`, silver `register`, `mdm grant-registration`, `bookkeeping grant-profile`, resetting databases, role guards |
+| Owner | `owner.env` | the instance's administrator | each store's `init`, silver `register`, `bookkeeping grant-profile`, resetting databases, role guards |
 | Loader | `worker.env` | `edgar_loader`, a member of every store's runtime role | `load` and the workers; it can create nothing |
 | Governance | `governance.env` | `governance`, a member of the MDM and Rules governance roles | registering and activating rules |
 | Reader | `reader.env` | `ops_reader` (`pg_monitor`, no store) | monitoring, profiling, the access audit |
@@ -92,9 +93,9 @@ For load profiling, `quality` reads MDM, `progress`, `failures` and `steps`
 read Bookkeeping, and `sample` uses the profiling login's `pg_stat_activity`
 access.
 
-Rules commands use the restricted `rules_agent` login; registering rules in
-MDM uses the MDM governance connection (`mdm grant-registration` gives that
-login its access). Silver landing
+Rules commands use the restricted `rules_agent` login, which also reads the registry (`rules.policy`,
+`rules.dataset_reading`); registering rules (`rules register`) uses the governance login, a member of
+`rules_governance`, which `rules init --registrar-role rules_governance` lets add to the registry. Silver landing
 uses its runtime connection and the MDM runtime connection to resolve master
 IDs. Each profile grants its worker duty to `bookkeeping_runtime`. After `provision_hosted_store.py --loader --retire`, every load logs in as
 `edgar_loader`, and the runtime roles named here are NOLOGIN groups it holds by membership.
@@ -104,11 +105,8 @@ The application guard uses runtime role `mdm_runtime`.
 
 When provisioning these files, use `umask 077`, retain TLS settings
 (`sslmode=require` for the hosted PostgreSQL target), and keep owners
-separate from restricted runtime logins. `mdm_governance` needs database
-`CONNECT`, schema `USAGE`, read access to prepared/mastering tables, and
-`INSERT` on `mdm.policy`, `mdm.dataset` and `mdm.dataset_mapping`, plus the
-registration grant (`edgar-warehouse mdm grant-registration --role mdm_governance`,
-with the owner connection). Apply the committed provisioning and grant procedures rather
+separate from restricted runtime logins. No login may change or delete a registry row: the agent role holds
+SELECT on the registry, the registrar SELECT and INSERT. Apply the committed provisioning and grant procedures rather
 than granting administrative rights to runtimes.
 
 `MDM_APPLICATION_ROLE` names the application role.

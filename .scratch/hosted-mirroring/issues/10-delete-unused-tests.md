@@ -1,6 +1,6 @@
 # 10: Delete unused tests
 
-Status: open
+Status: resolved
 
 The operator, 2026-11-20: "Delete all unused tests"; asked which count, chose "Never run + old engine (Recommended)":
 the tests that never run, and the tests of the old engine's tables and code, each deleted with that code.
@@ -24,5 +24,9 @@ the tests that never run, and the tests of the old engine's tables and code, eac
 
 - [x] Find the tests that never run: skips per engine, files that collect nothing, the unit skip (above) 2026-11-20 10:12 ET
 - [x] Delete `tests/integration/test_name_matching.py` (imported by nothing) and `test_database_file_tables_become_parts` (never runs in CI); `tests/unit/test_profiling_inputs.py` 57 passed, integration still collects 336 2026-11-20 10:12 ET
-- [ ] ~~The old engine's tests~~ moved to ticket 09: deleted with the old engine's code and tables (the `mdm rebuild` replay, the per-kind views, the `mdm_store_*` install), in the same change
-- [ ] Learning → skill: none yet (ticket 09 carries the old-engine lesson)
+- [x] The old engine's tests: deleted with the old engine's code and tables in ticket 09 (resolved); `tests/storage_adapters/test_registration_authority.py` no longer exists 2026-11-20 16:01 ET
+- [x] Learning → skill: none (ticket 09 carries the old-engine lesson) 2026-11-20 16:01 ET
+
+## Answer
+
+Resolved 2026-11-20 16:01 ET. The tests that never run are deleted (PR 1947) and the old engine's tests went with its code in ticket 09.

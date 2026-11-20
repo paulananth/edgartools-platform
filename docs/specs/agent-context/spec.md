@@ -87,10 +87,8 @@ Each view and each of its columns has a `COMMENT ON` in plain English. Ticket
   highest `generation` whose batch `created_at` is at or before that time.
 - `--as-of <time>`: what was true in the business at that time. MDM masters
   with an `as_of` per batch (`effects->>'as_of'`); the command takes the latest
-  generation whose `as_of` is at or before that time. RDM uses the version whose
-  `valid_from`..`valid_to` covers it, for both flags; `--as-at` shows that
-  version as it stood then (not yet replaced or retired), and `--as-of` also
-  checks the code's own business dates (`code_valid_from`..`code_valid_to`).
+  generation whose `as_of` is at or before that time. RDM holds one version of a code set, so neither flag picks a version;
+  `--as-of` checks the code's own business dates (`code_valid_from`..`code_valid_to`), and `--as-at` is refused for a code set.
 
 ## 3. The command
 
@@ -160,12 +158,11 @@ edgar-warehouse context <kind|code_set> --search "<words>" [--limit 5]
   `code_status`, `code_valid_from`, `code_valid_to`, `synonyms` (the first 20, with `synonyms_count` when more), `crosswalk` (the codes of other sets it maps to, with
   match types), `meaning` (the version's meaning hints), and `trust`
   (`version`, `sha256`, `valid_from`, `valid_to`, the version's `status`,
-  `approved_by`, `approved_at`). `--as-of` reads the version valid then;
-  `--as-at` the newest published by then. `rdm.code_context` holds every code
-  of every version ever published; `rdm.code_search` searches one
+  `approved_by`, `approved_at`). `--as-of` checks the code's own business dates;
+  a code set holds one version, so `--as-at` has no past version to read. `rdm.code_context` holds every code
+  of the published version; `rdm.code_search` searches one
   version's labels and synonyms (full-text, then `ILIKE`, with `%` and `_`
-  matching themselves); with `--as-of` or `--as-at` it searches the version of
-  that time. A search answer lists `matches` (`name`, `code`, `path`,
+  matching themselves); it searches that one version. A search answer lists `matches` (`name`, `code`, `path`,
   `matched_by`) and carries the same `trust`. `--detail full` adds the code
   set's `used_in` (where its values live); `--hops` and `--type` are refused
   for a code set. A code set's id never takes a kind's name or

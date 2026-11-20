@@ -11,7 +11,8 @@ A part classed reference data becomes a code set version in RDM
    `edgar-warehouse rdm describe <code set>` for what a code set means, where
    its values live and how to compare them. A code set that already exists
    gets a new version that names the current one in `supersedes`, never a
-   second code set.
+   second code set. Publishing it replaces the current version in RDM: a code set
+   keeps one version, and git (`rules/reference/published/`) keeps the history.
 2. **Write the draft file** (JSON or YAML) from the approved findings:
    `{code_set: {code_set, name, definition, authority, steward}, version,
    created_by, evidence, supersedes, codes, labels, levels, crosswalk}`.

@@ -14,24 +14,15 @@ Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#
 It answers: **is this change to the MDM store lean, fast on the engine it
 runs on, safe to migrate, and proved by the cheapest check that proves it?**
 
-The operator chooses PostgreSQL, MySQL or SQL Server Express. This skill owns
-one Merge Stage contract across those engines and the engineering needed to
-support their storage differences. Its executable adapter persists prepared
-effects without interpreting entity or source policy. The application's
-native owner migration installs governed registry storage on PostgreSQL and
-MySQL. Normal saves, readers and worker recovery have separate selected-engine
-qualification gates; complete support requires the full installed caller matrix. Read [governed owner installation](references/storage-adapters.md#governed-owner-installation)
-before installing or recovering that registry. A silver table spec is applied by
+The operator chooses PostgreSQL, MySQL or SQL Server Express. MDM has **one engine**: the mastering tables every merge
+writes, and the rules it runs by, registered in the Rules Database. Entity and source names and field policies arrive as
+data; storage holds no domain branch. Read [Storage on each database engine](references/storage-adapters.md) before
+provisioning, initializing or reviewing storage. A silver table spec is applied by
 [data-operations](../data-operations/SKILL.md).
 
-Adapter implementation belongs under this skill's `scripts/`, with
-[database_adapter.py](scripts/database_adapter.py) as its entry point.
-Entity/source names and field policies arrive as data from the shared engine;
-the adapter contains no domain branches or application imports. Read
-[Storage adapter contract and execution](references/storage-adapters.md)
-before provisioning, migrating, applying prepared effects or reviewing the
-boundary. Apply its GoF review before recommending a change and again
-against the resulting work.
+- **One engine.** A store holds only the tables, code and commands its one engine uses; `init` installs only what a
+  reader, command or stored record uses. A table, module or command nothing uses is removed in the change that stops
+  using it: kept, it is loaded at every worker start, tested on every database and checked at every init.
 
 ## Database-agnostic merge logic
 
@@ -240,17 +231,11 @@ temporary table and require an index seek in the plan. A scan fails the test.
 A statement whose key-list size changes enough to pick a bad cached plan uses
 `OPTION (RECOMPILE)` on that statement only. Do not put it on every procedure.
 
-**A lookup over current masters is an index passed as data**.
-`master_index.py` owns what every such lookup needs: a retained summary per
-master, per-generation coverage, the batch's changes once coverage is
-complete, and the resumable owner rebuild. A lookup gives an `Index`: its
-family, the pin of its configuration, `derive` (a master's body to its
-envelope, summary and groups) and `check` (a retained summary back to the
-groups it wrote). Name search (`master_search.py`) and the configured detail
-lookup (`detail_lookups.py`) are two; a third adds an `Index` and its reader,
-never a copy of the coverage or rebuild. A changed engine catalog reaches a
-store only through the owner's `mdm init`, and a new lookup over stored
-masters needs its rebuild before readers accept it.
+**A lookup over current masters is one table of tokens.** `mastering/lookups.py` builds `mastering_lookup` after a
+load from the masters that changed: one row (token, master id) per name word, detail key and cross-reference, each
+token the digest of what it finds under the pin of the configuration (`master_search` and `detail_lookups` in the
+engine catalog). A changed configuration starts the build again from the first file, and a reader refuses until it is
+built. A new lookup adds its tokens there, never a table or index of its own.
 
 **A merge keeps an index only after the owner has built it.** An index with no
 coverage row is not built, at any generation: the merge writes nothing for it
@@ -360,6 +345,7 @@ Name the claim in one sentence, then take the smallest cohort that can falsify i
 | The Merge Stage engine, a worker, Bookkeeping | A Proving Run on a pinned cohort, and the full installed proof on an empty store: every count as before, a killed worker resumes, the second pass changes nothing |
 | Matching rules, a Dataset Contract | The smallest cohort that contains each new case. One slice whose second pass changes nothing proves the path on real records. A case that slice did not contain is the one bundle that contains it, then stop. The whole delivery is the proof only when the claim is that delivery's totals, or switch-on |
 | A storage adapter or a change claimed to work across databases | The shared per-engine behavior checks above for every affected kind and source; preserve restricted-role, transaction and recovery guarantees |
+| A new or deleted module the workers import | The installed-bundle tests (`tests/engine/test_data_skill_bundle_postgres.py`, the installed `tests/storage_adapters` files) after a commit: they build the bundle from the last commit, and the bundle ships only the modules `packages/data-skill/pyproject.toml` lists, so a module missing there passes every checkout test and fails every installed worker. Run the full local set after the last edit, not before it |
 | Speed | Time per batch over a whole feed: flat, not growing with the store. Each worker's process time is in the run's progress lines; `mastering.merge` gives one total a file. |
 | A version whose rules moved since its last proof, each change proven by its own merged PR at the level this table names for it | No new run: carry the last proof forward. Write a proof file from the last one: its counts and `batch_hash`, `passed: true`, `digest` set to the new version's digest (`rules record-proof` refuses any other), its acquisition evidence if it had any, and under `evidence` and `note` the run it came from and each change since with its PR. Record it with `rules record-proof --proof-uri --proof-sha256`; `rules pending` then shows that evidence for approval. A change without such a proof gets its own row's proof first |
 

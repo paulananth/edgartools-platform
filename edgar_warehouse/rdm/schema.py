@@ -64,7 +64,6 @@ def mysql_statements():
             table.append_constraint(CheckConstraint(condition, name=name + "_check_" + str(i)))
         if name == "code_set_version":
             _ref(table, "_catalog_key", ("code_set",), "code_set")
-            _ref(table, "_supersedes_key", ("code_set", "supersedes"), "code_set_version", nullable="supersedes")
         elif name != "code_set":
             table.append_constraint(ForeignKeyConstraint(["_version_key"], ["code_set_version._row_key"]))
         if name in {"code_label", "code_path", "crosswalk_row"}:
@@ -133,22 +132,25 @@ def mysql_statements():
                     body.append(_fail("TRUE", "Code set words are immutable"))
             elif name == "code_set_version":
                 declarations = "DECLARE replaced LONGTEXT DEFAULT NULL;"
+                # A code set keeps one version: only a replaced or retired one (its valid_to is set) is deleted.
                 body.extend([draft_insert] if action == "INSERT" else governance if action == "UPDATE"
-                            else [_fail("TRUE", "Reference data history is retained")])
+                            else [_fail("OLD.valid_to IS NULL", "Only a replaced or retired version is deleted")])
             else:
-                declarations = "DECLARE held_status LONGTEXT DEFAULT NULL;"
+                declarations = "DECLARE held_status LONGTEXT DEFAULT NULL; DECLARE held_closed INT DEFAULT 0;"
                 fields = ("from_set", "from_version") if name == "crosswalk_row" else ("code_set", "version")
                 prefix = "OLD." if action == "DELETE" else "NEW."
                 if action == "UPDATE":
                     body.append(_fail(_changed(fields), "A row stays in its version"))
-                body.append("SELECT status INTO held_status FROM code_set_version WHERE _row_key=" + _hash(fields, prefix)
+                body.append("SELECT status, valid_to IS NOT NULL INTO held_status, held_closed FROM code_set_version WHERE _row_key=" + _hash(fields, prefix)
                     + " AND code_set=" + prefix + "`" + fields[0] + "` AND version=" + prefix + "`" + fields[1]
                     + "` FOR SHARE;")
                 if name == "code_path":
-                    body.append(_fail("TRUE" if action != "INSERT" else "NOT (held_status <=> 'approved')",
+                    body.append(_fail("NOT (held_closed = 1)" if action == "DELETE" else "TRUE" if action != "INSERT"
+                                      else "NOT (held_status <=> 'approved')",
                                       "Paths are written once, while an approved version is published"))
-                else:
-                    body.append(_fail("NOT (held_status <=> 'draft')", "Only a draft version's content may change"))
+                else:  # the content of a replaced or retired version leaves with it
+                    body.append(_fail("NOT (held_status <=> 'draft' OR held_closed = 1)" if action == "DELETE"
+                                      else "NOT (held_status <=> 'draft')", "Only a draft version's content may change"))
             statements.append("CREATE TRIGGER `" + trigger + "` BEFORE " + action + " ON `" + name
                               + "` FOR EACH ROW BEGIN " + declarations + "\n" + "\n".join(body) + "\nEND")
     statements.extend([

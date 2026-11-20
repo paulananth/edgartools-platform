@@ -208,7 +208,7 @@ def sql_facts(reader_env: dict, env: dict) -> tuple[dict | None, dict | None, in
 
 
 def registration_facts(reader_env: dict, env: dict) -> dict | None:
-    """What init's steps 5 to 7 leave: the policies and Dataset Contracts the loader reads in MDM, and the worker profiles Bookkeeping
+    """What init's steps 5 to 7 leave: the policies and Dataset Contract readings the loader reads in the Rules Database, and the worker profiles Bookkeeping
     has granted (the reader's login sees the memberships). None when a fact cannot be read."""
     sys.path.insert(0, str(HERE))
     import load_chain
@@ -221,8 +221,8 @@ def registration_facts(reader_env: dict, env: dict) -> dict | None:
             with psycopg2.connect(load_chain.in_database(load_chain.data_url(source), database), connect_timeout=10) as conn, conn.cursor() as cur:
                 cur.execute(sql)
                 return cur.fetchone()[0]
-        return {"policies": one(env, "data", "select count(*) from mdm.policy"),
-                "datasets": one(env, "data", "select count(*) from mdm.dataset_mapping"),
+        return {"policies": one(env, "control", "select count(*) from rules.policy"),
+                "datasets": one(env, "control", "select count(*) from rules.dataset_reading"),
                 "profiles": len(PROFILES),
                 "profiles_granted": one(reader_env, "control", "select count(*) from pg_auth_members m join pg_roles r on r.oid = m.roleid "
                                         "join pg_roles u on u.oid = m.member where u.rolname = 'bookkeeping_runtime' and r.rolname like 'bk\\_worker\\_%'")}

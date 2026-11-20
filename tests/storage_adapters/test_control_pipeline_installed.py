@@ -37,7 +37,7 @@ def test_installed_rules_and_real_workers_complete_and_resume_one_run(installed,
                 (root / "private-control-pipeline.log").write_text(result.stdout + "\n" + result.stderr)
             assert result.returncode == 0, "Installed pipeline failed; private diagnostic retained"
             return json.loads(result.stdout) if report else None
-        command("rules", "init", "--agent-role", role)
+        command("rules", "init", "--agent-role", role, "--registrar-role", role)
         command("bookkeeping", "init", "--runtime-role", role)
         command("bookkeeping", "init", "--runtime-role", reader_role)
         command("change-journal", "init", "--runtime-role", role)

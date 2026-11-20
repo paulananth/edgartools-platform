@@ -19,15 +19,8 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
 
     migrate = mdm_sub.add_parser("init", help="Create the MDM schema, or bring it to current")
     migrate.add_argument("--application-role", default="application")
-    migrate.add_argument("--application-host", default="%", help="MySQL runtime account host")
-    migrate.add_argument("--prepared-store", action="store_true", default=True,
-                         help="Install governed prepared storage on a fresh PostgreSQL or MySQL target")
     migrate.set_defaults(handler=_logged_handler("init", _handle_migrate))
 
-    registrar = mdm_sub.add_parser("grant-registration", help="Owner: let a restricted login register rules in MDM "
-                                   "(reads the stored records, writes the policy and dataset tables)")
-    registrar.add_argument("--role", required=True, help="The registration login, an existing role with no administrative rights")
-    registrar.set_defaults(handler=_logged_handler("grant-registration", _handle_grant_registration))
 
     capture = mdm_sub.add_parser("prepare-capture", help="Write a declared target's input manifest for one bundle of "
                                  "captured documents, from the source's Bookkeeping section (version 2)")
@@ -86,25 +79,10 @@ def _handle_migrate(args: argparse.Namespace) -> int:
 
     engine = owner_engine("mdm")
     try:
-        payload = migrate(engine, application_role=args.application_role,
-                          application_host=args.application_host,
-                          prepared=args.prepared_store)
+        payload = migrate(engine, application_role=args.application_role)
     finally:
         engine.dispose()
     print(json.dumps(payload, indent=2, sort_keys=True))
-    return 0
-
-
-def _handle_grant_registration(args: argparse.Namespace) -> int:
-    from edgar_warehouse.database_connections import owner_engine
-    from edgar_warehouse.mdm.registration import grant_registrar
-
-    engine = owner_engine("mdm")
-    try:
-        grant_registrar(engine, args.role)
-    finally:
-        engine.dispose()
-    print(json.dumps({"registration_login": args.role, "granted": True}, sort_keys=True))
     return 0
 
 

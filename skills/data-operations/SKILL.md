@@ -125,7 +125,8 @@ the whole list.
    pins. A published version is operational. A missing or draft code set is a
    blocker for that domain: route it through data-profiling's RDM steps
    (`rdm draft`, `rdm diff`, operator `rdm approve`, `rdm publish`). Leave the
-   code set unpublished until those words exist.
+   code set unpublished until those words exist. A code set keeps one version: publishing deletes the
+   one it replaces, `rdm retire` removes it, and `edgar-warehouse rdm prune [<code set>]` cleans a store an earlier build left with more.
 4. **Check the silver tables.** Data-onboarding registers each part's approved spec
    ([TARGETS.md](../data-onboarding/TARGETS.md)); this skill creates none. For each part,
    `edgar-warehouse silver created <spec>` then `edgar-warehouse silver describe <table>` with the runtime login.
@@ -383,8 +384,6 @@ Work it out from counts before starting:
 - **Measure a slow load with `scripts/profile_load.py`, never by hand**.
   `progress` shows, for the running runs, the units in each state per step and how long they have run: the
   answer to "how far is it", and it lists runs left `running` by a load that was stopped.
-  `quality` lists the data quality counts each merge run retained (records, records set aside by a failed check,
-  open reviews, fields with empty values).
   `failures` groups the units that hold an error by step, state and error shape, with counts: read it before
   opening the load log.
   `steps` gives each step's share of a finished run;

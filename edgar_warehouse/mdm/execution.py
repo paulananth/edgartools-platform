@@ -17,34 +17,28 @@ from . import limits
 from .activation import check_policy
 from .adapters import UnsupportedRecord, normalize
 from .evidence import deferred_record
-from .store import Conflict, Store, current_reading, reading_at, storage_adapter
+from .store import Conflict, current_reading, reading_at
 
 
 def runtime_files() -> list[Path]:
     """The execution module owns the code its caller must pin."""
     from edgar_warehouse.bookkeeping.clean import config
     from edgar_warehouse.mdm import (
-        activation, adapters, assessment, binding, catalog, classification,
-        correction, evidence, identifier_types, identity, matching, registration,
-        names, prepared, prepared_registry, prepared_publication, master_index, master_search, detail_lookups, record_reads, primitives, quality, relationships, scope, store, survivorship, waterfall_passes,
+        activation, adapters, binding, catalog, classification, correction, evidence, identifier_types, identity,
+        matching, names, master_search, detail_lookups, primitives, quality, relationships, store, survivorship,
+        waterfall_passes,
     )
-    from edgar_warehouse.rules import files, source_engine
+    from edgar_warehouse.rules import files, registry, source_engine
     from edgar_warehouse.workers import source_mapping
 
     # Explicit execution dependencies.
     # CLI presentation is not executable merge behavior. This is not
     # the separately tracked complete environment/reproducibility fingerprint.
-    modules = (activation, adapters, assessment, binding, catalog, classification, config,
-               correction, evidence, files, identifier_types,
-               identity, limits, matching, names, prepared, prepared_registry, prepared_publication, master_index, master_search, detail_lookups, record_reads, primitives, quality,
-               relationships, registration, scope, source_mapping, store, survivorship, waterfall_passes)
-    adapter = store.storage_adapter()
-    adapter_files = [Path(getfile(adapter)).with_name(name) for name in
-                     ("database_adapter.py", "adapter_model.py", "adapter_sql.py", "registry_migration.py")]
+    modules = (activation, adapters, binding, catalog, classification, config, correction, evidence, files,
+               identifier_types, identity, limits, matching, names, master_search, detail_lookups, primitives, quality,
+               registry, relationships, source_mapping, store, survivorship, waterfall_passes)
     return [Path(__file__), *[Path(getfile(module)) for module in modules],
-            *source_engine.runtime_files(), catalog.path(), *adapter_files,
-            *[Path(store.__file__).parent / "migrations" / module.MIGRATION
-              for module in (registration,)]]
+            *source_engine.runtime_files(), catalog.path()]
 
 
 def _reject_json_constant(value):
@@ -61,7 +55,7 @@ def _finite_json_float(value):
 def batch_input(
     batch: dict,
     root: Path,
-    store: Store,
+    rules,
     *,
     policy_digest: str | None = None,
     mapping_versions: dict[str, int] | None = None,
@@ -96,7 +90,7 @@ def batch_input(
     if hashlib.sha256(raw).hexdigest() != spec["sha256"]:
         raise Conflict("Source artifact digest mismatch")
     code = spec["source_code"]
-    with store.engine.connect() as conn:
+    with rules.connect() as conn:  # the Rules Database: the registered readings
         if mapping_versions is None:
             reading = current_reading(conn, code)
             if reading is None:
@@ -110,8 +104,10 @@ def batch_input(
     # rule: every other contract states its kind and needs no policy to read.
     policy = None
     if contract["adapter"].get("classification"):
-        with store.engine.connect() as conn:
-            policy = storage_adapter().registered_policy(conn, policy_digest)
+        from edgar_warehouse.rules import registry
+
+        with rules.connect() as conn:
+            policy = registry.policy(conn, policy_digest)
         if policy is None:
             # Fail before reading a record, not on the first one.
             raise Conflict(

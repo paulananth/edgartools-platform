@@ -86,10 +86,14 @@ def test_a_cyclic_draft_can_still_be_described():
 
 
 def test_namespace_comes_from_configuration(tmp_path):
-    path = tmp_path / "context" / "definitions.yaml"
+    data = b'{"code":"invented-kind"}\n{"code":"another-kind"}\n'
+    folder = tmp_path / "reference" / "published" / "mdm-kinds" / "test"
+    folder.mkdir(parents=True)
+    (folder / "canonical.jsonl").write_bytes(data)
+    path = tmp_path / "mastering" / "engine-v1.yaml"
     path.parent.mkdir()
-    path.write_text("kinds: {invented-kind: Invented, another-kind: Another}\n")
+    path.write_text(f"kinds: {{code_set: mdm-kinds, version: test, sha256: {hashlib.sha256(data).hexdigest()}}}\n")
     assert context_subjects(tmp_path) == {"invented-kind", "another-kind", "relationship"}
     path.write_text("kinds: [invented-kind]\n")
-    with pytest.raises(RulesFileError, match="configured kinds"):
+    with pytest.raises(RulesFileError, match="pins its kinds"):
         context_subjects(tmp_path)

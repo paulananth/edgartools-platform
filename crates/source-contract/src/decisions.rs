@@ -171,30 +171,3 @@ pub fn replay_record_decisions(raw: &str) -> Result<String, String> {
     ]);
     serde_json::to_string(&result).map_err(|_| "Cannot serialize replayed decisions".into())
 }
-
-/// Owned records that are unbound must not fall back to their old stored binding.
-pub fn resolve_record_bindings(raw: &str) -> Result<String, String> {
-    #[derive(Deserialize)]
-    struct Inputs {
-        subjects: Vec<String>,
-        bindings: indexmap::IndexMap<String, String>,
-        canonical: indexmap::IndexMap<String, String>,
-    }
-    let input: Inputs = serde_json::from_str(raw).map_err(|_| "Invalid record binding inputs")?;
-    let mut result = indexmap::IndexMap::new();
-    for subject in input.subjects {
-        let record = input
-            .bindings
-            .get(&subject)
-            .map(|identity| {
-                input
-                    .canonical
-                    .get(identity)
-                    .cloned()
-                    .ok_or_else(|| "Unknown bound identity".to_owned())
-            })
-            .transpose()?;
-        result.insert(subject, record);
-    }
-    serde_json::to_string(&result).map_err(|_| "Cannot serialize current record bindings".into())
-}

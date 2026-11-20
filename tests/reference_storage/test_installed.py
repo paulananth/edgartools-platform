@@ -30,7 +30,6 @@ sys.exit(main(json.load(sys.stdin)))
         command(["rdm", "draft", "--file", str(draft)])
         command(["rdm", "approve", name, "1", "--by", "operator", "--words", "Approve this invented test version"])
         command(["rdm", "publish", name, "1", "--out", str(out)])
-        first_time = command(["rdm", "describe", name])["valid_from"]
         assert command(["rdm", "verify", name, "1"])["matches"]
         for words, method in [("AI", "label"), ("the", "label"), ("-second", "label"),
                               ("well-known", "label"), ("an", "synonym")]:
@@ -44,10 +43,7 @@ sys.exit(main(json.load(sys.stdin)))
         command(["rdm", "draft", "--file", str(draft)])
         command(["rdm", "approve", name, "2", "--by", "operator", "--words", "Approve this invented replacement"])
         assert command(["rdm", "publish", name, "2", "--out", str(out)])["superseded"] == "1"
-        historical = command(["context", name, "a", "--as-at", first_time])
-        assert historical["trust"]["version"] == "1"
+        assert command(["context", name, "a"])["trust"]["version"] == "2"  # a code set keeps one version
         command(["rdm", "init", "--runtime-role", role])
-        assert command(["rdm", "verify", name, "1"])["matches"]
         assert command(["rdm", "verify", name, "2"])["matches"]
-        command(["rdm", "retire", name, "2"])
-        assert command(["rdm", "describe", name, "--version", "2"])["status"] == "retired"
+        assert command(["rdm", "retire", name, "2"])["status"] == "retired"

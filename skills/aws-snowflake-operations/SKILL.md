@@ -249,7 +249,11 @@ role and so keeps control. A database made by an administrator's
 SQL has its ownership moved at once with `GRANT OWNERSHIP ON DATABASE <name> TO ROLE <owner> COPY CURRENT GRANTS` (never
 `REVOKE CURRENT GRANTS`, above); `scripts/database_owner_sql.py` writes the statements from the names file and the databases named, and the
 role and the grants belong in the access Terraform root. The exception is a managed
-mirror's target database: the mirror owns it, no customer role may rename, move or drop it, and `DROP_MIRROR(<mirror>, TRUE)` removes it.
+mirror's target database, proved on a probe mirror: while the mirror replicates (active or suspended) the Snowflake application owns the target
+and `GRANT OWNERSHIP` is refused ("cannot be transferred while the mirror is active"); `CREATE_MIRROR` refuses a database that already exists, even one the
+mirror operator owns, so the owner role cannot own a target in advance. `DROP_MIRROR(<mirror>, TRUE)` removes the target. A target left by
+`DROP_MIRROR(<mirror>, FALSE)` is moved with the administrator's `GRANT OWNERSHIP ON DATABASE <name> TO ROLE <owner>` (no `COPY CURRENT GRANTS`: refused for
+an application-owned object, and the mirror operator's own attempt gives "Insufficient privileges"), then dropped by that owner. A live target is administered through its database role `<DATABASE>_ADMIN`, which the mirror operator role holds (the owner role does not).
 
 ## Credentials on the command line
 

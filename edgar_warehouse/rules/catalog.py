@@ -59,13 +59,11 @@ SOURCES, MDM, MASTER_RECORDS = "sources", "mdm", "master_records"
 SILVER, RDM, CODE_SETS = "silver", "rdm", "code_sets"
 JOURNAL, JOURNAL_SCHEMA, JOURNAL_TABLE = "journal", "change_journal", "processed_files"
 TEXT = "STRING"  # the catalog shows what a value means, not a database type
-# One relationship endpoint the rules name differently from its catalog domain.
-ENDPOINT_CATALOG_NAME = {"venue": "market_venue"}
 GOLD, SILVER_MARK = "Certification.Gold", "Certification.Silver"
 # The kinds of an identity: the domain whose glossary holds the term, for a heading
 # that does not start with a domain's display name (ticket 158, ticket 159).
 KIND_HOME = {"Adviser": "company", "Audit Firm": "company", "Fund Company": "company",
-             "Fund": "fund_structure", "Fund Series": "fund_structure", "Market/Venue": "market_venue"}
+             "Fund": "fund_structure", "Fund Series": "fund_structure"}
 RELATIONSHIP_FACTS = (" Each link has a capacity, and holds over one or more dated intervals, "
                       "stated by a filing or observed from one.")
 # The four data classes: tag name, its CONTEXT.md heading, and the words when CONTEXT.md has none.
@@ -348,11 +346,12 @@ def _pipeline_services(pipelines: list[dict], root: Path) -> list[dict]:
     by_name = {}
     for pipeline in pipelines:
         by_name.setdefault(pipeline["service"], pipeline)
+    digest = rules_digest(root) if by_name else ""
     return [{"name": name,
              "displayName": _visible_name(pipeline["name"].split(":", 2)[1]),
              "serviceType": "CustomPipeline",
              "description": "Configured source and standalone pipeline definitions; "
-                            f"rules digest `{rules_digest(root)}`. "
+                            f"rules digest `{digest}`. "
                             "This catalog does not enable schedules or run workloads."}
             for name, pipeline in sorted(by_name.items())]
 
@@ -400,14 +399,14 @@ def _step_pipelines(pipeline: dict, target: dict) -> list[dict]:
             for step in _steward_steps(target)]
 
 
-def _pipelines(root: Path) -> list[dict]:
+def _pipelines(root: Path, sources: dict[Path, dict]) -> list[dict]:
     """Native catalog pipelines for every declared source and standalone target."""
     owners = {}
     result = []
     for folder, scope, filename in (("sources", "source", "source.yaml"),
                                     ("pipelines", "pipeline", "pipeline.yaml")):
         for path in sorted((root / folder).glob("*/" + filename)):
-            body = files.load_source(path) if scope == "source" else files.load(path)
+            body = sources[path] if scope == "source" else files.load(path)
             catalog_metadata = body.get("catalog") or {}
             if not isinstance(catalog_metadata, dict):
                 raise CatalogError(f"{path}: catalog must be a mapping")
@@ -510,7 +509,8 @@ def _ancestors(steps: list[dict]) -> dict[str, set[str]]:
 
 
 def _governed(pipelines: list[dict], tables: list[dict], table_lineage: list[dict], root: Path,
-              families: dict[str, list[tuple[str, str]]]) -> tuple[list[dict], list[dict], list[dict]]:
+              families: dict[str, list[tuple[str, str]]],
+              sources: dict[Path, dict]) -> tuple[list[dict], list[dict], list[dict]]:
     """The path a steward follows for each source target: the feeds and
     reference files it reads, the run file it relies on and what builds it,
     then the steps that can fail, and the tables they publish. Returns the
@@ -522,7 +522,7 @@ def _governed(pipelines: list[dict], tables: list[dict], table_lineage: list[dic
     for edge in table_lineage:
         if edge["to"].startswith(fqn(SERVICE, MDM) + "."):
             lineage_by_dataset[edge["from"]].add(edge["to"])
-    bodies = {path.parent.name: files.load_source(path) for path in sorted((root / "sources").glob("*/source.yaml"))}
+    bodies = {path.parent.name: body for path, body in sources.items()}
     all_families = set(families)
     journal = fqn(SERVICE, JOURNAL, JOURNAL_SCHEMA, JOURNAL_TABLE)
     new_tables, new_lineage, edges, journaled = [], [], [], False
@@ -642,8 +642,8 @@ def _relationships(root: Path, policy: dict) -> list[dict]:
         props = row.get("properties") or {}
         capacities = [{"code": r["code"], "label": r["label"], "properties": r.get("properties") or {}}
                       for r in rows if r.get("parent_code") == name]
-        origin = ", ".join(_display(ENDPOINT_CATALOG_NAME.get(code, code)) for code in (props.get("from") or []))
-        destination = ", ".join(_display(ENDPOINT_CATALOG_NAME.get(code, code)) for code in (props.get("to") or []))
+        origin = ", ".join(_display(code) for code in (props.get("from") or []))
+        destination = ", ".join(_display(code) for code in (props.get("to") or []))
         roles = ", ".join(item["label"] for item in capacities if item.get("label"))
         text = row.get("definition") or row["label"]
         if origin or destination:
@@ -748,7 +748,7 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
         roots.append(row)
         props = row.get("properties") or {}
         for code in (props.get("from") or []) + (props.get("to") or []):
-            ends.add(ENDPOINT_CATALOG_NAME.get(code, code))
+            ends.add(code)
     names = sorted(kinds | ends)
     kind_tables = {fqn(SERVICE, MDM, MASTER_RECORDS, kind): kind for kind in kinds}
     words = {heading: _sentence(description.split("Avoid:")[0], 240)
@@ -781,8 +781,7 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
              if (home := glossary_of(heading)) and not heading.endswith(" Profile")]
     by_term = {term["name"]: term for term in terms}
     for row in roots:
-        first = next(iter((row.get("properties") or {}).get("from") or []), None)
-        home = ENDPOINT_CATALOG_NAME.get(first, first)
+        home = next(iter((row.get("properties") or {}).get("from") or []), None)
         if home not in names:
             continue
         by_term[row["code"]] = {
@@ -920,13 +919,12 @@ def _identifier_cases(kinds: dict, by_name: dict) -> list[dict]:
     return cases
 
 
-def _quality(root: Path, tables: list[dict], kinds: dict) -> dict:
+def _quality(root: Path, tables: list[dict], kinds: dict, sources: dict[Path, dict]) -> dict:
     """Configured checks and fixes. A profile proposal is not a case, and a
     case has no pass or fail result."""
     by_name = {_table_name(table): table for table in tables}
     cases = _identifier_cases(kinds, by_name)
-    for path in sorted((root / "sources").glob("*/source.yaml")):
-        body = files.load_source(path)
+    for path, body in sources.items():
         source = body.get("source") or path.parent.name
         for code, entry in sorted((body.get("dataset_contracts") or {}).items()):
             quality = ((entry.get("contract") or {}).get("quality") or {})
@@ -965,7 +963,8 @@ def plan(root: Path | None = None) -> dict:
     root = root or files.ROOT
     policy = files.policy(root)
     kinds = policy.get("kinds") or {}
-    by_kind = winners(policy, root)
+    bodies = {path: files.load_source(path) for path in sorted((root / "sources").glob("*/source.yaml"))}
+    by_kind = winners(policy, root, bodies)
     schemas, tables, lineage = [], [], []
     profiles = _profiles_of(root)
     silver_schemas, profiled, profiled_lineage = _profiles(root)
@@ -973,16 +972,15 @@ def plan(root: Path | None = None) -> dict:
     lineage += profiled_lineage
     relationship_tables = _relationships(root, policy)
     tables += relationship_tables
-    bodies = [(path, files.load_source(path)) for path in sorted((root / "sources").glob("*/source.yaml"))]
     # A feed captures one bronze family; a source that declares no feed of its own
     # reads the files of each feed that captures its family (a second kind from
     # another source's files).
     captured: dict[str, list[tuple[str, str]]] = {}
-    for path, body in bodies:
+    for path, body in bodies.items():
         for feed, spec in _feeds(body):
             if spec.get("family"):
                 captured.setdefault(spec["family"], []).append((body.get("source") or path.parent.name, feed))
-    for path, body in bodies:
+    for path, body in bodies.items():
         source = body.get("source") or path.parent.name
         mdm = body.get("dataset_contracts") or {}
         schemas.append({"name": source, "database": fqn(SERVICE, SOURCES),
@@ -1031,9 +1029,9 @@ def plan(root: Path | None = None) -> dict:
                        "description": f"One {_display(kind)} in the master data. "
                                       "The first dataset with a value fills each field."
                                       + _kind_profile_text(kind, profiles)})
-    pipelines = _pipelines(root)
+    pipelines = _pipelines(root, bodies)
     pipeline_services = _pipeline_services(pipelines, root)
-    governed_tables, governed_lineage, service_lineage = _governed(pipelines, tables, lineage, root, captured)
+    governed_tables, governed_lineage, service_lineage = _governed(pipelines, tables, lineage, root, captured, bodies)
     tables += governed_tables
     lineage += governed_lineage
     has_journal = any(table["databaseSchema"] == fqn(SERVICE, JOURNAL, JOURNAL_SCHEMA) for table in tables)
@@ -1069,7 +1067,7 @@ def plan(root: Path | None = None) -> dict:
         "profiles": [mark for mark in _profile_marks(profiles)
                      if mark["table"] in {_table_name(table) for table in tables}],
         **_meaning(root, policy, tables, lineage),
-        **_quality(root, tables, kinds),
+        **_quality(root, tables, kinds, bodies),
     }
 
 

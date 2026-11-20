@@ -5,7 +5,7 @@ from uuid import uuid4
 import json
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
 
 from tests.support.duty import duty_url
@@ -83,13 +83,38 @@ def test_supersession_retirement_and_history(reference, tmp_path):
     draft(store, name=name, version="2", supersedes="1")
     approve(store, name, "2")
     assert store.publish(name, "2", out=tmp_path)["superseded"] == "1"
-    assert store.version(name, "1")["valid_to"] == store.version(name, "2")["valid_from"]
-    assert store.verify(name, "1")["matches"] and read_published(tmp_path, name, "1", first["sha256"])
-    store.retire(name, "2")
-    assert store.version(name, "2")["valid_to"] is not None
-    draft(store, name=name, version="3", supersedes="2")
+    with pytest.raises(Blocked, match="Unknown reference data version"):  # a code set keeps one version
+        store.version(name, "1")
+    assert store.verify(name, "2")["matches"] and read_published(tmp_path, name, "1", first["sha256"])  # git's copy stays
+    assert store.retire(name, "2")["valid_to"] is not None
+    with pytest.raises(Blocked, match="Unknown reference data version"):
+        store.version(name, "2")
+    draft(store, name=name, version="3")
     approve(store, name, "3")
     assert store.publish(name, "3", out=tmp_path)["superseded"] is None
+
+
+def test_a_publish_leaves_only_its_version_in_every_table(reference, tmp_path):
+    store, *_ = reference
+    name = draft(store)
+    approve(store, name)
+    store.publish(name, "1", out=tmp_path)
+    draft(store, name=name, version="2", supersedes="1")
+    approve(store, name, "2")
+    store.publish(name, "2", out=tmp_path)
+    with store.engine.connect() as conn:
+        for table, set_column, version_column in (("code", "code_set", "version"), ("code_label", "code_set", "version"),
+                ("code_path", "code_set", "version"), ("crosswalk_row", "from_set", "from_version"),
+                ("code_set_version", "code_set", "version")):
+            held = store.tables[table]
+            versions = set(conn.scalars(select(held.c[version_column]).where(held.c[set_column] == name)))
+            assert versions <= {"2"}, table
+        code = store.tables["code"]
+        assert conn.scalar(select(func.count()).select_from(code).where(code.c.code_set == name)) > 0
+    version = store.tables["code_set_version"]
+    with pytest.raises(DBAPIError):  # the version that stays is not deleted
+        with store.engine.begin() as conn:
+            conn.execute(version.delete().where(version.c.code_set == name))
 
 
 def test_content_and_approval_are_immutable_after_approval(reference):

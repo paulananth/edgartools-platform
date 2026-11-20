@@ -9,12 +9,11 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
-from edgar_warehouse.database_connections import storage_adapter
 
 
 class Conflict(ValueError):
@@ -58,51 +57,18 @@ BASELINE = "schema.sql"
 MIGRATIONS: tuple[str, ...] = ()
 
 
-def migrate(
-    engine: Engine,
-    *,
-    application_role: str,
-    application_host: str = "%",
-    prepared: bool = True,
-) -> dict:
-    """The stores' tables, then the mastering tables every merge writes."""
-    result = _migrate(engine, application_role=application_role, application_host=application_host, prepared=prepared)
+def migrate(engine: Engine, *, application_role: str) -> dict:
+    """The init stamp (PostgreSQL's `mdm` schema), then the mastering tables every merge writes."""
+    result = _stamp(engine, application_role=application_role) if engine.dialect.name == "postgresql" else {}
     from edgar_warehouse.mastering import store as mastering
 
     mastering.install(engine, runtime_role=application_role)
     return result
 
 
-def _migrate(
-    engine: Engine,
-    *,
-    application_role: str,
-    application_host: str = "%",
-    prepared: bool = True,
-) -> dict:
-    """Explicit isolated migration with checksum validation.
-
-    Role provisioning stays outside this function; deployments provide the
-    restricted login role.
-    """
-    if type(prepared) is not bool:
-        raise ValueError("prepared must be a boolean")
-    if not prepared:
-        raise Conflict(
-            "MDM installs governed storage only"
-        )
-    if engine.dialect.name == "mysql":
-        from . import catalog
-        catalog.assert_current()
-        from .prepared_registry import PROTOCOL, finish_indexes, PREFIX
-        result = storage_adapter().migrate_registry(engine,runtime_role=application_role,
-            runtime_host=application_host,configuration=catalog.CATALOG,kinds=catalog.CATALOG["kinds"],
-            prepared=prepared, prepared_protocol=PROTOCOL, runtime_execute=not prepared)
-        if prepared:
-            finish_indexes(engine)
-            storage_adapter().Adapter(engine, prefix=PREFIX, protocol=PROTOCOL).enable_runtime(
-                application_role, runtime_host=application_host)
-        return result
+def _stamp(engine: Engine, *, application_role: str) -> dict:
+    """Record once which schema init installed, by its checksum; a store holding another one is refused.
+    Role provisioning stays outside this function; deployments provide the restricted login role."""
     if engine.dialect.name != "postgresql":
         raise ValueError("MDM requires PostgreSQL 16")
     path = Path(__file__).parent / "migrations" / BASELINE
@@ -162,7 +128,6 @@ def _migrate(
                 )
             elif saved != extra_hash:
                 raise Conflict("Installed migration checksum differs")
-        storage_adapter().verify_native_registry(conn)
         for inherited in ("PUBLIC", application_role, "snowflake_write"):
             if inherited == "PUBLIC" or conn.scalar(
                 text("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=:r)"),
@@ -194,29 +159,11 @@ def _migrate(
         )
         if leaked:
             raise ValueError("Runtime role inherits direct MDM writes")
-    result = {
-        "migration": path.name,
-        "checksum": checksum,
-        "installed": not bool(installed),
-    }
-    if prepared:
-        from .prepared_registry import initialize
-
-        result["prepared_storage"] = initialize(
-            engine, application_role=application_role, application_host=application_host
-        )["migration"]
-    return result
-
-
-def _registry_configuration(conn):
-    if conn.dialect.name == "mysql":
-        from . import catalog
-        catalog.assert_current()
-        storage_adapter().require_registry(conn,digest(catalog.CATALOG))
+    return {"migration": path.name, "checksum": checksum, "installed": not bool(installed)}
 
 
 def register_policy(conn: Connection, body: dict) -> str:
-    """Migration/governance owner only; runtime has no INSERT privilege.
+    """On a Rules Database connection of the governance login; the loader cannot add to the registry.
 
     A body is refused, by name and with its reason, unless every rule in it is
     well formed and every `automatic_rules` entry names a rule version it holds
@@ -224,10 +171,10 @@ def register_policy(conn: Connection, body: dict) -> str:
     """
     from .activation import check_policy, rule_version_conflicts
 
+    from edgar_warehouse.rules import registry
+
     check_policy(body)
-    _registry_configuration(conn)
-    adapter = storage_adapter()
-    registered = [b for b in adapter.registered_policies(conn) if "kinds" in b]
+    registered = [b for b in registry.policies(conn) if "kinds" in b]
     reused = rule_version_conflicts(body, registered)
     if reused:
         # A rule version names one exact set of steps (§10 check 9). A new
@@ -249,11 +196,7 @@ def register_policy(conn: Connection, body: dict) -> str:
         or not all(isinstance(c, str) and c for c in consumers)
     ):
         raise ValueError("A policy requires distinct nonempty consumer names")
-    key = digest(body)
-    adapter.retain_policy(conn, body, key)
-    from .prepared_registry import approve_policy
-    approve_policy(conn, key)
-    return key
+    return registry.add_policy(conn, body)
 
 
 def _issued_namespaces(conn: Connection | None, code: str) -> frozenset[str]:
@@ -261,7 +204,9 @@ def _issued_namespaces(conn: Connection | None, code: str) -> frozenset[str]:
     this dataset as issuing. Without a connection, none."""
     if conn is None:
         return frozenset()
-    bodies = storage_adapter().registered_policies(conn)
+    from edgar_warehouse.rules import registry
+
+    bodies = registry.policies(conn)
     return frozenset(
         namespace
         for body in bodies
@@ -370,36 +315,35 @@ def register_dataset(
             raise ValueError(f"List the quality exceptions as nonblocking_deferred_reasons: {sorted(missing)}")
     if rules_authority is None:
         raise Conflict("Dataset requires approved frozen Rules source authority")
+    missing = sorted(set(CONTRACT_PARTS) - set(body))
+    if missing:
+        raise ValueError(f"A Dataset Contract names {', '.join(missing)}")
+    from edgar_warehouse.rules import registry
     from edgar_warehouse.rules.acquisition_authority import registration_authority
 
-    _registry_configuration(conn)
     evidence = registration_authority(rules_authority, code, body)
     authority_version = evidence["version_id"]
     # Pin the authority after the comparison below, not before: a registry
     # version bump is not a mapping change, and must not mint a reading that
     # would fork every later assertion id for a mapping nobody corrected.
     pinned = {**body, "registry_evidence": evidence}
-    adapter = storage_adapter()
-    current = adapter.dataset_reading(conn, code)
+    current = registry.reading(conn, code)
     if current is not None:
         stored = current["body"]
         if stored == pinned and current["registry_version"] == authority_version:
-            from .prepared_registry import approve_mapping
-            approve_mapping(conn, code, current["mapping_version"], pinned)
             return
         if _mapping_of(stored) == _mapping_of(pinned):
             raise Conflict(
                 "Dataset mapping is unchanged; a registry version bump is not a new reading"
             )
         protected_change(stored, pinned)
-        adapter.retain_dataset_reading(conn, code, current["mapping_version"] + 1, pinned, str(UUID(authority_version)))
-        from .prepared_registry import approve_mapping
-        approve_mapping(conn, code, current["mapping_version"] + 1, pinned)
+        registry.add_reading(conn, code, current["mapping_version"] + 1, pinned, str(UUID(authority_version)))
         return
-    adapter.retain_dataset_reading(conn, code, 1, pinned, str(UUID(authority_version)))
-    from .prepared_registry import approve_mapping
+    registry.add_reading(conn, code, 1, pinned, str(UUID(authority_version)))
 
-    approve_mapping(conn, code, 1, pinned)
+
+# What every Dataset Contract states.
+CONTRACT_PARTS = ("provider", "family", "schema_version", "record_key", "publication_key", "effective_time", "semantics")
 
 
 def _mapping_of(body: dict) -> dict:
@@ -426,12 +370,11 @@ def current_reading(conn: Connection, code: str) -> tuple[int, dict] | None:
     One accessor, so that a caller cannot take the contract body without the
     reading number that produced it. Reading them apart is how an adapter ends
     up stamping version 1 onto a record it read under a corrected mapping.
-
-    `mdm.dataset` cannot answer this: it is append-only,
-    so its body stays whatever was registered first.
+    `conn` is a Rules Database connection (`edgar_warehouse.rules.registry`).
     """
-    _registry_configuration(conn)
-    found = storage_adapter().dataset_reading(conn, code)
+    from edgar_warehouse.rules import registry
+
+    found = registry.reading(conn, code)
     return (found["mapping_version"], found["body"]) if found is not None else None
 
 
@@ -443,8 +386,9 @@ def reading_at(conn: Connection, code: str, mapping_version: int) -> tuple[int, 
     a corrected mapping mid-run changes the reconstructed run scope and the
     run can never be resumed (Codex review of PR #695, P1).
     """
-    _registry_configuration(conn)
-    found = storage_adapter().dataset_reading(conn, code, mapping_version)
+    from edgar_warehouse.rules import registry
+
+    found = registry.reading(conn, code, mapping_version)
     if found is None:
         raise Conflict(
             f"Run pins reading {mapping_version} of {code}, which is not registered"
@@ -473,59 +417,3 @@ def protected_change(current: dict, proposed: dict) -> None:
             "Dataset identity is immutable within one source code; "
             f"register a new source code: {', '.join(sorted(moved))}"
         )
-
-
-class Publisher(Protocol):
-    def publish(self, key: str, payload: dict, expected_hash: str) -> None: ...
-    def verify(self, key: str, payload: dict, expected_hash: str) -> str: ...
-
-
-class Store:
-    def __init__(self, engine: Engine, *, read_only: bool = False):
-        if type(read_only) is not bool:
-            raise ValueError("read_only must be a boolean")
-        if engine.dialect.name not in ("postgresql", "mysql"):
-            raise ValueError("MDM requires PostgreSQL")
-        with engine.connect() as conn:
-            from .prepared_registry import require_installed
-
-            self.protocol = require_installed(conn).protocol
-        self.prepared = True
-        self.engine = engine
-        self.read_only = read_only
-
-    def commit(self, conn: Connection, request: dict, run_id: str) -> dict:
-        if self.read_only:
-            raise Conflict("A read-only MDM store cannot admit writes or publication")
-        from .prepared import commit
-
-        return commit(self, request, run_id)
-
-    def deliver_one(
-        self,
-        consumer: str,
-        worker: str,
-        publisher: Publisher,
-        *,
-        lease_seconds: int = 300,
-        batch_id: str | None = None,
-    ) -> bool:
-        if self.read_only:
-            raise Conflict("A read-only MDM store cannot admit writes or publication")
-        from .prepared_publication import deliver
-
-        return deliver(self, consumer, worker, publisher,
-                       lease_seconds=lease_seconds, batch_id=batch_id)
-
-    def run_status(self, run_id: str) -> dict:
-        """Observation for Bookkeeping; never declares an empty run complete."""
-        from .prepared_publication import adapter, publication_rows
-
-        api = adapter(self)
-        with self.engine.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
-            observed = api.observed_batches(run_id, connection=conn)
-            _, publications = publication_rows(api,observed,connection=conn,light=True)
-        batches = len({row["batch_key"] for row in publications})
-        pending = sum(not row["verified"] for row in publications)
-        return {"batches": batches, "pending": pending,
-                "publication_complete": batches > 0 and pending == 0}

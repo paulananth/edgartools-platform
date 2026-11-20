@@ -24,6 +24,9 @@ CODE_COLUMNS = ("code", "label", "definition", "parent_code", "valid_from", "val
                 "value", "unit", "properties")
 # What a diff compares for a code's value: the value, its unit and its period.
 VALUED = ("value", "unit", "valid_from", "valid_to")
+# A version's tables, children first: the order its foreign keys allow it to be deleted in.
+DROP_ORDER = ("code_label", "code_path", "crosswalk_row", "level", "code_set_usage", "code_set_hint", "code",
+              "code_set_version")
 # A crosswalk target RDM does not hold (an outside standard) carries this version.
 OUTSIDE = "outside"
 # An answer for an agent stays within this many bytes of JSON, as `context` does.
@@ -271,13 +274,15 @@ class RDM:
             if conn.dialect.name == "postgresql":
                 conn.execute(text("SELECT rdm.write_published_codes(:s, :v)"), {"s": code_set, "v": version})
             published = self._version(conn, code_set, version)
+            self._drop_closed(conn, code_set)
             self._write(Path(out) / code_set / version, codes, levels, found, published)
         return {"code_set": code_set, "version": version, "sha256": digest, "codes": len(codes),
                 "superseded": current}
 
     def retire(self, code_set: str, version: str) -> dict:
-        """Retire a published version on the operator's word: kept, never
-        deleted, so every pin stays resolvable; its successor supersedes it."""
+        """Retire a code set's published version on the operator's word: its rows
+        leave every table in the same transaction (a code set keeps one version;
+        git keeps the history). The answer is the version as it was retired."""
         with transaction(self.engine) as conn:
             lock_code_set(conn, code_set)
             table = self.tables["code_set_version"]
@@ -285,7 +290,41 @@ class RDM:
                 table.c.status == "published").values(status="retired")).rowcount
             if done != 1:
                 raise Blocked(f"{code_set} {version} is not a published version")
-            return self._version(conn, code_set, version)
+            retired = self._version(conn, code_set, version)
+            self._drop_closed(conn, code_set)
+            return retired
+
+    def prune(self, code_set: str | None = None) -> dict:
+        """Delete every replaced or retired version still held (of one code set, or of all):
+        what an earlier build kept. A store that only publishes and retires holds none."""
+        with transaction(self.engine) as conn:
+            names = [code_set] if code_set else conn.scalars(select(self.tables["code_set"].c.code_set)).all()
+            gone = {}
+            for name in names:
+                lock_code_set(conn, name)
+                if dropped := self._drop_closed(conn, name):
+                    gone[name] = dropped
+            return gone
+
+    def _drop_closed(self, conn, code_set: str) -> list[str]:
+        """Delete the code set's versions whose valid_to is set (replaced or retired), children first.
+        The triggers allow a delete only of such a version."""
+        table = self.tables["code_set_version"]
+        closed = list(conn.scalars(select(table.c.version).where(
+            scope(conn, table, code_set=code_set), table.c.valid_to.is_not(None))).all())
+        for version in closed:
+            if conn.dialect.name == "postgresql":
+                conn.execute(text("SELECT rdm.delete_published_codes(:s, :v)"), {"s": code_set, "v": version})
+            else:  # a code's parent is deleted with its children: MySQL checks that key row by row
+                conn.execute(text("SET SESSION foreign_key_checks = 0"))
+            for name in DROP_ORDER:
+                held = self.tables[name]
+                keys = ({"from_set": code_set, "from_version": version} if name == "crosswalk_row"
+                        else {"code_set": code_set, "version": version})
+                conn.execute(held.delete().where(scope(conn, held, **keys)))
+            if conn.dialect.name == "mysql":
+                conn.execute(text("SET SESSION foreign_key_checks = 1"))
+        return closed
 
     def verify(self, code_set: str, version: str) -> dict:
         """Whether a published version's stored sha256 is its rows' canonical sha256."""

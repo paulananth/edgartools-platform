@@ -13,8 +13,10 @@ mdm-relationship-types:
   # Version 4 adds RELATED_PERSON, Form ADV's own term (operator, 2026-11-08: "RELATED_PERSON (Recommended)").
   # Version 5 adds INVESTMENT_ADVISER_TO's capacities `advisor` and `subadvisor`, SEC Form N-CEN's own
   # adviser types (operator, 2026-11-14 10:30 ET, asked to name them with N-CEN's terms: "yes").
-  version: '5'
-  sha256: 3fd9c31a87657c5de5ba38b6771652469f90484ac313c665cbeff28ecf887a2b
+  # Version 6: every type names MDM kinds at both ends; a trading venue is RDM's iso-10383-mic on a Security's
+  # listing, not a kind (operator, 2026-11-20: "Yes").
+  version: '6'
+  sha256: e544991c2caca8077c163f041dc06b6bb1cbc6c11eeeb965bf253fb83cb5e300
 sec-place-codes:
   code_set: sec-place-codes
   version: '1'

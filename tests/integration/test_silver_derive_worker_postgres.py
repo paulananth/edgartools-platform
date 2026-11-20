@@ -156,7 +156,8 @@ def test_links_land_as_one_row_a_period_and_a_second_build_keeps_them(postgres, 
         silver.register(owner, spec_file(files.ROOT / "silver" / "silver-relationship.yaml", None), runtime_role=RUNTIME)
         monkeypatch.setattr(links, "calculate", calculate)
         monkeypatch.setattr(stores, "open_store", lambda engine: Master2())
-        monkeypatch.setattr("edgar_warehouse.database_connections.storage_adapter", lambda: Policies())
+        monkeypatch.setattr("edgar_warehouse.rules.registry.engine", lambda: Rules())
+        monkeypatch.setattr("edgar_warehouse.rules.registry.policy", lambda conn, digest: {"relationships": {}})
         first = links.build(runtime, MasterPolicy(), "invented", "2026-11-06T00:00:00+00:00")
         links.build(runtime, MasterPolicy(), "invented", "2026-11-06T00:00:00+00:00")
         assert first == {"table": "relationship", "links": 1, "rows": 1, "waiting": {"no_master": 2}}
@@ -199,9 +200,15 @@ def test_the_floor_refuses_a_company_the_source_does_not_hold(postgres):
             silver_derive._floor(small, "line_items", 5)
 
 
-class Policies:
-    def registered_policy(self, conn, digest):
-        return {"relationships": {}}
+class Rules:
+    """The Rules Database: links.build reads the policy there."""
+    def connect(self):
+        from contextlib import nullcontext
+
+        return nullcontext(None)
+
+    def dispose(self):
+        pass
 
 
 class MasterPolicy(Master):

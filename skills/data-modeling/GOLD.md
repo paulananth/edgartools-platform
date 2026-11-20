@@ -170,7 +170,8 @@ gets its own Gold view, `ref_<code set>`, of that code set's codes, made from th
 `code_set`. **A code set keeps exactly one version** (version 1.0: git holds what came before): its folder holds one
 version, and the view selects that version by name, so no other row can reach it. A new version replaces the old
 folder in the change that publishes it; a retired code set loses its folder, and its view goes with it. The views
-refuse a folder with more than one version.
+refuse a folder with more than one version. RDM's store holds the same rule: publishing a version deletes the
+one it replaces, in one transaction (the RDM spec, section 3).
 
 **KISS in shapes:** the fewest objects that answer the questions. One fact view per silver grain; one base view of the
 masters with a thin view per kind on it; one view per published code set; one date dimension. No surrogate keys (the

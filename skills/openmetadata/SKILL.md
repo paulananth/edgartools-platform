@@ -73,10 +73,8 @@ A declared domain with a kind file is qualified and receives the mastered kind,
 the datasets whose records become that kind or fill its fields, and the
 registered silver tables whose links name that kind. A declared domain with no
 kind file is created from its definition and receives no kind table and no
-dataset. Use the kind code as the native name when configuration has one
-(`branch`, `government`). International Organization and Market/Venue have no
-kind code. Their approved catalog names are `international_organization` and
-`market_venue`. Those names are destination identities, not kind codes.
+dataset. Use the kind code of RDM code set `mdm-kinds` as the native name
+(`branch`, `government`, `international_organization`).
 
 MDM, RDM and silver are processing layers, not subject domains ([data-catalog](../data-catalog/SKILL.md)): do not create a
 domain named after a layer.

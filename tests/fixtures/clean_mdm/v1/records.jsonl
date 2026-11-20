@@ -5,6 +5,5 @@
 {"issuer":"fund_company","key":"security","kind":"security","name":"Synthetic Fund Share","valid_from":"2026-01-01T00:00:00+00:00"}
 {"head_office":"company","key":"branch","kind":"branch","name":"Synthetic Branch","valid_from":"2026-01-01T00:00:00+00:00"}
 {"key":"government","kind":"government","name":"Synthetic Government Body","valid_from":"2026-01-01T00:00:00+00:00"}
-{"key":"venue","kind":"venue","name":"Synthetic Venue","operator":"company","valid_from":"2026-01-01T00:00:00+00:00"}
 {"key":"international","kind":"international_organization","name":"Synthetic International Organization","valid_from":"2026-01-01T00:00:00+00:00"}
 {"holding":"security","key":"manager13f","kind":"company","name":"Synthetic 13F Manager","valid_from":"2026-01-01T00:00:00+00:00"}

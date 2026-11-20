@@ -421,8 +421,7 @@ Examples only; nothing above depends on them.
   other name one by one from its source: `BENEFICIAL_OWNER_OF` (13D/13G, Forms
   3/4/5), `IS_SUBSIDIARY_OF` (Exhibit 21), `INVESTMENT_ADVISER_TO` (Form ADV,
   N-CEN) beside GLEIF's `IS_FUND-MANAGED_BY` (a fund's manager, a different
-  role), `HAS_MARKET_OPERATOR` (MiFID II's market operator),
-  `SUCCESSOR_ENTITY` (GLEIF).
+  role), `SUCCESSOR_ENTITY` (GLEIF).
 - **Who decides is not who owns:** an adviser's discretion (discretionary or
   non-discretionary, Form ADV Item 5.F) is on its link; ownership is
   `BENEFICIAL_OWNER_OF`.

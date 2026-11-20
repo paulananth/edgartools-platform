@@ -10,12 +10,35 @@ import pytest
 
 from edgar_warehouse.mdm import catalog, execution
 from edgar_warehouse.rules import files
+from tests.support.kinds import write_catalog
 
 
 def write(root, body):
-    target = root / catalog.RELATIVE
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(files.dumps(body))
+    write_catalog(root, body)
+
+
+def test_each_kind_holding_golden_records_has_one_rules_file_and_back():
+    """The kinds are RDM code set mdm-kinds; a code that holds golden records has its merge rules file."""
+    codes = files.kinds()
+    assert sorted(catalog.CATALOG["kinds"]) == sorted(code["code"] for code in codes)
+    golden = {code["code"] for code in codes if code["properties"]["golden_records"]}
+    assert golden == {path.stem for path in (files.ROOT / "merge" / "kinds").glob("*.yaml")}
+    assert all(code["label"].strip() and code["definition"].strip() for code in codes)
+
+
+def test_every_probable_kind_a_rule_names_is_a_kind():
+    """A held-back record's probable kind is a code of mdm-kinds, with or without golden records."""
+    named = {step["probable_kind"] for path in (files.ROOT / "merge" / "kinds").glob("*.yaml")
+             for rule in files.load(path).get("rules", []) for step in rule.get("steps", [])
+             if step.get("probable_kind")}
+    assert named and named <= set(catalog.CATALOG["kinds"])
+
+
+def test_a_catalog_that_lists_its_kinds_is_refused(tmp_path):
+    (tmp_path / catalog.RELATIVE).parent.mkdir(parents=True)
+    (tmp_path / catalog.RELATIVE).write_text(files.dumps({**catalog.CATALOG, "kinds": ["company"]}))
+    with pytest.raises(ValueError, match="pins its kinds as an RDM code set"):
+        catalog.load(tmp_path)
 
 
 def test_configuration_is_part_of_the_execution_identity():

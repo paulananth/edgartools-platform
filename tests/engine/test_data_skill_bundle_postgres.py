@@ -222,6 +222,11 @@ profile.update(eligibility_kind="bundle-invented-kind", eligibility_categories=[
                waterfall_field="invented_waterfall",
                waterfall_identifier_field="invented_target")
 body["pair_comparisons"]["bundle-invented"] = profile
+import hashlib, json
+kinds = "".join(json.dumps({"code": kind, "definition": "Invented."}) + "\\n" for kind in body["kinds"]).encode()
+(folder / "reference/published/mdm-kinds/test").mkdir(parents=True)
+(folder / "reference/published/mdm-kinds/test/canonical.jsonl").write_bytes(kinds)
+body["kinds"] = {"code_set": "mdm-kinds", "version": "test", "sha256": hashlib.sha256(kinds).hexdigest()}
 (folder / catalog.RELATIVE).write_text(files.dumps(body))
 env = {**os.environ, "EDGAR_RULES_ROOT": str(folder.resolve())}
 code = """
@@ -237,18 +242,6 @@ paths = candidate_paths(rule)
 assert paths["identifier"] == ("identifiers", "invented_namespace")
 assert paths["cascade"] == ("provenance", "matching", "invented_name_count", "invented_waterfall", "invented_target")
 assert candidate_value({"identifiers":{"invented_namespace":"invented-value"}}, paths["identifier"]) == "invented-value"
-from edgar_warehouse.mdm.matching import candidate_routes
-from edgar_warehouse.mdm.evidence import assertion
-from edgar_warehouse.rules.source_engine import prepare_record_lookups
-item = assertion(source_code="invented.source",record_key="one",publication_key="first",revision=1,
-    effective_at=None,kind="bundle-invented-kind",fields={},identifiers={"invented_namespace":"invented-value"})
-command = {"readings":[item],"previous":{},"subjects":[item["subject"]],"bindings":{},
-    "quarantined":{},"policy":{},"normalizers":{},"batch_id":"invented-first","occurrences":{},
-    "candidate_routes":candidate_routes()}
-current, changes = prepare_record_lookups(command)
-assert current[item["subject"]]["matching_keys"] == {'["bundle-invented","identifier"]':"invented-value"}
-again, changes = prepare_record_lookups({**command,"previous":current,"batch_id":"invented-retry"})
-assert again == current and changes == []
 right["fields"]["invented_status"]["value"] = "OTHER"
 assert compare_candidate_records(rule, [({}, right)]) == [[False, False]]
 """
@@ -301,7 +294,6 @@ print(json.dumps({{"shipped": shipped, "modules": modules, "absent": absent, "ru
     assert any(p.endswith("mastering/schema/postgresql.sql") for p in found["shipped"])
     assert any(p.endswith("mastering/schema/mysql.sql") for p in found["shipped"])
     assert any(p.endswith("mdm/migrations/schema.sql") for p in found["shipped"])
-    assert any(p.endswith("mdm/migrations/registration_authority.sql") for p in found["shipped"])
 
 
 def _stores(databases):
@@ -333,14 +325,11 @@ def test_source_sequence_runs_from_installed_bundle_without_checkout(installed):
     assert report["runtime_readiness"] == "not_checked"
 
 
-def test_engine_number_text_and_store_migrations_run_from_installed_bundle(installed):
+def test_store_migrations_run_from_installed_bundle(installed):
     python, root = installed
     result = _run(python, "-c", '''
 from pathlib import Path
-from edgar_warehouse.rules import source_engine
 from edgar_warehouse.mdm import store
-raw = source_engine.postgres_jsonb_text('{"a":1e-7,"bbb":1.2300}')
-assert raw == '{"a": 0.0000001, "bbb": 1.2300}'
 assert (Path(store.__file__).parent/"migrations"/store.BASELINE).is_file()
 assert all((Path(store.__file__).parent/"migrations"/name).is_file() for name in store.MIGRATIONS)
 print("publication preparation installed")
@@ -537,7 +526,7 @@ def empty_rules_database():
             if time.monotonic() > deadline:
                 pytest.fail("PostgreSQL 16 did not finish initializing")
             time.sleep(0.2)
-        for statement in ("CREATE ROLE rules_agent LOGIN PASSWORD 'test'",
+        for statement in ("CREATE ROLE rules_agent LOGIN PASSWORD 'test'", "CREATE ROLE rules_governance LOGIN PASSWORD 'test'",
                           "CREATE DATABASE rules"):
             subprocess.run(["docker", "exec", name, "psql", "-U", "postgres", "-v", "ON_ERROR_STOP=1",
                             "-c", statement], capture_output=True, check=True)
@@ -719,7 +708,7 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
     mdm_admin = create_engine(databases.admin.url.set(database=mdm_name))
     mdm_app = create_engine(mdm_admin.url.set(username="clean_application", password="test"))
     migrate(mdm_admin, application_role="clean_application")
-    with mdm_admin.begin() as conn:
+    with databases.admin.begin() as conn:  # the registry is the Rules Database's, in the control database
         policy = register_policy(conn, {"version": 1, "required_consumers": ["export"], "automatic_rules": [],
                                         "kinds": {"company": {"version": "1", "defaults": {"sources": ["fixture.filers"]},
                                                               "fields": {"name": {"sources": ["fixture.filers"]}}}}})
@@ -728,7 +717,7 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
             "reading": mapped_reading({"name": "name"})}))
 
     if trial_mode == "raw-person":
-        with mdm_admin.begin() as conn:
+        with databases.admin.begin() as conn:
             policy = register_policy(conn, files.policy())
             register_dataset(conn, "sec.submissions.person.v1", "1",
                              files.mdm_contract("sec.submissions.person", "sec.submissions.person.v1"))
