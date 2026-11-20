@@ -71,7 +71,7 @@ def test_the_command_is_registered():
 
 
 def test_no_output_holds_the_database_address(monkeypatch, capsys):
-    monkeypatch.setenv("DB_URL", "postgresql+psycopg2://agentlogin:s3cretpw@127.0.0.1:1/mdmstore")
+    monkeypatch.setenv("DATA_URL", "postgresql+psycopg2://agentlogin:s3cretpw@127.0.0.1:1/mdmstore")
     code = main(["context", "company", "--search", "acme"])
     out, err = capsys.readouterr()
     assert code == 1 and json.loads(out)["try"]
@@ -80,9 +80,9 @@ def test_no_output_holds_the_database_address(monkeypatch, capsys):
 
 
 def test_a_missing_login_says_what_to_set(monkeypatch, capsys):
-    monkeypatch.delenv("DB_URL", raising=False)
+    monkeypatch.delenv("DATA_URL", raising=False)
     assert main(["context", "company", "x"]) == 2
-    assert "DB_URL" in json.loads(capsys.readouterr().out)["error"]
+    assert "DATA_URL" in json.loads(capsys.readouterr().out)["error"]
 
 
 def test_an_item_too_big_for_a_page_is_an_error_not_a_loop():

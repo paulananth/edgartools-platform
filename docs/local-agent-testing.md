@@ -45,7 +45,7 @@ Three private files are written in the environment folder:
 
 | File | Use |
 | --- | --- |
-| `owner.env` | The schema owner's `DB_URL` (no database), for `init` and administration |
+| `owner.env` | The schema owner's `DATA_URL` and `CONTROL_URL` (the `data` and `control` databases), for `init` and administration |
 | `worker.env` | Five runtime connections; Bookkeeping worker and MDM application logins |
 | `governance.env` | Rules governance and MDM registration connections |
 

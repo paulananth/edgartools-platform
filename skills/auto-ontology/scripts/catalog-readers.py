@@ -120,9 +120,10 @@ def verify(url, expected=None):
 
 
 def owner_url(owner, store):
-    """The owner file's `DB_URL` with the source's store database; a `DB_URL` that names a database keeps it."""
-    parts = urlsplit(owner["DB_URL"])
-    return owner["DB_URL"] if parts.path.strip("/") else urlunsplit(parts._replace(path="/" + store))
+    """The owner file's URL of the database that holds the source's store (edgar_warehouse.database_connections)."""
+    from edgar_warehouse.database_connections import store_url
+
+    return store_url(store, owner).render_as_string(hide_password=False)
 
 
 def shared_password(saved, role):

@@ -18,15 +18,20 @@ STORES = ("mdm", "rdm", "rules", "bookkeeping", "change_journal", "silver")
 # Two databases, each store in its own schema: what consumers read (one mirror carries it) and what runs the platform.
 DATA_STORES = ("mdm", "rdm", "silver")
 CONTROL_STORES = ("rules", "bookkeeping", "change_journal")
+DATABASES = {"data": DATA_STORES, "control": CONTROL_STORES}  # the database each group of stores shares
+
+
+def database_of(store: str) -> str:
+    """The database that holds this store's schema: data or control."""
+    for database, stores in DATABASES.items():
+        if store in stores:
+            return database
+    raise ValueError(f"unknown store {store!r}")
 
 
 def url_variable(store: str) -> str:
     """The duty file's variable that names this store's database: DATA_URL or CONTROL_URL."""
-    if store in DATA_STORES:
-        return "DATA_URL"
-    if store in CONTROL_STORES:
-        return "CONTROL_URL"
-    raise ValueError(f"unknown store {store!r}")
+    return {"data": "DATA_URL", "control": "CONTROL_URL"}[database_of(store)]
 
 
 def configured(store: str, environment=None) -> bool:

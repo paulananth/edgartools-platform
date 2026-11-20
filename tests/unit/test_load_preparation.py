@@ -231,7 +231,7 @@ def test_registered_preparation_uses_the_selected_worker_environment_and_dispose
     monkeypatch.setattr(database_connections, "storage_adapter",
                         lambda: type("Adapter", (), {"registered_policy": lambda self, conn, digest: None})())
     # The value is only a presence marker: connection construction is stubbed above.
-    selected["DB_URL"] = "invented-present"
+    selected["DATA_URL"] = "invented-present"
     with pytest.raises(RunStopped, match="registered mastering policy"):
         with preparation.registered_store("invented-policy", selected):
             pytest.fail("unregistered policy was admitted")
@@ -244,8 +244,8 @@ def test_an_explicit_connection_environment_overrides_ambient_values(monkeypatch
     calls = []
     adapter = type("Adapter", (), {"connect": lambda self, *a, **k: calls.append((a, k)) or "engine"})()
     monkeypatch.setattr(connections, "storage_adapter", lambda: adapter)
-    monkeypatch.setenv("DB_URL", "not-a-connection")
-    selected = {"DB_URL": "postgresql://invented:invented@localhost",
+    monkeypatch.setenv("DATA_URL", "not-a-connection")
+    selected = {"DATA_URL": "postgresql://invented:invented@localhost/data",
                 "MDM_APPLICATION_ROLE": "invented_worker"}
     assert connections.mdm_engine_from(selected) == "engine"
-    assert calls == [(("postgresql://invented:invented@localhost/mdm", "postgresql"), {"runtime_role": "invented_worker"})]
+    assert calls == [(("postgresql://invented:invented@localhost/data", "postgresql"), {"runtime_role": "invented_worker"})]

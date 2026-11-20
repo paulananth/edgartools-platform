@@ -86,7 +86,7 @@ def test_the_verifier_refuses_a_table_that_no_longer_matches_its_receipt(silver_
 
 def test_a_build_without_the_master_database_is_refused(silver_store, monkeypatch):
     monkeypatch.setattr(silver_derive, "engines", lambda: (silver_store, None))
-    with pytest.raises(ValueError, match="DB_URL"):
+    with pytest.raises(ValueError, match="reads each company.s master: source the loader file"):
         silver_derive.execute(envelope("measures"), Artifacts())
 
 

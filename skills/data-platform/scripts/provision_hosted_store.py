@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Give a fresh hosted PostgreSQL instance the stores' logins and six databases, from the stores folder's duty files.
+"""Give a fresh hosted PostgreSQL instance the stores' logins and two databases, from the stores folder's duty files.
 
     python <this skill>/scripts/provision_hosted_store.py --service <pg service>            # lists what it would do
     python <this skill>/scripts/provision_hosted_store.py --service <pg service> --confirm  # does it
 
-A duty is one login and one file in the stores folder (default ~/.config/edgartools/hosted/), each holding one `DB_URL` with no
-database: `owner.env` (the instance's administrator), `worker.env` (the loader, `edgar_loader`), `governance.env` (the governance
+A duty is one login and one file in the stores folder (default ~/.config/edgartools/hosted/), each holding two URLs of that login,
+one a database: the data database (mdm, rdm, silver) and the control database (rules, bookkeeping, change_journal), as
+`edgar_warehouse.database_connections` names them. The files: `owner.env` (the instance's administrator), `worker.env` (the loader, `edgar_loader`), `governance.env` (the governance
 login) and `reader.env` (the diagnostic login, `ops_reader`). A missing duty file is made with a new password; a login is created with
 the password its file already holds, so none is rotated. The administrator comes from the PostgreSQL service the instance's creation
 saved (~/.pg_service.conf and ~/.pgpass); every file then takes the new instance's address, and the owner file the administrator's
@@ -26,7 +27,10 @@ from pathlib import Path
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 from uuid import uuid4
 
-DATABASES = ("mdm", "rdm", "rules", "bookkeeping", "change_journal", "silver")
+from edgar_warehouse.database_connections import DATABASES as GROUPS_OF_STORES, url_variable
+
+DATABASES = tuple(GROUPS_OF_STORES)  # data, control
+SETTINGS = {url_variable(stores[0]): database for database, stores in GROUPS_OF_STORES.items()}  # each URL and its database
 OWNER_FILE = "owner.env"
 # Each duty: its file, its login, the databases it connects to and the group roles that carry its privileges. A group holds
 # what its store's `init` grants it; the login holds nothing of its own, so no login can create anything (ddl_free checks the loader).
@@ -36,10 +40,9 @@ GOVERNANCE = "governance"
 READER = "ops_reader"  # reads sessions, locks and statistics (pg_monitor) and no table
 DUTIES = {
     "worker.env": (LOADER, DATABASES, RUNTIME_ROLES),
-    "governance.env": (GOVERNANCE, ("mdm", "rules"), ("mdm_governance", "rules_governance")),
+    "governance.env": (GOVERNANCE, DATABASES, ("mdm_governance", "rules_governance")),
     "reader.env": (READER, DATABASES, ("pg_monitor",)),
 }
-SETTING = "DB_URL"
 # Groups put into other groups: the Bookkeeping worker duty, and the Rules agent's access for Rules governance.
 GROUPS = {"bookkeeping_control": ("bookkeeping_runtime",), "rules_agent": ("rules_governance",)}
 BUILT_IN = {"pg_monitor"}
@@ -64,14 +67,39 @@ def _value(raw: str) -> str:
     return words[0] if words else ""
 
 
-def read_url(folder: Path, name: str) -> str | None:
-    """The file's `DB_URL`, or None when the file or the setting is absent."""
+def read_urls(folder: Path, name: str) -> dict[str, str]:
+    """The file's URLs by setting; empty when the file is absent."""
     path = folder / name
+    found = {}
     for line in path.read_text().splitlines() if path.exists() else ():
         match = LINE.match(line.strip())
-        if match and match[2] == SETTING and _value(match[3]).startswith("postgres"):
-            return _value(match[3])
-    return None
+        if match and match[2] in SETTINGS and _value(match[3]).startswith("postgres"):
+            found[match[2]] = _value(match[3])
+    return found
+
+
+def read_url(folder: Path, name: str) -> str | None:
+    """The file's login as a URL: both of its URLs name the same login and password, each its own database. None when the
+    file holds neither; a file that holds one, or two logins, or a URL naming another database, is refused."""
+    found = read_urls(folder, name)
+    if not found:
+        return None
+    if set(found) != set(SETTINGS):
+        raise Refused(f"{name} must hold {' and '.join(SETTINGS)}")
+    for setting, url in found.items():
+        if urlsplit(url).path.strip("/") != SETTINGS[setting]:
+            raise Refused(f"{name}: {setting} must name the {SETTINGS[setting]} database")
+    if len({urlsplit(url).netloc for url in found.values()}) != 1:
+        raise Refused(f"{name}: its two URLs name two logins")
+    return next(iter(found.values()))
+
+
+def duty_file(url: str) -> str:
+    """A duty file: one URL a database, each with the login and the address of `url`."""
+    part = urlsplit(url)
+    lines = [f"unset {' '.join(SETTINGS)}"] + [
+        f"export {setting}={shlex.quote(urlunsplit(part._replace(path='/' + database)))}" for setting, database in SETTINGS.items()]
+    return "\n".join(lines) + "\n"
 
 
 def logins(folder: Path, admin: str) -> dict[str, tuple[str, set[str]]]:
@@ -111,7 +139,7 @@ def rewrite(folder: Path, host: str, port: int, admin: str, admin_password: str)
         lines = []
         for line in path.read_text().splitlines():
             match = LINE.match(line.strip())
-            if match and match[2] == SETTING and _value(match[3]).startswith("postgres"):
+            if match and match[2] in SETTINGS and _value(match[3]).startswith("postgres"):
                 line = f"{match[1] or ''}{match[2]}={shlex.quote(readdress(_value(match[3]), host, port, admin, admin_password))}"
                 changed += 1
             lines.append(line)
@@ -124,13 +152,13 @@ def ensure_files(folder: Path, host: str, port: int, admin: dict[str, str] | Non
     made = []
     if admin is not None and not (folder / OWNER_FILE).exists():
         url = f"postgresql://{quote(admin['user'], safe='')}:{quote(admin['password'], safe='')}@{host}:{port}"
-        private_write(folder / OWNER_FILE, f"unset {SETTING}\nexport {SETTING}={shlex.quote(url)}\n")
+        private_write(folder / OWNER_FILE, duty_file(url))
         made.append(OWNER_FILE)
     for name, (login, _, _) in DUTIES.items():
         if (folder / name).exists() and read_url(folder, name):
             continue
         url = f"postgresql://{login}:{quote(secrets.token_urlsafe(24), safe='')}@{host}:{port}"
-        private_write(folder / name, f"unset {SETTING}\nexport {SETTING}={shlex.quote(url)}\n")
+        private_write(folder / name, duty_file(url))
         made.append(name)
     return made
 

@@ -365,7 +365,7 @@ Before the first run, once per MDM database: `edgar-warehouse mdm init`. Then, f
 
 For an existing MDM store, before starting the new publication runtime,
 rerun `edgar-warehouse mdm init --application-role <MDM application role>`
-with the owner file's `DB_URL`. This applies the checksummed
+with the owner file's `DATA_URL` and `CONTROL_URL`. This applies the checksummed
 publication-input schema change and preserves existing publication readers' SELECT
 grants. Already frozen runs retain their original code/native binary; their
 SQL claim and delivery APIs remain compatible.
@@ -382,7 +382,7 @@ The steps below are what it runs, for a run you drive by hand.
 2. Work **each declared profile in dependency order**: `source.read`,
    `mdm.prepare`, `mastering.merge`. For example:
    `edgar-warehouse workers work mdm.prepare <run_id> --reports <uri> --limit 100`.
-   For merge, set `DB_URL` to the loader login
+   For merge, source the loader file (its `DATA_URL`)
    (`MDM_APPLICATION_ROLE` names its role).
 3. Repeat for each profile until its units are verified.
    `--limit 100` bounds one invocation; it does not prove the whole step ran.

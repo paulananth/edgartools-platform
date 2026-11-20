@@ -112,10 +112,10 @@ edgar-warehouse context <kind|code_set> --search "<words>" [--limit 5]
   matches with their path or kind so the agent picks one. A search with no
   match is logged (`context-search-miss`), which is how embeddings would be
   reconsidered later.
-- It reads through the existing environment variable (`DB_URL`, its mdm database),
+- It reads through the existing environment variable (`DATA_URL`, the data database that holds mdm),
   as the application role, which may only read tables, and in read-only
   transactions. A subject that is no master kind and not `relationship` is a
-  code set, read from RDM through `DB_URL` (its rdm database, the restricted runtime
+  code set, read from RDM through `DATA_URL` (the data database that holds rdm, the restricted runtime
   login), also in read-only transactions. It never prints a database address or a secret: a driver
   error is reported by its type only.
 

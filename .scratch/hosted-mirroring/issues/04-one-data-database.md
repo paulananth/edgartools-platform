@@ -35,9 +35,25 @@ and the rest in another db", then "Yes, open the ticket and start, make the skil
       `tests/unit/test_database_connections.py` failed first ("DB_URL is not set"), 11 pass. 2026-11-19 21:19 ET
 - [x] Operator: "kiss 94 url will be nigthmree to maintain": one module names the URLs; everything else asks it.
       `tests/architecture/test_store_urls_have_one_owner.py` fails while any other file names one (79 left). 2026-11-19 21:19 ET
-- [ ] Every other `DB_URL` reader moves to the URL of its store's group; instance-wide scripts (monitor, hardening, reset, audit) to `DATA_URL`
-- [ ] The duty files written by provisioning and the local test server hold the two URLs
-- [ ] Mastering in schema `mdm` on PostgreSQL: every MDM connection searches `mdm` first; a failing test first
+- [x] Every other `DB_URL` reader moves to the URL of its store's group; instance-wide scripts (monitor, hardening, reset, audit) to
+      `DATA_URL`. `tests/architecture/test_store_urls_have_one_owner.py` passes: no file but the resolver names one. The scripts only
+      their own tests used (`start-local-postgres.sh`, `provision-local-postgres-stores.sh`, `provision-clean-bookkeeping.py`, the old
+      one-database-per-store layout) are deleted. 2026-11-19 22:14 ET
+- [x] Operator: "yes" to rebuilding the shared local test server in the new layout when this merges (asked: "Do you approve
+      rebuilding the shared local server at merge time?"). 2026-11-19 22:14 ET
+- [x] The duty files written by provisioning and the local test server hold the two URLs: `provision_hosted_store.py` writes and
+      checks `DATA_URL` and `CONTROL_URL` (one login, each naming its database; 14 tests); `local-test-stores.py` writes both, makes
+      `data` and `control`, each store's schema under its own owner; `tests/integration/test_local_test_stores_postgres.py` 2 pass on
+      real PostgreSQL 16 (init, a worker run, backup and exact restore with owners kept). 2026-11-19 22:14 ET
+- [x] The Change Journal shares the control database: its PostgreSQL refusal of a database holding other tables is removed (it
+      contradicted the operator's control database); the untracked-schema and checksum refusals stay. The bookkeeping and journal
+      `init` default to the database their URL names. Test: `test_the_journal_shares_the_control_database_with_the_other_stores`. 2026-11-19 22:14 ET
+- [x] Tests move to the two URLs; the shared `databases` fixture makes `control` and `data`. Single-store adapter tests pass on
+      PostgreSQL and MySQL (8 files). 2026-11-19 22:14 ET
+- [ ] ~~Mastering in schema `mdm` on PostgreSQL~~ not needed: MDM's owner owns the data database, so mastering and MDM's
+      registration authority keep `public` (the mirror carries it as `PUBLIC`); rdm and silver keep their own schemas under their own
+      owners. Moving mastering into `mdm` is its own change if the Gold names ask for it.
+- [ ] Follow-up (no-DDL rule): the silver writer still stages each delivery in a temporary table, so the databases keep TEMPORARY
 - [ ] Access by schema in a shared database: reset, hardening (the mirror login's CONNECT), readiness, catalog readers, local
       test stores
 - [ ] `rules/exposure.yaml` and `rules/gold/gold.yaml`: one target database, mdm's source schema `mdm`

@@ -204,8 +204,8 @@ def _isolated_database(server_connection):
 
 @contextmanager
 def _store_databases(owner, *stores):
-    """One database per store, each named for its store behind a unique prefix (what `DB_PREFIX` selects), owned as the owner
-    login owns the factory's. Yields the prefix and an admin engine per store; every database is dropped on exit."""
+    """Databases named behind a unique prefix (`control`, `data`), owned as the owner login owns the factory's. Yields the
+    prefix and an admin engine per database; every database is dropped on exit."""
     prefix = "t" + uuid4().hex[:8] + "_"
     quote = owner.dialect.identifier_preparer.quote
     made, engines = [], {}

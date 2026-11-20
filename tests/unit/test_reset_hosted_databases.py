@@ -38,7 +38,7 @@ def test_the_approvals_log_is_in_the_stores_folder(monkeypatch, tmp_path):
 
 def test_a_drop_without_words_is_refused_before_any_connection(monkeypatch, capsys):
     monkeypatch.setattr(reset.sys, "argv", ["reset", "--words", " "])
-    monkeypatch.setenv("DB_URL", "postgresql://invented@h/postgres")
+    monkeypatch.setenv("DATA_URL", "postgresql://invented@h/postgres")
     monkeypatch.setattr(reset.sa, "create_engine", lambda *a, **k: (_ for _ in ()).throw(AssertionError("connected")))
     assert reset.main() == 2
     assert "exact approval" in capsys.readouterr().err
@@ -52,12 +52,12 @@ def test_a_reset_deletes_the_run_files_of_the_stores_it_drops_and_keeps_the_extr
     (root / "extracts" / "abc").mkdir(parents=True)
     stores = tmp_path / "stores"
     stores.mkdir()
-    (stores / "worker.env").write_text(f"export DB_URL='postgresql://invented/db'\nexport BOOKKEEPING_MANIFEST_ROOT='file://{root}'\n")
+    (stores / "worker.env").write_text(f"export DATA_URL='postgresql://invented/db'\nexport BOOKKEEPING_MANIFEST_ROOT='file://{root}'\n")
     assert reset.clear_run_files(stores) == root / "load"
     assert not (root / "load").exists() and (root / "extracts" / "abc").is_dir()
     assert reset.clear_run_files(stores) is None  # nothing left: a second reset deletes nothing
 
 
 def test_a_stores_folder_that_names_no_run_files_folder_deletes_nothing(tmp_path):
-    (tmp_path / "worker.env").write_text("export DB_URL='postgresql://invented/db'\n")
+    (tmp_path / "worker.env").write_text("export DATA_URL='postgresql://invented/db'\n")
     assert reset.clear_run_files(tmp_path) is None

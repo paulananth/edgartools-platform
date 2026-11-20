@@ -19,26 +19,26 @@ def test_installed_rules_and_real_workers_complete_and_resume_one_run(installed,
     with ExitStack() as stack:
         _, reader, reader_role = stack.enter_context(database_factory())
         owner, worker, role = stack.enter_context(database_factory())
-        # Each store is its own database, named for the store behind this test's prefix; one runtime login reaches them all.
-        prefix, stores = stack.enter_context(store_databases(owner, "bookkeeping", "change_journal", "rules"))
-        none = lambda engine: engine.url._replace(database=None).render_as_string(hide_password=False)
-        owner_url, worker_url = none(owner), none(worker)
-        env = {"BOOKKEEPING_MANIFEST_ROOT": (root / "runs").as_uri(), "DB_PREFIX": prefix}
+        # Rules, bookkeeping and the journal share the control database; one runtime login reaches them all.
+        prefix, stores = stack.enter_context(store_databases(owner, "control"))
+        control = lambda engine: engine.url.set(database=prefix + "control").render_as_string(hide_password=False)
+        owner_url, worker_url = control(owner), control(worker)
+        env = {"BOOKKEEPING_MANIFEST_ROOT": (root / "runs").as_uri()}
         def command(*args, verifier=False, report=True):
-            selected = {**env, "DB_URL": worker_url}
+            selected = {**env, "CONTROL_URL": worker_url}
             if args[:2] in (("rules", "init"), ("bookkeeping", "init"), ("change-journal", "init"), ("bookkeeping", "grant-profile")):
-                selected["DB_URL"] = owner_url
+                selected["CONTROL_URL"] = owner_url
             elif verifier:
-                selected["DB_URL"] = none(reader)
+                selected["CONTROL_URL"] = control(reader)
             result = _run(python, "-m", "edgar_warehouse.cli", *args, env=selected, cwd=root)
             if result.returncode:
                 (root / "private-control-pipeline.log").write_text(result.stdout + "\n" + result.stderr)
             assert result.returncode == 0, "Installed pipeline failed; private diagnostic retained"
             return json.loads(result.stdout) if report else None
         command("rules", "init", "--agent-role", role)
-        command("bookkeeping", "init", "--runtime-role", role, "--database-name", prefix + "bookkeeping")
-        command("bookkeeping", "init", "--runtime-role", reader_role, "--database-name", prefix + "bookkeeping")
-        command("change-journal", "init", "--runtime-role", role, "--database-name", prefix + "change_journal")
+        command("bookkeeping", "init", "--runtime-role", role)
+        command("bookkeeping", "init", "--runtime-role", reader_role)
+        command("change-journal", "init", "--runtime-role", role)
         with owner.connect() as conn:
             known = set(conn.scalars(text("SELECT User FROM mysql.user" if owner.dialect.name == "mysql" else "SELECT rolname FROM pg_roles")))
         groups = []

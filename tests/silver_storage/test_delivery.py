@@ -265,10 +265,10 @@ def test_normal_cli_reads_configured_connection(silver, tmp_path, monkeypatch, c
     path.write_text(json.dumps(config))
     delivered = tmp_path / "rows.jsonl"
     delivered.write_text("\n".join(json.dumps(row) for row in rows()))
-    monkeypatch.setenv("DB_URL", owner.url.render_as_string(hide_password=False))
+    monkeypatch.setenv("DATA_URL", owner.url.render_as_string(hide_password=False))
     assert main(["silver", "register", str(path), "--runtime-role", role]) == 0
     assert json.loads(capsys.readouterr().out)["created"]
-    monkeypatch.setenv("DB_URL", runtime.url.render_as_string(hide_password=False))  # the loader file, from here on
+    monkeypatch.setenv("DATA_URL", runtime.url.render_as_string(hide_password=False))  # the loader file, from here on
     assert main(["silver", "land", config["table"], str(delivered)]) == 0
     assert json.loads(capsys.readouterr().out)["inserted"] == 2
     assert main(["silver", "describe", config["table"]]) == 0

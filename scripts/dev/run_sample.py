@@ -34,7 +34,7 @@ def label(query: str, state: str) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--database", default="mdm", help="The store whose database is watched (its DB_URL is read)")
+    parser.add_argument("--database", default="mdm", help="The store whose database is watched (from the sourced duty file)")
     parser.add_argument("--count", required=True, help="SQL returning one number that grows as the job works")
     parser.add_argument("--seconds", type=int, default=120)
     args = parser.parse_args()

@@ -27,7 +27,7 @@ def test_normal_journal_cli_initializes_the_explicit_configured_database(databas
     import json
     from edgar_warehouse.change_journal.cli import main
     with database_factory() as (owner, runtime, role):
-        monkeypatch.setenv("DB_URL", owner.url.render_as_string(hide_password=False))
+        monkeypatch.setenv("CONTROL_URL", owner.url.render_as_string(hide_password=False))
         options = ["--runtime-role", role, "--database-name", owner.url.database]
         assert main(["init", *options]) == 0
         before = json.loads(capsys.readouterr().out)

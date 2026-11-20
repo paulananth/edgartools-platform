@@ -20,8 +20,8 @@ def test_installed_normal_silver_caller(installed, database_factory, mode):
         rows.write_text('{"visit_id":1,"member_id":"invented","amount":12345678901234567890.12345678,'
                         '"visited_on":"2026-10-01","duration":"2 days 01:02:03.123456",'
                         '"tags":{"fraction":0.123456789012345678901234567890123,"tiny":1e-600}}\n')
-        owner_env = {"DB_URL": owner.url.render_as_string(hide_password=False)}
-        environment = {"DB_URL": runtime.url.render_as_string(hide_password=False)}
+        owner_env = {"DATA_URL": owner.url.render_as_string(hide_password=False)}
+        environment = {"DATA_URL": runtime.url.render_as_string(hide_password=False)}
         program = '''
 import json, sys
 from edgar_warehouse.cli import main

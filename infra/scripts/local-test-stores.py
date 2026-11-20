@@ -25,14 +25,19 @@ from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import URL
 
 
-STORES = {
-    "mdm": ("DB_URL", "mdm"),
-    "rdm": ("DB_URL", "rdm"),
-    "rules": ("DB_URL", "rules"),
-    "bookkeeping": ("DB_URL", "bookkeeping"),
-    "change_journal": ("DB_URL", "journal"),
-}
-ALL_STORES = {**STORES, "silver": ("DB_URL", "silver")}
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from edgar_warehouse.database_connections import DATABASES, database_of, url_variable  # noqa: E402
+
+# Two databases, each store a schema under its own owner (skills/data-platform/CONNECTIONS.md).
+STORES = ("mdm", "rdm", "rules", "bookkeeping", "change_journal")
+ALL_STORES = (*STORES, "silver")
+# Mastering and MDM's registration authority keep `public`, so MDM's owner owns the data database; the control database is
+# the server's, and each store's owner gets CREATE on its database for its own schema.
+DATABASE_OWNER = {"data": "mdm_owner", "control": "postgres"}
+
+
+def databases(stores) -> list[str]:
+    return [database for database in DATABASES if any(database_of(store) == database for store in stores)]
 
 
 def runtime_login(store: str) -> str:
@@ -125,7 +130,7 @@ class LocalStores:
         if (not isinstance(selected, list) or len(set(selected)) != len(selected)
                 or not set(STORES) <= set(selected) <= set(ALL_STORES)):
             raise ValueError("Environment store selection is invalid")
-        return {database: ALL_STORES[database] for database in selected}
+        return [store for store in ALL_STORES if store in selected]
 
     def owned(self, name: str, identity: dict):
         container = "edgartools-local-" + name
@@ -199,15 +204,17 @@ class LocalStores:
         self.connections(name, include_silver=include_silver)
 
     def connections(self, name: str, *, include_silver=False):
-        def duty(user: str) -> str:
-            return self.url(name, "postgres", user)._replace(database=None).render_as_string(hide_password=False)
+        def duty(user: str) -> dict:
+            """One URL a database: the file names both, each with its database."""
+            return {url_variable(DATABASES[database][0]): self.url(name, database, user).render_as_string(hide_password=False)
+                    for database in DATABASES}
 
-        owner = duty("postgres")
-        worker = {"DB_URL": duty(LOADER), "MDM_APPLICATION_ROLE": "mdm_runtime",
+        worker = {**duty(LOADER), "MDM_APPLICATION_ROLE": "mdm_runtime",
                   "BOOKKEEPING_MANIFEST_ROOT": (self.folder(name) / "manifests").as_uri()}
-        for filename, values in (("owner.env", {"DB_URL": owner}), ("worker.env", worker), ("governance.env", {"DB_URL": duty(GOVERNANCE)})):
+        for filename, values in (("owner.env", duty("postgres")), ("worker.env", worker), ("governance.env", duty(GOVERNANCE))):
             # Clear a previous shell's settings before choosing a duty.
-            lines = ["unset DB_URL BOOKKEEPING_ADMIN_DATABASE_URL MDM_REGISTRATION_DATABASE_URL"]
+            lines = ["unset " + " ".join(sorted({url_variable(store) for store in ALL_STORES}))
+                     + " BOOKKEEPING_ADMIN_DATABASE_URL MDM_REGISTRATION_DATABASE_URL"]
             lines += [f"export {key}={shlex.quote(value)}" for key, value in values.items()]
             private_write(self.folder(name) / filename, "\n".join(lines) + "\n")
 
@@ -235,17 +242,19 @@ class LocalStores:
                     else:
                         suffix = "LOGIN PASSWORD :password" if login else "NOLOGIN"
                         conn.execute(text(f"CREATE ROLE {quote(role)} NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS {suffix}"), {"password": self.identity(name)["password"]})
-                for store in selected:
-                    database = store
+                for database in databases(selected):
                     owner = conn.scalar(text("SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname=:d"), {"d": database})
-                    if owner and owner != owner_login(store):
+                    if owner and owner != DATABASE_OWNER[database]:
                         raise ValueError("Database has a different owner; refusing adoption")
                     if not owner:
-                        conn.exec_driver_sql(f"CREATE DATABASE {quote(database)} OWNER {quote(owner_login(store))}")
+                        conn.exec_driver_sql(f"CREATE DATABASE {quote(database)} OWNER {quote(DATABASE_OWNER[database])}")
                     conn.exec_driver_sql(f"REVOKE CONNECT ON DATABASE {quote(database)} FROM PUBLIC")
-                    conn.exec_driver_sql(f"GRANT CONNECT ON DATABASE {quote(database)} TO {quote(runtime_login(store))}")
-                for database, login in (("mdm", "mdm_governance"), ("rules", "rules_governance")):
-                    conn.exec_driver_sql(f"GRANT CONNECT ON DATABASE {quote(database)} TO {quote(login)}")
+                for store in selected:
+                    database = quote(database_of(store))
+                    conn.exec_driver_sql(f"GRANT CONNECT, CREATE ON DATABASE {database} TO {quote(owner_login(store))}")
+                    conn.exec_driver_sql(f"GRANT CONNECT ON DATABASE {database} TO {quote(runtime_login(store))}")
+                for store, login in (("mdm", "mdm_governance"), ("rules", "rules_governance")):
+                    conn.exec_driver_sql(f"GRANT CONNECT ON DATABASE {quote(database_of(store))} TO {quote(login)}")
                 members = [(parent, LOADER) for parent in {runtime_login(store) for store in selected}] + [
                     (parent, GOVERNANCE) for parent in EXTRA_LOGINS]
                 for parent, member in (("bookkeeping_control", "bookkeeping_runtime"),
@@ -255,17 +264,18 @@ class LocalStores:
             if migrate:
                 migrations = {"mdm": mdm, "rdm": rdm, "silver": silver, "rules": rules,
                               "bookkeeping": bookkeeping, "change_journal": journal}
-                for database in selected:
-                    engine = self.engine(name, database)
+                for store in selected:
+                    engine = self.engine(name, database_of(store))
                     @event.listens_for(engine, "connect")
-                    def owner_role(connection, _, selected=owner_login(database)):
+                    def owner_role(connection, _, selected=owner_login(store)):
                         with connection.cursor() as cursor:
                             cursor.execute(f"SET ROLE {quote(selected)}")
                         connection.commit()
                     try:
-                        key = "application_role" if database == "mdm" else "agent_role" if database == "rules" else "runtime_role"
-                        role = "bookkeeping_control" if database == "bookkeeping" else database + "_runtime"
-                        migrations[database](engine, **{key: role})
+                        key = "application_role" if store == "mdm" else "agent_role" if store == "rules" else "runtime_role"
+                        role = "bookkeeping_control" if store == "bookkeeping" else runtime_login(store)
+                        named = {"database_name": database_of(store)} if store in ("rdm", "bookkeeping", "change_journal") else {}
+                        migrations[store](engine, **{key: role}, **named)
                     finally:
                         engine.dispose()
                 self.execution_access(name)
@@ -276,13 +286,13 @@ class LocalStores:
         from edgar_warehouse.bookkeeping.clean.database import grant_profile
         from edgar_warehouse.workers import PROFILES
 
-        book = self.engine(name, "bookkeeping")
+        book = self.engine(name, database_of("bookkeeping"))
         try:
             for profile in PROFILES:
                 grant_profile(book, profile=profile, worker="bookkeeping_runtime")
         finally:
             book.dispose()
-        mdm = self.engine(name, "mdm")
+        mdm = self.engine(name, database_of("mdm"))
         try:
             from edgar_warehouse.mdm.registration import grant_registrar
 
@@ -293,7 +303,7 @@ class LocalStores:
     def contents(self, name: str):
         """Private checksums, never row values, prove what a restored copy holds."""
         result = {}
-        for database in self.stores(name):
+        for database in databases(self.stores(name)):
             engine = self.engine(name, database)
             try:
                 with engine.connect() as conn:
@@ -348,12 +358,14 @@ class LocalStores:
                     raise ValueError("Workers or other connections are active; retry the backup after they finish")
             contents = self.contents(name)
             files = {}
-            for database in self.stores(name):
+            for database in databases(self.stores(name)):
                 path = target / (database + ".dump")
+                # Owners are kept: each schema belongs to its store's owner, and the restore gives it back.
                 with open(path, "wb", opener=lambda p, flags: os.open(p, flags, 0o600)) as out:
-                    self.docker("exec", container, "pg_dump", "-U", "postgres", "-Fc", "--no-owner", "-d", database, stdout=out)
+                    self.docker("exec", container, "pg_dump", "-U", "postgres", "-Fc", "-d", database, stdout=out)
                 files[path.name] = file_hash(path)
-            private_write(target / "manifest.json", json.dumps({"files": files, "contents": contents}, sort_keys=True))
+            private_write(target / "manifest.json", json.dumps(
+                {"files": files, "contents": contents, "stores": self.stores(name)}, sort_keys=True))
             return target
         finally:
             admin.dispose()
@@ -361,9 +373,10 @@ class LocalStores:
 
     def restore(self, name: str, snapshot: Path):
         manifest = json.loads((snapshot / "manifest.json").read_text())
-        selected = {database for database in ALL_STORES if database + ".dump" in manifest["files"]}
-        if not set(STORES) <= selected or set(manifest["files"]) != {d + ".dump" for d in selected}:
-            raise ValueError("Backup must contain the five core stores and optionally silver")
+        selected = set(manifest.get("stores", ()))
+        if (not set(STORES) <= selected <= set(ALL_STORES)
+                or set(manifest["files"]) != {d + ".dump" for d in databases(selected)}):
+            raise ValueError("Backup must contain the five core stores and optionally silver, one file a database")
         for file, sha in manifest["files"].items():
             if file_hash(snapshot / file) != sha:
                 raise ValueError("Backup checksum differs")
@@ -375,9 +388,9 @@ class LocalStores:
         private_write(self.folder(name) / "identity.json", json.dumps(identity))
 
         container, _ = self.owned(name, identity)
-        for database in self.stores(name):
+        for database in databases(self.stores(name)):
             with (snapshot / (database + ".dump")).open("rb") as data:
-                found = subprocess.run(["docker", "exec", "-i", container, "pg_restore", "-U", "postgres", "--exit-on-error", "--no-owner", "--role", database + "_owner", "-d", database], stdin=data, capture_output=True, timeout=180)
+                found = subprocess.run(["docker", "exec", "-i", container, "pg_restore", "-U", "postgres", "--exit-on-error", "-d", database], stdin=data, capture_output=True, timeout=180)
                 if found.returncode:
                     raise RuntimeError("Restore failed; retained the incomplete environment for diagnosis")
         if self.contents(name) != manifest["contents"]:

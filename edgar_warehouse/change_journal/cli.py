@@ -20,7 +20,7 @@ def _handle(args):
         owner = get_engine()
         try:
             result = migrate(owner, runtime_role=args.runtime_role,
-                             database_name=args.database_name)
+                             database_name=args.database_name or owner.url.database)
         finally:
             owner.dispose()
     else:
@@ -47,7 +47,7 @@ def _commands(parser):
     for name in ("init",):
         command = commands.add_parser(name)
         command.add_argument("--runtime-role", required=True)
-        command.add_argument("--database-name", default="change_journal", help="The configured isolated Journal database")
+        command.add_argument("--database-name", help="The control database (default: the one the URL names)")
         command.set_defaults(handler=_handle)
     for name in ("status", "events"):
         command = commands.add_parser(name)

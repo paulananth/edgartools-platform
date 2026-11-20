@@ -58,9 +58,10 @@ def test_corrupt_backup_is_refused_before_creating_a_copy(tmp_path, monkeypatch)
     stores = local.LocalStores(tmp_path / "stores", tmp_path)
     snapshot = tmp_path / "backup"
     snapshot.mkdir()
-    (snapshot / "manifest.json").write_text(json.dumps({"files": {d + ".dump": "wrong" for d in local.STORES}}))
-    for name in local.STORES:
-        (snapshot / (name + ".dump")).write_bytes(b"invented corrupt backup")
+    files = {d + ".dump": "wrong" for d in local.databases(local.STORES)}
+    (snapshot / "manifest.json").write_text(json.dumps({"files": files, "stores": list(local.STORES)}))
+    for file in files:
+        (snapshot / file).write_bytes(b"invented corrupt backup")
     checked(monkeypatch, stores, "start", lambda *a, **k: pytest.fail("must not create a target"))
     with pytest.raises(ValueError, match="checksum"):
         stores.restore("new", snapshot)
@@ -157,26 +158,29 @@ def test_a_failure_shows_its_text_only_when_the_text_is_this_scripts_own_or_the_
     assert local.error_text(KeyError("password=invented")) == "KeyError"
 
 
-def test_every_duty_file_holds_one_DB_URL_without_a_database(tmp_path, monkeypatch):
+def test_every_duty_file_holds_the_data_and_the_control_url_each_naming_its_database(tmp_path, monkeypatch):
     stores = local.LocalStores(tmp_path, tmp_path)
     stores.identity("one", create=True)
+    named = []
 
     class Address:
-        def _replace(self, **kwargs):
-            return self
+        def __init__(self, database):
+            self.database = database
 
         def render_as_string(self, hide_password=False):
-            return "postgresql://invented@127.0.0.1"
+            named.append(self.database)
+            return "postgresql://invented@127.0.0.1/" + self.database
 
-    checked(monkeypatch, stores, "url", lambda *a, **k: Address())
+    checked(monkeypatch, stores, "url", lambda name, database, user: Address(database))
     stores.connections("one")
 
     def exported(path):
         return [line.split("=", 1)[0][7:] for line in (stores.folder("one") / path).read_text().splitlines() if line.startswith("export ")]
 
-    assert exported("owner.env") == ["DB_URL"]
-    assert exported("worker.env") == ["DB_URL", "MDM_APPLICATION_ROLE", "BOOKKEEPING_MANIFEST_ROOT"]
-    assert exported("governance.env") == ["DB_URL"]
+    assert exported("owner.env") == ["DATA_URL", "CONTROL_URL"]
+    assert exported("worker.env") == ["DATA_URL", "CONTROL_URL", "MDM_APPLICATION_ROLE", "BOOKKEEPING_MANIFEST_ROOT"]
+    assert exported("governance.env") == ["DATA_URL", "CONTROL_URL"]
+    assert sorted(set(named)) == ["control", "data"]
     assert not (stores.folder("one") / "connection.env").exists()
 
 

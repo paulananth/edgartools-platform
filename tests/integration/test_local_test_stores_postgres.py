@@ -57,7 +57,7 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
         assert set(stores.stores(name)) == set(local.STORES)
         admin = engine("postgres", "postgres")
         with admin.connect() as conn:
-            assert not conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname='silver')"))
+            assert [row[0] for row in conn.execute(text("SELECT datname FROM pg_database WHERE datname IN ('data','control','mdm','rules') ORDER BY 1"))] == ["control", "data"]
             assert not conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='silver_runtime')"))
         for filename in ("owner.env", "worker.env", "governance.env"):
             assert (stores.folder(name) / filename).stat().st_mode & 0o777 == 0o600
@@ -65,9 +65,15 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
         worker, governance = (environment(f + ".env") for f in ("worker", "governance"))
         from sqlalchemy.engine import make_url
 
-        assert make_url(worker["DB_URL"]).username == "edgar_loader" and make_url(worker["DB_URL"]).database is None
-        assert make_url(governance["DB_URL"]).username == "governance" and make_url(governance["DB_URL"]).database is None
-        book = engine("bookkeeping", "postgres")
+        for values, login in ((worker, "edgar_loader"), (governance, "governance")):
+            assert [(make_url(values[v]).username, make_url(values[v]).database) for v in ("DATA_URL", "CONTROL_URL")] == [
+                (login, "data"), (login, "control")]
+            assert "DB_URL" not in values
+        with engine("data", "postgres").connect() as conn:  # silver is never created
+            assert not conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname='silver')"))
+            owners = dict(conn.execute(text("SELECT nspname, pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname IN ('mdm','rdm')")).all())
+            assert owners == {"mdm": "mdm_owner", "rdm": "rdm_owner"}  # each store's schema is its owner's
+        book = engine("control", "postgres")
         with book.connect() as conn:
             for profile in PROFILES:
                 assert conn.scalar(text("SELECT pg_has_role('bookkeeping_runtime',bookkeeping.profile_role(:p,'worker'),'MEMBER')"),
@@ -83,7 +89,7 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
         assert "acquisition" not in person
         files.write_source(person, root / "sources" / "sec.submissions.person")
         files.write_source({**person, "source": "invented.other"}, root / "sources" / "invented.other")
-        governance_mdm = engine("mdm", "mdm_governance")
+        governance_mdm = engine("data", "mdm_governance")
         with governance_mdm.begin() as conn:
             first = frozen.register(conn, ["sec.submissions.person"], root)
         with governance_mdm.begin() as conn:
@@ -95,7 +101,7 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
         with pytest.raises(Blocked, match="belongs to source sec.submissions.person"), governance_mdm.begin() as conn:
             frozen.register(conn, ["invented.other"], root)
         for login in ("mdm_runtime", "mdm_governance"):
-            reader = engine("mdm", login)
+            reader = engine("data", login)
             with reader.connect() as conn:
                 assert conn.scalar(text("SELECT count(*) FROM mdm.policy")) == 1
                 assert not conn.scalar(text("SELECT has_schema_privilege(current_user,'mdm','CREATE')"))
@@ -126,14 +132,14 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
             stores.start(name)
         assert stores.contents(name) == expected
         # Every generated login is paused/restored by backups, not just workers.
-        active = engine("mdm", "mdm_governance")
+        active = engine("data", "mdm_governance")
         with active.connect():
             with pytest.raises(ValueError, match="connections are active"):
                 stores.backup(name)
         active.dispose()
         with stores.locked(name):
             snapshot = stores.backup(name)
-        assert len(json.loads((snapshot / "manifest.json").read_text())["files"]) == 5
+        assert len(json.loads((snapshot / "manifest.json").read_text())["files"]) == 2  # one file a database
         with stores.locked(copy):
             stores.restore(copy, snapshot)
         assert stores.contents(copy) == expected
@@ -166,8 +172,11 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
         with second.locked(two):
             second.start(two, include_silver=True)
         # Each store has its own restricted login; it cannot create tables.
-        for database, (_, schema) in local.ALL_STORES.items():
-            runtime = first.engine(one, database, database + "_runtime")
+        schemas = {"mdm": "mdm", "rdm": "rdm", "rules": "rules", "bookkeeping": "bookkeeping", "change_journal": "journal",
+                   "silver": "silver"}
+        for store in local.ALL_STORES:
+            schema = schemas[store]
+            runtime = first.engine(one, local.database_of(store), store + "_runtime")
             try:
                 with runtime.connect() as conn:
                     assert conn.scalar(text(f"SELECT has_schema_privilege(current_user,'{schema}','USAGE')"))
@@ -178,20 +187,20 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
         # Invented MDM records use the existing Merge Stage fixture; do not touch a baseline.
         from tests.integration import test_mdm_postgres as mdm
         from tests.support import masters
-        owner = first.engine(one, "mdm")
+        owner = first.engine(one, "data")
         @event.listens_for(owner, "connect")
         def owner_role(connection, _):
             with connection.cursor() as cur:
                 cur.execute("SET ROLE mdm_owner")
             connection.commit()
-        app = first.engine(one, "mdm", "mdm_runtime")
+        app = first.engine(one, "data", "mdm_runtime")
         try:
             ids = masters.seed(app, [mdm.source(key=key, source_code="sec.company.v1", kind="company", fields={},
                                                 identifiers={"cik": cik}) for key, cik in (("a", "0000000001"), ("b", "0000000002"))])
         finally:
             owner.dispose()
             app.dispose()
-        rdm = first.engine(one, "rdm", "rdm_runtime")
+        rdm = first.engine(one, "data", "rdm_runtime")
         try:
             with rdm.begin() as conn:
                 conn.execute(text("INSERT INTO rdm.code_set(code_set,name) VALUES ('invented','Invented test codes')"))
@@ -202,16 +211,16 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
         from edgar_warehouse.silver_writer.sink import PostgresSink
         from edgar_warehouse.silver_writer.writer import MdmIds, land
         from tests.unit.test_silver_writer import a_spec
-        owner = first.engine(one, "silver")
+        owner = first.engine(one, "data")
         @event.listens_for(owner, "connect")
         def silver_owner(connection, _):
             with connection.cursor() as cur:
                 cur.execute("SET ROLE silver_owner")
             connection.commit()
-        runtime = first.engine(one, "silver", "silver_runtime")
+        runtime = first.engine(one, "data", "silver_runtime")
         table = a_spec(links=[{"columns": ["member_id"], "kind": "company", "source_code": "sec.company.v1",
                               "source_key": "member_id", "mdm_id_column": "member_id_mdm_id", "inclusion": 1.0}])
-        mdm_reader = first.engine(one, "mdm", "mdm_runtime")
+        mdm_reader = first.engine(one, "data", "mdm_runtime")
         try:
             silver.register(owner, table, runtime_role="silver_runtime")
             result = land(PostgresSink(runtime), "visit", [{"visit_id": 2**53 + 1, "member_id": "b", "amount": "1.25", "visited_on": None, "tags": None}], MdmIds(mdm_reader))
@@ -224,13 +233,13 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
             runtime.dispose()
             mdm_reader.dispose()
         expected = first.contents(one)
-        reader = first.engine(one, "mdm", "mdm_runtime")
+        reader = first.engine(one, "data", "mdm_runtime")
         try:
             assert len(masters.bodies(reader)) == 2
         finally:
             reader.dispose()
-        assert expected['silver.silver.visit']['rows'] == 1
-        assert second.contents(two)['rdm.rdm.code_set']['rows'] == 0
+        assert expected['data.silver.visit']['rows'] == 1
+        assert second.contents(two)['data.rdm.code_set']['rows'] == 0
         # Old environments predate the selection field; a core-only reinit must
         # leave their silver data intact and include it in recovery snapshots.
         identity = first.identity(one)
@@ -256,14 +265,14 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
             first.stop(one)
             first.start(one)
         assert not (first.folder(one) / "backup-paused.json").exists()
-        runtime = first.engine(one, "silver", "silver_runtime")
+        runtime = first.engine(one, "data", "silver_runtime")
         try:
             with runtime.connect() as conn:
                 assert conn.scalar(text("SELECT count(*) FROM silver.visit")) == 1
         finally:
             runtime.dispose()
         # Active writers block a baseline copy; the login is restored after refusal.
-        active = first.engine(one, "rdm", "rdm_runtime")
+        active = first.engine(one, "data", "rdm_runtime")
         try:
             with active.connect():
                 with pytest.raises(ValueError, match="connections are active"):
@@ -277,8 +286,8 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
             second.restore(restored, snapshot)
         assert second.contents(restored) == expected
         # Restored contents alone do not prove the runtime can use the tables.
-        runtime = second.engine(restored, "silver", "silver_runtime")
-        mdm_reader = second.engine(restored, "mdm", "mdm_runtime")
+        runtime = second.engine(restored, "data", "silver_runtime")
+        mdm_reader = second.engine(restored, "data", "mdm_runtime")
         try:
             with runtime.connect() as conn:
                 assert [(v, str(m)) for v, m in conn.execute(text("SELECT visit_id,member_id_mdm_id FROM silver.visit"))] == [(2**53 + 1, ids['b'])]
@@ -293,7 +302,7 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
         with pytest.raises(ValueError, match="existing data is never overwritten"):
             second.restore(restored, snapshot)
         assert first.contents(one) == expected
-        assert second.contents(two)['rdm.rdm.code_set']['rows'] == 0
+        assert second.contents(two)['data.rdm.code_set']['rows'] == 0
         assert (first.folder(one) / "owner.env").stat().st_mode & 0o777 == 0o600
     finally:
         # These are disposable targets created by this test, with these exact labels.

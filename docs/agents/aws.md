@@ -126,7 +126,7 @@ untouched until a teardown the operator approves. Publish images with
 
 ## AWS MDM
 
-MDM runtime writes use Snowflake Postgres through `DB_URL` (its mdm database). AWS Terraform manages only empty Secrets Manager containers:
+MDM runtime writes use Snowflake Postgres through `DATA_URL` (the data database that holds mdm). AWS Terraform manages only empty Secrets Manager containers:
 
 - `edgartools-<env>/mdm/postgres_dsn`
 - `edgartools-<env>/mdm/snowflake`

@@ -55,7 +55,7 @@ existing commands:
 edgar-warehouse workers work provider.capture "$RUN_ID" --reports "$REPORTS_URI" --limit 1
 ```
 
-Set `DB_URL` (the loader file) to the appropriate login: Bookkeeping and the
+Source the loader file (its `DATA_URL` and `CONTROL_URL`) for the appropriate login: Bookkeeping and the
 Journal add their own databases. These commands
 do not author, qualify, approve or activate a Source version.
 

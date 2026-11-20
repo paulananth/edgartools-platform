@@ -13,8 +13,8 @@ from tests.storage_adapters.test_rules_runtime import pipeline
 def test_installed_rules_cli_records_and_reports_the_rules_a_run_used(installed, database_factory):
     python, root = installed
     with database_factory() as (owner, runtime, role):
-        owner_env = {"DB_URL": owner.url.set(drivername=owner.dialect.name).render_as_string(hide_password=False)}
-        runtime_env = {"DB_URL": runtime.url.set(drivername=runtime.dialect.name).render_as_string(hide_password=False)}
+        owner_env = {"CONTROL_URL": owner.url.set(drivername=owner.dialect.name).render_as_string(hide_password=False)}
+        runtime_env = {"CONTROL_URL": runtime.url.set(drivername=runtime.dialect.name).render_as_string(hide_password=False)}
         init = '''
 import sys
 from edgar_warehouse.cli import main

@@ -28,17 +28,19 @@ assert not names & set({DOMAIN!r})
     assert probe.returncode == 0, "Control installation has a workload dependency"
     with database_factory() as (_, reader, reader_role):
         with database_factory() as (owner, worker, role):
-            with store_databases(owner, "bookkeeping", "change_journal") as (prefix, stores):  # one database per store, one login
+            with store_databases(owner, "control") as (prefix, stores):  # bookkeeping and the journal share control, one login
                 if owner.dialect.name == "mysql":
                     wheel = next((root / "dist").glob("edgartools_bookkeeping-*.whl"))
                     added = subprocess.run(["uv", "pip", "install", "--python", str(python),
                                             "edgartools-bookkeeping[mysql] @ " + wheel.as_uri()],
                                            capture_output=True, text=True, timeout=60)
                     assert added.returncode == 0, "Declared MySQL control extra failed to install"
-                def url(engine):  # a duty file's DB_URL names no database: each store is its own name behind DB_PREFIX
-                    return engine.url.set(drivername=engine.dialect.name)._replace(database=None).render_as_string(hide_password=False)
-                environment = {**os.environ, "DB_PREFIX": prefix}
-                journal_owner, journal_runtime, journal_role = stores["change_journal"], worker, role
+                control = prefix + "control"
+
+                def url(engine):  # a duty file's control URL: the login's, naming the control database
+                    return engine.url.set(drivername=engine.dialect.name, database=control).render_as_string(hide_password=False)
+                environment = {k: v for k, v in os.environ.items() if k not in ("DATA_URL", "CONTROL_URL")}
+                journal_owner, journal_runtime, journal_role = stores["control"], worker, role
                 reader_url = url(reader)
                 def invoke(*arguments, document=None, verifier=False, expected=0, module="edgar_warehouse.bookkeeping"):
                     owner_command = arguments[0] in {"init", "grant-profile"}
@@ -46,14 +48,14 @@ assert not names & set({DOMAIN!r})
                     result = subprocess.run([str(python), "-I", "-m", module, *arguments],
                                             input=None if document is None else json.dumps(document), capture_output=True,
                                             text=True, cwd=tmp_path, timeout=30,
-                                            env={**environment, "DB_URL": owner_login if owner_command else (reader_url if verifier else url(worker))})
+                                            env={**environment, "CONTROL_URL": owner_login if owner_command else (reader_url if verifier else url(worker))})
                     if result.returncode != expected:
                         (tmp_path / "private-installed-control.log").write_text(result.stdout + "\n" + result.stderr)
                     assert result.returncode == expected, "Installed control failed; private diagnostic retained"
                     return json.loads(result.stdout)
-                invoke("init", "--runtime-role", role, "--database-name", prefix + "bookkeeping")
-                invoke("init", "--runtime-role", reader_role, "--database-name", prefix + "bookkeeping")
-                invoke("init", "--runtime-role", journal_role, "--database-name", prefix + "change_journal",
+                invoke("init", "--runtime-role", role, "--database-name", control)
+                invoke("init", "--runtime-role", reader_role, "--database-name", control)
+                invoke("init", "--runtime-role", journal_role, "--database-name", control,
                        module="edgar_warehouse.change_journal.cli")
                 granted = []
                 with owner.connect() as conn:
@@ -82,7 +84,7 @@ book=Bookkeeping(get_engine())
 try: print(json.dumps(book.start(rules_ref=rules,inputs_ref=inputs,target="silver",scope={})))
 finally: book.close()
 '''], input=json.dumps([rules, inputs]), capture_output=True, text=True, timeout=30, cwd=tmp_path,
-                        env={**environment, "DB_URL": url(worker)})
+                        env={**environment, "CONTROL_URL": url(worker)})
                     if start.returncode:
                         (tmp_path / "private-installed-control.log").write_text(start.stdout + "\n" + start.stderr)
                     assert start.returncode == 0, "Installed start failed; private diagnostic retained"
@@ -103,12 +105,12 @@ finally: book.close()
                     assert invoke("resume", run_id, expected=3)["run"]["state"] == "running"
                     assert invoke("finalize", run_id)["run"]["state"] == "complete"
                     assert json.loads(artifacts.verified({"uri": counted, "sha256": final["items"][1]["receipt"]["sha256"]})) == {"lines": 1}
-                    invoke("init", "--runtime-role", role, "--database-name", prefix + "bookkeeping")
+                    invoke("init", "--runtime-role", role, "--database-name", control)
                     with journal_owner.begin() as conn:
                         conn.execute(text("DROP TABLE journal.event CASCADE" if owner.dialect.name == "postgresql" else "DROP TABLE journal_event"))
                     refused = subprocess.run([str(python), "-I", "-m", "edgar_warehouse.change_journal.cli", "init",
-                        "--runtime-role", journal_role, "--database-name", prefix + "change_journal"],
-                        capture_output=True, text=True, cwd=tmp_path, timeout=30, env={**environment, "DB_URL": url(owner)})
+                        "--runtime-role", journal_role, "--database-name", control],
+                        capture_output=True, text=True, cwd=tmp_path, timeout=30, env={**environment, "CONTROL_URL": url(owner)})
                     assert refused.returncode != 0, "Installed Journal recreated missing history"
                     assert not inspect(journal_owner).has_table("event" if owner.dialect.name == "postgresql" else "journal_event",
                         schema="journal" if owner.dialect.name == "postgresql" else None)

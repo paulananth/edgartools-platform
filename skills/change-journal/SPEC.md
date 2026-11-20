@@ -57,7 +57,7 @@ edgar-warehouse change-journal init --runtime-role <role>
 ```
 
 For an already initialized, checksummed schema, run `change-journal init
---runtime-role <role>` again with the same separate owner connection (`DB_URL`);
+--runtime-role <role>` again with the same separate owner connection (`CONTROL_URL`);
 it never imports legacy events.
 
 The version 1 envelope contains `producer`, original `event_key`, root
@@ -211,7 +211,7 @@ historical roots. Do not import historical decisions, checkpoints or pending
 delivery. Fresh provisioning never creates legacy source/mirror tables.
 Local fresh-store provisioning is described in the central connection section;
 it imports nothing and removes nothing. Original acquisition connection helpers
-reject a runtime with `DB_URL` configured.
+reject a runtime with `CONTROL_URL` configured.
 That marker also restricts the CLI to `rules`, `bookkeeping` and
 `change-journal`, and refuses ungated provider transport. Legacy scheduled commands
 cannot be run with the fresh connections; keep their original task revisions

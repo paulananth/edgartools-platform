@@ -9,7 +9,7 @@ For each version, in order: draft it from its canonical rows, approve it, publis
 folder, and refuse unless the published bytes equal the repository's file and its pin. Nothing is written
 into the repository. A version RDM already holds is left alone.
 
-    uv run python scripts/dev/reload_rdm.py            # uses DB_URL (the loader file), never printed
+    uv run python scripts/dev/reload_rdm.py            # the loader file's data database URL, never printed
 
 A new version of a published code set is drafted from its newest published rows plus the added codes
 (each a row in the published shape: code, label, definition, parent_code, level, properties), for

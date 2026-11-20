@@ -67,7 +67,7 @@ command (below). Once nothing holds the six runtime logins, retire them with `pr
 ## Diagnose with the reader login
 
 Diagnosis (sessions, locks, waits, connections, what a load is doing) reads the database as the diagnostic login in
-the stores folder's `reader.env` (its `DB_URL`): it has `pg_monitor`, which shows sessions, locks and
+the stores folder's `reader.env` (its `DATA_URL` and `CONTROL_URL`): it has `pg_monitor`, which shows sessions, locks and
 statistics and the catalogs of each store (who holds what), never a table. Never diagnose as the owner, the administrator or a
 runtime login: each can change or read data, and a diagnosis that needs more than the reader shows is a gap to name.
 `load_chain.py --auto` reads the database this way; [database-monitoring](../database-monitoring/SKILL.md) has the readings.

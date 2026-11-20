@@ -68,14 +68,6 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False, database_
             )
         if exists and not saved:
             raise Blocked("Refusing to adopt an untracked journal schema")
-        # A hosted instance's own extension tables sit in every database it creates (`extension_base.workers`).
-        if conn.scalar(
-            text(
-                "SELECT EXISTS(SELECT 1 FROM pg_tables WHERE schemaname NOT IN "
-                "('pg_catalog','information_schema','journal','extension_base','extension_updater'))"
-            )
-        ):
-            raise Blocked("Journal database must hold only the journal")
         checksums = json.loads(saved) if saved else {}
         if saved and not conn.scalar(text("SELECT to_regclass('journal.event') IS NOT NULL")):
             # `init` makes a store and brings a tracked one to current; it never makes history again where history was lost
