@@ -298,13 +298,34 @@ uv run --with duckdb --with pyyaml python profile_data.py run --name "<data set>
 - **Size:** inputs up to `--limit-gb` (default 5) are read in full. A larger
   one is read once into a seeded sample, then read again in full for its key
   candidates. The run prints the estimate before it starts.
-- **Kinds:** pass the master kinds that already exist (from the operator, or
-  `edgar-warehouse context <kind> --search "<words>"` on a few of the part's
-  names) so a matching part is not proposed as new.
+- **Kinds:** pass the master kinds that already exist, read from the RDM code
+  set `mdm-kinds` (`edgar-warehouse context mdm-kinds`), and check a few of the
+  part's names with `edgar-warehouse context <kind> --search "<words>"`, so a
+  matching part is not proposed as new. See "Identify an MDM kind" below.
 - **Code sets:** before proposing a code list as new reference data, look for
   it: `edgar-warehouse rdm list`, then
   `edgar-warehouse context <code set> --search "<a label>"` on a few of its
   values.
+
+## Identify an MDM kind
+
+A kind is the category of a golden record. The list of kinds is
+reference data: it classifies the golden records (DAMA: reference data classifies other data; master
+data describes the entities), so it is the RDM code set `mdm-kinds`, beside `mdm-relationship-types`,
+whose types name the kinds at each end. How a kind is matched and merged is rules, one file per code:
+`rules/merge/kinds/<kind>.yaml`. MDM products keep the same split: an entity type is model
+configuration, and code lists live in reference data management (Reltio's entity types and lookup
+types). Nothing else holds a list of kinds.
+
+A master part is a **new kind** only when all of these hold, each measured on the part:
+- it is an entity other records point to: another part, or another source, links to its key;
+- it carries its own identifier, or a designed key that persists from one delivery to the next;
+- no code of `mdm-kinds` already names it: its names find no golden record of an existing kind
+  (`context <kind> --search`), and its identifiers are no existing kind's namespaces.
+
+A part that fails one is a role an existing kind plays, a detail of one, or silver. A new kind is proposed in `findings.yaml` as a draft code of
+`mdm-kinds` (code, label, definition, its identifiers) beside the draft of its rules file; the operator
+approves both, and data-onboarding publishes them in one change.
 
 ## An id from a name: only when no id exists
 

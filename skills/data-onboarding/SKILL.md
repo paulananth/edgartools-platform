@@ -207,7 +207,7 @@ onboarding log under "The source":
   identifiers, stand-in values such as all-zero ids, how often it publishes,
   full files or changes only), only with the operator's permission for that
   request (Hard stops);
-- what MDM already holds: `edgar-warehouse context <kind> --search "<words>"`.
+- what MDM already holds: `mdm-kinds` and `edgar-warehouse context <kind> --search "<words>"`.
 
 Then pass what it gives to the run: the existing kinds (`--kinds`), and each
 known stand-in and identifier type, named in the log, so a finding that
@@ -326,10 +326,10 @@ This is the same as **init**, run again after a schema change. Rerunning it chan
    - the capture family the repo already names for these files; if it names
      none, the folder name. Log it either way.
 5. **A new domain.** If the records are a kind with no merge rules yet (no
-   `rules/merge/kinds/<kind>.yaml`), say so. The kind must be in `KINDS`
-   (`edgar_warehouse/mdm/evidence.py`); a kind that is not there
-   needs the operator's ruling. Its written requirements (its spec under
-   `docs/specs/`) are the requirements.
+   `rules/merge/kinds/<kind>.yaml`), say so. A kind is a code of the RDM code
+   set `mdm-kinds` ([data-profiling](../data-profiling/SKILL.md), "Identify an
+   MDM kind"); a new one needs the operator's ruling, then one change publishes
+   `mdm-kinds` with it and its rules file. Its spec in `docs/specs/` is its requirements.
 
 **Output:** a line in the log with the name, the source code(s), the family,
 and whether it is a new domain.
