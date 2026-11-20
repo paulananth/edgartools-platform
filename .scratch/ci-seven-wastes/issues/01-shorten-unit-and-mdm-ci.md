@@ -1,7 +1,7 @@
 # Shorten Unit and MDM CI without reducing behavior coverage
 
 Type: task
-Status: claimed
+Status: resolved
 
 ## Scope
 
@@ -14,10 +14,11 @@ database acceptance. New test scenarios require operator approval before code.
 - [x] Measure recent successful CI runs, separating startup, build and execution (2026-11-20 14:52 ET): three successful runs below.
 - [x] Profile the existing affected code and identify the root cause (2026-11-20 14:52 ET): cProfile counts below; per-test CI durations enabled.
 - [x] Review the relevant code and change history using the GoF method (2026-11-20 14:52 ET): repeated work within existing functions; share computed inputs, no pattern abstraction warranted.
-- [ ] Apply the smallest measured optimization; preserve behavior coverage.
-- [ ] Verify locally within five minutes per invocation and compare CI results.
-- [ ] Review Standards, Spec and GoF; publish a PR with evidence.
-- [ ] Learning → skill: none identified yet.
+- [x] Apply the measured optimization; preserve behavior coverage (2026-11-20 15:01 ET): share operation-local source documents, field winners and service digest; no test changes.
+- [x] Verify all affected test files locally (2026-11-20 15:01 ET): 116 passed in 51.02s using testmon with selection disabled on final code.
+- [x] Compare complete CI execution and job times against the baseline (2026-11-20 15:01 ET): run 44806172228 passed all 12 jobs; 2,989 passed / one skipped in 231.38s.
+- [x] Review Standards, Spec and GoF; publish a PR with evidence (2026-11-20 15:01 ET): three independent reviews, no actionable findings; PR #1957.
+- [x] Learning → skill (2026-11-20 15:01 ET): none; the data-platform seven-wastes rule already requires measured cheap proof and carrying computed inputs forward.
 
 ## Baseline
 
@@ -62,3 +63,63 @@ without completing. It reported setup errors before its deadline; it is not
 passing validation. All its process-group children were stopped. Validation is
 restricted to the affected files, with the complete inventory verified in CI.
 No shared data server or other agent's work was changed.
+
+## Local verification
+
+Final implementation head `5ba006ac61a232407f4d9898d67fbf601548a809`:
+
+```bash
+TESTMON_DATAFILE=~/.cache/edgartools/testmondata uv run --no-sync pytest \
+  --testmon --testmon-noselect tests/unit/test_rules_catalog.py \
+  tests/unit/test_rules_catalog_coverage.py tests/unit/test_rules_mapdoc.py \
+  tests/unit/test_custom_parsing_mapping.py --durations=15 -q --tb=short
+```
+
+116 passed in 51.02 seconds. Existing tests verify a changed source changes
+its catalog and digest, independent rules roots, workbook round trips and
+edits, pipeline discovery/metadata validation, quality publication/readback,
+and nested custom parsing. No new tests were added and none were removed.
+
+## Standards
+
+No actionable findings. Configuration stays generic and operation-local;
+required CI inventory and validation remain unchanged.
+
+## Spec
+
+No actionable findings. A fresh branch, measured critical path, seven-waste
+audit and targeted optimization meet the operator's request; full CI comparison
+is recorded below.
+
+## GoF
+
+No pattern refactor warranted. Existing modules own the right responsibilities;
+passing already computed inputs removes repeated work without a persistent cache.
+
+## Full CI comparison
+
+Implementation head `5ba006ac61a232407f4d9898d67fbf601548a809`,
+[run 44806172228](https://github.com/paulananth/edgartools-platform/actions/runs/44806172228):
+all 12 jobs passed, including every required database engine and the aggregate gate.
+
+| Measurement | Main baseline 44800864333 | Implementation 44806172228 |
+|---|---:|---:|
+| Unit/architecture/MDM test execution | 398.83s | 231.38s |
+| Unit/MDM dependency step | 47s | 68s |
+| Complete Unit/MDM job | 455s | 309s |
+| Complete workflow, including scheduling | 465s | 339s |
+| Test result | 2,989 passed / one skipped | 2,989 passed / one skipped |
+
+Test execution improved 42%; the complete Unit/MDM job improved 32%. Install
+cost varied and was higher on the optimized run. These are observations from
+separate hosted runners, not a controlled hardware benchmark; the component
+profiles and read counts isolate the eliminated work.
+
+## Remaining observed work
+
+The new CI duration report identifies two existing load-chain tests at 18.63s
+and 18.36s. Each calls its `targets()` helper (which reads all source rules)
+inside a loop over chain steps. Hoisting that setup before the loop preserves
+all assertions. Operator approval of that existing scenario has been requested
+before editing test code, as required by the testing discipline. This observation
+is separate from the verified catalog/mapping improvement above.
