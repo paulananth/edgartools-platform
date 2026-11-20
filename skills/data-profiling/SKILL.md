@@ -126,16 +126,20 @@ break things. A random sample only estimates a rate.
 
 ## Hard stops
 
+A shared rule names its home beside it; the rest are this phase's own. This list grants no permission.
+
 | Never | Instead |
 |---|---|
-| Approve findings for the operator, or record words they did not say | Ask one question, wait, record their exact words with `approve` |
+| Approve findings for the operator, or record words they did not say | Ask one question, wait, record their exact words with `approve`; `compare` refuses findings without it |
 | Guess a class, a key or a link | Record the measured tests and the silver fields (numbers, identifiers, material commentary). A class the tests do not pick is `silver` |
-| Print or keep a database address, a password or a raw personal value | Put the address in an environment variable (`env:<VARIABLE>`); samples are masked to their shape; the run's working copy is deleted when it ends |
-| Request anything from a provider's website | Profile the local copies only |
-| Pin a finding on one source or one domain | Use the tests; names in this skill are generic |
-| Start a long pass silently | Say the size and the time estimate first (the run prints both) |
+| Print or keep a database address, a password or a raw personal value | Put the address in an environment variable (`env:<VARIABLE>`), never printed ([data-platform hard stops](../data-platform/SKILL.md#hard-stops)); a personal column's samples are masked to their shape; the run's working copy is deleted when it ends |
+| Commit or publish `REPORT.md`, `findings.yaml`, `invalid_rows.jsonl`, `fingerprints.json` or `drift.yaml` | Keep them on the machine, outside the repository: a non-personal column's top values and failing examples are values from the data, and a short key can be found again from its hash. Only `catalog`'s `profile.yaml`, names and counts, is public (`CLAUDE.md`, "Commits, PRs and secrets") |
+| Request anything from a provider (its site, API or documentation) | Profile the local copies only; a capture or a fact that only the provider holds is a blocker named to the operator ([data-platform hard stops](../data-platform/SKILL.md#hard-stops)) |
+| Edit the profiler's code while profiling a source | A gap in what it measures is a profiler fix: write its ticket and ask before coding ([data-onboarding hard stops](../data-onboarding/SKILL.md#hard-stops)) |
+| Pin a finding on one source or one domain | Use the tests; names in this skill are generic (`CLAUDE.md`, "Build generic") |
+| Start a long pass silently | Say the size and the time estimate first (the run prints both); `CLAUDE.md`, "Long steps and runs", holds the rest |
 | Profile the same inputs twice | Profile once; reuse the findings while the inputs and the profiler are unchanged ("Profile once", below) |
-| Ask several questions at once | Ask one, in plain words, with your recommendation |
+| Ask several questions at once | Ask one, in plain words, with your recommendation ([data-onboarding hard stops](../data-onboarding/SKILL.md#hard-stops)) |
 
 ## Tell the discovery story as you work
 
@@ -246,7 +250,8 @@ uv run --with duckdb --with pyyaml python profile_data.py run --name "<data set>
 
   A question the findings leave open goes to onboarding's one test or Proving
   Run, never to a second scan of the data. A gap in what the profiler
-  measures is a profiler fix with its own ticket, used on the next source.
+  measures is a profiler fix with its own ticket, written before any code
+  (Hard stops), used on the next source.
   Never re-profile a source whose findings are already approved just to fill
   that gap.
 - **One data set per source.** Profile each source into its own `--out`, so a
@@ -332,7 +337,9 @@ Read [SOURCE-RANKING.md](SOURCE-RANKING.md) when a kind has more than one source
 
 ## How to work
 
-1. **Ask what the data set is called and where its copies are.** One question.
+1. **Start from the capture location the caller handed over.** When none was
+   handed over and no local copy fits, ask what the data set is called and
+   where its copies are: one question.
 2. **Run** the command above. Read `REPORT.md` first; `findings.yaml` holds
    the detail and the evidence for every claim.
 3. **Read the silver fields**, every designed key, and every proposed new kind.
