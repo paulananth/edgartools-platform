@@ -64,25 +64,25 @@ def _engine(*, restricted: bool):
     return mdm_engine(restricted=restricted)
 
 
-def _settings(engine, manifest: dict, kind: str):
-    from edgar_warehouse.database_connections import storage_adapter
+def _settings(rules, manifest: dict, kind: str):
     from edgar_warehouse.mastering.merge import Settings
+    from edgar_warehouse.rules import registry
 
-    with engine.connect() as conn:
-        policy = storage_adapter().registered_policy(conn, manifest["policy_digest"])
+    with rules.connect() as conn:
+        policy = registry.policy(conn, manifest["policy_digest"])
     if policy is None:
         raise ValueError("The manifest's policy is not registered")
     return Settings(policy, manifest["policy_digest"], kind, manifest["as_of"])
 
 
-def _quiet(engine, deferred: list[dict], known: dict) -> dict:
+def _quiet(rules, deferred: list[dict], known: dict) -> dict:
     """The reasons each source leaves quiet; a source's contract is read once a unit, kept in `known`."""
-    from edgar_warehouse.database_connections import storage_adapter
+    from edgar_warehouse.rules import registry
 
     missing = {r["source_code"] for r in deferred} - known.keys()
     if missing:
-        with engine.connect() as conn:
-            contracts = storage_adapter().dataset_contracts(conn, missing)
+        with rules.connect() as conn:
+            contracts = registry.first_contracts(conn, missing)
         known.update({code: set(body.get("nonblocking_deferred_reasons", [])) for code, body in contracts.items()})
     return {r["source_code"]: known[r["source_code"]] for r in deferred if r["source_code"] in known}
 
@@ -95,14 +95,14 @@ def _batch_key(source: str, identity: str, spec: dict) -> str:
     return f"{EVENT_TYPE}:{source}:{identity}:{spec['sha256']}:{spec['path']}"
 
 
-def _identity(engine, manifest: dict, spec: dict, known: dict) -> str:
+def _identity(rules, manifest: dict, spec: dict, known: dict) -> str:
     """What a batch's records depend on besides its bytes: the reading, the policy and the publication it carries."""
     from edgar_warehouse.control_contract import digest
     from edgar_warehouse.mdm.store import current_reading
 
     code = spec["source_code"]
     if code not in known:
-        with engine.connect() as conn:
+        with rules.connect() as conn:
             found = current_reading(conn, code)
         known[code] = None if found is None else found[0]
     return digest({"policy": manifest["policy_digest"], "reading": known[code], "publication": spec["publication"]})
@@ -159,9 +159,10 @@ def _merge_batches(envelope: dict, manifest: dict, folder: str, work: list[tuple
     from edgar_warehouse.mastering.store import open_store
     from edgar_warehouse.mdm import changed_files
     from edgar_warehouse.mdm.execution import batch_input
-    from edgar_warehouse.mdm.store import Store
+    from edgar_warehouse.rules import registry
 
     engine = _engine(restricted=True)
+    rules = registry.engine()
     db = open_store(engine)
     known: dict = {}
     settings: dict = {}
@@ -171,18 +172,18 @@ def _merge_batches(envelope: dict, manifest: dict, folder: str, work: list[tuple
     try:
         for position, key in work:
             batch = manifest["batches"][position]
-            found = batch_input(batch, Path(folder), Store(engine), policy_digest=manifest["policy_digest"],
+            found = batch_input(batch, Path(folder), rules, policy_digest=manifest["policy_digest"],
                                 mapping_versions=mapping_versions)
             quality = found.get("quality")
             kinds = defaultdict(list)
             for record in found["assertions"]:
                 kinds[record["kind"]].append(record)
             deferred = found["deferred"]
-            quiet = _quiet(engine, deferred, known)
+            quiet = _quiet(rules, deferred, known)
             files = []
             for kind, records in sorted(kinds.items()) or [("", [])]:
                 if kind not in settings:
-                    settings[kind] = _settings(engine, manifest, kind)
+                    settings[kind] = _settings(rules, manifest, kind)
                 made = merge.merge_file(db, settings[kind], records, deferred=deferred, quiet=quiet)
                 files.extend(made["files"])
                 alone.update(made["alone"])
@@ -193,6 +194,7 @@ def _merge_batches(envelope: dict, manifest: dict, folder: str, work: list[tuple
     finally:
         db.close()
         engine.dispose()
+        rules.dispose()
         if alone:
             print(json.dumps({"mastering_merge_alone": dict(alone)}, sort_keys=True), file=sys.stderr, flush=True)
     return done
@@ -202,17 +204,16 @@ def _quality_for_recorded(envelope: dict, manifest: dict, folder: str, positions
                           mapping_versions: dict[str, int]) -> dict[int, dict]:
     """Recompute read-only outcomes for journal-skipped batches under the same reading identity."""
     from edgar_warehouse.mdm.execution import batch_input
-    from edgar_warehouse.mdm.store import Store
+    from edgar_warehouse.rules import registry
 
-    engine = _engine(restricted=True)
+    rules = registry.engine()
     try:
-        store = Store(engine)
         return {position: {"files": [], "quality": batch_input(
-            manifest["batches"][position], Path(folder), store,
+            manifest["batches"][position], Path(folder), rules,
             policy_digest=manifest["policy_digest"], mapping_versions=mapping_versions).get("quality")}
                 for position in positions}
     finally:
-        engine.dispose()
+        rules.dispose()
 
 
 def _attach_replayed_quality(done: dict[int, dict], replayed: dict[int, dict]) -> dict[int, dict]:
@@ -275,7 +276,9 @@ def execute(envelope: dict, artifacts) -> dict:
     if checks not in ({CHECK}, {CHECK, QUALITY_CHECK}):
         raise ValueError(f"mastering.merge verifies {CHECK}, with optional {QUALITY_CHECK}")
     _quality_enabled(checks)
-    engine = _engine(restricted=True)
+    from edgar_warehouse.rules import registry
+
+    rules = registry.engine()
     readings: dict = {}
     journal = changed_files.journal()
     with tempfile.TemporaryDirectory(prefix="mastering-") as folder:
@@ -285,10 +288,10 @@ def execute(envelope: dict, artifacts) -> dict:
             for position, batch in enumerate(manifest["batches"]):
                 spec = batch.get("input")
                 if spec is not None:
-                    keys[position] = _batch_key(spec["source_code"], _identity(engine, manifest, spec, readings), spec)
+                    keys[position] = _batch_key(spec["source_code"], _identity(rules, manifest, spec, readings), spec)
             recorded = _recorded(journal, list(keys.values()))
         finally:
-            engine.dispose()
+            rules.dispose()
         done = {position: {"files": [{"file": name, "records": int(count)} for name, count in recorded[key]],
                            "quality": None}
                 for position, key in keys.items() if key in recorded}

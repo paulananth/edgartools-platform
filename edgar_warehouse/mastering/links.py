@@ -42,13 +42,17 @@ def calculate(store, policy: dict, as_of: str, stored: dict) -> tuple[list[dict]
 def build(silver, mdm, policy_digest: str, as_of: str) -> dict:
     """The links table, built whole from the stored records as they are now, once a load's merges are done. A link
     keeps the start the last build gave it."""
-    from edgar_warehouse.database_connections import storage_adapter
     from edgar_warehouse.mastering.store import open_store
+    from edgar_warehouse.rules import registry
     from edgar_warehouse.silver_writer.relational import DatabaseSink
     from edgar_warehouse.silver_writer.writer import land
 
-    with mdm.connect() as conn:
-        policy = storage_adapter().registered_policy(conn, policy_digest)
+    rules = registry.engine()
+    try:
+        with rules.connect() as conn:
+            policy = registry.policy(conn, policy_digest)
+    finally:
+        rules.dispose()
     if policy is None:
         raise ValueError("The merge policy of the rules files is not registered: load or register a source first")
     with silver.connect() as conn:

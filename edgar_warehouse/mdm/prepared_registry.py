@@ -41,36 +41,12 @@ def storage_ready(conn):
     return adapter
 
 
-def _approve(conn, adapter, name, value):
-    if conn.dialect.name == "postgresql":
-        from .registration import approve
-        approve(conn, name, value)
-    else:
-        adapter.admit_pin(conn, name, value)
-
-
-def approve_policy(conn, key):
-    adapter = installed(conn)
-    if adapter is not None:
-        _approve(conn, adapter, "policy", key)
-
-
 def mapping_pin(code, version):
     return "mapping/" + canonical([code, version])
 
 
 def schema_pin(code, schema):
     return "schema/" + canonical([code, schema])
-
-
-def approve_mapping(conn, code, version, body):
-    adapter = installed(conn)
-    if adapter is not None:
-        _approve(conn, adapter, mapping_pin(code, version), digest(body))
-        # Deferred records name their schema, not a mapping revision. Retain
-        # approval of each registered schema without resolving the latest map.
-        schema = body.get("schema_version")
-        _approve(conn, adapter, schema_pin(code, schema), digest([code, schema]))
 
 
 def initialize(engine, *, application_role, application_host="%"):

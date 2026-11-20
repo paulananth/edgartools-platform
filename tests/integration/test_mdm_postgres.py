@@ -8,6 +8,7 @@ from uuid import uuid4
 from sqlalchemy import create_engine, text
 
 from edgar_warehouse.mdm.store import migrate, register_policy
+from edgar_warehouse.rules.db import migrate as rules_migrate
 from tests.support.relationship_types import with_relationship_types
 from tests.support.rules_authority import register_dataset
 
@@ -56,6 +57,8 @@ def initialize_database(admin, app):
         version = str(uuid4())
     assert migrate(admin, application_role="clean_application")["installed"]
     assert not migrate(admin, application_role="clean_application")["installed"]
+    # The registry is the Rules Database's; the test database holds it beside MDM.
+    rules_migrate(admin, agent_role="clean_application")
     with admin.begin() as conn:
         policy = register_policy(
             conn,

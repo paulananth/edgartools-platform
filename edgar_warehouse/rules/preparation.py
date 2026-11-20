@@ -25,8 +25,8 @@ from .driving import RunStopped
 
 @contextmanager
 def registered_store(policy_digest, environment):
-    from edgar_warehouse.database_connections import storage_adapter
     from edgar_warehouse.mastering.store import open_store
+    from edgar_warehouse.rules import registry
     from edgar_warehouse.mdm.connections import mdm_engine_from
 
     from edgar_warehouse.database_connections import configured
@@ -36,8 +36,12 @@ def registered_store(policy_digest, environment):
     engine = mdm_engine_from(environment, restricted=True)
     store = None
     try:
-        with engine.connect() as conn:
-            policy = storage_adapter().registered_policy(conn, policy_digest)
+        rules = registry.engine(environment)
+        try:
+            with rules.connect() as conn:
+                policy = registry.policy(conn, policy_digest)
+        finally:
+            rules.dispose()
         if policy is None:
             raise RunStopped("Automatic preparation requires the load's registered mastering policy")
         store = open_store(engine)

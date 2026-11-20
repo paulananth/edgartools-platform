@@ -139,8 +139,8 @@ reopens.
 Keep an explicit pending marker while an owner installs or replaces governed
 storage. Approve the catalog and retain the complete marker in the same
 transaction; grant restricted runtime execution after that transaction commits.
-Policy and mapping registration approve their immutable references in their
-existing owner transaction. Qualify an interruption after the durable pending
+Policy and mapping registration live in the Rules Database, not in governed
+storage (`edgar_warehouse.rules.registry`). Qualify an interruption after the durable pending
 marker, failed registration rollback and a populated retry. A previous runtime
 grant or an already-entered call must not bypass the pending marker. A populated
 native store needs a fresh rebuild before its

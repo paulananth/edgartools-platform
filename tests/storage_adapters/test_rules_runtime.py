@@ -9,6 +9,7 @@ from tests.support.duty import duty_url
 from edgar_warehouse.control_contract import Blocked
 from edgar_warehouse.rules import frozen
 from edgar_warehouse.rules.db import TABLE, Rules, migrate
+from tests.support.rules_authority import register_dataset
 
 
 def pipeline(seconds=60):
@@ -24,8 +25,9 @@ def test_a_runs_rules_are_recorded_once_and_read_back(database_factory, monkeypa
     with database_factory(store="rules") as (owner, runtime, role):
         if owner.dialect.name == "mssql":
             pytest.skip("The Rules Database is qualified on PostgreSQL and MySQL")
-        assert migrate(owner, agent_role=role) == {"table": TABLE}
-        assert migrate(owner, agent_role=role) == {"table": TABLE}  # rerunning changes nothing
+        made = {"tables": sorted([TABLE, "policy", "dataset_reading"])}
+        assert migrate(owner, agent_role=role) == made
+        assert migrate(owner, agent_role=role) == made  # rerunning changes nothing
         rules = Rules(runtime)
         first, changed = frozen.of("pipeline", "invented.pipeline", pipeline()), \
             frozen.of("pipeline", "invented.pipeline", pipeline(seconds=90))
@@ -48,3 +50,43 @@ def test_a_runs_rules_are_recorded_once_and_read_back(database_factory, monkeypa
         monkeypatch.setenv("CONTROL_URL", duty_url(runtime, "rules"))
         assert main(["rules", "status", "--pipeline", "invented.pipeline"]) == 0
         assert [row["digest"] for row in json.loads(capsys.readouterr().out)] == [first["digest"], changed["digest"]]
+
+
+def test_the_registry_keeps_each_policy_and_each_reading_and_the_runtime_only_reads_it(database_factory):
+    """The merge rules and the Dataset Contracts MDM runs by, registered in the Rules Database: a policy under its
+    digest, each reading numbered from 1, nothing changed in place, a rolled-back registration leaving nothing."""
+    from edgar_warehouse.mdm.store import current_reading, reading_at, register_policy
+    from edgar_warehouse.rules import registry
+
+    with database_factory(store="rules") as (owner, runtime, role):
+        if owner.dialect.name == "mssql":
+            pytest.skip("The Rules Database is qualified on PostgreSQL and MySQL")
+        migrate(owner, agent_role=role)
+        body = {"version": "invented-approved", "required_consumers": ["invented"], "automatic_rules": []}
+        with owner.begin() as conn:
+            pin = register_policy(conn, body)
+        with owner.begin() as conn:
+            assert register_policy(conn, body) == pin  # registering again changes nothing
+        contract = {"provider": "fixture", "family": "fixture", "schema_version": "1", "record_key": "key",
+                    "publication_key": "revision", "effective_time": "effective_at", "semantics": "patch"}
+        with owner.begin() as conn:
+            register_dataset(conn, "invented.source", "invented-registry", contract)
+            register_dataset(conn, "invented.source", "invented-registry", {**contract, "schema_version": "2"})
+        with pytest.raises(RuntimeError, match="invented interruption"), owner.begin() as conn:
+            rejected = register_policy(conn, {**body, "version": "invented-rolled-back"})
+            register_dataset(conn, "invented.source", "invented-registry", {**contract, "schema_version": "3"})
+            raise RuntimeError("invented interruption")
+        with runtime.connect() as conn:
+            assert registry.policy(conn, pin) == body and registry.policy(conn, rejected) is None
+            version, latest = current_reading(conn, "invented.source")
+            assert (version, latest["schema_version"]) == (2, "2")
+            assert reading_at(conn, "invented.source", 1)[1]["schema_version"] == "1"
+            assert registry.first_contracts(conn, ["invented.source"])["invented.source"]["schema_version"] == "1"
+        with pytest.raises(ValueError, match="A Dataset Contract names provider"), owner.begin() as conn:
+            register_dataset(conn, "invented.other", "invented-registry", {k: v for k, v in contract.items()
+                                                                           if k != "provider"})
+        prefix = "rules." if owner.dialect.name == "postgresql" else ""
+        for sql in (f"DELETE FROM {prefix}policy", f"UPDATE {prefix}dataset_reading SET body='{{}}'",
+                    f"INSERT INTO {prefix}policy(digest, body, registered_at) VALUES ('x', '{{}}', CURRENT_TIMESTAMP)"):
+            with pytest.raises(DBAPIError), runtime.begin() as conn:
+                conn.execute(text(sql))

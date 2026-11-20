@@ -230,17 +230,16 @@ def test_rows_read_against_a_lookup_set_are_their_own_publication(tmp_path):
 def test_merge_reads_a_sources_contract_once_a_unit(monkeypatch):
     reads = []
 
-    class Adapter:
-        def dataset_contracts(self, conn, codes):
-            reads.append(set(codes))
-            return {code: {"nonblocking_deferred_reasons": ["why"]} for code in codes}
+    def first_contracts(conn, codes):
+        reads.append(set(codes))
+        return {code: {"nonblocking_deferred_reasons": ["why"]} for code in codes}
 
     class Engine:
         def connect(self):
             from contextlib import nullcontext
             return nullcontext()
 
-    monkeypatch.setattr("edgar_warehouse.database_connections.storage_adapter", lambda: Adapter())
+    monkeypatch.setattr("edgar_warehouse.rules.registry.first_contracts", first_contracts)
     known: dict = {}
     deferred = [{"source_code": "a.b"}]
     answers = [mastering_merge._quiet(Engine(), deferred, known) for _ in range(3)]
