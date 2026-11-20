@@ -73,7 +73,10 @@ No scenario or test code is approved by creating these tickets. Proposed Givenâ€
 
 ## Decisions so far
 
-No child ticket has been resolved. Scope and the six requested outcomes come from the operator's request; effectiveness findings remain to be measured.
+- [data-platform: Define one responsibility](issues/01-data-platform-responsibility.md): Data Platform owns the next-phase decision, shared source-readiness acceptance, and connection discovery/setup. Downstream procedures stay with their owning skill. PR #1956, merged 2026-11-20 17:07 ET.
+- [data-platform: Reconcile shared rules](issues/02-data-platform-consistent-rules.md): a rule list names each rule's home and grants no permission. The findings-approval conflict is carried by tickets 08 and 20. PR #1966, merged 2026-11-20 17:46 ET.
+- [data-profiling: Define one responsibility](issues/07-data-profiling-responsibility.md): profiling owns measurement and the evidence files. Decisions made from them belong to their named owners. PR #1969, merged 2026-11-20 18:02 ET.
+- [access-audit: Define one responsibility](issues/79-access-audit-responsibility.md): the auditor owns the grade and the re-run. The fix belongs to the platform's operations skill. PR #1968, merged 2026-11-20 18:08 ET.
 
 ## Not yet specified
 

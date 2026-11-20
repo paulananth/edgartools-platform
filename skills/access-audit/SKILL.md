@@ -11,22 +11,31 @@ The auditor tests whether access is **least-privilege, approved, recorded, monit
 data stack touches. The controls are 14 platform-neutral **objectives** mapped to SOX IT general controls (access, program
 change, operations), SOC 2 trust criteria (CC6 logical access, CC7 monitoring, CC8 change management, A1 capacity) and ITIL
 practices (service access, change enablement, monitoring, information security). Each platform is an **adapter** that reads
-its own evidence and grades the objectives it can. The auditor finds and reports and never changes anything; remediation is a separate, approved, code-driven step.
+its own evidence and grades the objectives it can. The auditor finds and reports and never changes anything; remediation is a
+separate, approved, code-driven step owned by the operations skill of the platform (see [Decisions, artifacts and
+handoffs](#decisions-artifacts-and-handoffs)), and the auditor's re-run closes the finding.
 
 ## Hard stops
 
+A shared rule keeps its home, named in its row. This table grants no approval, provider access, access change or switch-on.
+
 | Never | Instead |
 |---|---|
-| Let the auditor change anything | The audit identity is read-only. Fixing is a separate step with its own identity (see Remediate): plan, the operator's recorded words, apply, then a fresh audit |
-| Use, change, disable or plan against the operator's overall administrator account (`ANANP11`) or a connection that signs in as it | The audit refuses those connections; the remediation refuses any plan that touches the account; a finding about it is reported and needs the operator's signed acceptance |
+| Let the auditor change anything | The audit identity is read-only. Fixing is a separate step with its own identity, owned by the platform's operations skill ([handoffs](#decisions-artifacts-and-handoffs)), then a fresh audit |
+| Use, change or disable the operator's overall administrator account (`ANANP11`), or audit through a connection that signs in as it | The audit refuses those connections ([Access identities](../aws-snowflake-operations/SKILL.md#access-identities-read-only-first)); a finding about the account is reported and needs the operator's signed acceptance |
 | Audit as an administrator and call it independent | A read-only audit identity per platform; an administrator run needs `--as-admin` and fails that platform's IND |
-| Print a password, key, token, address or a value from the data | The adapters return counts and role names only; keep it that way |
-| Mark a control PASS from reading code or a document | Test it against the live system; no live test is NOT_TESTED, and an objective an adapter lacks is a gap (`-`) |
+| Print a password, key, token, address or a value from the data | The adapters return counts and role names only; keep it that way (`CLAUDE.md`, "Commits, PRs and secrets") |
+| Mark a control PASS from reading code or a document | Test it against the live system; no live test is NOT_TESTED, and an objective an adapter lacks is a gap (`-`) (`CLAUDE.md`, "Tests") |
 | Treat what the auditor cannot see as clean | The adapter returns NOT_TESTED when its view is empty or refused |
-| Close a finding without evidence | The re-run's PASS, or a signed acceptance of the risk in the ticket |
+| Close a finding without evidence | The re-run's PASS, or the operator's signed acceptance of the risk in the ticket |
+| Accept a risk for the operator, or record an acceptance as given | A signed acceptance is the operator's own words, stamped `{{now}}` (`CLAUDE.md`, "Task checklists"), with the owner, reason and expiry date, given when asked. Accepting a risk is a new kind of decision (`CLAUDE.md`, "Talking with the operator"), never a routine approval |
 | Finalise a skill, role or login with an open FAIL that is not accepted | See the gate below |
 
 ## Run it
+
+Before a Snowflake or AWS run, open [AWS and Snowflake Operations](../aws-snowflake-operations/SKILL.md) (`CLAUDE.md`,
+"Skills and guides"). The login files and their duties belong to [Connections](../data-platform/CONNECTIONS.md). Reading a
+platform's own access records is no request to a data provider.
 
 ```bash
 set -a; . ~/.config/edgartools/hosted/reader.env; set +a     # the read-only Postgres login; never print it
@@ -64,7 +73,7 @@ platform's usage views have not shown yet (they lag). The workstation adapter al
 | LOG | Access and changes logged; transport and storage encrypted | Who did what, when |
 | CHG | Every access principal has a ticket and is defined in code; protected branch with a review | Change enablement: approver, reason, back-out |
 | SCR | No plain-text secret; secret files private; secret scanning on | Credential hygiene |
-| ROT | Credentials rotate on a dated, owned schedule | AWS keys are tested; elsewhere read the ticket |
+| ROT | Credentials rotate on a dated, owned schedule | AWS keys are tested; elsewhere NOT_TESTED, since a person reads the ticket's dated record |
 | REV | Access is reviewed on a schedule with a signed record | A person reads it: NOT_TESTED until a record exists |
 
 A database's own logins, made with the instance and used by the platform (its administrator account and application login), are left out
@@ -79,39 +88,46 @@ Add `audit_platforms/<name>.py` with `NAME`, `configured(env)`, `collect(env, as
 refuse an administrator identity), `principals(evidence)` (the roles and users to check for a change record) and
 `controls(evidence)` returning `base.control(NAME, objective, ok, evidence, fix, tested=...)` for each objective it can
 test; list it in `PLATFORMS` in `access_audit.py`, then add its clean case and one weakness per objective to
-`tests/unit/test_access_audit.py`. Databricks, OpenMetadata and any further cloud follow this contract.
+`tests/unit/test_access_audit.py`. Databricks, OpenMetadata and any further cloud follow this contract. The code and its tests
+follow `CLAUDE.md`'s "Code review" and test-writing rules.
 
-## Remediate
+## Decisions, artifacts and handoffs
 
-Findings are closed as code, by the skill, with no hand steps (`scripts/access_remediate.py`; the Terraform root is
-`infra/terraform/access/snowflake/accounts/prod`):
+Access audit owns the independent verdict: which objectives apply, how each control is graded from live read-only evidence, the
+report and coverage matrix, the gate below, and whether a finding is closed. It owns no fix. Hand the finding (control id,
+evidence counts, the fix it names) to the owner below, then re-run the audit on that platform; do not repeat a run only to
+recreate its report.
 
-1. `bootstrap` creates a key pair for a dedicated **access-admin** service identity (a role that creates roles, users and
-   policies and grants them; never `ACCOUNTADMIN`) and prints the one-time SQL that creates it, holding the public key only. An
-   account owner runs that SQL once; nothing else is ever run by hand.
-2. `plan` runs Terraform as that identity and summarises creates, updates and destroys. It refuses a plan that touches the
-   operator's own administrator account, and any destroy unless `--allow-destroy`.
-3. `apply --words "<the operator's exact words>"` records the words with the ET time and the plan counts
-   (`.scratch/access-audit/approvals.jsonl`), then applies the saved plan.
-4. Re-run `access_audit.py`; the finding is closed only by the re-run's PASS.
-
-Objects made before the root existed are imported once, so a plan shows no change for them. A permission error from the
-access-admin identity is reported as the missing privilege to grant it; it is never worked around with an administrator.
-A finding about a person's own account (their MFA, their password) has no code fix: it is reported, and closes by the
-operator's signed acceptance (owner, reason, expiry) or by moving the work to a service identity.
+| Decision or artifact | Authoritative owner | Handoff |
+|---|---|---|
+| Objectives, adapters, grading, the PASS/FAIL/NOT_TESTED report and the coverage matrix (`scripts/access_audit.py`) | Access audit | Keep the `--json` record of the run; a later run on the same platform is the recheck. |
+| The read-only audit logins and their connection variables | [Data Platform](../data-platform/CONNECTIONS.md) (the PostgreSQL reader duty) and [AWS and Snowflake Operations](../aws-snowflake-operations/SKILL.md#access-identities-read-only-first) (the Snowflake audit identity); the AWS and GitHub audit identities hold what Run it lists | The audit receives only the variable names listed in Run it; it refuses an administrator identity. |
+| Fixing a Snowflake access finding: the access-admin identity, the Terraform plan, the operator's recorded words and the apply | [AWS and Snowflake Operations](../aws-snowflake-operations/SKILL.md#fixing-an-access-finding) | Carry the finding; after the apply, re-run the audit. Only that re-run's PASS closes it. |
+| Fixing an AWS access finding | [AWS and Snowflake Operations](../aws-snowflake-operations/SKILL.md), which owns every AWS command | Same: carry the finding, re-run the audit after the change. |
+| Fixing a PostgreSQL role guard (connection limit, timeouts, `work_mem`, audit classes) | [Data Operations](../data-operations/HOSTED-LOADS.md#before-a-load-starts) (role guards) | Carry the failing CST, TMO or LOG control; re-run the audit on `postgres` after the guards are applied. |
+| Whether a load may start on today's audit | [Data Operations](../data-operations/HOSTED-LOADS.md#the-gate-nothing-loads-until-the-infrastructure-is-ready-and-tested) (the readiness gate) | The gate runs the `postgres` audit and reads its failing control ids; it decides the load, the audit decides the controls. |
+| GitHub repository settings and the operator's own accounts (MFA, passwords, workstation files) | The operator; no skill holds code for them | Report the finding; it closes by a re-run's PASS or the operator's signed acceptance (owner, reason, expiry) in the ticket. |
 
 ## Rating and report
 
 A failing control carries the objective's severity: **high** where one credential can change or read everything or leave no
 trail (ADM, OPS, AUT, LPR, LOG, SCR), **medium** where a guard is weak (IND, NET, CST, TMO, POL, CHG, ROT, REV). Report, in
-order: scope and evidence date; counts (pass, fail, not tested) and the matrix; each finding as control, evidence numbers,
-risk in plain words and the fix; what was not tested and why. Evidence is counts, never values.
+order: scope and evidence date and time in ET; counts (pass, fail, not tested) and the matrix; each finding as control, evidence numbers,
+risk in plain words, the fix and the owner it is handed to ([handoffs](#decisions-artifacts-and-handoffs)); what was not
+tested and why. Evidence is counts, never values.
 
 ## The gate before finalising a skill, role or login
 
-The audit ran as a read-only identity on every platform the change touches; every FAIL it touches is fixed or has a signed
-acceptance (owner, reason, expiry date) in its ticket; the new principal has a ticket and is in code (CHG); its credential is a
-key or role, or a secret held outside the repository, with a rotation date; and the re-run shows no new FAIL.
+The audit ran as a read-only identity on every platform the change touches; every FAIL it touches is fixed or has the
+operator's signed acceptance ([Hard stops](#hard-stops)) in its ticket; the new principal has a ticket and is in code (CHG); its
+credential is a key or role, or a secret held outside the repository, with a rotation date; and the re-run shows no new FAIL. Each
+NOT_TESTED or `-` control on a platform the change touches is named in the report as not tested, never counted as a pass.
+
+- A change that touches no platform's access (no role, login, grant, credential, connection or audited setting) records the
+  gate as not applicable, with that reason, never as PASS.
+- An open FAIL with no acceptance stops the finalising: ask the operator one question, naming the finding, the decision and
+  your recommendation (`CLAUDE.md`, "Talking with the operator").
+- Passing the gate grants no approval, access change, activation or switch-on.
 
 ## Limits
 

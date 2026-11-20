@@ -225,8 +225,8 @@ notes is not the live one. The order:
 - `ACCOUNT_USAGE` lags by minutes to hours (a new user or grant is missing at first), and a view the role may not read fails:
   treat both as "not tested", never as "empty, so clean".
 - These identities, the resource monitor, the statement timeout and the key-pair-only authentication policy are code
-  (`infra/terraform/access/snowflake`), applied by a dedicated access-admin service identity under the
-  [access-audit](../access-audit/SKILL.md) skill, not by hand.
+  (`infra/terraform/access/snowflake`), applied by a dedicated access-admin service identity ([Fixing an access
+  finding](#fixing-an-access-finding)), not by hand. The [access-audit](../access-audit/SKILL.md) skill grades them.
 - The server log quotes the data a failed statement held: read it only through the monitoring script, which drops those lines.
 - The Gold writer is the one identity that writes: a key-pair service user whose role reads the approved mirror databases and
   creates views (never tables) in the Gold schema only. dbt reads its settings from the private file
@@ -241,6 +241,26 @@ notes is not the live one. The order:
   and reading account usage are refused.
 - An access change made by an account owner's SQL, before the access-admin identity exists, is the same objects as the Terraform
   and is written there too; import them (`terraform import`) before the first apply, or the plan tries to create them again.
+
+## Fixing an access finding
+
+A finding from the [access-audit](../access-audit/SKILL.md) skill is fixed here, as code, with no hand steps
+([access_remediate.py](../access-audit/scripts/access_remediate.py); the Terraform root is `infra/terraform/access/snowflake/accounts/prod`).
+The auditor never fixes; this procedure never grades.
+
+1. `bootstrap` creates a key pair for a dedicated **access-admin** service identity (a role that creates roles, users and
+   policies and grants them; never `ACCOUNTADMIN`) and prints the one-time SQL that creates it, holding the public key only. An
+   account owner runs that SQL once; nothing else is ever run by hand.
+2. `plan` runs Terraform as that identity and summarises creates, updates and destroys. It refuses a plan that touches the
+   operator's own administrator account, and any destroy unless `--allow-destroy`.
+3. `apply --words "<the operator's exact words>"` records the words with the ET time and the plan counts
+   (`.scratch/access-audit/approvals.jsonl`), then applies the saved plan.
+4. Hand back to the access audit: re-run `access_audit.py` on the platform; the finding is closed only by the re-run's PASS.
+
+Objects made before the root existed are imported once, so a plan shows no change for them. A permission error from the
+access-admin identity is reported as the missing privilege to grant it; it is never worked around with an administrator.
+A finding about a person's own account (their MFA, their password) has no code fix: it is reported, and closes by the
+operator's signed acceptance (owner, reason, expiry) or by moving the work to a service identity.
 
 ## Database ownership
 

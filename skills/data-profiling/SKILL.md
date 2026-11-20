@@ -17,6 +17,25 @@ the parts connect. The store suggestion is advice only.
 
 A failure, a surprise or two readings that disagree: find the root cause first, by the [five whys](../data-platform/ROOT-CAUSE.md), silently, and report the conclusion.
 
+## Decisions, artifacts and handoffs
+
+This skill measures the captured copies once and writes reusable evidence. It
+proposes; it does not decide a part's final place in the model, write
+configuration or run a load. Hand the retained artifact to its owner; never
+profile again only to cross a boundary.
+
+| Decision or artifact | Authoritative owner | Handoff |
+|---|---|---|
+| Inventory, column profiles and shapes, class tests, record keys, entities, links, identifiers and their pairs, hierarchies, time roles, sensitivity, code-set and quality proposals with their failing rows | Data Profiling: `findings.yaml`, `REPORT.md`, `invalid_rows.jsonl`, `fingerprints.json` | A new data set: [Data Onboarding](../data-onboarding/SKILL.md) reads the approved findings in its **discover** step |
+| The operator's approval of the findings | Data Profiling (`approve`), in the operator's exact words | Every later skill reads `approval.status: approved`; none approves for the operator |
+| A changed delivery's differences from approved findings | Data Profiling (`compare`): `drift.yaml` | [Refining Rules](../refining-rules/SKILL.md) decides each change; the approved findings stay as they are |
+| A part's class, master kind or code set, which identifiers decide identity, the final outputs and their current/history scope | [Data Modeling](../data-modeling/SKILL.md), from approved findings | The class tests, the new-kind tests ("Identify an MDM kind") and `identifiers.pairs` are its evidence; a proposed kind stays a draft until the operator rules |
+| The mapping that converts each field's one declared shape, source and merge rules, the plan of parts, silver tables, the catalog summary and its timing, RDM code set versions | [Data Onboarding](../data-onboarding/SKILL.md) for a new feed; [Refining Rules](../refining-rules/SKILL.md) for a live one | They run `catalog` and the RDM steps in [CODE-SETS.md](CODE-SETS.md) from the approved findings |
+| Engine checks, `on_fail`, and the fix or steward decision on an invalid row | [Data Quality](../data-quality/SKILL.md) | It reads the `quality` items and `invalid_rows.jsonl`; the profiler's proposed fix and its evidence are inputs, not a decision |
+| Exposure eligibility | [Final exposable tables](../data-platform/FINAL-TABLES.md): Data Modeling defines the outputs, Data Onboarding records the approved selection | The report's trace of each candidate ("Exposure tags follow requirements and mappings") |
+| The proof level a merge change needs | [MDM Engineering](../mdm-engineering/SKILL.md#choose-the-cheapest-proof) | The batches picked by kind ("Choose a proof sample by kind") |
+| A field's source order, and the matching rule for an id made from a name | Data Onboarding or Refining Rules, with the operator | The measurements of [SOURCE-RANKING.md](SOURCE-RANKING.md) and [NAME-IDS.md](NAME-IDS.md) |
+
 ## Silver fields
 
 Operator. This is the rule the silver spec follows.
@@ -40,47 +59,23 @@ Operator. This is the rule the silver spec follows.
 
 ## Exposure tags follow requirements and mappings
 
-For managed mirroring and AutoOntology, apply
-[Final exposable tables](../data-platform/FINAL-TABLES.md). Only final MDM
-master, RDM master and silver outputs may be eligible. A profiled class,
-store suggestion, table name or catalog certification is not an exposure tag.
+[Final exposable tables](../data-platform/FINAL-TABLES.md) is the rule for
+managed mirroring and AutoOntology, its eligibility and its review checkpoint.
+This skill supplies the evidence, from the one profile:
 
-Reuse the one profile's evidence. In `REPORT.md` and the onboarding handoff,
-trace each candidate output to the requirement it serves and the source-to-final
-mapping: source part/fields, transformations, destination table/fields, grain,
-keys, master links, time roles, sensitivity and applicable quality checks.
-Reference the requirements and mapping versions. Where mapping or approval is
-not yet available, record the candidate and the missing evidence; do not tag it
-as final. Do not add unsupported fields to `findings.yaml` or a table spec.
-
-Data-modeling defines the final outputs and each output's current/history
-scope from the requirements and mappings, using this profile's evidence.
-After the review below is approved, onboarding verifies the final
-physical table and records eligibility in the authoritative configuration.
-That one selection guides both consumers and is projected into OpenMetadata.
-An intermediate output or a table mixing final and draft/internal rows stays
-ineligible until the final-output boundary is resolved. Missing requirements,
-unmapped required fields or unresolved sensitivity/quality decisions block the
-tag. A tag never substitutes for source qualification or consumer approval.
-
-**Human review checkpoint:** include the candidate-table list in the existing
-requirements-and-mapping approval, backed by `REPORT.md`; do not add a separate
-table-tagging approval round. Before recording approved eligibility, show each table's
-purpose, requirement and mapping versions, final physical output, mapped
-fields, current/history scope, sensitivity/quality findings and exclusions.
-Record approval of the requirements, mapping and included concrete table list
-with the operator's exact words against their versions; pending or declined
-entries remain ineligible. A prior approval that did not include the table
-list does not approve exposure. A changed mapping or requirement
-reopens only the affected selection for review. Mirror creation retains its
-separate billable-operation approval. This defines the review checkpoint;
-it does not claim an implemented tagging screen or approval API.
-
-This skill supplies evidence; it does not grant access, apply live tags, create
-mirrors or start ingestion. Reuse approved findings without another data scan;
-a changed requirement or mapping triggers review of the affected selection.
-Until the runtime supports this configured table selection and tag projection,
-report the gap and stop the affected consumer workflow.
+- In `REPORT.md` and the onboarding handoff, trace each candidate output to the
+  requirement it serves and the source-to-final mapping: source part/fields,
+  transformations, destination table/fields, grain, keys, master links, time
+  roles, sensitivity and applicable quality checks, with the requirements and
+  mapping versions.
+- Where mapping or approval is not yet available, record the candidate and the
+  missing evidence; do not tag it as final. A profiled class, store suggestion,
+  table name or catalog certification is not an exposure tag. Do not add
+  unsupported fields to `findings.yaml` or a table spec.
+- Reuse approved findings without another data scan; a changed requirement or
+  mapping reopens only the affected selection.
+- This skill grants no access, applies no live tag, creates no mirror and
+  starts no ingestion.
 
 ## Every date, number and identifier has one written shape
 
@@ -105,7 +100,8 @@ the data profiling skill"), worked adaptively and lean against
   mappings the same record and compares what they give.
 - **Report counts, never a value from the data:** the shapes seen, each
   one's count, and the rows that fit none.
-- **Fix in the mapping:** one declared shape per field, converted once, to the
+- **The mapping fixes it** (data-onboarding's **map**, or refining-rules for a
+  live feed): one declared shape per field, converted once, to the
   same calendar form wherever sources share a kind (a date is `YYYY-MM-DD`). A
   row that fits none becomes none and is counted, never guessed.
 - A profiled number is typed `BIGINT` (integer), or exact `BIGDECIMAL` in code and
@@ -113,12 +109,6 @@ the data profiling skill"), worked adaptively and lean against
   records the digits and decimal places that set the precision and scale.
 - **Carry the result forward** (Waiting, Defects): the shapes go in
   `findings.yaml`; `compare` reports a field whose shape counts moved, and only that field is checked again.
-
-**Use the other skill when:**
-- the findings are approved and you are bringing a part in: use
-  **data-onboarding** (it reads `findings.yaml`);
-- a feed is live and a new delivery arrived: run **compare** here, then use
-  **refining-rules**.
 
 ## Choose a proof sample by kind
 
@@ -136,16 +126,20 @@ break things. A random sample only estimates a rate.
 
 ## Hard stops
 
+A shared rule names its home beside it; the rest are this phase's own. This list grants no permission.
+
 | Never | Instead |
 |---|---|
-| Approve findings for the operator, or record words they did not say | Ask one question, wait, record their exact words with `approve` |
+| Approve findings for the operator, or record words they did not say | Ask one question, wait, record their exact words with `approve`; `compare` refuses findings without it |
 | Guess a class, a key or a link | Record the measured tests and the silver fields (numbers, identifiers, material commentary). A class the tests do not pick is `silver` |
-| Print or keep a database address, a password or a raw personal value | Put the address in an environment variable (`env:<VARIABLE>`); samples are masked to their shape; the run's working copy is deleted when it ends |
-| Request anything from a provider's website | Profile the local copies only |
-| Pin a finding on one source or one domain | Use the tests; names in this skill are generic |
-| Start a long pass silently | Say the size and the time estimate first (the run prints both) |
+| Print or keep a database address, a password or a raw personal value | Put the address in an environment variable (`env:<VARIABLE>`), never printed ([data-platform hard stops](../data-platform/SKILL.md#hard-stops)); a personal column's samples are masked to their shape; the run's working copy is deleted when it ends |
+| Commit or publish `REPORT.md`, `findings.yaml`, `invalid_rows.jsonl`, `fingerprints.json` or `drift.yaml` | Keep them on the machine, outside the repository: a non-personal column's top values and failing examples are values from the data, and a short key can be found again from its hash. Only `catalog`'s `profile.yaml`, names and counts, is public (`CLAUDE.md`, "Commits, PRs and secrets") |
+| Request anything from a provider (its site, API or documentation) | Profile the local copies only; a capture or a fact that only the provider holds is a blocker named to the operator ([data-platform hard stops](../data-platform/SKILL.md#hard-stops)) |
+| Edit the profiler's code while profiling a source | A gap in what it measures is a profiler fix: write its ticket and ask before coding ([data-onboarding hard stops](../data-onboarding/SKILL.md#hard-stops)) |
+| Pin a finding on one source or one domain | Use the tests; names in this skill are generic (`CLAUDE.md`, "Build generic") |
+| Start a long pass silently | Say the size and the time estimate first (the run prints both); `CLAUDE.md`, "Long steps and runs", holds the rest |
 | Profile the same inputs twice | Profile once; reuse the findings while the inputs and the profiler are unchanged ("Profile once", below) |
-| Ask several questions at once | Ask one, in plain words, with your recommendation |
+| Ask several questions at once | Ask one, in plain words, with your recommendation ([data-onboarding hard stops](../data-onboarding/SKILL.md#hard-stops)) |
 
 ## Tell the discovery story as you work
 
@@ -205,7 +199,7 @@ uv run --with duckdb --with pyyaml python profile_data.py --help
 | quality | Every data quality rule each part needs on every load, with the rows that fail it: a defect when above 0, a rule the clean data passes at 0 (a key column filled, an identifier's one shape or check digit, a link that resolves, a code list); masked examples; each invalid hierarchy row marked with an evidence-backed fix or "needs steward" | `quality`, `invalid_rows.jsonl` |
 | code sets | The RDM code sets the data set needs: each existing or proposed set, the columns that use it, how many codes | `code_sets` |
 | suggest-store, silver | Advice: MDM, RDM, MDM relationships, silver, bookkeeping; a silver table spec per part under "Silver fields" (a master's rows also carry their own MDM id) | `store_suggestion`, `silver` |
-| catalog | From approved findings, the public summary the Data Catalog shows: every part's silver fields and quality rules, and the code sets; names and counts only. Write it once the source lands a part in silver: it declares every part as a silver table, landed or not, and two parts may name one table, which the catalog's profile check refuses | `sources/<source>/profile.yaml` |
+| catalog | From approved findings, the public summary the Data Catalog shows: every part's silver fields and quality rules, and the code sets; names and counts only. It declares every part as a silver table, landed or not, and two parts may name one table, which the catalog's profile check refuses; so data-onboarding writes it when a part lands in silver (its **plan-parts** step) | `sources/<source>/profile.yaml` |
 | report | `REPORT.md` and `findings.yaml` | files |
 | approve | Records the operator's approval in their exact words | `approval` |
 | rank sources | Several sources of one kind, joined on the identifier they share: per field, how much each fills, how often it states one value, how often each pair agrees; a recommended source order (`rank_sources.py`, below) | `ranking.yaml`, `RANKING.md` |
@@ -256,7 +250,8 @@ uv run --with duckdb --with pyyaml python profile_data.py run --name "<data set>
 
   A question the findings leave open goes to onboarding's one test or Proving
   Run, never to a second scan of the data. A gap in what the profiler
-  measures is a profiler fix with its own ticket, used on the next source.
+  measures is a profiler fix with its own ticket, written before any code
+  (Hard stops), used on the next source.
   Never re-profile a source whose findings are already approved just to fill
   that gap.
 - **One data set per source.** Profile each source into its own `--out`, so a
@@ -317,20 +312,21 @@ whose types name the kinds at each end. How a kind is matched and merged is rule
 configuration, and code lists live in reference data management (Reltio's entity types and lookup
 types). Nothing else holds a list of kinds.
 
-A master part is a **new kind** only when all of these hold, each measured on the part:
-- it is an entity other records point to: another part, or another source, links to its key;
-- it carries its own identifier, or a designed key that persists from one delivery to the next;
-- no code of `mdm-kinds` already names it: its names find no golden record of an existing kind
-  (`context <kind> --search`), and its identifiers are no existing kind's namespaces.
+For each master part, measure the three new-kind tests that
+[Data Modeling](../data-modeling/SKILL.md#2-a-master-part-its-kind) decides on:
+- whether another part, or another source, links to its key;
+- whether it carries its own identifier, or a designed key that persists from one delivery to the next;
+- whether its names find a golden record of an existing kind (`context <kind> --search`), and whether its
+  identifiers are an existing kind's namespaces.
 
-A part that fails one is a role an existing kind plays, a detail of one, or silver. A new kind is proposed in `findings.yaml` as a draft code of
+A part that is linked to, has its own key and matches no existing kind is proposed in `findings.yaml` as a draft code of
 `mdm-kinds` (code, label, definition, `golden_records: true`) beside the draft of its rules file; the operator
 approves both, and data-onboarding publishes them in one change. Its identifiers stay in its rules file.
 
 A code with `golden_records: false` has no rules file and no golden records: a classification rule labels
 held-back records with it as the kind they probably are, the evidence for onboarding it later. Before
 removing a kind, count the held-back records labelled with it and the rules that name it: it is unused only
-when both are zero. A value list that names no entity (a trading venue's MIC) is a code set, not a kind.
+when both are zero.
 
 ## An id from a name: only when no id exists
 
@@ -342,7 +338,9 @@ Read [SOURCE-RANKING.md](SOURCE-RANKING.md) when a kind has more than one source
 
 ## How to work
 
-1. **Ask what the data set is called and where its copies are.** One question.
+1. **Start from the capture location the caller handed over.** When none was
+   handed over and no local copy fits, ask what the data set is called and
+   where its copies are: one question.
 2. **Run** the command above. Read `REPORT.md` first; `findings.yaml` holds
    the detail and the evidence for every claim.
 3. **Read the silver fields**, every designed key, and every proposed new kind.
@@ -358,24 +356,18 @@ uv run --with duckdb --with pyyaml python profile_data.py approve \
   --findings <folder>/findings.yaml --by "<operator>" --words "<their exact words>"
 ```
 
-6. **Write the catalog summary** (`catalog`, above) into
-   `sources/<source>/profile.yaml`, so the Data Catalog shows every
-   silver field, its quality rules and the code sets. Then publish it:
-   `edgar-warehouse rules catalog publish --root rules`, and
-   `rules catalog check --root rules` must match. A re-profiled or re-approved
-   source changes `profile.yaml`; until the next publish, `check` reports each
-   changed table as "profile changed, publish again". A source with no
-   `profile.yaml` shows "Not profiled yet" on its source schema.
-7. **Hand over.** data-onboarding reads the approved `findings.yaml`, plans one
-   onboarding per part in dependency order (master kinds with their "together"
-   relationships first, then reference data as RDM code sets, then
-   transaction data and "separate" relationships), and prefills its steps.
-   The `quality` items and `invalid_rows.jsonl` go to the
-   [data-quality](../data-quality/SKILL.md) skill.
+6. **Hand over** the approved findings' folder, by the table in "Decisions,
+   artifacts and handoffs": data-onboarding plans the parts and writes the
+   catalog summary when a part lands in silver; data-quality takes the
+   `quality` items and `invalid_rows.jsonl`. A re-profiled or re-approved
+   source changes `profile.yaml`; until the next publish,
+   `edgar-warehouse rules catalog check --root rules` reports each changed
+   table as "profile changed, publish again". A source with no `profile.yaml`
+   shows "Not profiled yet" on its source schema.
 
 ## Reference data: a draft code set in RDM
 
-Read [CODE-SETS.md](CODE-SETS.md) when a part is classed reference data: it becomes a draft code set version, which only the operator approves.
+A part classed reference data becomes a draft code set version, which only the operator approves. Data-onboarding (a new feed) or refining-rules (a live one) drafts it from the findings' `code_sets` by [CODE-SETS.md](CODE-SETS.md).
 
 ## Reading the findings
 
