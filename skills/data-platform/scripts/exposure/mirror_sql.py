@@ -43,7 +43,7 @@ def unmirrored_reads(reads: dict, managed: dict) -> list[str]:
     return sorted(f"{layer}.{table}" for layer, table in wanted - listed)
 
 
-DATA_DATABASE = "data"  # the one database the mirror reads (the stores' DATA_URL); the control database is never mirrored
+DATA_DATABASE = "data"  # the one database the mirror reads (the data stores' database); the control database is never mirrored
 
 
 def plan(managed: dict, exposure: dict, publication_limit: int, publications_held: int) -> str:
@@ -51,9 +51,10 @@ def plan(managed: dict, exposure: dict, publication_limit: int, publications_hel
     if managed["postgres_database"] != DATA_DATABASE:
         raise SystemExit(f"postgres_database is {managed['postgres_database']}: only the {DATA_DATABASE} database is mirrored")
     layers = exposure["layers"]
-    if outside := sorted(f"{e['layer']}.{e['table']} ({layers[e['layer']]['connection']})" for e in managed["tables"]
-                         if layers[e["layer"]]["connection"] != "DATA_URL"):
-        raise SystemExit(f"not in the data database, so not mirrored: {', '.join(outside)}")
+    held = {e["layer"]: layers[e["layer"]]["connection"] for e in managed["tables"]}
+    if len(set(held.values())) > 1:
+        spread = sorted(f"{e['layer']}.{e['table']} ({held[e['layer']]})" for e in managed["tables"])
+        raise SystemExit(f"the tables are not all in the data database, so one mirror cannot carry them: {', '.join(spread)}")
     listed = tables(managed, exposure)
     if publications_held + 1 > publication_limit:
         raise SystemExit(f"no free publication: {publications_held} held of {publication_limit}; the mirror needs 1")
