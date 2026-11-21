@@ -55,13 +55,12 @@ These scenarios follow [Start here: route the work](../../../skills/data-platfor
 
 ### Evidence and limitations
 
-- The local `origin/main` ref contains prerequisite commit `4881e8322909888860db576f65730bc4889dc5a4` (ticket 04) and `adee430549b843ce93e8b0a96f306700fc3d8a1e` (ticket 14); both are ancestors of that ref. The log also contains ticket 03 (`c9b1c18f`), ticket 13 (`576904f0`), ticket 08 (`a5624b18`), ticket 80 (`d3de34ad`) and ticket 81 (`4da40b6a`). This verifies the review's prerequisite claims against the local ref; fetching a newer ref was unavailable because Git could not write the shared worktree's `FETCH_HEAD`.
-- Installed-skill provenance: `~/.agents/skills/data-platform` is a symlink to `~/.local/share/edgartools/skill-source/skills/data-platform`, but that target directory does not exist. Therefore the installed copy could not be read or compared; only the repository skill at [SKILL.md](../../../skills/data-platform/SKILL.md) was reviewed.
-- `~/.agents/skills/write-skill/SKILL.md` was read. Its installed provenance is a symlink to `~/.agents/skills/gstack/write-skill/SKILL.md`. The `write-skill` guidance concerns authoring skills; this ticket proposes verification scenarios and does not justify changing skill wording before behavior is established.
-- No scenario approval is recorded in this task instruction. No test/scenario code or load was run. Consequently there are no stored behavior outcomes, and the routing and resume claims remain unqualified by executable behavioral evidence. This proposal is not a PASS and does not establish runtime enforcement.
+- The current `origin/main` contains the merged prerequisite skill changes, including tickets 03, 04, 08, 13, 14, 80 and 81. Installed-skill provenance could not be compared: `~/.agents/skills/data-platform` points to a missing target. Only the repository skill was reviewed.
+- The operator approved the three scenarios in this conversation before any scenario code. No scenario tests or source load were run: the route exists only as skill text, so these cases have no executable generic path. The capability gap is linked above; no behavior is claimed or marked PASS.
 
 ### Validation
 
-- `uv run --no-project --with pytest -- pytest -q -p no:cacheprovider tests/unit/test_profiling_genericity.py`: **142 passed**. This repository check scans skills and specifications; the changed ticket is outside its scope. It does not validate routing, load or resume behavior.
-- Not run: scenario tests and source load, pending scenario approval and outside this request's authorized scope.
-- Not run: publication; this handoff explicitly forbids commit, push and PR creation.
+- `uv run --no-project --with pytest -- pytest -q -p no:cacheprovider tests/unit/test_profiling_genericity.py`: **142 passed**. This check scans documentation wording; it does not exercise routing, load or resume behavior.
+- Scenario tests and source load: not run because no executable route exists. This is the capability gap, not pending scenario approval.
+- Draft PR #1983 publishes the scenarios and gap. Its prior 12-check CI was on an older base; refresh CI on the current base before marking ready.
+
