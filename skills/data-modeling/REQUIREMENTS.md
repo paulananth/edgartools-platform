@@ -5,9 +5,7 @@ The boundary of the data-modeling skill. Decided from `CONTEXT.md`, the kinds
 Identifier Contracts (`rules/merge/kinds/`), the relationship types
 (RDM code set `mdm-relationship-types`), and the approved specs
 (`docs/specs/rdm/spec.md`, `docs/specs/agent-context/spec.md`,
-`docs/specs/profiling/`). First written by Grok; handed to Claude by
-the operator ("I am handing it to you"), after a review found
-it out of date and without a method for reference data.
+`docs/specs/profiling/`).
 
 ## Scope
 
@@ -17,7 +15,7 @@ a contract or starts a load, and reviews the model itself. In scope:
 - **Class:** master data, reference data, relationship, transaction data or
   metadata, from data-profiling's approved findings; the skill does not
   measure the files again.
-- **Master parts:** which kind in `KINDS`; a profile hangs on a kind and is
+- **Master parts:** which kind, a code of the RDM code set `mdm-kinds`; a profile hangs on a kind and is
   never a kind.
 - **Identity and cross-reference:** identity only from the namespaces a kind's
   Identifier Contract declares; every other identifier is a cross-reference,
@@ -79,9 +77,13 @@ approved findings exist, or to say that they do not.
   each is an operator ruling.
 - Do not treat a cross-reference as identity, or similar names as one entity.
 - Do not write rules, contracts, quality files or code set versions.
-- Do not request anything from a provider's live service.
+- Do not request anything from a provider (its site, API or documentation)
+  without the operator's permission for that request (`CLAUDE.md`).
+- Do not write a value from the data into a public repository (a committed
+  decision, proof report or example): counts, shapes and invented examples
+  only.
 
-## Settled since the first version
+## Built
 
 - The RDM spec is approved and built: the `rdm`
   database, the policy's pin of its reference data.
