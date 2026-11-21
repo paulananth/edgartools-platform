@@ -116,7 +116,7 @@ Two permissions a mirror needs beyond the sub-skill's grant sequence:
 - Snowflake's system login `snowflake_system` must hold CONNECT on each mirrored database ("permission denied for
   database"): the stores revoke it from PUBLIC, and `infra/scripts/harden-hosted-roles.py` grants it.
 
-**The managed mirror record is the system of record.** `rules/managed-mirror.yaml` lists the tables the managed mirror carries (with its name,
+**The managed mirror record is the system of record.** `sources/managed-mirror.yaml` lists the tables the managed mirror carries (with its name,
 database, refresh interval, table format, the operator's words and whether a read-back verified it), and the mirror SQL is written from that file alone. Mirror only what a reader in Snowflake
 reads: Gold (its dbt sources file, `models/sources.yml`, written from its configuration) may read only what the record lists
 (`mirror_sql.py check --reads <sources file>`, and a unit test on the repository's files), and the record may list only what
@@ -148,7 +148,7 @@ database that already exists (even one the mirror operator owns, so ownership ca
 `DROP_MIRROR(<mirror>, FALSE)` has no mirror, and the administrator can then `GRANT OWNERSHIP ON DATABASE <name> TO ROLE <owner role>` (without `COPY CURRENT GRANTS`, which
 is refused for an application-owned object; the mirror operator alone gets "Insufficient privileges") and the owner role drops it: no support request. `scripts/exposure/mirror_sql.py release` writes both steps for a mirror whose target the owner role should own: the data stays, but nothing refreshes it. So:
 - rename by recreating, with `scripts/exposure/mirror_sql.py` (it writes the `CREATE_MIRROR`, `ALTER_MIRROR`, `LIST_MIRRORED_TABLES` and `DROP_MIRROR`
-  text from `rules/managed-mirror.yaml`, `rules/exposure.yaml` and `rules/snowflake.yaml`, so no call is typed by hand): `CREATE_MIRROR` (the skill's SETUP) with the new target name and a new mirror name, as the mirror operator, while
+  text from `sources/managed-mirror.yaml`, `rules/exposure.yaml` and `rules/snowflake.yaml`, so no call is typed by hand): `CREATE_MIRROR` (the skill's SETUP) with the new target name and a new mirror name, as the mirror operator, while
   the old mirror still replicates (an instance holds two); when every table reads `REPLICATING` with equal counts, move the readers and
   the configuration, then `DROP_MIRROR(<old mirror>, TRUE)` so its target goes with it;
 - always drop a mirror with the second argument `TRUE`, never `FALSE`.
@@ -174,7 +174,7 @@ only when requested; the mirror owns target writes.
 
 ## After the first load: mirror only what Gold reads
 
-The mirror is created after the stores' first load, and again after a reset, for the tables `rules/managed-mirror.yaml` lists and no others
+The mirror is created after the stores' first load, and again after a reset, for the tables `sources/managed-mirror.yaml` lists and no others
 (Gold reads only those; each must be on `rules/exposure.yaml`, which [Final exposable tables](FINAL-TABLES.md) owns). A read table must
 exist before a mirror can take it, so the order is the load, then:
 

@@ -33,11 +33,71 @@ These blockers order skill-improvement work. They do not activate optional sourc
 
 ## Acceptance checklist
 
-- [ ] List decisions, inputs and outputs owned here using current repository evidence.
-- [ ] Assign each overlapping responsibility one authoritative owner and a named handoff.
-- [ ] Demonstrate the boundary on valid and invalid rows, a deferred identity and a failing check that must survive into stored quality evidence; link retained work rather than duplicating it.
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md.
-- [ ] Learning → skill: name the verified reusable lesson and its owning skill section, or record none.
+- [x] List decisions, inputs and outputs owned here using current repository evidence. Verified against the current Data Quality skill, Data Profiling and Data Modeling ownership tables, Data Onboarding's quality step, Refining Rules' change-quality step, Business Catalog, and Bookkeeping recovery; recorded in [Decisions, artifacts and handoffs](../../../skills/data-quality/SKILL.md#decisions-artifacts-and-handoffs). (2026-11-20 19:43 ET)
+- [x] Assign each overlapping responsibility one authoritative owner and a named handoff. Verified by reconciling the skill index and inbound references from profiling, modeling, onboarding, refining-rules and data-catalog with the cited owner sections; the index already routes each activity to its owner. (2026-11-20 19:43 ET)
+- [ ] Demonstrate the boundary on valid and invalid rows, a deferred identity and a failing check that must survive into stored quality evidence; link retained work rather than duplicating it. The documented trace is under `## Answer`, linked to the evaluator, contract and recovery evidence paths. End-to-end stored MDM quality evidence remains unverified: [Bookkeeping recovery](../../../skills/bookkeeping/RECOVERY.md#mdm-quality-evidence-v1) says the receipt path is unqualified and disabled; no source run or end-to-end execution was performed.
+- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. Publication is explicitly out of scope for this request; no commit, push or PR was made.
+- [x] Learning → skill: Data Quality owns check/fix meaning and measured dispositions; onboarding/refining-rules own the lifecycle-specific configuration handoff, Data Catalog owns business definitions, and Bookkeeping owns receipt admission. Recorded in [Decisions, artifacts and handoffs](../../../skills/data-quality/SKILL.md#decisions-artifacts-and-handoffs). (2026-11-20 19:43 ET)
+
+## Answer
+
+Data Quality owns the translation from measured defects and governed
+requirements into supported checks, fixes and dispositions, plus the count
+evidence used to decide them. Data Profiling owns the measurements and proposed
+findings; Data Modeling owns part semantics; Data Onboarding writes new-feed
+contracts and configuration; Refining Rules writes live-feed changes; Data
+Catalog owns business definitions and native test-case definitions; Bookkeeping
+admits durable execution receipts. The skill records this boundary in
+[Decisions, artifacts and handoffs](../../../skills/data-quality/SKILL.md#decisions-artifacts-and-handoffs).
+
+The existing [skills index](../../../skills/README.md) already routes each
+activity to its skill, so no index entry needed moving or duplication. Existing
+inbound references were checked in data-profiling, data-modeling,
+data-onboarding, refining-rules and data-catalog. Their terms agree with the
+new ownership table.
+
+Documented boundary trace (static reading; no data, load or test was run):
+
+| Case | Data Quality decision | Retained evidence and handoff |
+|---|---|---|
+| A record passes its configured checks | Preserve it as a valid result of those checks; a zero failure count is meaningful only after the planner's planted-record check proves each kind can fire | The evaluator's check definitions and counts remain keyed by check id/kind and failure action; [MDM quality tests](../../../tests/mdm/test_quality.py) cover the evaluator contract |
+| A required value fails an `exception` check | Set aside the record with `quality_<id>`; it does not stop the run, and later checks for that record are unknown | The Dataset Contract declares the nonblocking reason; `edgar_warehouse/mdm/quality.py` raises it and [MDM execution](../../../edgar_warehouse/mdm/execution.py) carries outcomes. The [Bookkeeping recovery contract](../../../skills/bookkeeping/RECOVERY.md#mdm-quality-evidence-v1) says receipts retain check identity/action and bounded counts |
+| An identifier is deferred by its declared identity type | Keep the contract's `invalid_<type>_checksum` reason; do not add a duplicate quality check for the same validation | The Data Quality plan table points to identifier types and `nonblocking_deferred_reasons`; Data Onboarding owns the contract. This is separate from a quality check failure |
+| A hierarchy row violates its rule | Keep the row marked in `invalid_rows.jsonl`; record only an evidence-backed fix for steward approval, otherwise `needs_steward` | Data Profiling's proposed row/evidence remains the input; Data Quality records the disposition. The row is not dropped |
+
+These traces establish the ownership boundary from current code and guidance,
+not execution. The MDM receipt pathway is explicitly disabled pending recovery
+qualification, so the requirement that a failing check survive into stored
+quality evidence remains unchecked. The Silver receipt integration test is
+retained at [test_quality_recovery_postgres.py](../../../tests/integration/test_quality_recovery_postgres.py),
+but it was not run in this documentation-only change.
+
+Baseline and provenance: `HEAD` is
+`4881e8322909888860db576f65730bc4889dc5a4`. A live `git ls-remote origin
+refs/heads/main` returned `2bcbbda62f19b6b8c17c1962a95daa26d38ab828`; its only
+changes since this head are the Data Profiling entrypoint and its ticket. The
+Data Quality skill blob is identical at both revisions, and current Data
+Profiling and Data Modeling sections retain the named handoffs. A fetch could
+not update the shared worktree ref because Git could not write
+`/Users/aneenaananth/projects/edgartools-platform/.git/worktrees/edgartools-platform-ticket-25/FETCH_HEAD`;
+the remote commit object was locally readable with `git show`. The prerequisite
+Data Modeling ownership work (`576904f0`, PR #1971) and rules-owner
+clarification (`adee4305`, PR #1978) are in this history.
+The installed `~/.agents/skills/data-quality` and
+`~/.claude/skills/data-quality` links both resolve to the separate checkout
+`/Users/aneenaananth/projects/edgartools-platform`; its `data-quality` skill is
+at `3884e81` and its last skill-file change is `277b67e` (2026-11-08), so it is
+stale relative to this branch and was not used as the edit source. The
+installed `write-skill` guidance was read. Its `gstack-skill-bill data-quality`
+resolves the installed copy (19,995 bytes), not this worktree's file, so that
+size is not reported as this change's size.
+
+Checks: `UV_CACHE_DIR=/private/tmp/uv-cache-ticket25 uv run --no-project
+--with pytest -- pytest -q -p no:cacheprovider
+tests/unit/test_profiling_genericity.py` — **142 passed**; the first attempt
+without `UV_CACHE_DIR` could not create a file in the configured cache outside
+the writable workspace. `git diff --check` — **clean**. The genericity check
+does not validate ownership or execution behavior.
 
 ## Completion evidence
 

@@ -1,6 +1,6 @@
 ---
 name: data-governance
-description: Decide what a steward may treat as governed data, including the path from a data source through the steps that can fail to the domain and data product. Use for data governance, lineage, a target's graph, or whether a step belongs on that graph.
+description: Decide what a steward may trust as governed evidence and which source-to-output links belong on its lineage path, independently of catalog mechanics. Use for data governance, lineage, a target's graph, or whether a step belongs on that graph.
 ---
 
 # Data governance
@@ -8,31 +8,36 @@ description: Decide what a steward may treat as governed data, including the pat
 Governed data is evidence a steward can trust, not every file a run touched.
 
 Read [LINEAGE.md](LINEAGE.md) before drawing, publishing, or judging lineage.
-How OpenMetadata stores that picture stays in the
-[openmetadata](../openmetadata/SKILL.md) skill. Subject domains and glossary
-words stay in the [data-catalog](../data-catalog/SKILL.md) skill.
+This skill decides what evidence and processing path a steward may trust. It
+does not define business meaning, choose a catalog presentation, or describe a
+destination's publication mechanics.
 
-## What is governed
+## Decisions, evidence and handoffs
 
-A governed path starts at a data source and ends at a data product:
+Use the configured source contract, processing steps and checks to decide
+which evidence enters a governed path, which processing steps can fail, and
+which outputs are trusted. Use run evidence to distinguish a configured path
+from processing that actually completed. A file a target writes while running
+is not a new source.
 
-1. Source. A captured feed or a named reference file the target reads. Not a
-   file the same target wrote on the way.
-2. Control. One pinned run file a step reads, built from the feeds its
-   contract requires.
-3. Steps that can fail, with their declared checks and the data quality they
-   run. Plumbing steps are not drawn.
-4. Trusted outputs: the prepared dataset, mastered tables, Silver tables and
-   the change journal.
-5. Domain, the subject of an output, and the data product made of domains.
+| Decision or artifact | Owner | Handoff |
+|---|---|---|
+| Which source evidence, material controls, failable steps, checks and trusted outputs form the path | Data Governance | This skill's [LINEAGE.md](LINEAGE.md) is the neutral lineage contract. |
+| Business words, subject domain, glossary meaning and catalog presentation | [Data Catalog](../data-catalog/SKILL.md) | Governance supplies the supported outputs and their evidence-backed path; the catalog projects their meaning. |
+| Class, kind, identifiers, relationships and store placement | [Data Modeling](../data-modeling/SKILL.md) | Governance uses those decisions when identifying output meaning; it does not redefine them. |
+| Destination mapping, publication and native readback | The selected destination's skill, such as [OpenMetadata](../openmetadata/SKILL.md) | Governance supplies the neutral path; the destination owns its mechanics and reports what its readback confirms. |
+| Running, diagnosing or recovering processing | [Data Operations](../data-operations/SKILL.md) | Governance identifies the configured step and evidence needed; Operations owns execution and recovery. |
 
-The catalog's service layer mixes pipeline services with the database service,
-so it is never this picture. Draw the whole path from the rules.
+The inputs are configured source contracts and reads, step order and declared
+checks, control-file dependencies, and available run evidence. The output is
+the evidence-backed lineage contract: source and control inputs, failable
+steps with their checks, trusted outputs, and any supported domain or product
+links. Keep configured intent distinct from observed completion.
 
 ## Completion
 
-The lineage picture matches [LINEAGE.md](LINEAGE.md), and a readback of the
-live catalog shows the same edges. An HTTP success is not that match.
-When the operator asks to see the shipped lineage UI, observe it with
-Playwright and compare the nodes to this contract. Every other catalog step
-stays on the API and CLI.
+The proposed lineage matches [LINEAGE.md](LINEAGE.md). A destination's native
+readback determines whether the published edges match what it stores; a
+successful write alone does not establish that. Destination-specific checking
+and presentation belong to its skill. When the operator asks to see shipped
+lineage UI, observe it with Playwright and compare the nodes to this contract.

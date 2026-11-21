@@ -14,6 +14,25 @@ Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#
 It answers: **is this change to the MDM store lean, fast on the engine it
 runs on, safe to migrate, and proved by the cheapest check that proves it?**
 
+## Decisions, artifacts and handoffs
+
+MDM Engineering owns decisions about reusable merge behavior, durable MDM
+storage, adapter operations and migrations, and the proof needed for a
+demonstrated engine or storage change. Its inputs are a configured policy or
+contract, an observed behavior gap that configuration cannot express, and the
+selected engine's requirements. Its outputs are shared engine or adapter
+changes, migrations where needed, and qualification evidence for the affected
+behavior. It does not decide what a source field means or refactor the engine
+to accommodate a source mapping.
+
+| Decision or artifact | Owner | Handoff |
+|---|---|---|
+| Source mapping, matching policy or quality rule when the existing engine can express it | [Data Onboarding](../data-onboarding/SKILL.md) for new configuration; [Refining Rules](../refining-rules/SKILL.md) for a live feed | The configured contract and rules identify the requested behavior; use MDM Engineering only if a demonstrated gap remains. |
+| A part's class, kind, identifiers, relationship meaning and time model | [Data Modeling](../data-modeling/SKILL.md) | The approved model and contract become MDM Engineering inputs when they require reusable engine behavior or storage. |
+| Merge decisions, identity replay, relationship computation, persistence, adapter parity, migrations and their qualification | MDM Engineering | Return the supported behavior, migration requirements and proof evidence to the caller. |
+| Silver table specification and load, monitoring or recovery of a configured feed | [Data Operations](../data-operations/SKILL.md); [Bookkeeping](../bookkeeping/SKILL.md) owns run control and recovery | MDM Engineering supplies the MDM behavior and store contract; operations owns the run and silver DDL. |
+| A failed or slow production run without a demonstrated code gap | [Production Support](../production-support/SKILL.md) | Bring back a reproducible engine or storage gap before requesting an MDM change. |
+
 The operator chooses PostgreSQL, MySQL or SQL Server Express. MDM has **one engine**: the mastering tables every merge
 writes, and the rules it runs by, registered in the Rules Database. Entity and source names and field policies arrive as
 data; storage holds no domain branch. Read [Storage on each database engine](references/storage-adapters.md) before
@@ -102,6 +121,7 @@ authoritative content before approval freezes it.
 
 ## Hard stops
 
+- **Shared operating rules live with their owners.** Follow [Data Platform's hard stops](../data-platform/SKILL.md#hard-stops) for approval and activation, provider requests, credentials and configuration-only work; [Data Onboarding](../data-onboarding/SKILL.md#hard-stops) for configuration changes; and `CLAUDE.md` for test-scenario authorization, task checklists and completion wording. This skill grants none of those permissions. Keep engine qualification and its smallest sufficient proof here.
 - **Design for the hosted target.** MDM, Rules and Bookkeeping run on the
   hosted engine that environment uses: PostgreSQL, MySQL, or SQL Server
   Express. A local container of that same engine is for tests and Proving
@@ -343,7 +363,7 @@ Name the claim in one sentence, then take the smallest cohort that can falsify i
 | A lookup moved to another read file | Compare the pair set from the old read and the new one on every captured delivery. Equal pairs prove every reader that uses the set: load one reader end to end at most, never each reader again |
 | A source extract folded or split | Load the same capture with main and with the change on two disposable stores, then compare them (below) |
 | The Merge Stage engine, a worker, Bookkeeping | A Proving Run on a pinned cohort, and the full installed proof on an empty store: every count as before, a killed worker resumes, the second pass changes nothing |
-| Matching rules, a Dataset Contract | The smallest cohort that contains each new case. One slice whose second pass changes nothing proves the path on real records. A case that slice did not contain is the one bundle that contains it, then stop. The whole delivery is the proof only when the claim is that delivery's totals, or switch-on |
+| Matching rules, a Dataset Contract | The smallest cohort that contains each new case. One slice whose second pass changes nothing proves the path on real records. A case that slice did not contain is the one bundle that contains it, then stop. The whole delivery is needed only when the claim concerns that delivery's totals; a switch-on follows its separate approval gate |
 | A storage adapter or a change claimed to work across databases | The shared per-engine behavior checks above for every affected kind and source; preserve restricted-role, transaction and recovery guarantees |
 | A new or deleted module the workers import | The installed-bundle tests (`tests/engine/test_data_skill_bundle_postgres.py`, the installed `tests/storage_adapters` files) after a commit: they build the bundle from the last commit, and the bundle ships only the modules `packages/data-skill/pyproject.toml` lists, so a module missing there passes every checkout test and fails every installed worker. Run the full local set after the last edit, not before it |
 | Speed | Time per batch over a whole feed: flat, not growing with the store. Each worker's process time is in the run's progress lines; `mastering.merge` gives one total a file. |
@@ -357,11 +377,11 @@ each runs slower than alone; say the pair's time.
 
 Say the time of any proof over ten minutes before starting it. When a run
 shows a case the cohort did not contain, prove that case and stop. Name what
-stays unchecked, including the delivery's totals until switch-on. A domain
-skill that names a whole-delivery test uses that test only when the claim is
-the delivery's totals or switch-on. So does a ticket's checklist: a line
-written as "proof on the capture" is met by the limited test that answers its
-claim, never by a multi-hour run that repeats it at scale.
+stays unchecked, including delivery totals when they were not measured. A
+domain skill that names a whole-delivery test uses that test only when the
+claim concerns the delivery's totals. A ticket checklist follows the same
+claim: a line written as "proof on the capture" is met by the limited test
+that answers it, never by a multi-hour run that repeats it at scale.
 Stop the proof's containers when it ends,
 whatever the outcome.
 

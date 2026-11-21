@@ -7,8 +7,8 @@ description: Analyze data quality defects, including tracing a mastered entity t
 
 Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#the-seven-wastes) and drop what adds no value.
 
-> Part of the **data-platform** skill set. data-onboarding and refining-rules
-> call it; remediation writes only `sources/<source>/quality.yaml`.
+> Part of the **data-platform** skill set. Data Onboarding and Refining Rules
+> call it for a new feed and a live feed respectively.
 
 It answers: **which rules does this part need, which defects does it have,
 which check or fix carries each, and what does each one do on the records?**
@@ -21,6 +21,29 @@ This skill turns them into the engine's checks and fixes, measures them, and
 writes them once the operator decides. For an existing-data audit, it can also
 produce a read-only analysis of a mastered entity and its downstream fields;
 that analysis does not itself change quality configuration.
+
+## Decisions, artifacts and handoffs
+
+Data Quality translates measured defects and governed requirements into
+supported checks, fixes, dispositions and quality evidence. It decides what a
+check means and what its failure action does; the operator decides whether to
+keep a proposed check or fix and approves each disposition. It does not decide
+the part's model, rewrite source mappings, define business meaning for the
+catalog, or claim results without execution evidence.
+
+| Decision or artifact | Authoritative owner | Handoff |
+|---|---|---|
+| Captured-data measurements, `quality` proposals and invalid hierarchy rows in approved `findings.yaml` and `invalid_rows.jsonl` | [Data Profiling](../data-profiling/SKILL.md) | Data Quality reads these retained inputs; it does not re-profile to decide a check |
+| Part class, identity, relationship and time semantics | [Data Modeling](../data-modeling/SKILL.md#decisions-artifacts-and-handoffs) | Data Quality reads the accepted decision when it affects a check or disposition |
+| Which supported check or fix addresses a measured defect, how it is measured, and the `on_fail` disposition | Data Quality: `quality.yaml` for MDM checks/fixes; `QUALITY.md` for measured counts and operator decisions; dispositions in `invalid_rows.jsonl` | Data Onboarding applies this in its **quality** step for a new feed; Refining Rules applies it in **change-quality** for a live feed |
+| Silver field transformations and the Dataset Contract or silver spec that carries checks | [Data Onboarding](../data-onboarding/SKILL.md) for a new feed; [Refining Rules](../refining-rules/SKILL.md) for a live feed | Data Quality supplies supported check meaning and measured evidence; the configuration owner writes the contract/spec |
+| Check business definitions and their named native test-case definitions in the catalog | [Data Catalog](../data-catalog/SKILL.md) through [Business catalog](../data-onboarding/CATALOG.md) | Data Quality supplies configured checks, inputs, failure actions and references; fixes remain corrections and findings remain proposals |
+| Executed result evidence and its durable run/work-unit receipt | The configured evaluator emits it; [Bookkeeping recovery](../bookkeeping/RECOVERY.md) governs admission and recovery | Publish only verified counts through the Business Catalog; incomplete evidence stays unknown/Aborted and is never reported as a pass or fail |
+| New check kinds, cross-store comparisons or other missing evaluator capability | Platform implementation, tracked by a ticket | Data Quality names the required behavior and evidence; it does not invent a rule kind, source-specific adapter or SQL substitute |
+
+The skills index (`skills/README.md` in a checkout) routes profiling, modeling,
+onboarding, quality and live-feed changes to these owners. Keep those entries
+as routing links; this table is the authority for the decisions and artifacts.
 
 **A part that goes to silver** (transaction or event data, published
 reference data) has no `quality.yaml`: those checks read MDM records only.
@@ -38,10 +61,6 @@ with the writer's own code (`edgar_warehouse.silver_writer.checks.run`), and
 write each count in the check's comment; a check that flags rows the source
 gives on purpose is no check. A rule none of the three carries is new code:
 log it for a ticket.
-
-**Use the other skill when:**
-- there are no approved findings yet: use **data-profiling** first;
-- you are changing a live feed's mapping or matching: use **refining-rules**.
 
 ## Trace a mastered entity through downstream data
 
