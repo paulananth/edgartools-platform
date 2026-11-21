@@ -8,40 +8,46 @@ Install every skill for Claude, Codex and Grok from this checkout with
 `bash skills/link.sh`, or name the skills to link. An installed command line
 copies them instead: `edgar-warehouse skill install`.
 
-| When the task is | Open |
-| --- | --- |
-| Any data work, from setup to a verified run; finding the next step | [data-platform](data-platform/SKILL.md) |
-| **Bring a data set in** | |
-| Profile a data set, or compare a new delivery with approved findings | [data-profiling](data-profiling/SKILL.md) |
-| Decide where a profiled part sits, or how Gold facts and dimensions are shaped | [data-modeling](data-modeling/SKILL.md) |
-| Onboard a new feed or a new domain | [data-onboarding](data-onboarding/SKILL.md) |
-| Turn defects into checks, or audit existing data | [data-quality](data-quality/SKILL.md) |
-| Change the mapping, quality or matching rules of a live feed | [refining-rules](refining-rules/SKILL.md) |
-| **The operator's rulings for one domain** | |
-| Anything about a Security | [security-master](security-master/SKILL.md) |
-| Company facts, line items and measures | [company-financials](company-financials/SKILL.md) |
-| **Build the engine and its stores** | |
-| MDM merge code, migrations, storage adapters, choosing a proof | [mdm-engineering](mdm-engineering/SKILL.md) |
-| SQL that must run on more than one database | [sql-writer](sql-writer/SKILL.md) |
-| Worklists, leases, checkpoints and recovery of work | [bookkeeping](bookkeeping/SKILL.md) |
-| Journal events, receipts and delivery recovery | [change-journal](change-journal/SKILL.md) |
-| **Run it** | |
-| Make the stores operational, run and monitor loads | [data-operations](data-operations/SKILL.md) |
-| Audit access, roles and logins (SOX, SOC 2, ITSM) before finalising a skill or role | [access-audit](access-audit/SKILL.md) |
-| A load is slow, stuck or waiting on locks (connections, statements, table churn; read-only) | [database-monitoring](database-monitoring/SKILL.md) |
-| Timers, sequences and start or stop of a pipeline | [pipeline-orchestration](pipeline-orchestration/SKILL.md) |
-| A failed run, a telemetry gap, wasted resources | [production-support](production-support/SKILL.md) |
-| Any AWS, Snowflake, Terraform, image or deploy command | [aws-snowflake-operations](aws-snowflake-operations/SKILL.md) |
-| **Govern and catalog** | |
-| What counts as governed data, and what belongs on a lineage graph | [data-governance](data-governance/SKILL.md) |
-| Business domains, glossaries, assets and lineage in a catalog | [data-catalog](data-catalog/SKILL.md) |
-| Reading or writing the catalog on OpenMetadata | [openmetadata](openmetadata/SKILL.md) |
-| Setting up AutoOntology above MDM, RDM, and Silver | [auto-ontology](auto-ontology/SKILL.md) |
-| Building business-question interfaces for one or more data products | [auto-ontology-product-query](auto-ontology-product-query/SKILL.md) |
-| Draft an Ossie model and deploy a Snowflake semantic view | [semantic-views](semantic-views/SKILL.md) |
-| **General teaching, not this platform's rules** | |
-| What pipelines, warehouses and data engineering are | [data-engineering-fundamentals](data-engineering-fundamentals/SKILL.md) |
-| Analysing a data set end to end | [data-scientist](data-scientist/SKILL.md) |
+## Lifecycle role map
+
+Role names organize existing skills; they do not add authority. Follow each skill's trigger and handoff. Start at [data-platform](data-platform/SKILL.md) when the platform phase is unclear. This repository's exact store boundaries override generic Medallion labels: captured files are Bronze; MDM owns masters; RDM owns code sets; Silver holds source facts; consumers use the configured mirror and, when required, Gold transformations. See [aws-snowflake-operations](aws-snowflake-operations/SKILL.md).
+
+The source order is capture, profile, model, approved configuration, then MDM/Silver load. Raw data is not loaded into MDM for discovery. The CDO role adds no new approval path; existing operators and skill owners retain their decisions.
+
+### Stages 1–2: ingestion, storage, cleaning and modeling
+
+**Data Architect — design and discovery**
+- [data-platform](data-platform/SKILL.md) routes architecture, readiness and the next step.
+- [data-profiling](data-profiling/SKILL.md) measures captured structure and can add portable NER mention evidence from local text; it does not resolve identities.
+- [data-modeling](data-modeling/SKILL.md) decides approved domains, classes, master kinds, reference code sets and hierarchies, entity resolution and identity, relationships and time.
+- [data-governance](data-governance/SKILL.md) and [data-catalog](data-catalog/SKILL.md) govern definitions, lineage and catalog meaning.
+
+**Data Engineer — engineering and production**
+- New/live source configuration and checks: [data-onboarding](data-onboarding/SKILL.md), [refining-rules](refining-rules/SKILL.md), [data-quality](data-quality/SKILL.md).
+- Runtime and stores: [mdm-engineering](mdm-engineering/SKILL.md), [sql-writer](sql-writer/SKILL.md), [bookkeeping](bookkeeping/SKILL.md), [change-journal](change-journal/SKILL.md), [data-operations](data-operations/SKILL.md), [pipeline-orchestration](pipeline-orchestration/SKILL.md), [database-monitoring](database-monitoring/SKILL.md), [production-support](production-support/SKILL.md), [aws-snowflake-operations](aws-snowflake-operations/SKILL.md), [access-audit](access-audit/SKILL.md) and [openmetadata](openmetadata/SKILL.md).
+
+### Stage 3: BI and consumption
+
+**Data Analyst — discovery and business questions**
+- [auto-ontology-product-query](auto-ontology-product-query/SKILL.md) answers questions over configured products. No general analyst workflow skill is maintained here.
+
+**BI Developer — production reporting**
+- [semantic-views](semantic-views/SKILL.md), [auto-ontology](auto-ontology/SKILL.md) and [aws-snowflake-operations](aws-snowflake-operations/SKILL.md) cover scoped semantic/query and Snowflake/dbt work; [data-catalog](data-catalog/SKILL.md) and [openmetadata](openmetadata/SKILL.md) cover governed publication. No generic dashboard-builder skill is maintained in this repository.
+
+### Stage 4: advanced analytics and AI
+
+**Data Scientist — exploratory and predictive modeling**
+- [data-scientist](data-scientist/SKILL.md) teaches general exploration and prediction concepts; platform NER belongs to Data Profiling, not this stage.
+
+**AI/ML Engineer — production AI**
+- No end-to-end production ML/AI skill is maintained in this repository; production NER deployment is not covered. Semantic and query skills are not model-training, RAG or agent-deployment workflows.
+
+### Domain and teaching routes
+
+- [security-master](security-master/SKILL.md) and [company-financials](company-financials/SKILL.md) hold domain-specific rules.
+- [data-engineering-fundamentals](data-engineering-fundamentals/SKILL.md) teaches general concepts; platform rules stay with their owner skills.
+
+The role map is an entry point, not a substitute for a skill's own boundaries.
 
 ## What a skill holds
 
@@ -53,4 +59,4 @@ copies them instead: `edgar-warehouse skill install`.
   `python3 scripts/dev/move_skill_section.py`.
 - A source, kind or identifier is named only under a heading that contains
   "Examples", except in the skills whose purpose is one domain or deployment.
-- A new skill is a folder with a `SKILL.md`; add its row to the table above.
+- A new skill is a folder with a `SKILL.md`; add its route under the lifecycle role map or Domain and teaching routes above.

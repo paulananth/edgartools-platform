@@ -67,7 +67,7 @@ approval:                       # §9
   rows: <n>
   class: master|reference|relationship|transaction|metadata|silver
   confidence: <0..1>            # share of the class's tests that passed
-  tests: [{test: <name>, value: <measured>, passed: true|false}]
+  tests: [{class: <scored class>, test: <name>, value: <measured>, passed: true|false}]
   kind: <existing MDM kind|null>
   proposed_kind:                # when no existing kind fits (needs approval)
     {domain: <name>, kind: <name>, why: <plain words>}

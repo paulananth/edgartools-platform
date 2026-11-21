@@ -386,7 +386,9 @@ Take its design, not its tool:
   minority" is this engine's own kind; it carries rules such as the rows of one
   document agreeing on what the document is. Keep it for group consistency.
 - **Name the dimension in the `why`** (completeness, validity, consistency,
-  uniqueness, timeliness): the business catalog groups cases by it.
+  uniqueness, timeliness, or accuracy). Accuracy requires a declared authoritative
+  reference or governed cross-source comparison; without one, report it unknown.
+  The business catalog groups cases by dimension.
 - **Start with the checks that run today**, measure each on the delivery, and
   list the others as the work for a new kind.
 

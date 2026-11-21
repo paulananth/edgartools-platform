@@ -19,10 +19,10 @@ A failure, a surprise or two readings that disagree: find the root cause first, 
 
 ## Decisions, artifacts and handoffs
 
-This skill measures the captured copies once and writes reusable evidence. It
-proposes; it does not decide a part's final place in the model, write
-configuration or run a load. Hand the retained artifact to its owner; never
-profile again only to cross a boundary.
+This is discovery: profile captured copies once and write evidence for candidate master/reference/relationship/transaction parts.
+Class scores, keys and links are structural evidence, not business-domain or identity decisions.
+When captured text can change the handoff, run portable NER as a companion step within this profiling phase; it yields mention evidence, not resolved identities.
+Data Modeling decides; hand off once without rescanning, configuring or loading.
 
 | Decision or artifact | Authoritative owner | Handoff |
 |---|---|---|
@@ -131,7 +131,8 @@ A shared rule names its home beside it; the rest are this phase's own. This list
 | Never | Instead |
 |---|---|
 | Approve findings for the operator, or record words they did not say | Ask one question, wait, record their exact words with `approve`; `compare` refuses findings without it |
-| Guess a class, a key or a link | Record the measured tests and the silver fields (numbers, identifiers, material commentary). A class the tests do not pick is `silver` |
+| Guess a class, key, link or master domain from a label or a single row | Report measured tests, source/parent grain, cross-source evidence and unknowns. One row can show shapes but not uniqueness, lifecycle or shared use; a `master` class is a candidate, not a domain verdict. |
+| Treat NER as entity resolution or a standalone Data Scientist/ML phase | Use a portable local script only as a companion to profiling captured text; `profile_data.py` remains structural. NER yields mentions, not identities. Keep text private and hand resolution to Data Modeling/MDM under approved rules. |
 | Print or keep a database address, a password or a raw personal value | Put the address in an environment variable (`env:<VARIABLE>`), never printed ([data-platform hard stops](../data-platform/SKILL.md#hard-stops)); a personal column's samples are masked to their shape; the run's working copy is deleted when it ends |
 | Commit or publish `REPORT.md`, `findings.yaml`, `invalid_rows.jsonl`, `fingerprints.json` or `drift.yaml` | Keep them on the machine, outside the repository: a non-personal column's top values and failing examples are values from the data, and a short key can be found again from its hash. Only `catalog`'s `profile.yaml`, names and counts, is public (`CLAUDE.md`, "Commits, PRs and secrets") |
 | Request anything from a provider (its site, API or documentation) | Profile the local copies only; a capture or a fact that only the provider holds is a blocker named to the operator ([data-platform hard stops](../data-platform/SKILL.md#hard-stops)) |
@@ -162,10 +163,12 @@ uv run --with duckdb --with pyyaml python profile_data.py run --name "<data set>
 ```
 
 This writes private `REPORT.md`, `findings.yaml`, `fingerprints.json` and
-`invalid_rows.jsonl` in the output folder. Read `REPORT.md`, then review the
-findings' silver fields, designed keys and proposed kinds. Ask any remaining
-question one at a time and record the answer in the findings. Show the report
-and wait for the operator's approval before recording it:
+`invalid_rows.jsonl`. Read `REPORT.md`; review measured class/tests, keys,
+identifiers, links, embedded-entity evidence, time roles and unknowns. Ask any
+remaining question one at a time and record the answer in `findings.yaml`.
+Before approval, follow [VISUAL-REVIEW.md](VISUAL-REVIEW.md) to make a private
+Archify page and show it with the report. Wait for explicit approval in chat;
+the page is read-only, not consent. Then record the operator's exact words:
 
 ```sh
 uv run --with duckdb --with pyyaml python profile_data.py approve \
@@ -364,16 +367,14 @@ whose types name the kinds at each end. How a kind is matched and merged is rule
 configuration, and code lists live in reference data management (Reltio's entity types and lookup
 types). Nothing else holds a list of kinds.
 
-For each master part, measure the three new-kind tests that
-[Data Modeling](../data-modeling/SKILL.md#2-a-master-part-its-kind) decides on:
-- whether another part, or another source, links to its key;
-- whether it carries its own identifier, or a designed key that persists from one delivery to the next;
-- whether its names find a golden record of an existing kind (`context <kind> --search`), and whether its
-  identifiers are an existing kind's namespaces.
-
-A part that is linked to, has its own key and matches no existing kind is proposed in `findings.yaml` as a draft code of
-`mdm-kinds` (code, label, definition, `golden_records: true`) beside the draft of its rules file; the operator
-approves both, and data-onboarding publishes them in one change. Its identifiers stay in its rules file.
+For each `master` part and each `silver` part whose `master` tests tie for the top score above 0.5, report an entity candidate and preserve `silver`.
+Record available evidence for Data Modeling's three new-kind tests: independent references; an own identifier or designed key persistent across deliveries; and no existing kind or identity namespace match.
+A single `run` cannot prove persistence; absent tests or source evidence stays unknown. Widen only signals that can change the handoff and stop when a pass adds none.
+For the private aggregate review page, follow [VISUAL-REVIEW.md](VISUAL-REVIEW.md).
+The run may draft `proposed_kind` for a top-level `master` part with no matched kind; its generated question may recommend yes from class tests.
+Treat both as provisional, not approval or proof of persistence.
+Hand approved findings to [Data Modeling](../data-modeling/SKILL.md#2-a-master-part-its-kind), which checks existing kinds and all three tests before proposing a code.
+The operator decides; Data Onboarding publishes the approved mapping and rules.
 
 A code with `golden_records: false` has no rules file and no golden records: a classification rule labels
 held-back records with it as the kind they probably are, the evidence for onboarding it later. Before

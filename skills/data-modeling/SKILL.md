@@ -34,7 +34,7 @@ A shared rule names its home beside it; the rest are this phase's own. This list
 | Approve findings or a code set version, or write words the operator did not say | Ask one question, then wait; findings are approved through [Data Profiling](../data-profiling/SKILL.md#hard-stops), a code set version by [CODE-SETS.md](../data-profiling/CODE-SETS.md), and switching a rule on is the operator's (`CONTEXT.md`, "Rule Activation Approval") |
 | Guess a class, a key, a link or a meaning | Leave it unknown and name the failing tests from the findings |
 | Add a kind, or treat a profile as a kind | A missing kind is an operator ruling |
-| Join records on a lookup-only identifier, or merge on similar names | Records join only through a kind's Identifier Contract or a matching rule the operator switched on |
+| Treat an NER mention or name similarity as identity, join on a lookup-only identifier, or merge text matches | NER locates mention spans; resolution uses a kind's Identifier Contract or operator-switched matching rule. Ambiguity remains review, never an automatic merge. |
 | Split one kind into loads by the identifier asked, or pair two identifiers of one master in a source's own rules | One record carries every identifier it has; the Merge Stage looks each one up in the Cross-reference and puts them on one master (operator) |
 | Name a new relationship type when an existing one, or its inverse, means the same | Use it, or ask the operator why a second type is needed |
 | Write rules, contracts, quality files, or a code set version | Hand off by the table above: Data Onboarding (a new feed) or Refining Rules (a live one) drafts a code set version in RDM by [CODE-SETS.md](../data-profiling/CODE-SETS.md) |
@@ -137,7 +137,7 @@ modeling path; concrete entity examples do not restrict the supported domains.
 
 ### 1. Class
 
-Take the class from the approved findings, and check it against the glossary:
+Take the class from approved findings and check it against the glossary. A class is structural evidence; a shared master domain also needs a coherent business noun, its own identity and lifecycle, and references across sources or independent records. Check the part's parent and event grain before naming its domain:
 
 | Class | The part... | Lives in |
 |---|---|---|
