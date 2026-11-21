@@ -58,6 +58,7 @@ and the rest in another db", then "Yes, open the ticket and start, make the skil
       registration authority keep `public` (the mirror carries it as `PUBLIC`); rdm and silver keep their own schemas under their own
       owners. Moving mastering into `mdm` is its own change if the Gold names ask for it.
 - [ ] Follow-up (no-DDL rule): the silver writer still stages each delivery in a temporary table, so the databases keep TEMPORARY
+- [ ] The snapshot cost of the one mirror read from metering history against the bounds (5 credits for a mirror), once it is created and the history shows it (moved from ticket 03)
 - [ ] Access by schema in a shared database: reset, hardening (the mirror login's CONNECT), readiness, catalog readers, local
       test stores
 - [ ] `rules/exposure.yaml` and `rules/gold/gold.yaml`: one target database, mdm's source schema `mdm`
