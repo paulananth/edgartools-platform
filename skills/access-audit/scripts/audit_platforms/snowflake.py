@@ -36,6 +36,60 @@ def lower(rows):
     return [{k.lower(): (str(v).lower() if isinstance(v, bool) else v) for k, v in row.items()} for row in rows]
 
 
+def expected_policies() -> dict:
+    """The policy file's values with the database it names resolved from snowflake.yaml."""
+    import yaml
+    from edgar_warehouse.rules import files
+
+    policy = yaml.safe_load((files.ROOT / "snowflake_policy.yaml").read_text(encoding="utf-8"))
+    names = yaml.safe_load((files.ROOT / "snowflake.yaml").read_text(encoding="utf-8"))
+    where = policy["location"]
+    return {**policy, "location": {"database": names[where["database_of"]]["database"], "schema": where["schema"]}}
+
+
+def found_policies(connection: str):
+    """The live password and authentication policies of the account, each with its properties; None when they cannot be read."""
+    found = {}
+    for kind in ("password", "authentication"):
+        listed = snow(connection, f"show {kind} policies in account", soft=True)
+        if listed is None:
+            return None
+        found[kind] = []
+        for row in lower(listed):
+            full = ".".join(f'"{row[k]}"' for k in ("database_name", "schema_name", "name"))
+            described = snow(connection, f"describe {kind} policy {full}", soft=True)
+            if described is None:
+                return None
+            found[kind].append({**{k: row[k] for k in ("database_name", "schema_name", "name")},
+                                "properties": {r["property"].lower(): str(r["value"]) for r in lower(described)}})
+    return found
+
+
+def policy_drift(expected: dict, found: dict | None) -> list[str]:
+    """Every way the live policies differ from snowflake_policy.yaml: a policy missing, in another database or schema, or with another value."""
+    if found is None:
+        return ["the policies could not be read"]
+    place = (expected["location"]["database"].upper(), expected["location"]["schema"].upper())
+    drift = []
+    for kind in ("password", "authentication"):
+        want = expected[kind]
+        held = [p for p in found[kind] if p["name"].upper() == want["name"].upper()]
+        drift += [f"{kind} policy {p['name']} is in {p['database_name']}.{p['schema_name']}, not {place[0]}.{place[1]}"
+                  for p in found[kind] if (p["database_name"].upper(), p["schema_name"].upper()) != place]
+        if not held:
+            drift.append(f"{kind} policy {want['name']} is missing")
+            continue
+        properties = held[0]["properties"]
+        if kind == "password":
+            drift += [f"password {key}: {properties.get('password_' + key)}, expected {value}"
+                      for key, value in want.items() if key != "name" and str(properties.get("password_" + key)) != str(value)]
+        else:
+            methods = {m.strip().upper() for m in properties.get("authentication_methods", "").strip("[]").split(",") if m.strip()}
+            if methods != {m.upper() for m in want["methods"]}:
+                drift.append(f"authentication methods: {sorted(methods)}, expected {sorted(m.upper() for m in want['methods'])}")
+    return drift
+
+
 def collect(env, as_admin: bool = False) -> dict:
     connection = env["AUDIT_SNOWFLAKE_CONNECTION"]
     if connection in FORBIDDEN_CONNECTIONS:
@@ -53,6 +107,7 @@ def collect(env, as_admin: bool = False) -> dict:
         "monitors": len(snow(connection, "show resource monitors")),
         "warehouses": lower(snow(connection, "show warehouses")),
         "statement_timeout": int(next(r["value"] for r in lower(snow(connection, "show parameters like 'STATEMENT_TIMEOUT_IN_SECONDS' in account")))),
+        "policy_drift": policy_drift(expected_policies(), found_policies(connection)),
         "password_policies": len(snow(connection, f"select name from {USAGE}.password_policies where deleted is null")),
         "authentication_policies": (lambda rows: None if rows is None else len(rows))(
             snow(connection, f"select name from {USAGE}.authentication_policies where deleted is null", soft=True)),
@@ -95,7 +150,8 @@ def controls(ev: dict) -> list[dict]:
           "Set an account network policy; add one per service user"),
         c("CST", not ungoverned, {"warehouses_without_monitor": len(ungoverned), "monitors": ev["monitors"]}, "Create a resource monitor with a credit quota"),
         c("TMO", ev["statement_timeout"] <= MAX_TIMEOUT, {"statement_timeout_s": ev["statement_timeout"]}, "Set a timeout on the account or on each service user"),
-        c("POL", ev["password_policies"] > 0 and (ev["authentication_policies"] or 0) > 0,
-          {"password_policies": ev["password_policies"], "authentication_policies": ev["authentication_policies"]}, "Create both",
+        c("POL", ev["password_policies"] > 0 and (ev["authentication_policies"] or 0) > 0 and not ev.get("policy_drift"),
+          {"password_policies": ev["password_policies"], "authentication_policies": ev["authentication_policies"], "drift_from_snowflake_policy_yaml": ev.get("policy_drift")},
+          "Apply the access Terraform root from rules/snowflake_policy.yaml (policies live in the Gold database's POLICIES schema, no other database)",
           tested=ev["authentication_policies"] is not None),
     ]

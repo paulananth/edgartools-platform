@@ -1,0 +1,28 @@
+# The account's credential policies: the one place their values and their home are written. Terraform
+# (infra/terraform/access/snowflake) creates them from this file and the access audit (skills/access-audit, control POL)
+# reads the live policies back and fails on any difference, including a policy that lives anywhere else.
+#
+# Snowflake keeps a password or authentication policy as a schema-level object (a policy needs a database and a schema
+# to be created in; the documentation names no account-level form), so it lives in a schema of a database the platform
+# already has: the Gold database of snowflake.yaml. No database is created for it.
+approval:
+  date: "2026-11-21"
+  words:
+  - you cannot be creating a database you have to use native platform feature the policy must be kept in the snowflake_policy.yaml and it must be audited remove creating unapproved db
+location:
+  database_of: gold              # the `gold` block of snowflake.yaml names the database
+  schema: POLICIES
+password:
+  name: EDGARTOOLS_PASSWORD_POLICY
+  min_length: 14
+  min_upper_case_chars: 1
+  min_lower_case_chars: 1
+  min_numeric_chars: 1
+  min_special_chars: 1
+  max_age_days: 0                # set once the human administrator's password is gone
+  max_retries: 5
+  lockout_time_mins: 15
+  history: 5
+authentication:
+  name: EDGARTOOLS_SERVICE_KEYPAIR_ONLY
+  methods: [KEYPAIR]

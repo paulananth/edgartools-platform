@@ -101,7 +101,7 @@ own access records is no request to a data provider.
 | NET | A network or public-exposure boundary applies | Boundary protection |
 | CST | Cost and capacity guards (monitors, budgets, connection limits) | A runaway cannot spend or exhaust without a stop |
 | TMO | Execution is bounded (statement or session timeouts) | A runaway statement cannot run for days |
-| POL | Credential policies exist | Standards enforced, not hoped for |
+| POL | Credential policies exist, and equal `rules/snowflake_policy.yaml` (Snowflake: values, and the schema they live in; a policy in any other database is drift) | Standards enforced, not hoped for |
 | LOG | Access and changes logged; transport and storage encrypted | Who did what, when |
 | CHG | Every access principal has a ticket and is defined in code; protected branch with a review | Change enablement: approver, reason, back-out |
 | SCR | No plain-text secret; secret files private; secret scanning on | Credential hygiene |

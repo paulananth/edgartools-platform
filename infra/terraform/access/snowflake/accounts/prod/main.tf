@@ -2,31 +2,33 @@
 # the cost and timeout guards, and the credential policies. Changes go through plan, a recorded approval, apply, re-audit.
 
 
-# --- Policies live in their own database -----------------------------------------------------------------------------
-resource "snowflake_database" "governance" {
-  name    = "EDGARTOOLS_GOVERNANCE"
-  comment = "Account-level policies: password, authentication"
+# --- Credential policies: values and home in rules/snowflake_policy.yaml ----------------------------------------------
+# A policy is a schema-level object, so it needs a schema; it lives in one of the Gold database's (rules/snowflake.yaml), and
+# no database is created for it. The access audit (control POL) reads the live policies back against the same file.
+locals {
+  policy        = yamldecode(file("${path.module}/../../../../../../rules/snowflake_policy.yaml"))
+  gold_database = yamldecode(file("${path.module}/../../../../../../rules/snowflake.yaml"))[local.policy.location.database_of].database
 }
 
 resource "snowflake_schema" "policies" {
-  database = snowflake_database.governance.name
-  name     = "POLICIES"
+  database = local.gold_database
+  name     = local.policy.location.schema
 }
 
 resource "snowflake_password_policy" "standard" {
-  database             = snowflake_database.governance.name
+  database             = local.gold_database
   schema               = snowflake_schema.policies.name
-  name                 = "EDGARTOOLS_PASSWORD_POLICY"
-  min_length           = 14
-  min_upper_case_chars = 1
-  min_lower_case_chars = 1
-  min_numeric_chars    = 1
-  min_special_chars    = 1
-  max_age_days         = 0
-  max_retries          = 5
-  lockout_time_mins    = 15
-  history              = 5
-  comment              = "Standard for any password that exists; max age is set once the human admin password is gone"
+  name                 = local.policy.password.name
+  min_length           = local.policy.password.min_length
+  min_upper_case_chars = local.policy.password.min_upper_case_chars
+  min_lower_case_chars = local.policy.password.min_lower_case_chars
+  min_numeric_chars    = local.policy.password.min_numeric_chars
+  min_special_chars    = local.policy.password.min_special_chars
+  max_age_days         = local.policy.password.max_age_days
+  max_retries          = local.policy.password.max_retries
+  lockout_time_mins    = local.policy.password.lockout_time_mins
+  history              = local.policy.password.history
+  comment              = "Values in rules/snowflake_policy.yaml"
 }
 
 resource "snowflake_account_password_policy_attachment" "standard" {
@@ -34,11 +36,11 @@ resource "snowflake_account_password_policy_attachment" "standard" {
 }
 
 resource "snowflake_authentication_policy" "service_keypair_only" {
-  database               = snowflake_database.governance.name
+  database               = local.gold_database
   schema                 = snowflake_schema.policies.name
-  name                   = "EDGARTOOLS_SERVICE_KEYPAIR_ONLY"
-  authentication_methods = ["KEYPAIR"]
-  comment                = "Service users sign in with a key pair only"
+  name                   = local.policy.authentication.name
+  authentication_methods = local.policy.authentication.methods
+  comment                = "Values in rules/snowflake_policy.yaml"
 }
 
 # --- Account guards -------------------------------------------------------------------------------------------------
@@ -125,10 +127,6 @@ resource "snowflake_grant_privileges_to_account_role" "auditor_warehouse" {
 # The Gold destination database: the auditor reads its metadata (schemas, objects, grants) to check what is there before a build, and
 # no data (REFERENCES shows a table to the role without reading a row).
 # Named once, in rules/snowflake.yaml; a renamed database is a one-line change there.
-locals {
-  gold_database = yamldecode(file("${path.module}/../../../../../../rules/snowflake.yaml")).gold.database
-}
-
 resource "snowflake_grant_privileges_to_account_role" "auditor_gold_database" {
   account_role_name = snowflake_account_role.auditor.name
   privileges        = ["USAGE"]
