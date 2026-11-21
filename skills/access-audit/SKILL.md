@@ -161,6 +161,47 @@ NOT_TESTED or `-` control on a platform the change touches is named in the repor
   your recommendation (`CLAUDE.md`, "Talking with the operator").
 - Passing the gate grants no approval, access change, activation or switch-on.
 
+## Resume an audit
+
+Keep progress in the existing onboarding log or task record for the change under review. Use its single `## Resume` section as
+the common progress record ([Data Platform's record and resume rules](../data-platform/RESUME.md#the-record)); do not create an
+audit-specific state store. Update it when an audit stops, completes, or hands findings to an owner. Record public names and
+repository paths only; never copy credentials, addresses, role membership, or data values into the record.
+
+Record:
+
+- the change and platforms in scope, the applicable principals or settings by public name, and the objectives assessed;
+- the evidence date and time in ET, the audit adapter/skill revision, and each platform's `--json` artifact path and sha256;
+- each objective's PASS, FAIL, NOT_TESTED or `-` result, its evidence counts, and each finding's status and remediation owner;
+  for an accepted finding, link the operator's signed acceptance with its owner, reason and expiry;
+- pending read-only rechecks, their owning skill, and the next action as an unchecked checklist item.
+
+Resume by comparing the recorded scope, inputs, revision and evidence date with the change and read-only evidence needed now:
+
+1. **Reuse** completed objective results only for the same platform, principal or setting, objectives and adapter revision, while
+   the evidence is within the review window recorded for this task. Keep the original artifact and date; continue at the first
+   unchecked action. Do not rerun completed objectives just to recreate their report.
+2. **Invalidate** results for an affected platform when its scope, principal or setting changes; invalidate results assessed
+   under changed objectives or adapter logic. Reassess each invalidated objective with fresh read-only evidence. Keep prior
+   artifacts and mark the affected results reopened; never replace them with a claim that the old evidence still applies.
+3. **Block** when the record or artifact is missing, its hash differs, the evidence date is outside the recorded review window,
+   the review window was never recorded, or the applicable scope cannot be established. Name the missing evidence and its owner;
+   do not infer PASS or reuse stale results.
+4. **Hand off** every open finding to the operations skill named in [Decisions, artifacts and handoffs](#decisions-artifacts-and-handoffs).
+   That owner records authorized remediation in the same task record. Access audit then performs only the pending read-only
+   recheck and records its result there. Leave every unfinished action unchecked.
+
+## Examples: staged interruption
+
+An invented task record says a PostgreSQL connection-limit change is in scope, its recorded review window is still open, and
+the `postgres` artifact is hashed. Its objectives show CHG and IND complete;
+CST is FAIL and has been handed to Data Operations; the CST recheck is unchecked. The interruption occurs before remediation.
+With the same setting, objectives, adapter revision and in-window artifact, resume at the first unchecked action: **Data
+Operations handles the authorized role-guard remediation**. Access audit does not repeat CHG or IND. After that owner records
+completion, the next action is **access-audit rechecks CST on `postgres` with read-only evidence**. If the setting or adapter
+revision changes before resumption, the affected result is reopened and the next action becomes its fresh audit; if the artifact
+is absent or outside its recorded window, resume is blocked pending valid evidence.
+
 ## Limits
 
 - Snowflake `ACCOUNT_USAGE` and AWS's credential report lag by minutes to hours; a principal made a moment ago may not show.
