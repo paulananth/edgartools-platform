@@ -1,7 +1,7 @@
 # data-platform: Make the entrypoint executable
 
 Type: task
-Status: open
+Status: resolved
 Priority: P0
 Blocked by: 02
 Labels: wayfinder:task
@@ -36,9 +36,9 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] Produce an entrypoint that consumes source readiness, the skill index and private connection-variable names and yields one selected next action, its owner and the required environment checks; verified by document review of [Start here: route the work](../../../skills/data-platform/SKILL.md#start-here-route-the-work), its `doctor` expectations matched line by line to `edgar_warehouse/bundle.py` (`doctor()`, `_store()`, `_print()`) and its configured-source test to `edgar_warehouse/rules/files.py` (`EDGAR_RULES_ROOT`, else the bundled rules; `sources/<name>/source.yaml`). (2026-11-20 18:41 ET)
 - [x] Verify referenced paths and supported commands; retain mandatory stops and discoverability of optional detail; verified by a no-import link check (65 relative links and every `#anchor` in `SKILL.md` resolve; the two `data-profiling` anchors also exist on `origin/main`), by matching the one command the new text names, `edgar-warehouse doctor`, to `add_parser("doctor")` in `edgar_warehouse/bundle.py`, by running `bundle.py`'s `_COMMAND` pattern over the old and new `SKILL.md` (the same command lines, none added or removed), and by document review that Hard stops stay first and every optional reference stays linked. `edgar-warehouse doctor` itself did not run (not installed), and the two command-resolution tests stopped on import (see [Validation](#validation)). (2026-11-20 18:41 ET)
 - [x] Walk one applicable example to its handoff without loading unrelated references or repeating another skill's procedure; verified by the document trace under [Trace](#trace). It is a reading of the text, not a source run. (2026-11-20 18:41 ET)
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. Checks ran (see [Validation](#validation)); not committed, pushed or opened as a PR in this session.
-- [ ] Read the installed `write-skill` guidance (`~/.agents/skills/write-skill/SKILL.md`): not read. The session's permissions refused a direct read of the file and loading it as the `write-skill` skill.
-- [ ] Learning → skill: proposed lesson in [Start here: route the work](../../../skills/data-platform/SKILL.md#start-here-route-the-work): an entrypoint states each check's expected output from the command's own code (doctor probes four stores, `not set` passes), so a reader can tell a pass from a stop without opening another file. Not ticked until the change is published and reviewed.
+- [x] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. [PR #1975](https://github.com/paulananth/edgartools-platform/pull/1975) merged with all 12 CI checks passing. (2026-11-21 10:24 ET)
+- [x] Read the installed `write-skill` guidance during this closeout. No additional skill edit was required. (2026-11-21 10:24 ET)
+- [x] Learning → skill: the entrypoint states `doctor`'s expected output, including the passing `not set` case for unused stores; verified against `bundle.py` and present in [Start here](../../../skills/data-platform/SKILL.md#start-here-route-the-work). (2026-11-21 10:24 ET)
 
 ## Changes
 
@@ -75,15 +75,9 @@ stop for Data Onboarding's discover step to raise.
 
 The shortest sufficient entrypoint is one section placed directly after Hard stops: its inputs and output, five
 steps and the stop conditions, with `doctor`'s expected output stated from its code. Everything else in the skill
-stays reference, reached by link. Not resolved: publication and the learning remain open.
+PR #1975 merged with all 12 CI checks green. The installed skill link target was unavailable, so the evidence covers the repository copy only.
 
-Provenance: the branch is based on `30ae0e7b`, which contains ticket 02's merge `e166fa56`, ticket 07's `6c5c5393`
-and ticket 79's `30ae0e7b` (checked with `git merge-base --is-ancestor`). `origin/main` has since moved to
-`576904f0` (#1971). `git diff --stat HEAD origin/main` touches no `skills/data-platform/` file, and
-`origin/main`'s `skills/data-platform/SKILL.md` is 496 lines, the same as this branch's base. So this change still
-gives 499 lines on top of it. `~/.agents/skills/data-platform` and `~/.claude/skills/data-platform` both link
-(`readlink`) to `~/.local/share/edgartools/skill-source/skills/data-platform`. The session's permissions refused
-reading that target, so no installed copy was compared. The repository copy is the one changed.
+Provenance: the original branch was based on `30ae0e7b`, which includes the prerequisite merges recorded above; `origin/main` at that validation was `576904f0` (#1971). PR #1975 merged as `c9b1c18fa7d363814edf87860f2aa73436db391d`. At closeout, `origin/main` was `a98bbb16d3e73f212a203b868b34d49b747199a4` and still contained the entrypoint. Both installed Data Platform skill links point to `~/.local/share/edgartools/skill-source/skills/data-platform`; the target could not be read at the original validation, so the installed copy was not compared. PR #1975 changed the repository copy only.
 
 ## Validation
 
@@ -92,7 +86,7 @@ reading that target, so no installed copy was compared. The repository copy is t
 - `bundle.py`'s `_COMMAND` pattern over `git show HEAD:skills/data-platform/SKILL.md` and the edited file: the same
   command lines, none added or removed. It shows the resolver sees no new command. It does not run the resolver.
 - `git diff --check`: clean.
-- `uv run --no-project --with pytest --with pyyaml --with sqlalchemy --with 'psycopg[binary]' -- pytest -q -p no:cacheprovider tests/unit/test_skill_bundle_portability.py tests/unit/test_role_skills.py tests/unit/test_rules_skill_commands.py`: **10 passed, 2 failed**. `test_rules_skill_commands.py` passed. `test_skill_commands_and_links_resolve_without_checkout` and `test_role_skills_name_registered_commands` failed on import with `ModuleNotFoundError: No module named 'source_contract'`: the Rust engine is not built in this worktree (no `.venv/bin/pytest`). These failures come from the environment and say nothing about the skill text. Command resolution is still unproven here; CI runs it.
+- `uv run --no-project --with pytest --with pyyaml --with sqlalchemy --with 'psycopg[binary]' -- pytest -q -p no:cacheprovider tests/unit/test_skill_bundle_portability.py tests/unit/test_role_skills.py tests/unit/test_rules_skill_commands.py`: **10 passed, 2 failed**. Local import failures were `test_skill_commands_and_links_resolve_without_checkout` and `test_role_skills_name_registered_commands` (`ModuleNotFoundError: No module named 'source_contract'`; the Rust engine was absent). PR #1975's full CI suite passed all 12 checks.
 - Not run: `edgar-warehouse doctor` (not installed; its CI copy is `tests/engine/test_data_skill_bundle_postgres.py`).
 
 ## Completion evidence
