@@ -45,6 +45,18 @@ A shared rule names its home beside it; the rest are this phase's own. This list
 | Design one Gold fact alone, or build a Gold object no named requirement needs | Design the whole bus first and build the least: [GOLD.md](GOLD.md), "Design the whole bus first" |
 | Write a table spec, or start a build, from its own ticket alone | Review every ticket it builds on and every build ticket that cites it: each ruling since it was written, each dependency it leaves out, each stale "or" a ruling closed, each hard case its test lacks. Record the findings on the spec's ticket and fix the stale tickets in the same change (operator: "Check the tickets related to financial review work") |
 
+## Start here: decide one part
+
+Use this for each part whose class, identity, relationship or destination needs mapping. Start only from approved `findings.yaml` and `REPORT.md`. Read `CONTEXT.md`. Do not rescan the files.
+
+1. Require `approval.status: approved` and the class tests, new-kind tests, key and identifiers. Missing approval or a needed measurement goes back to [Data Profiling](../data-profiling/SKILL.md#decisions-artifacts-and-handoffs).
+2. Read held kinds with `edgar-warehouse context mdm-kinds` and the kind's Identifier Contract in `rules/merge/kinds/<kind>.yaml`. A proposed kind needs all three new-kind tests; otherwise use the existing kind or leave it unknown. An identifier pair or a profile is not a kind.
+3. For a reference code set or relationship type, run `edgar-warehouse rdm list`, then `edgar-warehouse rdm describe <code set>`. Compare the part with the published rows. An absent or uncertain meaning stops under the hard stops.
+4. Write one decision: class and destination, kind or code set, matching identity versus lookup-only identifiers, and why. Carry an unknown with the finding that failed to settle it.
+5. Hand the decision and the approved findings to Data Onboarding for a new feed, or Refining Rules for a live one. A change to joins or row grain also completes [Prove the model](#9-prove-the-model-on-the-data-before-building) first.
+
+Open [GOLD.md](GOLD.md), [DIMENSIONAL.md](DIMENSIONAL.md) or [TEMPORAL.md](TEMPORAL.md) only for that kind of decision. The [hard stops](#hard-stops) stay in force.
+
 ## What the platform already says
 
 Read these before deciding, and use their words:
