@@ -45,6 +45,21 @@ The skills index (`skills/README.md` in a checkout) routes profiling, modeling,
 onboarding, quality and live-feed changes to these owners. Keep those entries
 as routing links; this table is the authority for the decisions and artifacts.
 
+## Shared rules and gates
+
+Use `CLAUDE.md` for repository-wide approval, provider access,
+secrets, local stores, testing, completion claims and publication rules. Use the
+owning phase skill for its local decisions; this skill does not grant authority
+to cross a phase boundary.
+
+| Concern | Authority and application here |
+|---|---|
+| Approval and activation | `CLAUDE.md`, "Talking with the operator", and the [Data Onboarding hard stops](../data-onboarding/SKILL.md#hard-stops). A measured disposition is a recommendation under the standing rule; it does not approve a source change, a new kind, a load or a switch-on. Preserve the exact approval gate the owner phase requires. |
+| Provider access and secrets | `CLAUDE.md`, "Commits, PRs and secrets", and [Data Platform hard stops](../data-platform/SKILL.md#hard-stops). Work from retained local evidence; a provider request needs permission for that request. Read secrets from configuration and never print them. |
+| Configuration and local proof | [Data Onboarding](../data-onboarding/SKILL.md) owns new-feed configuration and [Refining Rules](../refining-rules/SKILL.md) owns live-feed changes. Use their scoped checks and authorized local proof; this plan only measures records and does not run a source load. |
+| Test scenarios | Follow `CLAUDE.md`, "How to work in this repo", and the owner phase's check/load gate. A planted record required by the measurement helper verifies that check; it does not authorize a new scenario suite or a production-like load. |
+| Completion wording | Follow `CLAUDE.md`, "Task checklists" and "Talking with the operator": claim only verified work, distinguish measured inputs from execution evidence, and leave unresolved items open. A successful configuration check is not proof of a completed load or catalog publication. |
+
 **A part that goes to silver** (transaction or event data, published
 reference data) has no `quality.yaml`: those checks read MDM records only.
 Fix what the reading can fix there (a date written with a time-zone offset
