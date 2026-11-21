@@ -68,3 +68,4 @@ bypass-selection = true
 "../../skills" = "edgar_warehouse/bundle_data/skills"
 "../../rules" = "edgar_warehouse/bundle_data/rules"
 "../../sources" = "edgar_warehouse/bundle_data/sources"
+"../../destination" = "edgar_warehouse/bundle_data/destination"

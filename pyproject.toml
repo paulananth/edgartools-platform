@@ -69,6 +69,7 @@ include = [
   "edgar_warehouse/silver_writer/migrations/*.sql",
   "rules/**/*.yaml",
   "sources/**/*.yaml",
+  "destination/**/*.yaml",
   "rules/reference/published/**/*.jsonl",
   "rules/reference/published/**/*.json",
 ]

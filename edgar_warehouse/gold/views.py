@@ -1,4 +1,4 @@
-"""Render every Gold object of rules/gold/gold.yaml as one CREATE VIEW statement.
+"""Render every Gold object of destination/gold/gold.yaml as one CREATE VIEW statement.
 
 One function per object kind, chosen by the object's `kind`. The dialect decides only how a structured body is read,
 how a date is split and how a day is added; every other expression is portable, so a test can run the same views on
@@ -11,7 +11,7 @@ from pathlib import Path
 
 from edgar_warehouse.rules import files
 
-CONFIG = files.ROOT / "gold" / "gold.yaml"  # the rules root, so an installed bundle reads its own copy
+CONFIG = files.ROOT.parent / "destination" / "gold" / "gold.yaml"  # `destination` beside the rules folder, so an installed bundle reads its own copy
 
 DIALECTS = {
     "snowflake": {

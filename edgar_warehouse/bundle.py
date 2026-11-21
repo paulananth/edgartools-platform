@@ -26,6 +26,7 @@ SKILLS = files.BUNDLE_DATA / "skills" if files.BUNDLED.is_dir() else Path(__file
 # The approved rules the bundle was built with: a folder to start from.
 RULES = files.BUNDLED if files.BUNDLED.is_dir() else Path(__file__).resolve().parents[1] / "rules"
 SOURCES = RULES.parent / "sources"  # beside the rules, where `files.sources_root` finds them
+DESTINATION = RULES.parent / "destination"  # beside the rules: where Gold is written (destination/gold/gold.yaml)
 STORES = ("rules", "bookkeeping", "change_journal", "mdm")
 MARKER = ".installed-by-edgar-warehouse"
 # A fenced line or a code span may wrap onto the next line. A shell pipe
@@ -184,7 +185,8 @@ def install(home: Path, rules: Path | None = None) -> list[str]:
     if rules is not None:
         shutil.copytree(RULES, rules)
         shutil.copytree(SOURCES, rules.parent / "sources")  # sources sit beside the rules
-        done.extend([str(rules), str(rules.parent / "sources")])
+        shutil.copytree(DESTINATION, rules.parent / "destination")  # and so does the destination
+        done.extend([str(rules), str(rules.parent / "sources"), str(rules.parent / "destination")])
     for skill, target in targets:
         if target.exists():
             shutil.rmtree(target)

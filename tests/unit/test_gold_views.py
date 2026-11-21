@@ -1,4 +1,4 @@
-"""The Gold views, rendered from rules/gold/gold.yaml and run on an invented fixture (data-modeling skill, GOLD.md).
+"""The Gold views, rendered from destination/gold/gold.yaml and run on an invented fixture (data-modeling skill, GOLD.md).
 
 The fixture has four companies (one merged into another), two securities, a joint filing and a holding whose
 security was never mastered. Each test is one of the skill's proofs; the rendered Snowflake text is checked apart.
@@ -257,3 +257,10 @@ def test_a_code_set_with_two_versions_is_refused(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="invented-set holds 2 versions"):
         views.code_set_views({"code_sets": {"published": "reference/published", "name": "ref_{code_set}", "source": "rdm.x",
                                             "columns": ["code"], "requirement": "r"}})
+
+
+def test_the_gold_configuration_is_a_destination_not_a_rule():
+    """Operator, 2026-11-21: "move rules/gold to destination/gold": where Gold is written is not a rule."""
+    root = files.ROOT.parent
+    assert views.CONFIG == root / "destination" / "gold" / "gold.yaml" and views.CONFIG.is_file()
+    assert not (files.ROOT / "gold").exists()
