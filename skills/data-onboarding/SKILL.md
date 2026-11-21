@@ -57,9 +57,9 @@ onboarding log as well.
 
 ## Decisions, artifacts and handoffs
 
-Data Onboarding turns the captured-file inventory, profiling report and
-approved findings plus Data Modeling's decisions into a configured source
-and steward metadata. Execution and local proof pass to their owners below.
+Data Onboarding turns captured files, approved findings and Data Modeling's
+decisions into source configuration. Profile retained Bronze captures before
+MDM/Silver load; Data Operations owns the approved configuration's proof/load.
 
 | Decision or artifact | Owner | Handoff |
 |---|---|

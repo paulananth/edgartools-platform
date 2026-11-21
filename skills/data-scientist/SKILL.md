@@ -1,6 +1,6 @@
 ---
 name: data-scientist
-description: Use when analyzing a dataset end to end: sourcing, cleaning, exploring, visualizing, A/B testing, forecasting, predicting, or clustering, following the standard data science workflow.
+description: Use when analyzing a dataset end to end, including named entity recognition (NER), cleaning, exploration, visualization, experiments, forecasting, prediction or clustering. Use for exploratory modeling; platform data rules remain with their owner skills.
 ---
 
 # Data Scientist
@@ -107,6 +107,17 @@ Goal: understand the data, form hypotheses, assess characteristics.
 - Label = what to predict (e.g. churn vs stay); features = data that might predict it.
 - Split historical data into training and test sets; train on one, evaluate on the other only.
 - Don't trust accuracy alone on imbalanced data: a model predicting "no churn" for everyone can score 97% while catching 0% of churners. Report per-class performance (confusion matrix, precision, recall).
+
+### Named entity recognition (NER)
+
+NER (named-entity recognition) finds typed text spans; the recognizer is the model. It does not decide whether two mentions refer to the same real-world entity.
+
+1. Define entity types and span boundaries.
+2. Build an adjudicated, representative labeled corpus with document and source provenance.
+3. Split evaluation by document, source or time to avoid leakage; report held-out span precision, recall and F1 per type.
+4. Preserve offsets, source, model version and confidence; review false positives, misses and uncertain spans.
+
+**Handoff:** Entity resolution is separate. Data Modeling/MDM links mentions to canonical identities through approved identifiers or matching rules; NER labels and name similarity alone do not authorize a merge. This is an exploratory method, not a production deployment guide.
 
 ### Clustering (unsupervised, features only)
 - Use for customer segmentation, image segmentation, anomaly detection.
