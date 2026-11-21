@@ -14,6 +14,25 @@ Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#
 It answers: **is this change to the MDM store lean, fast on the engine it
 runs on, safe to migrate, and proved by the cheapest check that proves it?**
 
+## Decisions, artifacts and handoffs
+
+MDM Engineering owns decisions about reusable merge behavior, durable MDM
+storage, adapter operations and migrations, and the proof needed for a
+demonstrated engine or storage change. Its inputs are a configured policy or
+contract, an observed behavior gap that configuration cannot express, and the
+selected engine's requirements. Its outputs are shared engine or adapter
+changes, migrations where needed, and qualification evidence for the affected
+behavior. It does not decide what a source field means or refactor the engine
+to accommodate a source mapping.
+
+| Decision or artifact | Owner | Handoff |
+|---|---|---|
+| Source mapping, matching policy or quality rule when the existing engine can express it | [Data Onboarding](../data-onboarding/SKILL.md) for new configuration; [Refining Rules](../refining-rules/SKILL.md) for a live feed | The configured contract and rules identify the requested behavior; use MDM Engineering only if a demonstrated gap remains. |
+| A part's class, kind, identifiers, relationship meaning and time model | [Data Modeling](../data-modeling/SKILL.md) | The approved model and contract become MDM Engineering inputs when they require reusable engine behavior or storage. |
+| Merge decisions, identity replay, relationship computation, persistence, adapter parity, migrations and their qualification | MDM Engineering | Return the supported behavior, migration requirements and proof evidence to the caller. |
+| Silver table specification and load, monitoring or recovery of a configured feed | [Data Operations](../data-operations/SKILL.md); [Bookkeeping](../bookkeeping/SKILL.md) owns run control and recovery | MDM Engineering supplies the MDM behavior and store contract; operations owns the run and silver DDL. |
+| A failed or slow production run without a demonstrated code gap | [Production Support](../production-support/SKILL.md) | Bring back a reproducible engine or storage gap before requesting an MDM change. |
+
 The operator chooses PostgreSQL, MySQL or SQL Server Express. MDM has **one engine**: the mastering tables every merge
 writes, and the rules it runs by, registered in the Rules Database. Entity and source names and field policies arrive as
 data; storage holds no domain branch. Read [Storage on each database engine](references/storage-adapters.md) before
