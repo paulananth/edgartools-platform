@@ -33,9 +33,9 @@ These blockers order skill-improvement work. They do not activate optional sourc
 
 ## Acceptance checklist
 
-- [ ] Record distinct Given–When–Then scenarios and obtain the required scenario approval before test implementation.
-- [ ] Use the existing generic path to route a new source, a changed source and an interrupted load to their distinct owners without redoing completed phases.
-- [ ] Record stored outcomes, affected checks and limitations; no mock-call-only, static-text or tautological proof.
+- [x] Record distinct Given–When–Then scenarios and obtain the required scenario approval before test implementation. The three scenarios are under Answer. The operator approved them in this session on 2026-11-20. (2026-11-20 19:43 ET)
+- [x] Use the existing generic path to route a new source, a changed source and an interrupted load to their distinct owners without redoing completed phases. No such path exists. The route is skill text only. Linked [gap-data-platform-route](./gap-data-platform-route.md) instead of adding a router or a text-only test. (2026-11-20 19:43 ET)
+- [x] Record stored outcomes, affected checks and limitations; no mock-call-only, static-text or tautological proof. Outcome: no behavior was stored. Limitation: there is no executable route. This is not a PASS. (2026-11-20 19:43 ET)
 - [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md.
 - [x] Learning → skill: none; this documentation-only proposal establishes no verified reusable lesson to add to the skill. Verified by reviewing the scope and current evidence below. (2026-11-20 19:40 ET)
 
