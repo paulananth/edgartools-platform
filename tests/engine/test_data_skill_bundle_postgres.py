@@ -672,8 +672,8 @@ def mastered(engine):
     from sqlalchemy import text
 
     with engine.connect() as conn:
-        records = conn.execute(text("SELECT count(*) FROM mastering_record")).scalar()
-        rows = conn.execute(text("SELECT kind, status, body FROM mastering_master")).all()  # kind and status are columns
+        records = conn.execute(text("SELECT count(*) FROM mdm.mastering_record")).scalar()
+        rows = conn.execute(text("SELECT kind, status, body FROM mdm.mastering_master")).all()  # kind and status are columns
     current = [(kind, json.loads(body)) for kind, status, body in rows if status != "alias"]
     return records, dict(Counter(kind for kind, _ in current)), [body.get("fields", {}).get("name") for _, body in current]
 
@@ -726,7 +726,6 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
     with mdm_admin.begin() as conn:
         conn.exec_driver_sql("GRANT USAGE ON SCHEMA mdm TO mdm_reader")
         conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA mdm TO mdm_reader")
-        conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA public TO mdm_reader")
     mdm_reader = create_engine(mdm_admin.url.set(username="mdm_reader", password="test"))
     pipeline_name = f"parse-and-master-{trial_mode}"
     pipeline = copy.deepcopy({**MASTER, "pipeline": pipeline_name})

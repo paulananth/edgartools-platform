@@ -25,8 +25,6 @@ def collect(env, as_admin: bool = False) -> dict:
     import psycopg2
 
     try:
-        from edgar_warehouse.database_connections import instance_url
-
         url = instance_url(env).set(drivername="postgresql").render_as_string(hide_password=False)
         conn = psycopg2.connect(url, connect_timeout=10)
     except psycopg2.Error:

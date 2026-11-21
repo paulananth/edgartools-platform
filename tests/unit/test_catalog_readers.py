@@ -187,7 +187,7 @@ def test_a_reader_is_granted_select_on_each_exposed_table_and_nothing_wider(read
 
 
 def test_the_exposure_list_gives_each_stores_schema_and_tables(readers):
-    assert readers.exposed(EXPOSURE_FILE, "mdm") == ("public", ["mastering_identifier", "mastering_master"])
+    assert readers.exposed(EXPOSURE_FILE, "mdm") == ("mdm", ["mastering_identifier", "mastering_master"])
     schema, tables = readers.exposed(EXPOSURE_FILE, "silver")
     assert schema == "silver" and "thirteenf_holding" in tables and len(tables) == 16
     with pytest.raises(ValueError, match="names no table"):
@@ -230,7 +230,7 @@ def test_one_reader_login_serves_every_store_and_is_made_once(readers, monkeypat
     a, b = readers.urlsplit(url1), readers.urlsplit(url2)
     assert (a.username, a.password) == (b.username, b.password) and (a.path, b.path) == ("/data", "/data")  # one credential; mdm and rdm share the data database
     joined = "\n".join(statements)
-    assert 'GRANT SELECT ON TABLE "rdm"."published_code"' in joined and 'GRANT SELECT ON TABLE "public"."mastering_master"' in joined
+    assert 'GRANT SELECT ON TABLE "rdm"."published_code"' in joined and 'GRANT SELECT ON TABLE "mdm"."mastering_master"' in joined
     assert "ALL TABLES" not in joined
 
 

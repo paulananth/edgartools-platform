@@ -16,12 +16,12 @@ from edgar_warehouse.mdm.store import migrate
 def _uncommented(conn) -> list[str]:
     return list(conn.scalars(text("""
         SELECT 'relation ' || c.relname FROM pg_class c
-        WHERE c.relnamespace = 'mdm'::regnamespace AND c.relkind IN ('r', 'v')
+        WHERE c.relnamespace = 'mdm'::regnamespace AND c.relkind IN ('r', 'v') AND c.relname NOT LIKE 'mastering\\_%'
           AND coalesce(obj_description(c.oid, 'pg_class'), '') = ''
         UNION ALL
         SELECT 'column ' || c.relname || '.' || a.attname
         FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid
-        WHERE c.relnamespace = 'mdm'::regnamespace AND c.relkind IN ('r', 'v')
+        WHERE c.relnamespace = 'mdm'::regnamespace AND c.relkind IN ('r', 'v') AND c.relname NOT LIKE 'mastering\\_%'
           AND a.attnum > 0 AND NOT a.attisdropped
           AND coalesce(col_description(c.oid, a.attnum), '') = ''
         UNION ALL
@@ -42,10 +42,10 @@ def test_init_installs_one_stamp_and_the_mastering_tables_only(database):
     """The data database holds MDM's init stamp and the mastering tables: no other MDM table, view or function."""
     with database.admin.connect() as conn:
         assert conn.execute(text("SELECT name FROM mdm.migration")).scalars().all() == ["schema.sql"]
-        assert conn.execute(text("SELECT tablename FROM pg_tables WHERE schemaname='mdm'")).scalars().all() == ["migration"]
-        others = conn.execute(text("""SELECT tablename FROM pg_tables WHERE schemaname='public'
+        others = conn.execute(text("""SELECT tablename FROM pg_tables WHERE schemaname='mdm'
             AND tablename NOT LIKE 'mastering\\_%'""")).scalars().all()
-        assert others == []
+        assert others == ["migration"]
+        assert conn.execute(text("SELECT tablename FROM pg_tables WHERE schemaname='public'")).scalars().all() == []  # nothing lives in public
         assert conn.scalar(text("""SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
             WHERE n.nspname IN ('mdm', 'public')""")) == 0
 
