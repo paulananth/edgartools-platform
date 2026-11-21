@@ -736,6 +736,7 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
                          "leases": ["combined-output:{batch_id}"], "checks": ["input.hash", "output.receipt", "source.combined"]})
         next(step for step in steps if step["name"] == "prepare")["requires"] = ["combine"]
     rules_root = tmp_path / "rules-root"
+    (tmp_path / "sources").mkdir(exist_ok=True)  # beside the rules folder
     files.LAYOUT["pipeline"][1](pipeline, rules_root / "pipelines" / pipeline_name / "pipeline.yaml")
     contract_bytes, filer_bytes = READ_CONTRACT, FILERS
     if trial_mode == "parquet-records":

@@ -51,6 +51,7 @@ def test_installed_rules_and_real_workers_complete_and_resume_one_run(installed,
             body = config(steps=2)
             body["bookkeeping"]["targets"]["silver"]["steps"][1]["operation"] = "jsonl.count"
             from edgar_warehouse.rules import files
+            (root / "sources").mkdir(exist_ok=True)  # beside the rules folder
             files.LAYOUT["pipeline"][1](body, root / "rules-root" / "pipelines" / "invented.installed-control" / "pipeline.yaml")
             artifacts = Artifacts()
             source = artifacts.put(root.as_uri() + "/inputs", {"invented": 10**50})

@@ -852,7 +852,7 @@ def test_two_workers_in_their_own_processes_complete_a_cli_submitted_run(databas
     for key, value in environment.items():
         monkeypatch.setenv(key, value)
     from edgar_warehouse.rules import files
-    files.write_source(body, tmp_path / "rules-root" / "sources" / name)
+    files.write_source(body, tmp_path / "sources" / name)
     assert main(["rules", "run", "--source", name, "--target", "silver", "--root", str(tmp_path / "rules-root"),
                  "--input-manifest", inputs["uri"], "--input-sha256", inputs["sha256"]]) == 0
     submitted = json.loads(capsys.readouterr().out)
@@ -967,7 +967,7 @@ def test_rules_run_submits_a_source_with_acquisition_over_captured_files(databas
                        "BOOKKEEPING_MANIFEST_ROOT": (tmp_path / "cli-manifests").as_uri()}.items():
         monkeypatch.setenv(key, value)
     from edgar_warehouse.rules import files
-    files.write_source(body, tmp_path / "rules-root" / "sources" / name)
+    files.write_source(body, tmp_path / "sources" / name)
     assert main(["rules", "run", "--source", name, "--target", "silver", "--root", str(tmp_path / "rules-root"),
                  "--input-manifest", inputs["uri"], "--input-sha256", inputs["sha256"]]) == 0
     submitted = json.loads(capsys.readouterr().out)
