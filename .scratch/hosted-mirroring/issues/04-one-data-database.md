@@ -23,7 +23,8 @@ and the rest in another db", then "Yes, open the ticket and start, make the skil
 - [x] Research: mirror scope, the publication limit, the earlier qualification, the code's store layout. 2026-11-19 21:19 ET
 - [x] Skill: `CONNECTIONS.md` holds the two databases and two URLs and why; `HOSTED-MIRRORING.md` plans mirrors from the
       exposure list by database, checks the publication limit, and answers a shortage with the store layout. 2026-11-19 21:19 ET
-- [ ] A mirror-plan script the skill runs (exposure list, layout, publication limit → the plan, or the refusal)
+- [x] A mirror-plan script the skill runs: `mirror_sql.py plan` (exposure list, layout, publication limit → the plan, or the refusal); operator, 2026-11-21: "only data db need to be mirrored not control db". Tests failed first with no `plan` (4 AttributeErrors), 12 pass; refuses another database, a CONTROL_URL layer, no free publication 2026-11-21 07:45 ET
+- [ ] Operator says the data database holds schemas `mdm`, `rdm` and `silver`, but mastering sits in `public` (mirrored as `PUBLIC`; `plan` prints `public -> PUBLIC`). Moving it into `mdm` is its own change (the ticket's struck part): needs the operator's word
 - [x] Consult the GoF reviewer: the shape stands; one finding, the store's database rule is copied in three places
       (`database_connections.store_url`, Bookkeeping's `default_url`, the Change Journal's `_default_url`), so the change goes in
       one resolver and the copies call it. 2026-11-19 21:19 ET
