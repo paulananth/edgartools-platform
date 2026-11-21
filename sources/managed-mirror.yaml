@@ -2,7 +2,7 @@
 # This file is the system of record for them. A table is mirrored only if it is listed here, and it may be listed only
 # if rules/exposure.yaml lets it leave the stores. The mirror's SQL (skills/data-platform/scripts/exposure/mirror_sql.py)
 # is written from this list, so the live mirror and this list cannot differ without a read-back that says so; Gold
-# (rules/gold) may read only what is listed. The target database comes from snowflake.yaml (`mirror.database`).
+# (destination/gold) may read only what is listed. The target database comes from snowflake.yaml (`mirror.database`).
 # A change to the list is a change to the mirror (ALTER_MIRROR), approved like a new mirror: it costs per table.
 mirror: edgartools_mirror         # the name given to CREATE_MIRROR
 postgres_database: data           # the one database the mirror reads (its schemas are the exposure layers' source_schema)
