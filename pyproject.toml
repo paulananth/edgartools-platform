@@ -68,6 +68,7 @@ include = [
   "edgar_warehouse/rdm/migrations/*.sql",
   "edgar_warehouse/silver_writer/migrations/*.sql",
   "rules/**/*.yaml",
+  "sources/**/*.yaml",
   "rules/reference/published/**/*.jsonl",
   "rules/reference/published/**/*.json",
 ]

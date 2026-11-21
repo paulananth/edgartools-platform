@@ -17,7 +17,7 @@ from . import waterfall_passes
 from .gleif_publication import validate_metadata
 from .store import Conflict
 
-GLEIF_READING = rules_files.ROOT / "sources/gleif/name-count-complete-stream.yaml"
+GLEIF_READING = rules_files.sources_root() / "gleif/name-count-complete-stream.yaml"
 # The recipe's own spool and output limits: 13.25 GB expanded projects to about 211 MB and 3.3 million rows.
 GLEIF_BYTES = 1024**3
 GLEIF_ROWS = 10_000_000

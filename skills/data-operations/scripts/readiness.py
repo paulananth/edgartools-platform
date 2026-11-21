@@ -199,7 +199,7 @@ def sql_facts(reader_env: dict, env: dict) -> tuple[dict | None, dict | None, in
             with psycopg2.connect(load_chain.in_database(load_chain.data_url(env), database), connect_timeout=10) as conn, conn.cursor() as cur:
                 cur.execute(sql)
                 return cur.fetchone()[0]
-        specs = len(list((REPO / "rules" / "sources").glob("*/silver-*.yaml")))
+        specs = len(list((REPO / "sources").glob("*/silver-*.yaml")))
         reference = {"codes": count("data", "select count(*) from rdm.published_code"), "specs": specs,
                      "silver_tables": count("data", "select count(*) from information_schema.tables where table_schema = 'silver'")}
     except Exception:  # noqa: BLE001

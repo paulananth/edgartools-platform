@@ -20,7 +20,7 @@ MEMBERS = ["level1", "relationships", "reporting-exceptions"]
 
 
 def configured(member, format, *, delta=False):
-    rules = files.load(files.ROOT / "sources" / "gleif" / f"{member}-{format}.yaml")
+    rules = files.load(files.sources_root() / "gleif" / f"{member}-{format}.yaml")
     if "approved_scope" in rules["read"].get("references", {}):  # JSON Level 1 reads every record
         rules["read"]["references"]["approved_scope"] = {LEI_A: {"selected": True}, LEI_B: {"selected": True}}
     if format == "xml":

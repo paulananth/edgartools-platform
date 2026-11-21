@@ -1,6 +1,6 @@
 """The SEC Company source's governance inputs, read from `rules/`.
 
-The Dataset Contract is `rules/sources/sec.company/source.yaml`
+The Dataset Contract is `sources/sec.company/source.yaml`
 and the Mastering Policy is `rules/merge/`, edited and reviewed as files
 (rules skill ticket 01). Preparation neither activates source coverage nor
 binds identities.

@@ -24,7 +24,7 @@ from tests.integration.test_silver_land_worker_postgres import Artifacts
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
 from tests.support.patching import checked
 
-FOLDER = files.ROOT / "sources" / "sec.company-facts"
+FOLDER = files.sources_root() / "sec.company-facts"
 TABLES = ("silver-company-fact.yaml", "silver-company-line-item.yaml", "silver-company-measure.yaml")
 
 

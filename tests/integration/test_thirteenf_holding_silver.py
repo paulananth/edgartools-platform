@@ -24,7 +24,7 @@ from tests.integration.test_silver_writer_postgres import RUNTIME, silver_databa
 from tests.integration.test_thirteenf_securities_target_postgres import ALSO, BAD, GOOD, SOURCE, capture
 from tests.support.bookkeeping_protocol import drive
 
-FOLDER = files.ROOT / "sources" / SOURCE
+FOLDER = files.sources_root() / SOURCE
 
 
 def holding(cusip, name, *, shares="100", value="5000", discretion="SOLE", put_call=""):

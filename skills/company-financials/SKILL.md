@@ -91,7 +91,7 @@ Evidence and sources: `.scratch/company-financials/research/02-vendor-standards.
   crosswalk (Recommended)"): `financial-line-items`, 23 codes with label,
   definition and period (duration or instant), crosswalked to the `us-gaap`,
   `ifrs-full` and `dei` concepts each tries (a computed value's terms stay in
-  the map). The rules file `rules/sources/sec.company-facts/line-items.yaml`
+  the map). The rules file `sources/sec.company-facts/line-items.yaml`
   names those codes and holds the order, the flags and the fallbacks; a test
   holds the two equal. The taxonomies are not loaded into RDM, and a
   concept's label and description stay out of silver: the same text on every
@@ -187,7 +187,7 @@ Evidence and sources: `.scratch/company-financials/research/02-vendor-standards.
 
 - **Configured reading only** (operator: "configure only"): a
   source-extract contract, no Python custom step. It is
-  `rules/sources/sec.company-facts/facts.yaml`. Its `company_fact`
+  `sources/sec.company-facts/facts.yaml`. Its `company_fact`
   table gives one row per filed fact through the engine's generic `nest`
   iteration (operator: "Engine step, local
   (Recommended)"), the rows silver's `company_fact` lands.
@@ -277,6 +277,6 @@ Reloaded from `rules/reference/published/` by `scripts/dev/reload_rdm.py`; the w
 
 | Code set | Source | Ticket |
 |---|---|---|
-| `financial-line-items` | internal: the line-item map `rules/sources/sec.company-facts/line-items.yaml` and company-financials research 01 | 46 |
+| `financial-line-items` | internal: the line-item map `sources/sec.company-facts/line-items.yaml` and company-financials research 01 | 46 |
 | `corporate-tax-rates` | OECD Corporate Tax Statistics, dataflow `OECD.CTP.TPS` `DSD_TAX_CIT@DF_CIT` 2.0 (combined central and sub-central statutory rate) | 133 |
 | `sec-sic-codes` | the SEC's company submissions: 407 SIC codes, each with its one description; `0000` kept invalid | 129 |

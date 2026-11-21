@@ -1,4 +1,4 @@
-"""The company facts source extract (`rules/sources/sec.company-facts/facts.yaml`, ticket 45).
+"""The company facts source extract (`sources/sec.company-facts/facts.yaml`, ticket 45).
 
 One table per taxonomy, one row per concept, its units kept whole; every figure
 exact, a bigint or a big decimal, never a float (tickets 128 and 134; operator,
@@ -14,7 +14,7 @@ import pytest
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 
-CONTRACT = files.load(files.ROOT / "sources" / "sec.company-facts" / "facts.yaml")
+CONTRACT = files.load(files.sources_root() / "sec.company-facts" / "facts.yaml")
 TAXONOMIES = ["dei", "ecd", "ffd", "ifrs-full", "invest", "rxp", "srt", "us-gaap", "vip"]
 
 

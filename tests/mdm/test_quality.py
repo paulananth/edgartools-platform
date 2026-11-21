@@ -253,10 +253,10 @@ class TestTheReviewFixes:
     @pytest.mark.parametrize("kind", ["source", "merge"])
     def test_each_kind_reads_and_writes_its_whole_layout(self, kind, tmp_path):
         read_, write = files.LAYOUT[kind]
-        main = {"source": files.ROOT / "sources" / "gleif" / "source.yaml",
+        main = {"source": files.sources_root() / "gleif" / "source.yaml",
                 "merge": files.ROOT / "merge" / "policy.yaml"}[kind]
         body = read_(main)
-        out = tmp_path / main.relative_to(files.ROOT)
+        out = tmp_path / (main.relative_to(files.ROOT) if main.is_relative_to(files.ROOT) else main.relative_to(files.ROOT.parent))
         write(body, out)
         assert read_(out) == body
 

@@ -43,22 +43,22 @@ One provider or captured delivery can therefore support several contracts.
 
 | Source definition | What its rules describe |
 | --- | --- |
-| [SEC Company submissions](rules/sources/sec.company/source.yaml) | Company evidence and identity from SEC submissions documents. |
-| [SEC Person submissions](rules/sources/sec.submissions.person/source.yaml) | Person evidence from the same submissions family, under separate classification and mapping rules. |
-| [GLEIF](rules/sources/gleif/source.yaml) | Legal-entity evidence, accounting-parent relationships and reporting exceptions. |
-| [IAPD Form ADV](rules/sources/iapd.adv/source.yaml) | Adviser filings and custodians mapped to Company identities; custody amounts remain separate facts. |
-| [SEC ownership, Forms 3/4/5](rules/sources/sec.ownership/source.yaml) | Reporting-owner identities and dated links to issuers. Transaction-table and pipeline work have separate qualification requirements. |
-| [SEC 13F information tables](rules/sources/sec.thirteenf.securities/source.yaml) | Security evidence keyed by CUSIP, keeping the filed issuer name and security title. |
-| [SEC N-PORT registrants](rules/sources/sec.nport.registrant/source.yaml) | Filing registrants mapped to Company by CIK, retaining the latest filing's name and address together. |
-| [SEC N-PORT securities](rules/sources/sec.nport.security/source.yaml) | Security evidence through separate CUSIP and ISIN-only Dataset Contracts. |
-| [SEC N-PORT fund series](rules/sources/sec.nport.fund/source.yaml) | Fund Structure evidence by SEC series ID and eligible LEI, keeping the registrant CIK as a lookup reference. |
+| [SEC Company submissions](sources/sec.company/source.yaml) | Company evidence and identity from SEC submissions documents. |
+| [SEC Person submissions](sources/sec.submissions.person/source.yaml) | Person evidence from the same submissions family, under separate classification and mapping rules. |
+| [GLEIF](sources/gleif/source.yaml) | Legal-entity evidence, accounting-parent relationships and reporting exceptions. |
+| [IAPD Form ADV](sources/iapd.adv/source.yaml) | Adviser filings and custodians mapped to Company identities; custody amounts remain separate facts. |
+| [SEC ownership, Forms 3/4/5](sources/sec.ownership/source.yaml) | Reporting-owner identities and dated links to issuers. Transaction-table and pipeline work have separate qualification requirements. |
+| [SEC 13F information tables](sources/sec.thirteenf.securities/source.yaml) | Security evidence keyed by CUSIP, keeping the filed issuer name and security title. |
+| [SEC N-PORT registrants](sources/sec.nport.registrant/source.yaml) | Filing registrants mapped to Company by CIK, retaining the latest filing's name and address together. |
+| [SEC N-PORT securities](sources/sec.nport.security/source.yaml) | Security evidence through separate CUSIP and ISIN-only Dataset Contracts. |
+| [SEC N-PORT fund series](sources/sec.nport.fund/source.yaml) | Fund Structure evidence by SEC series ID and eligible LEI, keeping the registrant CIK as a lookup reference. |
 
 N-PORT's registrant, fund series and held security describe different subjects.
 They do not become one identity because they appear in the same filing. The
 current Fund rules leave the subfund relationship for later evidence of its
 start date; they do not infer it from the registrant CIK alone.
 
-[OpenFIGI](rules/sources/openfigi/source.yaml) masters Securities from captured
+[OpenFIGI](sources/openfigi/source.yaml) masters Securities from captured
 mapping answers: each answer carries the CUSIP or ISIN asked and every listing's
 FIGI, so N-PORT's and 13F's records join the same Security by any of them.
 
@@ -214,7 +214,7 @@ gets its own onboarding and source folder.
    order: master data first, then required reference data, then transaction
    tables and separate relationships in silver. Metadata parts go to Bookkeeping.
 3. **Name the feed and define its contracts.** Create
-   `rules/sources/<source>/source.yaml`. Declare how to read the capture and
+   `sources/<source>/source.yaml`. Declare how to read the capture and
    how each record type maps to a master kind: record key, identity identifiers,
    cross-references, fields, relationships and source time. State whether
    the delivery is full or incremental; absence from a later file does not by
@@ -321,8 +321,8 @@ contract's declared reasons; a rejected record must remain visible in the report
   [refining-rules](skills/refining-rules/SKILL.md) for changes to an existing feed.
 
 For a concrete example, read the
-[Company source contract](rules/sources/sec.company/source.yaml),
-its [quality rules](rules/sources/sec.company/quality.yaml) and
+[Company source contract](sources/sec.company/source.yaml),
+its [quality rules](sources/sec.company/quality.yaml) and
 the [Company merge policy](rules/merge/kinds/company.yaml) together. The
 [contract reference](skills/data-onboarding/REFERENCE.md) explains the full language.
 
@@ -426,7 +426,7 @@ the rules files** into the platform's `edgartools-rules` service.
    the profiled data passes them, reference code-set needs and silver fields
    for every part, including master-data parts.
 2. After approval, profiling's `catalog` mode produces
-   `rules/sources/<source>/profile.yaml`. This public summary carries schema
+   `sources/<source>/profile.yaml`. This public summary carries schema
    names, types, classifications and counts; samples and actual source values
    stay outside the public repository.
 3. Onboarding or refinement generates the Mapping Document and reconciles

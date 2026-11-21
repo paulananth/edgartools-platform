@@ -8,7 +8,7 @@ description: Analyze data quality defects, including tracing a mastered entity t
 Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#the-seven-wastes) and drop what adds no value.
 
 > Part of the **data-platform** skill set. data-onboarding and refining-rules
-> call it; remediation writes only `rules/sources/<source>/quality.yaml`.
+> call it; remediation writes only `sources/<source>/quality.yaml`.
 
 It answers: **which rules does this part need, which defects does it have,
 which check or fix carries each, and what does each one do on the records?**
@@ -280,7 +280,7 @@ differs), and a fix with its evidence, or `needs_steward: true`.
 
 ### write: the feed's quality.yaml
 
-- `rules/sources/<source>/quality.yaml`: `version`, then `quality`, one
+- `sources/<source>/quality.yaml`: `version`, then `quality`, one
   entry per source code; the format is in data-onboarding
   [REFERENCE.md](../data-onboarding/REFERENCE.md), "Data quality".
 - A change is a new `version` name, so it is a new source version.

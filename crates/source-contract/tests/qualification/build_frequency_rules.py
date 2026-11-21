@@ -8,7 +8,7 @@ from edgar_warehouse.mdm import sec_company, waterfall_passes
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--check', action='store_true')
 args = parser.parse_args()
-root=files.ROOT/'sources/gleif'
+root=files.sources_root() / 'gleif'
 
 def emit(name, content):
     path = root / name

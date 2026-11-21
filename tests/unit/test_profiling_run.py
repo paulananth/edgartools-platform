@@ -103,7 +103,7 @@ def test_approve_records_exact_words(result):
 
 
 def test_the_catalog_summary_names_and_counts_but_never_a_value(result, tmp_path):
-    path, out = result["out"] / "findings.yaml", tmp_path / "rules" / "sources" / "fixture" / "profile.yaml"
+    path, out = result["out"] / "findings.yaml", tmp_path / "sources" / "fixture" / "profile.yaml"
     findings = yaml.safe_load(path.read_text())
     assert findings["approval"]["status"] == "approved"  # approved by the test above
     assert profile_data.main(["catalog", "--findings", str(path), "--out", str(out)]) == 0

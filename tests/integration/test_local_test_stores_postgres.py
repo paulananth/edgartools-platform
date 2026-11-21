@@ -87,8 +87,8 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
         # registers its datasets.
         person = files.source("sec.submissions.person")
         assert "acquisition" not in person
-        files.write_source(person, root / "sources" / "sec.submissions.person")
-        files.write_source({**person, "source": "invented.other"}, root / "sources" / "invented.other")
+        files.write_source(person, root.parent / "sources" / "sec.submissions.person")
+        files.write_source({**person, "source": "invented.other"}, root.parent / "sources" / "invented.other")
         # The registry is the Rules Database's (the control database): governance adds to it.
         governance = engine("control", "rules_governance")
         with governance.begin() as conn:

@@ -37,7 +37,7 @@ from tests.support.bookkeeping_protocol import finish
 from tests.support.memory_journal import MemoryJournal
 
 SOURCE = "sec.company-facts"
-FOLDER = files.ROOT / "sources" / SOURCE
+FOLDER = files.sources_root() / SOURCE
 WORKERS = {"source.read": source_read, "silver.land": silver_land}
 FILING = {"accn": "0000000042-26-000001", "fy": 2025, "fp": "FY", "form": "10-K", "filed": "2026-02-01"}
 CHECKS = {"one_form_per_filing", "one_filed_per_filing", "one_fiscal_year_filed_per_filing",

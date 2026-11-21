@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from edgar_warehouse.rules.files import load
+from edgar_warehouse.rules.files import load, sources_root
 
 from .config import digest
 
@@ -17,7 +17,7 @@ def resolve_feed(root: Path, source: str, feed: str) -> dict:
         raise ValueError("Both source and feed are required")
     documents = [
         (path.parent.name, load(path))
-        for path in sorted(root.glob("sources/*/source.yaml"))
+        for path in sorted(sources_root(root).glob("*/source.yaml"))
     ]
     matches = [(name, body) for name, body in documents if name == source]
     if not matches:

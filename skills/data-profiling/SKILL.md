@@ -199,7 +199,7 @@ uv run --with duckdb --with pyyaml python profile_data.py --help
 | quality | Every data quality rule each part needs on every load, with the rows that fail it: a defect when above 0, a rule the clean data passes at 0 (a key column filled, an identifier's one shape or check digit, a link that resolves, a code list); masked examples; each invalid hierarchy row marked with an evidence-backed fix or "needs steward" | `quality`, `invalid_rows.jsonl` |
 | code sets | The RDM code sets the data set needs: each existing or proposed set, the columns that use it, how many codes | `code_sets` |
 | suggest-store, silver | Advice: MDM, RDM, MDM relationships, silver, bookkeeping; a silver table spec per part under "Silver fields" (a master's rows also carry their own MDM id) | `store_suggestion`, `silver` |
-| catalog | From approved findings, the public summary the Data Catalog shows: every part's silver fields and quality rules, and the code sets; names and counts only. It declares every part as a silver table, landed or not, and two parts may name one table, which the catalog's profile check refuses; so data-onboarding writes it when a part lands in silver (its **plan-parts** step) | `rules/sources/<source>/profile.yaml` |
+| catalog | From approved findings, the public summary the Data Catalog shows: every part's silver fields and quality rules, and the code sets; names and counts only. It declares every part as a silver table, landed or not, and two parts may name one table, which the catalog's profile check refuses; so data-onboarding writes it when a part lands in silver (its **plan-parts** step) | `sources/<source>/profile.yaml` |
 | report | `REPORT.md` and `findings.yaml` | files |
 | approve | Records the operator's approval in their exact words | `approval` |
 | rank sources | Several sources of one kind, joined on the identifier they share: per field, how much each fills, how often it states one value, how often each pair agrees; a recommended source order (`rank_sources.py`, below) | `ranking.yaml`, `RANKING.md` |
@@ -409,11 +409,11 @@ that matter most:
 - **code_sets:** the RDM code sets the data needs, one per existing or
   proposed set, with every column that uses it (see "Reference data", below).
 - **catalog:** once approved, `profile_data.py catalog --findings <folder>/findings.yaml
-  --out rules/sources/<source>/profile.yaml` writes the public summary; the
+  --out sources/<source>/profile.yaml` writes the public summary; the
   Data Catalog (`edgar-warehouse rules catalog`) shows it as the `silver` and
   `rdm` databases. It holds names, types and counts only: never an example, a
   top value or a check's values, since the repository is public.
-  A table onboarding registers (`rules/sources/<source>/silver-*.yaml`, what
+  A table onboarding registers (`sources/<source>/silver-*.yaml`, what
   `silver register` makes) replaces the profile's proposal of the same name, so
   the catalog shows each table as it lands, with its MDM id, quality and load
   time columns; a source with a registered table and no profile gets its silver

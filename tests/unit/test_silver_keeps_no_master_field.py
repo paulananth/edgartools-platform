@@ -8,7 +8,7 @@ import pytest
 
 from edgar_warehouse.rules import files
 
-SOURCES = sorted(path.name for path in (files.ROOT / "sources").iterdir() if (path / "source.yaml").is_file())
+SOURCES = sorted(path.name for path in (files.sources_root()).iterdir() if (path / "source.yaml").is_file())
 
 # A column kept by a ruling, never by habit: (source, column) -> the ruling.
 KEPT = {
@@ -48,7 +48,7 @@ def kept_to_find_the_master(spec: dict, contract: dict) -> set[str]:
 def test_a_silver_table_copies_no_field_its_dataset_contract_maps(name):
     reading = files.source(name)
     contracts = reading.get("dataset_contracts") or {}
-    specs = [files.load(path) for path in sorted((files.ROOT / "sources" / name).glob("silver-*.yaml"))]
+    specs = [files.load(path) for path in sorted((files.sources_root() / name).glob("silver-*.yaml"))]
     copies = []
     for spec in specs:
         for code, contract in contracts.items():

@@ -19,7 +19,7 @@ from edgar_warehouse.silver_writer.writer import land
 from tests.integration.test_company_line_item_silver import fact, no_masters
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
 
-FOLDER = files.ROOT / "sources" / "sec.company-facts"
+FOLDER = files.sources_root() / "sec.company-facts"
 (GROWING, LOSS, STATUTORY, NO_PLACE, NO_RATE, BANK, UNMASTERED, EUROS, MOVED, TWO_ENDS, GAP, MIXED_PARTS) = (
     f"{n:010d}" for n in range(1, 13))
 # Each company's SIC and place of incorporation, as its Company master holds them; UNMASTERED has none.

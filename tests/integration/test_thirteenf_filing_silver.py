@@ -25,7 +25,7 @@ from tests.support.memory_journal import MemoryJournal
 
 
 SOURCE = "sec.thirteenf.filings"
-FOLDER = files.ROOT / "sources" / SOURCE
+FOLDER = files.sources_root() / SOURCE
 MANAGERS = (111, 222)
 
 

@@ -15,7 +15,7 @@ from tests.engine.test_company_preparation import company_row, CONTEXT
 from tests.engine.test_source_combine import envelope
 from tests.support.exact import require_tables
 
-ROOT = files.ROOT / 'sources/sec.company'
+ROOT = files.sources_root() / 'sec.company'
 
 
 def read(store, root, name, rules, payload, context, *, more_payloads=()):

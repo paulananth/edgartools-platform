@@ -23,7 +23,7 @@ from edgar_warehouse.rules import files
 from tests.support import masters, source_chain as chain
 
 NAME, FILINGS, CUSTODIANS = "iapd.adv", "iapd.adv.filings.v2", "iapd.adv.custodians.v1"
-FOLDER = files.ROOT / "sources" / NAME
+FOLDER = files.sources_root() / NAME
 CRD, BD, LEI = "999001", "8-99901", "9999000000EXAMPLE016"  # invented; the LEI's check digits are valid
 MAY, JUNE = "2026-05-31T00:00:00+00:00", "2026-06-30T00:00:00+00:00"
 BASE = ["FilingID", "DateSubmitted", "1A", "1B1", "1D", "1E1", "1P", "1F1-Street 1", "1F1-Street 2",

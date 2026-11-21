@@ -12,7 +12,7 @@ from tests.support.exact import require_tables
 from tests.engine.test_company_preparation import filing_row
 from tests.engine.test_source_combine import envelope, group, join, plan, table
 
-CONTRACT = files.load(Path('rules/sources/sec.company/pagination.yaml'))
+CONTRACT = files.load(Path('sources/sec.company/pagination.yaml'))
 CONTEXT = {'cik': 1, 'sync_run_id': 'capture', 'raw_object_id': '0' * 64, 'load_mode': 'default'}
 
 

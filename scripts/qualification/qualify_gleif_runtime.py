@@ -55,7 +55,7 @@ def qualify(member, format_name, parity_path, parity_sha256, publisher_path, pub
                *source_attestation.runtime_files(),
                Path(files.__file__),
                Path(store_module.__file__), Path(evidence_module.__file__), *source_engine.runtime_files(),
-               files.ROOT / "sources" / "gleif" / f"{member.replace('_', '-')}-{format_name}.yaml",
+               files.sources_root() / "gleif" / f"{member.replace('_', '-')}-{format_name}.yaml",
                parity_path, publisher_path]
 
     def evidence():

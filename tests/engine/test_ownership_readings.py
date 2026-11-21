@@ -1,4 +1,4 @@
-"""The ownership readings (`rules/sources/sec.ownership/`, profiling ticket 07).
+"""The ownership readings (`sources/sec.ownership/`, profiling ticket 07).
 
 A Form 3, 4 or 5 document is read the same way captured as bare XML (the
 accession number from the caller) and inside the SGML submission file (the accession number
@@ -17,7 +17,7 @@ from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 from tests.engine.test_sgml_container import document, submission
 
-FOLDER = files.ROOT / "sources" / "sec.ownership"
+FOLDER = files.sources_root() / "sec.ownership"
 XML, SGML = (files.load(FOLDER / f"ownership-{shape}.yaml") for shape in ("xml", "sgml"))
 SECURITY = files.load(FOLDER / "ownership-security-sgml.yaml")
 ACCESSION = "0000000000-26-000001"

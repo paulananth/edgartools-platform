@@ -30,7 +30,7 @@ def check(tmp_path, capsys, entries, *options):
     path.write_text(files.dumps({"version": 1, "sources": entries}))
     parser = argparse.ArgumentParser()
     register(parser.add_subparsers())
-    args = parser.parse_args(["rules", "sequence", "check", "--root", str(tmp_path),
+    args = parser.parse_args(["rules", "sequence", "check", "--root", str(tmp_path / "rules"),
                              "--file", str(path), *options])
     code = args.handler(args)
     output = capsys.readouterr()
@@ -138,7 +138,7 @@ def test_default_inventory_accounts_for_each_committed_source(capsys):
     args = parser.parse_args(["rules", "sequence", "check", "--root", str(files.ROOT)])
     assert args.handler(args) == 0  # every committed source is configured (exit 3 would name a blocked one)
     result = json.loads(capsys.readouterr().out)
-    expected_sources = {path.parent.name for path in (files.ROOT / "sources").glob("*/source.yaml")}
+    expected_sources = {path.parent.name for path in (files.sources_root()).glob("*/source.yaml")}
     assert set(result["sources"]) == expected_sources
     assert result["order"] == ["sec.company", "gleif", "sec.nport.registrant", "sec.company-facts",
                                "sec.registration", "sec.prospectus", "sec.ipo", "sec.submissions.person", "sec.nport.fund", "sec.ncen.registrant", "iapd.adv",

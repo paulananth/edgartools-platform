@@ -18,7 +18,7 @@ from edgar_warehouse.silver_writer.sink import PostgresSink
 from edgar_warehouse.silver_writer.writer import land
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
 
-FOLDER = files.ROOT / "sources" / "sec.company-facts"
+FOLDER = files.sources_root() / "sec.company-facts"
 US, EU, MARCH, NEXT = "0000000001", "0000000003", "0000000002", "0000000004"
 
 

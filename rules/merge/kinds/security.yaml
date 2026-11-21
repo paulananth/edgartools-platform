@@ -1,6 +1,6 @@
 # Security merge rules (a new kind, ticket 79). Source: the SEC Form 13F
 # information tables, one record per CUSIP over a data set
-# (rules/sources/sec.thirteenf.securities). Rulings it rests on
+# (sources/sec.thirteenf.securities). Rulings it rests on
 # (operator, 2026-10-14): "CUSIP and ISIN join" (one CUSIP is one Security;
 # FIGI, ticker and SEDOL are lookup only); "Securities only, options aside";
 # "A" (the Security carries the issuer name and class title as filed).

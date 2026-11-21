@@ -56,7 +56,7 @@ def source_rules(source: str) -> dict:
     from edgar_warehouse.rules import files as rules_files
     from edgar_warehouse.rules.shape import expand_source
 
-    folder = rules_files.ROOT / "sources" / source
+    folder = rules_files.sources_root() / source
     found = {path.name: expand_source(rules_files.contract(path), folder) for path in sorted(folder.glob("*.yaml"))}
     # A target's grain, and what only a target held by the unit reads, say how much of its work Bookkeeping holds,
     # not what the work writes: changing one processes no file again.

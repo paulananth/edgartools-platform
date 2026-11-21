@@ -21,13 +21,17 @@ def _rules_parts(paths: Iterable[str]) -> list[PurePosixPath]:
             if PurePosixPath(path).parts[:1] == ("rules",)]
 
 
+def _source_parts(paths: Iterable[str]) -> list[PurePosixPath]:
+    """The changed files under `sources/`: `sources/<name>/<file>`."""
+    return [PurePosixPath(path) for path in paths if PurePosixPath(path).parts[:1] == ("sources",)]
+
+
 def check_changed_documents(paths: Iterable[str], root: Path) -> list[str]:
     """Check changed source.yaml/quality.yaml, merge and pipeline documents only."""
     rules_paths = _rules_parts(paths)
-    source_names = sorted({path.parts[2] for path in rules_paths
-                           if len(path.parts) >= 4 and path.parts[1] == "sources"
-                           and path.parts[-1] in {"source.yaml", "quality.yaml"}
-                           and (root / "sources" / path.parts[2] / "source.yaml").is_file()})
+    source_names = sorted({path.parts[1] for path in _source_parts(paths)
+                           if len(path.parts) >= 3 and path.parts[-1] in {"source.yaml", "quality.yaml"}
+                           and (files.sources_root(root) / path.parts[1] / "source.yaml").is_file()})
     pipeline_names = sorted({path.parts[2] for path in rules_paths
                              if len(path.parts) >= 4 and path.parts[1] == "pipelines"
                              and path.parts[-1] == "pipeline.yaml"
@@ -83,7 +87,7 @@ def contract_identity_problems(source: str, before: dict[str, dict], after: dict
 
 
 def _base_source(base: str, name: str) -> dict[str, dict] | None:
-    path = f"rules/sources/{name}/source.yaml"
+    path = f"sources/{name}/source.yaml"
     result = subprocess.run(["git", "show", f"{base}:{path}"], capture_output=True, text=True, check=False)
     if result.returncode:
         return None  # A valid base with no such source means this source is new.
@@ -91,9 +95,8 @@ def _base_source(base: str, name: str) -> dict[str, dict] | None:
 
 
 def _changed_source_names(paths: Iterable[str]) -> list[str]:
-    return sorted({path.parts[2] for path in _rules_parts(paths)
-                   if len(path.parts) == 4 and path.parts[1] == "sources"
-                   and path.parts[3] == "source.yaml"})
+    return sorted({path.parts[1] for path in _source_parts(paths)
+                   if len(path.parts) == 3 and path.parts[2] == "source.yaml"})
 
 
 def _changed_merge(paths: Iterable[str]) -> bool:
@@ -139,7 +142,7 @@ def check_changed_rules(paths: Iterable[str], base: str, root: Path) -> list[str
     paths = list(paths)
     problems = check_changed_documents(paths, root)
     for name in _changed_source_names(paths):
-        current_path = root / "sources" / name / "source.yaml"
+        current_path = files.sources_root(root) / name / "source.yaml"
         if not current_path.is_file():
             continue
         revision = subprocess.run(["git", "rev-parse", "--verify", f"{base}^{{commit}}"],

@@ -278,8 +278,8 @@ def write_manifest(
     if type(revision) is not int or revision < 0:
         raise ValueError("Require a nonnegative explicit publication revision")
     instant(as_of)
-    if source not in {p.name for p in (rules_files.ROOT / "sources").iterdir() if p.is_dir()}:
-        raise ValueError(f"No source named {source!r} under rules/sources")
+    if source not in {p.name for p in rules_files.sources_root().iterdir() if p.is_dir()}:
+        raise ValueError(f"No source named {source!r} under sources/")
     reading = rules_files.source(source)
     if target not in ((reading.get("bookkeeping") or {}).get("targets") or {}):
         raise ValueError(f"The source declares no `{target}` target")
@@ -288,9 +288,9 @@ def write_manifest(
     # A contract is a file of the source's folder, or `<source>/<file>`: another source's reading.
     for name in {_contract(step) for step in steps}:
         other = name.split("/", 1)[0] if "/" in name else None
-        if other == source or other is not None and not (rules_files.ROOT / "sources" / name).is_file():
+        if other == source or other is not None and not (rules_files.sources_root() / name).is_file():
             raise ValueError(f"Contract {name} names another source's existing rules file, or a file of this source")
-    contracts = {name: rules_files.contract(rules_files.ROOT / "sources" / (name if "/" in name else f"{source}/{name}"))
+    contracts = {name: rules_files.contract(rules_files.sources_root() / (name if "/" in name else f"{source}/{name}"))
                  for name in sorted({_contract(step) for step in steps
                                      if step["operation"] == "source.read" or "contract" in step.get("input", {})})}
     # The run's own inputs, exactly as the target declares them (`run`): facts and files.

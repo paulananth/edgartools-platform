@@ -29,7 +29,7 @@ checked by a separate verifier. Nothing makes a request to SEC here.
      --input-manifest <URI> --input-sha256 <SHA256>
    ```
 
-   Its steps, in `rules/sources/sec.company/source.yaml`:
+   Its steps, in `sources/sec.company/source.yaml`:
    `main` reads each document (`name-count-main.yaml`); `catalog` reads the ticker catalog
    (`catalog.yaml`); `combine` joins each main unit with the catalog
    (`combine-name-count-captured.yaml`); `records` prepares the bundle's rows as

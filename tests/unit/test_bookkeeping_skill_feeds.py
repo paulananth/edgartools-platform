@@ -5,6 +5,7 @@ import sys
 
 import pytest
 
+from edgar_warehouse.rules import files
 from edgar_warehouse.rules.files import dumps, load
 from edgar_warehouse.bookkeeping.clean.config import digest
 from edgar_warehouse.bookkeeping.clean.feeds import resolve_feed
@@ -19,7 +20,7 @@ PAIRS = [
 def test_existing_feed_and_dataset_resolve_same_scope(source, feed, code):
     selected = resolve_feed(ROOT, source, feed)
     assert [dataset["code"] for dataset in selected["datasets"]] == [code]
-    assert selected["rules_digest"] == digest(load(ROOT / "sources" / source / "source.yaml"))
+    assert selected["rules_digest"] == digest(load(files.sources_root() / source / "source.yaml"))
     assert resolve_feed(ROOT, source, code)["datasets"] == selected["datasets"]
 
 
@@ -47,9 +48,9 @@ def test_unseen_mdm_source_is_not_an_acquisition_feed(tmp_path):
                               "dataset_contracts": {f"{name}.v1": {"contract": {"provider": "NewProvider",
                               "family": "new-family", "adapter": {"native_member": "new-member"}}}}}))
     with pytest.raises(ValueError):
-        resolve_feed(tmp_path, "new-feed", "new-member")
+        resolve_feed(tmp_path / "rules", "new-feed", "new-member")
     with pytest.raises(ValueError, match="exactly one"):
-        resolve_feed(tmp_path, "NewProvider", "new-family")
+        resolve_feed(tmp_path / "rules", "NewProvider", "new-family")
 
 
 @pytest.mark.parametrize("arguments", [[], ["--source", "gleif"], ["--feed", "level1"],

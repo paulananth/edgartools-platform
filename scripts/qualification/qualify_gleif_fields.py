@@ -37,14 +37,14 @@ def qualify(reports: Path, limit: int):
         path=Path(unquote(uri.path))
         started=time.monotonic()
         if sha(path)!=archive['sha256']: raise ValueError('archive hash mismatch')
-        recipe=files.ROOT/'sources/gleif'/f'{member.replace("_","-")}-fields.yaml'
+        recipe=files.sources_root() / 'gleif'/f'{member.replace("_","-")}-fields.yaml'
         config=files.load(recipe); engine=source_engine.SourceEngine(config)
         configured=files.source('gleif')['dataset_contracts'][f'gleif.{member}.v1']['contract']
         retained=copy.deepcopy(configured)
         retained['adapter'].pop('reading',None)
         mapping=retained['adapter']
         runtime=[Path(__file__),Path(adapters.__file__),Path(files.__file__),Path(source_mapping.__file__),recipe,
-                 files.ROOT/'sources/gleif/source.yaml',report_path,*source_engine.runtime_files()]
+                 files.sources_root() / 'gleif/source.yaml',report_path,*source_engine.runtime_files()]
         before={str(p.resolve()):sha(p) for p in runtime}
         count=0; observed=hashlib.sha256(); sample=hashlib.sha256()
         def consume(row,index):

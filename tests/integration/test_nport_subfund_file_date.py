@@ -14,7 +14,7 @@ from tests.support import source_chain
 
 def normalized(tmp_path, source, table, row):
     store = Artifacts()
-    folder = files.ROOT / 'sources' / source
+    folder = files.sources_root() / source
     root = tmp_path / source
     root.mkdir()
     raw = store.put((root / 'input.json').as_uri(), {'tables': {table: [row]}})

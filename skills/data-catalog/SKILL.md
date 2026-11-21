@@ -124,7 +124,7 @@ folders. Browse by business domain first; processing layer is a separate filter.
 ### Find source inventories at the right level
 
 Distinguish configured source scopes from top-level source groups. A configured
-scope is a `rules/sources/<folder>/source.yaml` and its `source:` identifier;
+scope is a `sources/<folder>/source.yaml` and its `source:` identifier;
 the catalog may show each scope as a schema. That inventory is not automatically
 the top-level source list. When asked for top-level sources, use the explicit
 source hierarchy or operator-approved grouping. Do not infer groups by splitting
@@ -140,7 +140,7 @@ end. A domain tag or a source name alone does not establish a pipeline, and the
 relationship is not necessarily one-to-one: one source can supply several
 domains, and one domain can receive data from several sources.
 
-1. Resolve the source to its exact `rules/sources/<folder>/source.yaml` and
+1. Resolve the source to its exact `sources/<folder>/source.yaml` and
    `source:` identifier. Read its `dataset_contracts` to find the datasets and
    declared kinds it supplies. Follow those kinds to
    `rules/merge/kinds/<kind>.yaml` and the applicable merge policy. Do not
@@ -156,7 +156,7 @@ domains, and one domain can receive data from several sources.
    source findings/contracts to their RDM definitions and catalog assets;
    identify which configured steps consume them. RDM is a distinct reference
    store, not an assumed stage in every source's Bookkeeping target.
-4. Trace prepared outputs from each `rules/sources/<source>/silver-*.yaml`
+4. Trace prepared outputs from each `sources/<source>/silver-*.yaml`
    specification to its target table and link keys. Join these with the
    Bookkeeping steps that produce/register the output. Keep MDM masters,
    RDM reference data and Silver transaction/prepared data as distinct store

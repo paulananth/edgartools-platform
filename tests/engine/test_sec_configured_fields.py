@@ -39,7 +39,7 @@ def row(source):
 @pytest.mark.parametrize('source',SOURCES)
 def test_inline_native_reading_matches_bundled_recipe(source):
     configured=next(iter(files.source(source)['dataset_contracts'].values()))['contract']
-    recipe=files.load(files.ROOT/'sources'/source/'fields.yaml')
+    recipe=files.load(files.sources_root()/source/'fields.yaml')
     assert digest(configured['adapter']['reading'])==digest(recipe)
 
 

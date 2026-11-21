@@ -172,7 +172,7 @@ silver database itself, so publishing never depends on it (ticket 06, 2026-10-08
   `in_reference@1` reads the pinned version. The YAML is removed only after a
   run shows the same mastering counts with the pin.
 - Contract-embedded tables (PR #815) gaining the pin beside their rows is a
-  **handoff request to Codex** in phase B: `rules/sources/**` and
+  **handoff request to Codex** in phase B: `sources/**` and
   `crates/source-contract/**` are Codex's paths (AGENTS.md, path ownership).
   RDM only publishes the embeddable mapping and its pin.
 

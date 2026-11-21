@@ -29,7 +29,7 @@ def test_a_dotted_name_is_quoted_as_the_server_quotes_it():
 
 def test_every_source_feed_dataset_and_mdm_field_is_in_the_catalog():
     plan = catalog.plan()
-    sources = sorted(p.parent.name for p in (files.ROOT / "sources").glob("*/source.yaml"))
+    sources = sorted(p.parent.name for p in (files.sources_root()).glob("*/source.yaml"))
     assert [s["name"] for s in plan["schemas"] if s["database"].endswith(".sources")] == sources
     tables = _tables(plan)
     assert 'edgartools-rules.sources."sec.adv".adv_bulk' not in tables
@@ -73,7 +73,8 @@ def test_each_feed_that_captures_the_family_gives_lineage(tmp_path: Path):
     # names no family leads nowhere (an invented second feed on the OpenFIGI source).
     root = tmp_path / "rules"
     shutil.copytree(files.ROOT, root)
-    path = root / "sources" / "openfigi" / "source.yaml"
+    shutil.copytree(files.sources_root(), root.parent / "sources")
+    path = root.parent / "sources" / "openfigi" / "source.yaml"
     body = files.load_source(path)
     feeds = body["acquisition"]["feeds"]
     feeds["more_submissions"] = {**feeds["mapping"], "family": "submissions", "datasets": []}
@@ -90,7 +91,8 @@ def test_the_same_rules_give_the_same_catalog_and_a_change_shows(tmp_path: Path)
     assert "Shared" not in {domain["name"] for domain in catalog.plan()["domains"]}
     root = tmp_path / "rules"
     shutil.copytree(files.ROOT, root)
-    path = root / "sources" / "sec.company" / "source.yaml"
+    shutil.copytree(files.sources_root(), root.parent / "sources")
+    path = root.parent / "sources" / "sec.company" / "source.yaml"
     body = files.load_source(path)
     del mapdoc.mapped(body["dataset_contracts"]["sec.company.v1"]["contract"]["adapter"], "fields")["description"]
     files.write_source(body, path.parent)
@@ -367,7 +369,7 @@ def test_bookkeeping_steps_are_embedded_as_target_pipeline_tasks():
         if catalog._is_step(pipeline):
             continue
         scope, _, target = pipeline["name"].split(":", 2)
-        path = files.ROOT / pipeline["pipelineLocation"]
+        path = catalog._file(files.ROOT, pipeline["pipelineLocation"])
         body = files.load_source(path) if scope == "source" else files.load(path)
         steps = (body.get("bookkeeping") or {}).get("targets", {}).get(target, {}).get("steps", [])
         assert [task["name"] for task in pipeline["tasks"]] == [step["name"] for step in steps]
@@ -379,7 +381,7 @@ def test_a_step_pipeline_carries_its_own_step_as_its_task():
     assert steps
     for pipeline in steps:
         scope, owner, target, step = pipeline["name"].split(":")
-        path = files.ROOT / pipeline["pipelineLocation"]
+        path = catalog._file(files.ROOT, pipeline["pipelineLocation"])
         body = files.load_source(path) if scope == "source" else files.load(path)
         declared = (body.get("bookkeeping") or {}).get("targets", {}).get(target, {}).get("steps", [])
         operation = next(item["operation"] for item in declared if item["name"] == step)
@@ -404,7 +406,7 @@ def test_target_pipeline_lineage_includes_configured_silver_and_master_outputs()
         scope, folder, target_name = pipeline["name"].split(":", 2)
         if scope != "source" or catalog._is_step(pipeline):
             continue
-        path = files.ROOT / pipeline["pipelineLocation"]
+        path = catalog._file(files.ROOT, pipeline["pipelineLocation"])
         body = files.load_source(path)
         source = body.get("source") or folder
         target = (body.get("bookkeeping") or {}).get("targets", {}).get(target_name, {})
@@ -896,7 +898,8 @@ def test_publish_stops_when_the_server_names_a_table_otherwise():
 def test_an_approved_profile_puts_silver_fields_quality_rules_and_code_sets_in_the_catalog(tmp_path: Path):
     root = tmp_path / "rules"
     shutil.copytree(files.ROOT, root)
-    folder = root / "sources" / "example.profiled"
+    shutil.copytree(files.sources_root(), root.parent / "sources")
+    folder = root.parent / "sources" / "example.profiled"
     folder.mkdir()
     profile = {"version": 1, "dataset": "example", "profiled_at": "2026-10-15T06:00:00-04:00",
                "approved_at": "2026-10-15T06:10:00-04:00",
@@ -935,6 +938,7 @@ def test_an_approved_profile_puts_silver_fields_quality_rules_and_code_sets_in_t
 def test_without_a_profile_or_a_silver_spec_the_catalog_has_no_silver_or_rdm_database(tmp_path):
     root = tmp_path / "rules"
     shutil.copytree(files.ROOT, root, ignore=shutil.ignore_patterns("profile.yaml", "silver-*.yaml"))
+    shutil.copytree(files.sources_root(), root.parent / "sources", ignore=shutil.ignore_patterns("profile.yaml", "silver-*.yaml"))
     assert {d["name"] for d in catalog.plan(root)["databases"]} == {"sources", "mdm", "journal"}
 
 
@@ -949,7 +953,8 @@ def test_a_registered_silver_table_shows_as_it_lands(tmp_path):
     with a spec and no profile gets its silver schema."""
     root = tmp_path / "rules"
     shutil.copytree(files.ROOT, root, ignore=shutil.ignore_patterns("profile.yaml"))
-    folder = root / "sources" / "example.profiled"
+    shutil.copytree(files.sources_root(), root.parent / "sources", ignore=shutil.ignore_patterns("profile.yaml"))
+    folder = root.parent / "sources" / "example.profiled"
     folder.mkdir()
     (folder / "silver-visit.yaml").write_text(files.dumps({
         "table": "visit", "definition": "One visit.", "grain": "one row per visit", "key": ["visit_id"],
@@ -985,7 +990,8 @@ def _invented_profile(tmp_path: Path):
     """A copy of the rules whose openfigi profile is an invented one: 2 parts, 40 rows, 3 fields."""
     root = tmp_path / "rules"
     shutil.copytree(files.ROOT, root)
-    path = root / "sources" / "openfigi" / "profile.yaml"
+    shutil.copytree(files.sources_root(), root.parent / "sources")
+    path = root.parent / "sources" / "openfigi" / "profile.yaml"
     profile = files.load(path)
     profile.update(dataset="Invented set", profiled_at="2026-01-02T03:04:05+00:00", approved_at="2026-01-03T00:00:00+00:00")
     profile["parts"] = profile["parts"][:2]
@@ -1006,7 +1012,7 @@ def test_a_profiled_source_says_so_and_an_unprofiled_one_says_not_yet(tmp_path: 
 def test_a_kind_table_says_which_profile_feeds_it_or_not_yet(tmp_path: Path):
     root, profile = _invented_profile(tmp_path)
     profile["parts"][1]["kind"] = "security"
-    (root / "sources" / "openfigi" / "profile.yaml").write_text(files.dumps(profile), encoding="utf-8")
+    (root.parent / "sources" / "openfigi" / "profile.yaml").write_text(files.dumps(profile), encoding="utf-8")
     tables = _tables(catalog.plan(root))
     assert tables["edgartools-rules.mdm.master_records.security"]["description"].endswith("Profiled from openfigi: 1 part.")
     assert tables["edgartools-rules.mdm.master_records.company"]["description"].endswith("Not profiled yet.")
@@ -1024,7 +1030,7 @@ def test_a_profiled_silver_table_carries_its_row_and_column_count(tmp_path: Path
 def test_a_profile_date_without_a_zone_is_utc(tmp_path: Path):
     root, profile = _invented_profile(tmp_path)
     profile["profiled_at"] = "2026-01-02T03:04:05"
-    (root / "sources" / "openfigi" / "profile.yaml").write_text(files.dumps(profile), encoding="utf-8")
+    (root.parent / "sources" / "openfigi" / "profile.yaml").write_text(files.dumps(profile), encoding="utf-8")
     assert {item["timestamp"] for item in catalog.plan(root)["profiles"]} == {1767323045000}
 
 
@@ -1270,7 +1276,7 @@ def test_catalog_status_reports_retryable_bookkeeping_failure_on_target_pipeline
     server = _Server(plan)
     catalog.publish(plan, server)
     pipeline = plan["pipelines"][0]
-    location = files.ROOT / pipeline["pipelineLocation"]
+    location = catalog._file(files.ROOT, pipeline["pipelineLocation"])
     scope, folder, target = pipeline["name"].split(":", 2)
     config = files.load_source(location) if scope == "source" else files.load(location)
     run_name = config.get("source") or folder if scope == "source" else config["pipeline"]
@@ -1310,7 +1316,7 @@ def test_bookkeeping_run_states_map_to_target_pipeline(kind, state):
     folder = "sources" if kind == "source" else "pipelines"
     pipeline = next(item for item in plan["pipelines"]
                     if Path(item["pipelineLocation"]).parts[0] == folder)
-    path = files.ROOT / pipeline["pipelineLocation"]
+    path = catalog._file(files.ROOT, pipeline["pipelineLocation"])
     body = files.load_source(path) if kind == "source" else files.load(path)
     owner = body.get("source") or path.parent.name if kind == "source" else body["pipeline"]
     target = pipeline["name"].rsplit(":", 1)[-1]

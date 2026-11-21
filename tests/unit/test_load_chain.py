@@ -23,7 +23,7 @@ BY_NAME = {step["name"]: step for step in STEPS}
 
 def targets():
     """Each (source, target) that loads a capture; a target that only copies or fetches one is not loaded here."""
-    return {(name, target): body for name in sorted(p.parent.name for p in (files.ROOT / "sources").glob("*/source.yaml"))
+    return {(name, target): body for name in sorted(p.parent.name for p in (files.sources_root()).glob("*/source.yaml"))
             for target, body in (files.source(name).get("bookkeeping", {}).get("targets") or {}).items()
             if not {step["operation"] for step in body["steps"]} & {"artifact.copy", "provider.capture"}}
 
