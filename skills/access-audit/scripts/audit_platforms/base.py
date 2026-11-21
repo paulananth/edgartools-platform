@@ -8,6 +8,7 @@ OBJECTIVES = {
     "AUT": ("No password-only privileged login; service identities use keys or roles, not passwords", "SOC2 CC6.1; SOX ITGC access", "high"),
     "LPR": ("Least privilege: no unexpected ownership, grant-management or wildcard-admin power", "SOC2 CC6.3; SOX ITGC access", "high"),
     "NET": ("A network or public-exposure boundary applies", "SOC2 CC6.6 boundary protection", "medium"),
+    "SCH": ("Nothing lives in a database's default public schema: every object is in its store's own schema", "SOC2 CC6.1, CC6.3 least privilege; SOX ITGC access", "medium"),
     "CST": ("Cost and capacity guards exist (monitors, budgets, connection limits)", "SOX ITGC operations; ITIL financial management", "medium"),
     "TMO": ("Execution is bounded (statement or session timeouts)", "SOC2 A1.1 capacity", "medium"),
     "POL": ("Credential policies exist and are enforced", "SOC2 CC6.1; SOX ITGC access", "medium"),

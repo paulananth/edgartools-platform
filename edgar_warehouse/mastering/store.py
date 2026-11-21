@@ -585,6 +585,9 @@ class Store:
         return {"masters": masters, "waiting": waiting, "set_aside": self.rows("select count(*) from mastering_deferred")[0][0]}
 
 
+SCHEMA = "mdm"  # PostgreSQL: the mastering tables live in MDM's own schema, never in `public` (operator, 2026-11-21: "mdm schema never use public")
+
+
 class Postgres(Store):
     dialect = "postgresql"
     can_share = True
@@ -679,7 +682,11 @@ def open_store(engine) -> Store:
     selected = {"postgresql": Postgres, "mysql": MySQL}.get(engine.dialect.name)
     if selected is None:
         raise ValueError("Mastering supports PostgreSQL and MySQL")
-    return selected(engine.raw_connection())
+    opened = selected(engine.raw_connection())
+    if engine.dialect.name == "postgresql":
+        opened.cursor.execute(f"set search_path to {SCHEMA}")
+        opened.connection.commit()  # a session setting, kept past later rollbacks
+    return opened
 
 
 def install(engine, *, runtime_role: str) -> None:
@@ -690,6 +697,10 @@ def install(engine, *, runtime_role: str) -> None:
     schema = "current_schema()" if engine.dialect.name == "postgresql" else "database()"
     used = {f"mastering_{name}" for name in (*WRITTEN, "decision")}
     with engine.begin() as conn:
+        if engine.dialect.name == "postgresql":
+            conn.exec_driver_sql(f"create schema if not exists {SCHEMA}")
+            conn.exec_driver_sql(f"set local search_path to {SCHEMA}")
+            conn.exec_driver_sql(f'grant usage on schema {SCHEMA} to {grantee}')
         for statement in source.split(";"):
             if statement.strip():
                 conn.exec_driver_sql(statement)

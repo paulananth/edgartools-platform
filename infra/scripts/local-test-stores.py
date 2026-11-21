@@ -31,7 +31,7 @@ from edgar_warehouse.database_connections import DATABASES, database_of, url_var
 # Two databases, each store a schema under its own owner (skills/data-platform/CONNECTIONS.md).
 STORES = ("mdm", "rdm", "rules", "bookkeeping", "change_journal")
 ALL_STORES = (*STORES, "silver")
-# Mastering and MDM's registration authority keep `public`, so MDM's owner owns the data database; the control database is
+# Nothing lives in `public` (the audit's SCH control): mastering is in the `mdm` schema. MDM's owner owns the data database; the control database is
 # the server's, and each store's owner gets CREATE on its database for its own schema.
 DATABASE_OWNER = {"data": "mdm_owner", "control": "postgres"}
 

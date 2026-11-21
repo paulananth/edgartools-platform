@@ -30,7 +30,7 @@ def snowflake_clean():
 
 
 def postgres_clean():
-    return {"login": (False, False, False, False), "memberships": ["pg_monitor"], "writes": 0, "superusers": ["postgres"], "logins": [("l", 20)],
+    return {"login": (False, False, False, False), "memberships": ["pg_monitor"], "writes": 0, "superusers": ["postgres"], "logins": [("l", 20)], "public_objects": {"data": 0, "control": 0},
             "settings": {"log_connections": "on", "log_disconnections": "on", "log_statement": "ddl", "ssl": "on", "password_encryption": "scram-sha-256",
                          "pgaudit.log": "write", "statement_timeout": "60000", "idle_in_transaction_session_timeout": "600000"}}
 
@@ -88,6 +88,7 @@ def test_every_control_names_a_known_objective_and_carries_severity_and_framewor
     ("postgres", "LOG", lambda e: e["settings"].update({"pgaudit.log": "none"})),
     ("postgres", "LOG", lambda e: e["settings"].update({"pgaudit.log": "none"}) or e.update(role_settings=[("l", ["pgaudit.log=none"])])),
     ("postgres", "CST", lambda e: e["logins"].append(("x", -1))),
+    ("postgres", "SCH", lambda e: e["public_objects"].update(data=3)),
     ("postgres", "TMO", lambda e: e["settings"].update(statement_timeout="0", idle_in_transaction_session_timeout="0")),
     ("aws", "IND", lambda e: e.update(identity_kind="root")),
     ("aws", "ADM", lambda e: e.update(root_keys=1)),
@@ -112,6 +113,7 @@ def test_a_control_the_auditor_cannot_see_is_not_tested_never_passed():
     assert graded("snowflake", lambda e: e.update(admin_holders=["HIDDEN"]))["ADM"] == "NOT_TESTED"
     assert graded("snowflake", lambda e: e.update(authentication_policies=None))["POL"] == "NOT_TESTED"
     assert graded("aws", lambda e: e.update(public_block=None))["NET"] == "NOT_TESTED"
+    assert graded("postgres", lambda e: e["public_objects"].update(control=None))["SCH"] == "NOT_TESTED"
 
 
 def test_the_coverage_matrix_marks_an_objective_an_adapter_does_not_test_as_a_gap():

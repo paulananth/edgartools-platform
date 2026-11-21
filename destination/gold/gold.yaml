@@ -8,7 +8,7 @@ version: gold-first-build.holdings-by-manager-security-quarter
 # The destination's database and schema are `gold` in rules/snowflake.yaml.
 # The mirror's database is `mirror.database` in rules/snowflake.yaml.
 mirror:
-  schemas: {mdm: PUBLIC, silver: SILVER, rdm: RDM}   # read back 2026-11-20: the mirror keeps PostgreSQL's `public` as PUBLIC
+  schemas: {mdm: MDM, silver: SILVER, rdm: RDM}   # the mirror keeps each PostgreSQL schema's name in upper case; nothing is exposed from `public`
   body_type: text            # UNVERIFIED: whether the mirror carries mastering_master.body as text or as a variant
 
 # A fact's dimension key is never null: two reserved members, kept apart (GOLD.md).

@@ -31,8 +31,8 @@ layers:
     authority: silver
   mdm:
     connection: DATA_URL
-    source_schema: public
-    target_schema: PUBLIC
+    source_schema: mdm
+    target_schema: MDM
     authority: mdm
   rdm:
     connection: DATA_URL

@@ -291,7 +291,8 @@ def test_install_drops_a_mastering_table_the_code_no_longer_uses(database_factor
             pytest.skip("Mastering runs on PostgreSQL and MySQL")
         stores.install(owner, runtime_role=role)
         with owner.begin() as conn:
-            conn.exec_driver_sql("create table mastering_unused(name varchar(16) primary key)")
+            where = "mdm." if owner.dialect.name == "postgresql" else ""  # PostgreSQL: the mastering tables are in the mdm schema
+            conn.exec_driver_sql(f"create table {where}mastering_unused(name varchar(16) primary key)")
         stores.install(owner, runtime_role=role)
         with owner.connect() as conn:
             tables = {name for (name,) in conn.exec_driver_sql("select table_name from information_schema.tables")}
@@ -886,3 +887,14 @@ def test_a_merge_keeps_its_file_in_memory_and_leaves_no_working_tables(database_
             "select table_name from information_schema.tables where table_name like 'mastering\\_%%'")}
         assert not {name for name in tables if name.startswith("mastering_stage")}, sorted(tables)
         assert db.rows("select count(*) from mastering_record")[0][0] == 2
+
+
+def test_postgresql_keeps_the_mastering_tables_in_the_mdm_schema_and_nothing_in_public(database_factory):
+    """Operator, 2026-11-21: "mdm schema never use public": a PostgreSQL store's tables are in its own schema."""
+    with opened(database_factory) as db:
+        if db.dialect != "postgresql":
+            pytest.skip("only PostgreSQL has schemas inside a database")
+        held = lambda schema: {name for (name,) in db.rows("select table_name from information_schema.tables where table_schema=%s", [schema])}
+        assert {"mastering_master", "mastering_identifier"} <= held("mdm")
+        assert held("public") == set()
+        assert db.rows("select current_schema()")[0][0] == "mdm"
