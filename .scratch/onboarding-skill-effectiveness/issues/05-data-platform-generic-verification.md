@@ -1,7 +1,7 @@
 # data-platform: Specify generic verification
 
 Type: task
-Status: open
+Status: resolved
 Priority: P0
 Blocked by: 04
 Labels: wayfinder:task
@@ -36,7 +36,7 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] Record distinct Given–When–Then scenarios and obtain the required scenario approval before test implementation. The three scenarios are under Answer. The operator approved them in this session on 2026-11-20. (2026-11-20 19:43 ET)
 - [x] Use the existing generic path to route a new source, a changed source and an interrupted load to their distinct owners without redoing completed phases. No such path exists. The route is skill text only. Linked [gap-data-platform-route](./gap-data-platform-route.md) instead of adding a router or a text-only test. (2026-11-20 19:43 ET)
 - [x] Record stored outcomes, affected checks and limitations; no mock-call-only, static-text or tautological proof. Outcome: no behavior was stored. Limitation: there is no executable route. This is not a PASS. (2026-11-20 19:43 ET)
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md.
+- [x] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. PR #1983 squash-merged at 2026-11-21 07:33 ET as `73198cd9ac26900c92f7854c27583b57b9e233a7`; updated-head CI run `44904073266` passed all 12 checks. This records the capability gap; it does not claim routed behavior. (2026-11-21 07:37 ET)
 - [x] Learning → skill: none; this documentation-only proposal establishes no verified reusable lesson to add to the skill. Verified by reviewing the scope and current evidence below. (2026-11-20 19:40 ET)
 
 ## Completion evidence
@@ -62,4 +62,4 @@ These scenarios follow [Start here: route the work](../../../skills/data-platfor
 
 - `uv run --no-project --with pytest -- pytest -q -p no:cacheprovider tests/unit/test_profiling_genericity.py`: **142 passed**. This check scans documentation wording; it does not exercise routing, load or resume behavior.
 - Scenario tests and source load: not run because no executable route exists. This is the capability gap, not pending scenario approval.
-- Draft PR #1983 publishes the scenarios and gap. Its prior 12-check CI was on an older base; refresh CI on the current base before marking ready.
+- PR #1983 squash-merged after updated-head CI passed all 12 checks. The route behavior remains unverified because no executable generic route exists; the separate capability-gap ticket remains open.
