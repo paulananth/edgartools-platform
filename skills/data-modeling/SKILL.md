@@ -27,17 +27,21 @@ anything: it proposes, and the operator rules.
 
 ## Hard stops
 
+A shared rule names its home beside it; the rest are this phase's own. This list grants no permission.
+
 | Never | Instead |
 |---|---|
-| Approve findings or a code set version, or write words the operator did not say | Ask one question, then wait |
+| Approve findings or a code set version, or write words the operator did not say | Ask one question, then wait; findings are approved through [Data Profiling](../data-profiling/SKILL.md#hard-stops), a code set version by [CODE-SETS.md](../data-profiling/CODE-SETS.md), and switching a rule on is the operator's (`CONTEXT.md`, "Rule Activation Approval") |
 | Guess a class, a key, a link or a meaning | Leave it unknown and name the failing tests from the findings |
 | Add a kind, or treat a profile as a kind | A missing kind is an operator ruling |
 | Join records on a lookup-only identifier, or merge on similar names | Records join only through a kind's Identifier Contract or a matching rule the operator switched on |
 | Split one kind into loads by the identifier asked, or pair two identifiers of one master in a source's own rules | One record carries every identifier it has; the Merge Stage looks each one up in the Cross-reference and puts them on one master (operator) |
 | Name a new relationship type when an existing one, or its inverse, means the same | Use it, or ask the operator why a second type is needed |
 | Write rules, contracts, quality files, or a code set version | Hand off by the table above: Data Onboarding (a new feed) or Refining Rules (a live one) drafts a code set version in RDM by [CODE-SETS.md](../data-profiling/CODE-SETS.md) |
-| Request anything from a provider's live service | Use the captured files and this repo |
-| Propose a domain rule (a key, an order of precedence, a definition) from the captured data alone | First find how a public standard or the main vendors do it. Write it in a research note the next decision reads, mark what is unverified, and follow the standard unless the operator rules otherwise |
+| Request anything from a provider (its site, API or documentation) without the operator's permission for that request | Use the captured files and this repo; a fact only the provider holds is a blocker named to the operator ([data-platform hard stops](../data-platform/SKILL.md#hard-stops)) |
+| Propose a domain rule (a key, an order of precedence, a definition) from the captured data alone | First find how a public standard or the main vendors do it. Write it in a research note the next decision reads, mark what is unverified, and follow the standard unless the operator rules otherwise. A standard published by the data's own provider is a provider request: it needs the operator's permission for that request |
+| Write a value from the data (a name, an identifier, a record) into a public repository (a committed decision, proof report or example) | Counts, shapes and invented examples ([data-onboarding hard stops](../data-onboarding/SKILL.md#hard-stops)) |
+| Ask several questions at once | Ask one, in plain words, with your recommendation ([data-onboarding hard stops](../data-onboarding/SKILL.md#hard-stops)) |
 | Design one Gold fact alone, or build a Gold object no named requirement needs | Design the whole bus first and build the least: [GOLD.md](GOLD.md), "Design the whole bus first" |
 | Write a table spec, or start a build, from its own ticket alone | Review every ticket it builds on and every build ticket that cites it: each ruling since it was written, each dependency it leaves out, each stale "or" a ruling closed, each hard case its test lacks. Record the findings on the spec's ticket and fix the stale tickets in the same change (operator: "Check the tickets related to financial review work") |
 
@@ -77,9 +81,7 @@ Read these before deciding, and use their words:
   either is a code set version in RDM. A yaml table, a test fixture, a Python or Rust constant or a
   second copy in a test is a copy outside RDM: read the code set (by its pinned version, for a
   historic one) instead. `rules/reference/published/` is the form RDM publishes a version in, not a
-  place to edit or copy from. Write a published file with `rdm.store.canonical` (rows in its order, then the
-  sha256 of those bytes in `pin.json`), never by hand: `tests/unit/test_reference_preparation.py` rebuilds each
-  one and fails on any other row order (CI).
+  place to edit or copy from. The owner publishes it by [CODE-SETS.md](../data-profiling/CODE-SETS.md), step 5.
 - `docs/specs/rdm/spec.md` and `docs/specs/agent-context/spec.md`: how
   reference data and agent context are kept.
 
@@ -156,7 +158,8 @@ master file is reference data plus a master attribute that holds its codes.
 
 ### 2. A master part: its kind
 
-- The kind is one of `KINDS`. A role a thing plays (an adviser, an auditor) is
+- The kind is a code of the RDM code set `mdm-kinds`, the one list of kinds (the engine reads its pinned
+  version as `KINDS`). A role a thing plays (an adviser, an auditor) is
   a profile on a kind (`PROFILE_KINDS`), never a kind. A fund is a collection of securities, never a profile.
 - **A new kind only when all three hold,** each read from the findings'
   new-kind tests ([data-profiling](../data-profiling/SKILL.md), "Identify an
@@ -337,7 +340,10 @@ is a child table on the master id, with a key of its own.
 ### 9. Prove the model on the data before building
 
 A decision read from code or a glossary is not proof: the untested case is
-where a gap hides. Before a build starts:
+where a gap hides. This proves the model before any build; a built change is
+then proved by [MDM Engineering](../mdm-engineering/SKILL.md#choose-the-cheapest-proof)
+on a real capture, the way production runs it (`CLAUDE.md`, "Stay close to
+reality"). Before a build starts:
 
 1. **Pick the archetypes by shape, at run time:** the common case; a
    look-alike that must stay apart (two things sharing a name or an issuer);
@@ -348,7 +354,9 @@ where a gap hides. Before a build starts:
    printing counts and shapes only. Run every load order.
 3. **Report per case:** masters formed, the identifier kinds each holds and
    their counts, what each source's records did (bind, mint, merge), and
-   whether every order gave the same result.
+   whether every order gave the same result. Give each count with the
+   captures it was measured on, and mark what was not run as not yet tested;
+   a committed report names each case by its shape.
 4. **Then measure the whole population** for each rule the cases exercised:
    the records it would merge, drop, set aside or leave with one identifier.
    A count above a handful is the operator's question, with the count and a
@@ -440,10 +448,9 @@ Examples only; nothing above depends on them.
   `BENEFICIAL_OWNER_OF`.
 - **The Security model: every rule above, applied.**
   The security-master skill states the rulings and holds the measurements.
-  - *One kind, many identifiers.* OpenFIGI had been loaded as a CUSIP target
-    and an ISIN target, the ISIN one reading the CUSIP runs, and N-PORT paired
-    them again in seven steps. One target, one record per answer with every
-    identifier, replaced them.
+  - *One kind, many identifiers.* OpenFIGI loads as one target, one record
+    per answer with every identifier, whether the question was a CUSIP or an
+    ISIN.
   - *The identifier's level.* A FIGI exists per trading line, per country
     (composite) and worldwide (share class). A shared listing FIGI
     pairs nearly every ISIN answer with one CUSIP answer; the composite and
@@ -462,7 +469,7 @@ Examples only; nothing above depends on them.
     currency, read from the ticker, still repeats on some
     lines, so the listing FIGI is the key and (master id, exchange, currency)
     an index.
-  - *Proving it.* Apple (the common case), an ADR and its ordinary share
+  - *Proving it.* A large US common stock (the common case), an ADR and its ordinary share
     (look-alikes that must stay apart: two Securities, one issuer), and a
     European stock (ISIN only) gave the same masters in all three load orders.
   - *A master fact from transaction rows.* N-PORT reports an asset category,
