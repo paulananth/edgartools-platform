@@ -63,7 +63,7 @@ def test_alter_writes_nothing_when_the_mirror_holds_exactly_the_record():
 def test_the_repository_record_lists_the_masters_the_published_codes_and_every_silver_table_and_no_working_table_and_gold_reads_only_those():
     from edgar_warehouse.gold import views
     exposure = yaml.safe_load((ROOT / "rules/exposure.yaml").read_text())
-    managed = yaml.safe_load((ROOT / "rules/managed-mirror.yaml").read_text())
+    managed = yaml.safe_load((ROOT / "sources/managed-mirror.yaml").read_text())
     names = mirror_sql.tables(managed, exposure)
     silver = sorted(f"silver.{t['table']}" for t in exposure["tables"] if t["layer"] == "silver")
     assert names == ["public.mastering_identifier", "public.mastering_master", "rdm.published_code"] + silver and len(names) == 19
