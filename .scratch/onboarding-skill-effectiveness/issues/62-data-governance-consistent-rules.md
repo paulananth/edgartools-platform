@@ -1,7 +1,7 @@
 # data-governance: Reconcile shared rules
 
 Type: task
-Status: open
+Status: resolved
 Priority: P1
 Blocked by: 02, 14, 61
 Labels: wayfinder:task
@@ -36,7 +36,7 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] Inventory each duplicated or conflicting instruction with its authoritative source and proposed disposition; verified by reviewing `CLAUDE.md`, tickets 02/14/61, the governance skill and `LINEAGE.md` under [Inventory](#inventory). (2026-11-20 19:58 ET)
 - [x] Align the local phase with the shared rule decision while preserving explicit operator boundaries; verified by reviewing the changed governance skill and lineage contract under [Answer](#answer). (2026-11-20 19:58 ET)
 - [x] Trace a routine path and a blocked path; confirm no new approval, provider access or switch-on authority was inferred; verified by document review under [Traces](#traces), with no source operation run. (2026-11-20 19:58 ET)
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. Deferred by this request's explicit prohibition on commits and PR creation; the change remains unpublished and this checklist part remains open.
+- [x] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. PR #1988 squash-merged at 2026-11-21 07:02 ET as `7062c67867cc0a46edc72895b22cb1b56eefeeb0`; updated-head CI passed all 12 checks. (2026-11-21 07:17 ET)
 - [x] Learning → skill: missing coverage or evidence must be named and unsupported lineage left unclaimed; recorded in [Shared rules](../../../skills/data-governance/SKILL.md#shared-rules), [Completion](../../../skills/data-governance/SKILL.md#completion) and [Coverage and evidence gaps](../../../skills/data-governance/LINEAGE.md#coverage-and-evidence-gaps). (2026-11-20 19:58 ET)
 
 ## Completion evidence

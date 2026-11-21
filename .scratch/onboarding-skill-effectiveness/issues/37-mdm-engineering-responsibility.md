@@ -1,7 +1,7 @@
 # mdm-engineering: Define one responsibility
 
 Type: task
-Status: open
+Status: resolved
 Priority: P2
 Blocked by: 01, 13
 Labels: wayfinder:task
@@ -36,7 +36,7 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] List decisions, inputs and outputs owned here using current repository evidence; verified against the current MDM Engineering scope, merge/storage sections and proof guidance, and recorded in [Decisions, artifacts and handoffs](../../../skills/mdm-engineering/SKILL.md#decisions-artifacts-and-handoffs). (2026-11-20 19:38 ET)
 - [x] Assign each overlapping responsibility one authoritative owner and a named handoff; verified against Data Onboarding, Refining Rules, Data Modeling, Data Operations, Bookkeeping and Production Support references in the ownership table. (2026-11-20 19:38 ET)
 - [x] Demonstrate the boundary on a conflicting identifier, a relationship with a missing endpoint and a merge retry after interruption; documented walkthrough links retained work rather than duplicating it. These links identify existing behavior coverage; no scenario was executed and no behavior claim is made from this documentation check. (2026-11-20 19:38 ET)
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md.
+- [x] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. PR #1981 squash-merged at 2026-11-20 19:44 ET as `51859666f3741dba4964b55aa4932c971e17bfeb`; updated-head CI passed all 12 checks. (2026-11-21 07:17 ET)
 - [x] Learning → skill: configuration is the default when the existing engine can express requested behavior; MDM Engineering changes require a demonstrated reusable engine or storage gap. Recorded in [Decisions, artifacts and handoffs](../../../skills/mdm-engineering/SKILL.md#decisions-artifacts-and-handoffs). (2026-11-20 19:38 ET)
 
 ## Completion evidence
