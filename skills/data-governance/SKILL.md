@@ -32,12 +32,26 @@ The inputs are configured source contracts and reads, step order and declared
 checks, control-file dependencies, and available run evidence. The output is
 the evidence-backed lineage contract: source and control inputs, failable
 steps with their checks, trusted outputs, and any supported domain or product
-links. Keep configured intent distinct from observed completion.
+links. State the covered scope and name any coverage or evidence gaps; leave an
+unsupported edge unclaimed. Keep configured intent distinct from observed
+completion.
+
+## Shared rules
+
+This contract describes supported lineage; it grants no permission to access a
+provider, read a secret, change configuration, run processing, approve or
+activate a rule, or publish a destination. Use [Data Platform hard stops](../data-platform/SKILL.md#hard-stops)
+for provider access, credentials and activation; [Data Onboarding hard stops](../data-onboarding/SKILL.md#hard-stops)
+for configuration-only work and public data; and [Data Operations](../data-operations/SKILL.md)
+for local proof and run evidence. Create or run only a test scenario the task
+explicitly authorizes.
 
 ## Completion
 
 The proposed lineage matches [LINEAGE.md](LINEAGE.md). A destination's native
 readback determines whether the published edges match what it stores; a
 successful write alone does not establish that. Destination-specific checking
-and presentation belong to its skill. When the operator asks to see shipped
-lineage UI, observe it with Playwright and compare the nodes to this contract.
+and presentation belong to its skill. Report uncovered scope and unavailable
+run or readback evidence as gaps, not as a completed path. When the operator
+asks to see shipped lineage UI, observe it with Playwright and compare the
+nodes to this contract.
