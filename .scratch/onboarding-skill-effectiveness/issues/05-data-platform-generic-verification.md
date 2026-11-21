@@ -63,4 +63,3 @@ These scenarios follow [Start here: route the work](../../../skills/data-platfor
 - `uv run --no-project --with pytest -- pytest -q -p no:cacheprovider tests/unit/test_profiling_genericity.py`: **142 passed**. This check scans documentation wording; it does not exercise routing, load or resume behavior.
 - Scenario tests and source load: not run because no executable route exists. This is the capability gap, not pending scenario approval.
 - Draft PR #1983 publishes the scenarios and gap. Its prior 12-check CI was on an older base; refresh CI on the current base before marking ready.
-
