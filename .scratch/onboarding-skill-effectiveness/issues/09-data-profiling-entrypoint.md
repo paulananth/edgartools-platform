@@ -33,11 +33,11 @@ These blockers order skill-improvement work. They do not activate optional sourc
 
 ## Acceptance checklist
 
-- [ ] Produce an entrypoint that consumes captured input inventory and hashes, existing kinds, known identifier formats and profiling settings and yields REPORT.md, findings.yaml, fingerprints and invalid-row evidence kept private where required.
-- [ ] Verify referenced paths and supported commands; retain mandatory stops and discoverability of optional detail.
-- [ ] Walk one applicable example to its handoff without loading unrelated references or repeating another skill's procedure.
+- [x] Produce an entrypoint that consumes captured input inventory and hashes, existing kinds, known identifier formats and profiling settings and yields REPORT.md, findings.yaml, fingerprints and invalid-row evidence kept private where required; verified against the profiler's argument parser, input fingerprinting and report writer (2026-11-20 19:17 ET).
+- [x] Verify referenced paths and supported commands; retain mandatory stops and discoverability of optional detail; checked compare's `--help`, report output paths, and the required-path hard stops (2026-11-20 19:17 ET).
+- [x] Walk the documented legal-entity register and relationship-file example through profiling and the approved-findings handoff to Data Onboarding and Data Quality; no input data was loaded (2026-11-20 19:17 ET).
 - [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md.
-- [ ] Learning → skill: name the verified reusable lesson and its owning skill section, or record none.
+- [x] Learning → skill: the `Run this phase` section separates required input context and the single-run outputs from conditional compare handling, then names the next owner (2026-11-20 19:17 ET).
 
 ## Completion evidence
 

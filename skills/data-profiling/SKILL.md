@@ -141,6 +141,53 @@ A shared rule names its home beside it; the rest are this phase's own. This list
 | Profile the same inputs twice | Profile once; reuse the findings while the inputs and the profiler are unchanged ("Profile once", below) |
 | Ask several questions at once | Ask one, in plain words, with your recommendation ([data-onboarding hard stops](../data-onboarding/SKILL.md#hard-stops)) |
 
+## Run this phase
+
+Use this phase for every new captured data set. Use `compare` only when a
+delivery changes after its findings are approved. Start with the capture
+inventory: name every input and its local file, folder, archive or read-only
+database location; retain the capture hashes. Bring the existing `mdm-kinds`,
+known identifier formats to check against measured identifier shapes, and the
+intended `--limit-gb`, `--sample` and `--seed` settings. Read the kinds with
+`edgar-warehouse context mdm-kinds`. Hashes are recorded by `run` in
+`dataset.profiled_with`; do not substitute a provider lookup for a missing
+capture.
+
+From this skill's `scripts` folder, run one of these supported commands:
+
+```sh
+uv run --with duckdb --with pyyaml python profile_data.py run --name "<data set>" \
+  --input <name>=<file|folder|zip|database file|env:VARIABLE> [--input ...] \
+  --out <private folder> --kinds <existing kind>,... [--limit-gb 5] [--sample 100000] [--seed 0]
+```
+
+This writes private `REPORT.md`, `findings.yaml`, `fingerprints.json` and
+`invalid_rows.jsonl` in the output folder. Read `REPORT.md`, then review the
+findings' silver fields, designed keys and proposed kinds. Ask any remaining
+question one at a time and record the answer in the findings. Show the report
+and wait for the operator's approval before recording it:
+
+```sh
+uv run --with duckdb --with pyyaml python profile_data.py approve \
+  --findings <private folder>/findings.yaml --by "<operator>" --words "<their exact words>"
+```
+
+Stop if no suitable captured copy exists, an input cannot be read, or a fact
+exists only at a provider. Report unreadable inputs; do not profile around them
+silently. Do not replace approved findings with changed inputs: use the
+supported compare command instead:
+
+```sh
+uv run --with duckdb --with pyyaml python profile_data.py compare \
+  --approved <private folder>/findings.yaml --input <name>=<new delivery> [--input ...] --out <private folder>
+```
+
+Compare requires approved findings and writes private `drift.yaml`; hand its
+changes to Refining Rules. Hand approved new-dataset findings to Data
+Onboarding, with `quality` and `invalid_rows.jsonl` available to Data Quality.
+Keep all these evidence files outside the repository. The Hard stops above
+remain in force throughout this route.
+
 ## Tell the discovery story as you work
 
 **Coordination note for every LLM:** keep this section when editing the skill;
@@ -338,32 +385,14 @@ Read [SOURCE-RANKING.md](SOURCE-RANKING.md) when a kind has more than one source
 
 ## How to work
 
-1. **Start from the capture location the caller handed over.** When none was
-   handed over and no local copy fits, ask what the data set is called and
-   where its copies are: one question.
-2. **Run** the command above. Read `REPORT.md` first; `findings.yaml` holds
-   the detail and the evidence for every claim.
-3. **Read the silver fields**, every designed key, and every proposed new kind.
-   A designed key and a proposed new kind are the questions in `findings.yaml`.
-   A part classed `silver` already has its numbers and identifiers recorded.
-4. **Ask the operator the questions, one at a time,** each with its
-   recommendation. Record each answer in the question's `answer`, in their
-   words.
-5. **Show the report and ask for approval.** Only when they say so:
-
-```
-uv run --with duckdb --with pyyaml python profile_data.py approve \
-  --findings <folder>/findings.yaml --by "<operator>" --words "<their exact words>"
-```
-
-6. **Hand over** the approved findings' folder, by the table in "Decisions,
-   artifacts and handoffs": data-onboarding plans the parts and writes the
-   catalog summary when a part lands in silver; data-quality takes the
-   `quality` items and `invalid_rows.jsonl`. A re-profiled or re-approved
-   source changes `profile.yaml`; until the next publish,
-   `edgar-warehouse rules catalog check --root rules` reports each changed
-   table as "profile changed, publish again". A source with no `profile.yaml`
-   shows "Not profiled yet" on its source schema.
+Follow [Run this phase](#run-this-phase) for capture, commands, approval and
+stop conditions. Read `REPORT.md` first, then inspect every silver field,
+designed key and proposed kind in `findings.yaml`. Ask each open question one
+at a time with a recommendation; record the operator's answer in its `answer`
+field. Hand approved findings to the owner listed in
+[Decisions, artifacts and handoffs](#decisions-artifacts-and-handoffs). Data
+Onboarding writes the catalog summary as each part lands in silver; Data
+Quality takes the `quality` items and `invalid_rows.jsonl`.
 
 ## Reference data: a draft code set in RDM
 
