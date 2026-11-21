@@ -83,6 +83,7 @@ No scenario or test code is approved by creating these tickets. Proposed Givenâ€
 - [mdm-engineering: Reconcile shared rules](issues/38-mdm-engineering-consistent-rules.md): shared rules name their authoritative home; MDM Engineering keeps engine qualification and proof. PR #1987, merged 2026-11-21 06:57 ET.
 - [data-governance: Define one responsibility](issues/61-data-governance-responsibility.md): Governance owns the evidence-backed neutral lineage path; catalog meaning and destination mechanics stay with their owners. PR #1982, merged 2026-11-20 19:49 ET.
 - [data-governance: Reconcile shared rules](issues/62-data-governance-consistent-rules.md): unsupported lineage edges and missing evidence remain explicit gaps, not claims. PR #1988, merged 2026-11-21 07:02 ET.
+- [data-platform: Specify generic verification](issues/05-data-platform-generic-verification.md): the operator-approved scenarios exposed no executable generic route; the limitation is recorded in a separate capability-gap ticket, with no behavioral PASS claimed. PR #1983, merged 2026-11-21 07:33 ET.
 
 ## Not yet specified
 
