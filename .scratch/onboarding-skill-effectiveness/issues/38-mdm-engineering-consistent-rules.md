@@ -1,7 +1,7 @@
 # mdm-engineering: Reconcile shared rules
 
 Type: task
-Status: open
+Status: resolved
 Priority: P2
 Blocked by: 02, 14, 37
 Labels: wayfinder:task
@@ -36,7 +36,7 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] Inventory each duplicated or conflicting instruction with its authoritative source and proposed disposition; verified by comparing this skill's hard stops, proof guidance and handoffs with `CLAUDE.md`, Data Platform, Data Onboarding, Data Modeling and the onboarding map. Recorded under [Inventory](#inventory). (2026-11-20 19:57 ET)
 - [x] Align the local phase with the shared rule decision while preserving explicit operator boundaries; verified by reviewing the updated shared-rules pointer and proof wording in [MDM Engineering](../../../skills/mdm-engineering/SKILL.md#hard-stops) against the inventory. (2026-11-20 19:57 ET)
 - [x] Trace a routine path and a blocked path; confirm no new approval, provider access or switch-on authority was inferred; verified by reading both paths against the current skill ownership and the rules cited below. No operation or scenario was run. (2026-11-20 19:57 ET)
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md.
+- [x] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. PR #1987 squash-merged at 2026-11-21 06:57 ET as `0cd62a5ed3dcd7b496d6928111eb34c27fddadb6`; updated-head CI passed all 12 checks. (2026-11-21 07:17 ET)
 - [x] Learning → skill: shared operating rules belong to their authoritative owners; this skill points to them and keeps only MDM-specific proof guidance. Recorded in [Hard stops](../../../skills/mdm-engineering/SKILL.md#hard-stops). (2026-11-20 19:57 ET)
 
 ## Inventory

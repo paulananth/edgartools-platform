@@ -1,7 +1,7 @@
 # data-profiling: Make progress resumable
 
 Type: task
-Status: open
+Status: resolved
 Priority: P0
 Blocked by: 04, 09
 Labels: wayfinder:task
@@ -37,7 +37,7 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] Specify resume, invalidate and blocked conditions for input fingerprints, profiler version, settings, output locations and whether findings remain applicable. Verified against `profile_data.py`'s `profiled_with` reuse guard and the shared `data-platform/RESUME.md` record; documented in [Resume from the source log](../../../skills/data-profiling/SKILL.md#resume-from-the-source-log). This is an instruction for the session reader, not an automated gate. (2026-11-20 19:51 ET)
 - [x] Resume a staged interruption from the recorded artifacts and identify exactly the first unfinished action. Document trace: unchanged artifacts resume at `review findings`; changed pre-approval input reopens at a new `run`; a missing output blocks artifact reuse. No source was run. (2026-11-20 19:51 ET)
 - [x] Show changed inputs cannot reuse stale proof and unchanged inputs do not repeat completed work. Verified against the `run` identity comparison and the documented trace; the code path is not exercised by the documentation check. (2026-11-20 19:51 ET)
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md.
+- [x] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. PR #1986 squash-merged at 2026-11-21 06:51 ET as `edce7b89192a2e39b698e717c6deb53f92983da4`; updated-head CI passed all 12 checks. (2026-11-21 07:17 ET)
 - [x] Learning → skill: a profiling resume belongs in the source's shared `## Resume` log, carries artifact identity and applicability, and names the first unfinished action; recorded in [Resume from the source log](../../../skills/data-profiling/SKILL.md#resume-from-the-source-log). (2026-11-20 19:51 ET)
 
 ## Answer

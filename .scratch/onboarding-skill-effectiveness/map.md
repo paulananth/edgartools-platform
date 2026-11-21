@@ -77,6 +77,12 @@ No scenario or test code is approved by creating these tickets. Proposed Givenâ€
 - [data-platform: Reconcile shared rules](issues/02-data-platform-consistent-rules.md): a rule list names each rule's home and grants no permission. The findings-approval conflict is carried by tickets 08 and 20. PR #1966, merged 2026-11-20 17:46 ET.
 - [data-profiling: Define one responsibility](issues/07-data-profiling-responsibility.md): profiling owns measurement and the evidence files. Decisions made from them belong to their named owners. PR #1969, merged 2026-11-20 18:02 ET.
 - [access-audit: Define one responsibility](issues/79-access-audit-responsibility.md): the auditor owns the grade and the re-run. The fix belongs to the platform's operations skill. PR #1968, merged 2026-11-20 18:08 ET.
+- [data-profiling: Resume a source's work](issues/10-data-profiling-resume.md): reuse only matching source, profiler, settings and artifact identities; record the first unfinished action in the shared source log. PR #1986, merged 2026-11-21 06:51 ET.
+- [data-modeling: Decide one part](issues/15-data-modeling-entrypoint.md): make one model decision from approved findings, then hand configuration to its owner. PR #1985, merged 2026-11-20 20:04 ET.
+- [mdm-engineering: Define one responsibility](issues/37-mdm-engineering-responsibility.md): MDM Engineering owns reusable merge, storage, adapter and migration behavior. PR #1981, merged 2026-11-20 19:44 ET.
+- [mdm-engineering: Reconcile shared rules](issues/38-mdm-engineering-consistent-rules.md): shared rules name their authoritative home; MDM Engineering keeps engine qualification and proof. PR #1987, merged 2026-11-21 06:57 ET.
+- [data-governance: Define one responsibility](issues/61-data-governance-responsibility.md): Governance owns the evidence-backed neutral lineage path; catalog meaning and destination mechanics stay with their owners. PR #1982, merged 2026-11-20 19:49 ET.
+- [data-governance: Reconcile shared rules](issues/62-data-governance-consistent-rules.md): unsupported lineage edges and missing evidence remain explicit gaps, not claims. PR #1988, merged 2026-11-21 07:02 ET.
 
 ## Not yet specified
 
