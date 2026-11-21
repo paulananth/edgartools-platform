@@ -12,6 +12,6 @@ python skills/access-audit/scripts/access_audit.py                   # the re-au
 ```
 
 Objects made by hand before this root existed are imported once (`terraform import`), so a plan shows no change for them:
-the two roles and users, the monitor, the two policies, the governance database and schema, the attachments and the grants.
+the two roles and users, the monitor, the two policies, the policies' schema in the Gold database (values in `rules/snowflake_policy.yaml`), the attachments and the grants.
 Warehouses are not managed here: attaching the monitor to a warehouse stays an `ALTER WAREHOUSE` until the warehouses are
 imported as resources.

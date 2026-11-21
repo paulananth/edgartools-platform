@@ -24,7 +24,7 @@ def snowflake_clean():
                   {"name": "SVC", "type": "SERVICE", "has_password": "false", "has_rsa_public_key": "true", "default_role": "SVC"}],
         "admin_holders": ["A1", "A2"], "network_policies": 1, "account_network_policy": "P", "monitors": 1,
         "warehouses": [{"name": "W", "resource_monitor": "M"}], "statement_timeout": 3600, "password_policies": 1,
-        "authentication_policies": 1, "risky_grants": [], "queries": [{"role_name": "WORK", "n": 100}, {"role_name": "ACCOUNTADMIN", "n": 1}],
+        "authentication_policies": 1, "policy_drift": [], "risky_grants": [], "queries": [{"role_name": "WORK", "n": 100}, {"role_name": "ACCOUNTADMIN", "n": 1}],
         "logins": [{"user_name": "A1", "first_factor": "PASSWORD", "second_factor": "TOTP", "n": 5}],
     }
 
@@ -82,6 +82,7 @@ def test_every_control_names_a_known_objective_and_carries_severity_and_framewor
     ("snowflake", "CST", lambda e: e["warehouses"][0].update(resource_monitor="null")),
     ("snowflake", "TMO", lambda e: e.update(statement_timeout=172800)),
     ("snowflake", "POL", lambda e: e.update(password_policies=0)),
+    ("snowflake", "POL", lambda e: e.update(policy_drift=["password: min_length 8, expected 14"])),
     ("postgres", "IND", lambda e: e.update(memberships=["pg_monitor", "pg_write_all_data"])),
     ("postgres", "LPR", lambda e: e["superusers"].append("loader")),
     ("postgres", "LOG", lambda e: e["settings"].update({"pgaudit.log": "none"})),
@@ -246,3 +247,24 @@ def test_the_connection_limit_control_leaves_out_the_platforms_own_logins_and_co
     monkeypatch.setitem(sys.modules, "psycopg2", fake)
     found = postgres.collect({"DATA_URL": "postgresql://invented@h/data"})["logins"]
     assert found == [("governance", 10), ("edgar_loader", -1)]
+
+
+EXPECTED_POLICIES = {"location": {"database": "INVENTED_GOLD", "schema": "POLICIES"},
+                     "password": {"name": "P1", "min_length": 14, "history": 5},
+                     "authentication": {"name": "A1", "methods": ["KEYPAIR"]}}
+FOUND_POLICIES = {"password": [{"database_name": "INVENTED_GOLD", "schema_name": "POLICIES", "name": "P1",
+                                "properties": {"password_min_length": "14", "password_history": "5"}}],
+                  "authentication": [{"database_name": "INVENTED_GOLD", "schema_name": "POLICIES", "name": "A1",
+                                      "properties": {"authentication_methods": "[KEYPAIR]"}}]}
+
+
+def test_policies_equal_to_the_policy_file_have_no_drift():
+    assert snowflake.policy_drift(EXPECTED_POLICIES, FOUND_POLICIES) == []
+
+
+def test_a_changed_value_a_missing_policy_and_a_policy_in_another_database_are_each_drift():
+    wrong_value = {**FOUND_POLICIES, "password": [{**FOUND_POLICIES["password"][0], "properties": {"password_min_length": "8", "password_history": "5"}}]}
+    assert any("min_length" in d for d in snowflake.policy_drift(EXPECTED_POLICIES, wrong_value))
+    assert any("authentication" in d and "missing" in d for d in snowflake.policy_drift(EXPECTED_POLICIES, {**FOUND_POLICIES, "authentication": []}))
+    elsewhere = {**FOUND_POLICIES, "password": [{**FOUND_POLICIES["password"][0], "database_name": "UNAPPROVED"}]}
+    assert any("UNAPPROVED" in d for d in snowflake.policy_drift(EXPECTED_POLICIES, elsewhere))

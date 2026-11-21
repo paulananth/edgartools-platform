@@ -257,6 +257,8 @@ The auditor never fixes; this procedure never grades.
    (`.scratch/access-audit/approvals.jsonl`), then applies the saved plan.
 4. Hand back to the access audit: re-run `access_audit.py` on the platform; the finding is closed only by the re-run's PASS.
 
+**No database is created to hold a control.** A password or authentication policy is a schema-level object (Snowflake documents no account-level form), so it lives in a schema of a database the platform already has (the Gold database's `POLICIES`); its values and home are `rules/snowflake_policy.yaml`, Terraform reads that file, and the audit's POL control fails any difference. A new database needs the operator's approval first; use the platform's native feature before adding an object.
+
 Objects made before the root existed are imported once, so a plan shows no change for them. A permission error from the
 access-admin identity is reported as the missing privilege to grant it; it is never worked around with an administrator.
 A finding about a person's own account (their MFA, their password) has no code fix: it is reported, and closes by the
