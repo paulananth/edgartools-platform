@@ -19,9 +19,9 @@ A failure, a surprise or two readings that disagree: find the root cause first, 
 
 ## Decisions, artifacts and handoffs
 
-This is discovery: profile retained copies once and write reusable evidence for
-candidate master/reference/relationship/transaction parts. Class scores, keys
-and links are structural evidence, not final business domains or identities.
+This is discovery: profile captured copies once and write evidence for candidate master/reference/relationship/transaction parts.
+Class scores, keys and links are structural evidence, not business-domain or identity decisions.
+When captured text can change the handoff, run portable NER as a companion step within this profiling phase; it yields mention evidence, not resolved identities.
 Data Modeling decides; hand off once without rescanning, configuring or loading.
 
 | Decision or artifact | Authoritative owner | Handoff |
@@ -132,7 +132,7 @@ A shared rule names its home beside it; the rest are this phase's own. This list
 |---|---|
 | Approve findings for the operator, or record words they did not say | Ask one question, wait, record their exact words with `approve`; `compare` refuses findings without it |
 | Guess a class, key, link or master domain from a label or a single row | Report measured tests, source/parent grain, cross-source evidence and unknowns. One row can show shapes but not uniqueness, lifecycle or shared use; a `master` class is a candidate, not a domain verdict. |
-| Treat an NER mention or name-like field as a resolved entity | NER finds typed spans from text; `profile_data.py` does not run NER. Treat mentions as candidates; entity resolution requires Data Modeling's approved identity or matching rules, and ambiguous pairs remain unresolved. |
+| Treat NER as entity resolution or a standalone Data Scientist/ML phase | Use a portable local script only as a companion to profiling captured text; `profile_data.py` remains structural. NER yields mentions, not identities. Keep text private and hand resolution to Data Modeling/MDM under approved rules. |
 | Print or keep a database address, a password or a raw personal value | Put the address in an environment variable (`env:<VARIABLE>`), never printed ([data-platform hard stops](../data-platform/SKILL.md#hard-stops)); a personal column's samples are masked to their shape; the run's working copy is deleted when it ends |
 | Commit or publish `REPORT.md`, `findings.yaml`, `invalid_rows.jsonl`, `fingerprints.json` or `drift.yaml` | Keep them on the machine, outside the repository: a non-personal column's top values and failing examples are values from the data, and a short key can be found again from its hash. Only `catalog`'s `profile.yaml`, names and counts, is public (`CLAUDE.md`, "Commits, PRs and secrets") |
 | Request anything from a provider (its site, API or documentation) | Profile the local copies only; a capture or a fact that only the provider holds is a blocker named to the operator ([data-platform hard stops](../data-platform/SKILL.md#hard-stops)) |
