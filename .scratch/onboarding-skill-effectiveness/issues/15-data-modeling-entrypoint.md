@@ -1,7 +1,7 @@
 # data-modeling: Make the entrypoint executable
 
 Type: task
-Status: open
+Status: resolved
 Priority: P0
 Blocked by: 03, 09, 14
 Labels: wayfinder:task
@@ -36,7 +36,7 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] Produce an entrypoint that consumes approved profiling findings, `CONTEXT.md`, existing kind definitions and published reference sets and yields one model decision per part with identity versus lookup choices and destination rationale; verified by document review against the current `data-profiling` handoff and `data-modeling` rules. The genericity check passed (142 tests); this checks generic language, not routing behavior. (2026-11-20 19:51 ET)
 - [x] Verify referenced paths and supported commands; retain mandatory stops and discoverability of optional detail; verified by checking all 38 local links and anchors in `skills/data-modeling/SKILL.md`, matching `context mdm-kinds` to `edgar_warehouse/context.py`, `rdm list` and `rdm describe` to `edgar_warehouse/rdm/cli.py`, and review that Hard stops remain before the entrypoint and optional references are linked. The commands were inspected in code, not run against stores. (2026-11-20 19:51 ET)
 - [x] Walk one applicable example to its handoff without loading unrelated references or repeating another skill's procedure; verified by the reading trace under [Trace](#trace). This is a document trace, not a live modeling run. (2026-11-20 19:51 ET)
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md.
+- [x] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. PR #1985 squash-merged at 2026-11-20 20:04 ET as `c1826fbcc3a66a6beb08947d9089fbb4889af4a0`; its updated-head CI passed all 12 checks. (2026-11-21 07:17 ET)
 - [x] Learning → skill: `Start here: decide one part` keeps published reference lookups on `rdm list` and `rdm describe`, whose outputs expose the meaning and version needed for a model decision; verified against the command descriptions and response construction in `edgar_warehouse/rdm/cli.py`. (2026-11-20 19:51 ET)
 
 ## Trace

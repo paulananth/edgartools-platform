@@ -1,7 +1,7 @@
 # data-governance: Define one responsibility
 
 Type: task
-Status: open
+Status: resolved
 Priority: P1
 Blocked by: 01, 13
 Labels: wayfinder:task
@@ -36,7 +36,7 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] List decisions, inputs and outputs owned here using current repository evidence; verified against `skills/data-governance/LINEAGE.md`, `sources/sec.company/source.yaml`, and the named owner skills in the responsibility table. (2026-11-20 19:39 ET)
 - [x] Assign each overlapping responsibility one authoritative owner and a named handoff; verified by checking the handoff table and its linked Data Modeling, Data Catalog, Data Operations and OpenMetadata sections against their current skill text. (2026-11-20 19:39 ET)
 - [x] Demonstrate the boundary on a governed input, a transient intermediate, a failed processing step and a trusted output; link retained work rather than duplicating it. Documented walkthrough below links the existing Company lineage example and source configuration; the failed-step case states the evidence boundary and does not claim an actual failed run. (2026-11-20 19:39 ET)
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. `UV_CACHE_DIR=/private/tmp/uv-cache-ticket61 uv run --no-project --with pytest -- pytest -q -p no:cacheprovider tests/unit/test_profiling_genericity.py` passed (142 tests), and `git diff --check` passed. Publication remains open because this task explicitly prohibits commits and PR creation. The genericity check validates wording constraints, not lineage behavior.
+- [x] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. PR #1982 squash-merged at 2026-11-20 19:49 ET as `fcd075b6cdda856c638870d6245e0f34ab67d1fe`; updated-head CI passed all 12 checks. The genericity check does not validate lineage behavior. (2026-11-21 07:17 ET)
 - [x] Learning → skill: governance owns the evidence-backed source-to-output lineage contract, while business meaning, catalog projection, destination publication and runtime recovery hand off to their named skills; recorded in [Decisions, evidence and handoffs](../../../skills/data-governance/SKILL.md#decisions-evidence-and-handoffs). (2026-11-20 19:39 ET)
 
 ## Completion evidence
