@@ -1,6 +1,6 @@
 ---
 name: data-onboarding
-description: Bring a NEW data feed or a NEW domain (a kind with no merge rules yet) into MDM and silver, starting from its captured files. Profile the data set with the data-profiling skill, plan one onboarding per part, map its fields and identifiers, write its first data quality checks, generate its metadata (Mapping Document and Data Catalog entry), check its rules files and load it. Also sets up the Rules Database (init, migrate). Use when the user wants to add or onboard a feed, a source or a domain that has no rules file yet. To change something already live, use refining-rules.
+description: Turn approved profiling findings and model decisions for a new source or domain into configured readers, Dataset Contracts, approved quality mappings, target declarations and steward metadata. Data Quality owns check meaning and evidence, Bookkeeping owns execution configuration, and Data Operations owns local proof and loads. Initialize or migrate the Rules Database when required. Use for new feeds or domains; use refining-rules for live changes.
 ---
 
 # Data Onboarding
@@ -14,13 +14,8 @@ Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#
 Brings something **new** into MDM (and silver): a feed with no rules
 file yet, or a domain (a kind) with no merge rules yet.
 
-**Use the other skill when:**
-- the feed already has `sources/<source>/source.yaml`, and you are
-  changing its mapping, its data quality or the matching rules: use
-  **refining-rules**;
-- Operating or recovering a configured feed: [Data Operations](../data-operations/SKILL.md); Bookkeeping owns run control and Change Journal owns receipt evidence.
-- Changing run-control/completion semantics: **bookkeeping**.
-- Changing or interpreting journal receipts/events: **change-journal**.
+For a live feed, use **refining-rules**. Other handoffs are in
+[Decisions, artifacts and handoffs](#decisions-artifacts-and-handoffs).
 
 ## Hard stops
 
@@ -60,25 +55,30 @@ file, so these counts are explored, not yet read by the contract."
 At a question, give the evidence and your recommendation. Record findings and open questions in the
 onboarding log as well.
 
-## What you produce
+## Decisions, artifacts and handoffs
 
-Everything lives in YAML files under `rules/` in this repo. People review
-them in PRs. [REFERENCE.md](REFERENCE.md) is the contract language.
+Data Onboarding turns the captured-file inventory, profiling report and
+approved findings plus Data Modeling's decisions into a configured source
+and steward metadata. Execution and local proof pass to their owners below.
 
-| File | What it holds |
+| Decision or artifact | Owner | Handoff |
 |---|---|
-| `sources/<source>/source.yaml` | The feed: `source`, `bronze` and `dataset_contracts` (one Dataset Contract per source code). Its `bookkeeping` section, which runs the feed into silver and MDM, belongs to the Bookkeeping skill. |
-| `rules/source-sequence.yaml` | One line per source folder, naming its Bookkeeping target (or `null` when no target is registered yet) and preferred `after` order. Every folder needs both a `source.yaml` (even one that only names the source and reads nothing) and a sequence entry. Every source must declare its intended `bookkeeping.targets` in `source.yaml`; a missing target or `target: null` is an explicit unregistered/not-runnable gap to resolve before claiming a complete pipeline. `after` is not a runtime dependency. Suite tests walk both files. |
-| `sources/<source>/quality.yaml` | The feed's data quality checks and fixes |
-| `sources/<source>/silver-<table>.yaml` | A silver table spec, one file per table (silver target): reviewed in the PR, registered from this file |
-| `rules/merge/kinds/<kind>.yaml` | A new domain's matching and merge rules (only when the kind is new) |
-| `sources/<source>/MAPPING.xlsx`, `rules/merge/kinds/<kind>.xlsx` | The Mapping Documents, generated for stewards (**metadata**) |
-| The Data Catalog (OpenMetadata) | Every feed, dataset and MDM field, published from the files (**metadata**) |
+| Profile measurements, `REPORT.md` and approved `findings.yaml` | [Data Profiling](../data-profiling/SKILL.md) | Data Onboarding consumes these retained findings; it does not profile to make modeling or quality decisions. |
+| Part class, identity, relationships, time and destinations | [Data Modeling](../data-modeling/SKILL.md#decisions-artifacts-and-handoffs) | Data Onboarding writes configuration from its accepted decision and proof report. |
+| New-source readers, Dataset Contracts, source sequence, kind rules and target declarations | Data Onboarding | `sources/<source>/source.yaml`, `rules/source-sequence.yaml`, new-kind rules and silver specs; `rules check` validates the configured files. |
+| Check/fix meaning, measured counts, dispositions and MDM `quality.yaml` | [Data Quality](../data-quality/SKILL.md#decisions-artifacts-and-handoffs) | Data Onboarding applies approved MDM checks to contracts and silver checks to table specs. |
+| Mapping Documents and technical catalog metadata | Data Onboarding prepares metadata from the reviewed configuration; [Data Catalog](../data-catalog/SKILL.md) owns business definitions and catalog publication. | `MAPPING.xlsx` and generated catalog metadata stay with the source configuration; catalog publication follows its own owner. |
+| The `bookkeeping` execution section, run-control semantics and worker orchestration | [Bookkeeping](../bookkeeping/SKILL.md) | Hand Bookkeeping the feed, intended target and required worker profiles; it owns execution configuration and run control. |
+| Journal receipts and delivery evidence | [Change Journal](../change-journal/SKILL.md) | Carry receipts to Data Operations; Bookkeeping records execution against them. |
+| Initial local proof, loads, operational readiness and handoff | [Data Operations](../data-operations/SKILL.md) | Hand over checked configuration, agreed Mapping Documents, retained capture/provenance and the source log; do not claim a load from an offline check. |
+| Changes to an already configured source or domain | [Refining Rules](../refining-rules/SKILL.md) | Carry the approved configuration and changed-delivery comparison; Data Onboarding handles new feeds or domains. |
 
-When renaming an existing source identity, update its folder and `source:`
-identifier, Dataset Contract IDs, source-sequence entry, Bookkeeping bindings,
-cross-source references and generated Mapping Document together. Retain prior
-run and capture evidence under the identity that produced it.
+For contract syntax, use [REFERENCE.md](REFERENCE.md); source and silver
+shapes remain in [MAP.md](MAP.md) and [TARGETS.md](TARGETS.md).
+
+When renaming a source identity, update its folder, `source:`, Dataset Contract
+IDs, source sequence, Bookkeeping bindings, cross-source references and
+Mapping Document together; retain prior run and capture evidence as recorded.
 
 The files in `sources/` show Dataset Contracts and publication rules.
 For configured complete JSON source extract, find a feed that keeps each
