@@ -1,7 +1,7 @@
 # data-profiling: Reconcile shared rules
 
 Type: task
-Status: open
+Status: resolved
 Priority: P0
 Blocked by: 02, 07
 Labels: wayfinder:task
@@ -36,9 +36,9 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] Inventory each duplicated or conflicting instruction with its authoritative source and proposed disposition; verified by document review of `CLAUDE.md`, `CONTEXT.md`, the data-platform and data-onboarding hard stops, the data-profiling skill and `docs/specs/profiling/findings.md`, plus a code reading of `profiling/run.py` and `profiling/quality.py` (masking); recorded under [Inventory](#inventory). (2026-11-20 18:29 ET)
 - [x] Align the local phase with the shared rule decision while preserving explicit operator boundaries; verified by document review of the diff to `skills/data-profiling/SKILL.md` (Hard stops, "Profile once", How to work step 1) against the inventory. The approval boundary is unchanged. (2026-11-20 18:29 ET)
 - [x] Trace a routine path and a blocked path; confirm no new approval, provider access or switch-on authority was inferred; verified by document review under [Traces](#traces). No profile, compare or approve command was run. (2026-11-20 18:29 ET)
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. The checks ran (see [Validation](#validation)). Nothing has been committed, pushed or opened as a PR yet.
-- [ ] Open decision A (routine approvals, carried from ticket 02) is answered by the operator for this skill's findings approval, designed keys and new kinds. It is recorded under [Open decisions](#open-decisions) and not settled here.
-- [ ] Learning → skill: proposed lesson for [Data Profiling hard stops](../../../skills/data-profiling/SKILL.md#hard-stops): "the evidence files hold values from the data and stay on the machine; only the catalog summary is public". It stays unchecked until the change is published and reviewed.
+- [x] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. [PR #1972](https://github.com/paulananth/edgartools-platform/pull/1972) merged with all 12 CI checks passing. (2026-11-21 12:10 ET)
+- [x] Open decision A resolved by the operator on 2026-11-21: keep explicit approval for findings and designed keys; the user asked for a private, sanitized Archify review view before approval. The view is not consent; `approve --words` remains the approval record. (2026-11-21 12:10 ET)
+- [x] Learning → skill: evidence files stay on the machine and only the names/counts catalog summary is public; present in [Hard stops](../../../skills/data-profiling/SKILL.md#hard-stops). (2026-11-21 12:10 ET)
 
 ## Inventory
 
@@ -69,20 +69,9 @@ The data-onboarding hard stops still say "a provider the operator has ruled
 out" and "read, print or paste a secret" (ticket 02's rows 5 and 6). They
 belong to ticket 20 and are not edited here.
 
-## Open decisions
+## Decision
 
-- **A. Routine approvals (from ticket 02), this skill's part.** `CLAUDE.md`
-  says not to ask for approval: record a step's approval as given under that
-  rule, and stop only for a switch-on or a new kind of decision. Data
-  Profiling asks the operator to approve the findings, each designed key,
-  each proposed new kind and each draft code set (`CODE-SETS.md`), and
-  records their exact words. The code requires
-  `approve --words` and refuses `compare` without it. Recording the rule's own
-  words would satisfy the code, but it would put words in the approval that
-  the operator did not say about these findings. This branch keeps the
-  stricter boundary. The operator needs to rule whether a findings approval is
-  a routine step under `CLAUDE.md` or the operator's own consent. A proposed
-  new kind is probably "a new kind of decision" either way.
+- **A. Routine approvals, this skill's part — resolved 2026-11-21.** The operator chose explicit approval for findings and designed keys. A private Archify review view is a read-only aid before the request, not consent; `approve --words` must still record the operator's exact words, and `compare` still refuses unapproved findings. A proposed new kind remains a new decision for Data Modeling and the operator. The view implementation belongs to the next Data Profiling entrypoint ticket.
 
 ## Traces
 
@@ -118,8 +107,7 @@ permission. The skill now:
 - gates a profiler code fix behind a ticket;
 - starts from the capture location it was handed.
 
-The findings approval keeps its exact-words boundary. Open decision A remains
-for the operator.
+PR #1972 merged the rule changes with all 12 CI checks green. The operator resolved decision A: explicit approval remains, and a private Archify view is only a review aid, not consent. The view and focused master-entity discovery are being implemented in the next Data Profiling entrypoint ticket.
 
 Provenance:
 
@@ -128,21 +116,17 @@ Provenance:
 - **Prerequisites.** `git merge-base --is-ancestor` exited 0 for
   `e166fa56` (ticket 02, PR #1966) and for `6c5c5393` (ticket 07, PR #1969)
   against `origin/main`. Their ticket files were not edited.
-- **Installed copies.** `~/.agents/skills/data-profiling` and
-  `~/.claude/skills/data-profiling` resolve to the main checkout's
-  `skills/data-profiling`. This session could not read outside this worktree,
-  so the installed copy was not compared.
-- **write-skill guidance.** Reading `~/.agents/skills/write-skill/SKILL.md`
-  was denied in this session, so that guidance was not read.
+- **Installed copies.** Both aliases resolve to the main checkout's `skills/data-profiling`. The installed file differs from the current repository copy (514 versus 497 lines); it was left untouched. This closeout changes only the repository ticket.
+- **write-skill guidance.** Read during this closeout; no skill file is edited by this status update.
 
 ## Validation
 
-- `uv run --no-project --with pytest -- pytest -q -p no:cacheprovider --rootdir <worktree> <worktree>/tests/unit/test_skills_cite_no_ticket.py <worktree>/tests/unit/test_profiling_genericity.py <worktree>/tests/unit/test_guides_name_existing_paths.py`, run after each edit: **149 passed** every time. These check skill wording (no ticket numbers or dates, the 500-line limit, genericity) and the paths the guides name. They do not exercise approval, privacy or routing behaviour.
-- `git diff --check`: clean.
-- `skills/data-profiling/SKILL.md`: 462 lines.
+- Original PR #1972 docs checks: `uv run --no-project --with pytest -- pytest -q -p no:cacheprovider tests/unit/test_skills_cite_no_ticket.py tests/unit/test_profiling_genericity.py tests/unit/test_guides_name_existing_paths.py` — **149 passed** after each edit. These check wording, genericity and guide paths; not approval or routing behavior.
+- Closeout check: `uv run --no-project --with pytest -- pytest -q -p no:cacheprovider tests/unit/test_profiling_genericity.py` — **142 passed**; `git diff --check` clean. This check does not exercise approval or routing.
+- `skills/data-profiling/SKILL.md` was 462 lines at PR #1972 validation; the repository copy is 497 lines at this closeout.
 - Placement of evidence files: a `grep` for `findings.yaml`, `REPORT.md`, `drift.yaml`, `invalid_rows` and `RANKING` across data-onboarding, refining-rules, data-quality and the profiling sub-files found no instruction to commit them. The onboarding log records only the findings' path. `git ls-files` lists none of the five files.
 - The new links (`../data-platform/SKILL.md#hard-stops` and `../data-onboarding/SKILL.md#hard-stops`) were checked by hand against those files' `## Hard stops` headings.
-- `tests/unit/test_skill_bundle_portability.py` did not run: it imports `edgar_warehouse`, and this worktree has no synced environment.
+- The local `tests/unit/test_skill_bundle_portability.py` run was skipped because the original worktree had no synced environment; PR #1972's full CI suite passed all 12 checks.
 
 ## Completion evidence
 
