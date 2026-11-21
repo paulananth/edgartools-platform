@@ -65,6 +65,15 @@ steps, and the outputs. A plumbing step is absent. When the operator asks to
 see the shipped UI, open a step's lineage tab with Playwright and confirm the
 same nodes. A passing API write is not that confirmation.
 
+## Coverage and evidence gaps
+
+State which configured targets and outputs the contract covers. Name missing
+source contracts, declared checks, run evidence or destination readback that
+limits the claim. Configuration establishes intended paths; run evidence
+establishes observed completion, and native readback establishes what a
+destination stores. Leave unsupported edges and unobserved completion
+unclaimed.
+
 ## Examples
 
 SEC Company mastering:
