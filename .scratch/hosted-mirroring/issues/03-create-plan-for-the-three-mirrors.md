@@ -1,6 +1,6 @@
 # The create plan for the three mirrors, after the first load
 
-Status: open
+Status: resolved
 Type: task
 
 The operator said "Approved" (2026-11-19 12:37 ET) to the question "approval to create the mirror after the load finishes". Recorded as given. In plain
@@ -22,11 +22,11 @@ No credential, connection or Snowflake object was given or created.
 - [x] rdm mirror created and read back: REPLICATING in a minute, 7,378 rows on both sides, target `DB_EDGARTOOLS_MIRROR_RDM.RDM.PUBLISHED_CODE`. 2026-11-19 20:34 ET
 - [x] mdm mirror created and read back: both tables REPLICATING in four minutes, 3,328,964 masters and 5,306,430 identifiers on both sides; the target schema is `PUBLIC` (a mirror keeps the source schema's name). 2026-11-19 20:34 ET
 - [x] The third mirror refused: the instance allows two publications (`snowflake_cdc.max_publications` 2), and `POSTGRES_SETTINGS` refuses the setting in both forms (instance unchanged, READY). Operator: "Yes" to raising it (refused by Snowflake), then "2": the rdm mirror and its target database dropped (source untouched) and the silver mirror created with the 16 tables. 2026-11-19 20:34 ET
-- [ ] The silver mirror REPLICATING and read back, table by table
-- [ ] The support request to raise the limit to 3 (text drafted for the operator); then the rdm mirror again
-- [ ] `rules/exposure.yaml` and `rules/gold/gold.yaml`: a target database per layer and the schemas the mirrors keep (`PUBLIC` for mdm, `SILVER`, `RDM`); `target.verified` once all three replicate
-- [ ] The snapshot cost read from metering history against the bounds (5 credits a mirror), once the history shows it
-- [ ] Learning → skill: HOSTED-MIRRORING.md, once a mirror is built
+- [ ] ~~The silver mirror REPLICATING and read back, table by table~~ superseded by ticket 04: the three store databases became one data database, so the three mirrors were dropped and one mirror of the exposed tables replaces them
+- [ ] ~~The support request to raise the limit to 3 (text drafted for the operator); then the rdm mirror again~~ superseded by ticket 04: one data database needs one publication, so the limit of 2 no longer binds
+- [ ] ~~`rules/exposure.yaml` and `rules/gold/gold.yaml`: a target database per layer and the schemas the mirrors keep (`PUBLIC` for mdm, `SILVER`, `RDM`); `target.verified` once all three replicate~~ superseded by ticket 04: one target database, and the mirror's table list is `sources/managed-mirror.yaml` (`verified: false` until a read-back)
+- [ ] ~~The snapshot cost read from metering history against the bounds (5 credits a mirror), once the history shows it~~ deferred to ticket 04: it is read when the one mirror is created and its history shows
+- [x] Learning → skill: none new. HOSTED-MIRRORING.md already holds the publication limit, the one-mirror-per-database rule and the creation order, and the three-mirror plan is retired 2026-11-21 07:41 ET
 
 ## Draft plan (not approved, not priced)
 
@@ -62,3 +62,7 @@ Rates are the account's, read from the rate sheet (3.00 USD a credit for compute
   With three mirrors there are three target databases, so both files change to a database per layer once the targets are approved
   (the Gold sources already name a database in each source entry's layer, so only the configuration changes).
 - A reset of the stores breaks a mirror: none exists now. After this load, plan any reset with the mirrors' drop or restart first.
+
+## Answer
+
+The three-mirror plan is retired. The rdm and mdm mirrors were built and read back equal, and the silver mirror was created, but the instance allows two publications and ticket 04 then moved mdm, rdm and silver into one data database, which needs one. The old mirrors are gone. What is left of this ticket's open parts is replaced by ticket 04 (one mirror, listed in `sources/managed-mirror.yaml`) or moved to it (the snapshot cost reading).
