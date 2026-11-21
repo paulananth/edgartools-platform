@@ -1,4 +1,4 @@
-# The managed mirror: the tables Snowflake replicates from the data database, and nothing else.
+# The managed mirror (part of the source mapping, beside the sources): the tables Snowflake replicates from the data database, and nothing else.
 # This file is the system of record for them. A table is mirrored only if it is listed here, and it may be listed only
 # if rules/exposure.yaml lets it leave the stores. The mirror's SQL (skills/data-platform/scripts/exposure/mirror_sql.py)
 # is written from this list, so the live mirror and this list cannot differ without a read-back that says so; Gold

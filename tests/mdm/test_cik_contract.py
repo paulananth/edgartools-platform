@@ -38,7 +38,7 @@ def test_each_feed_maps_only_the_identifiers_it_issues():
     maps one it does not issue must bring a change to the conflict count."""
     issuers = _issuers()
     mapped = {}
-    for folder in sorted((files.sources_root()).iterdir()):
+    for folder in sorted(p for p in files.sources_root().iterdir() if p.is_dir()):
         for code, body in (files.source(folder.name).get("dataset_contracts") or {}).items():
             for namespace in ((body.get("contract") or {}).get("adapter") or {}).get("identifiers") or {}:
                 mapped[(code, namespace)] = code in issuers.get(namespace, set())

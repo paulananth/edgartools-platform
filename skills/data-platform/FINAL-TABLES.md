@@ -54,7 +54,7 @@ authorization and verification gates.
 ## Consumer enforcement
 
 - **Managed mirrors:** mirror only the tables the managed mirror record
-  (`rules/managed-mirror.yaml`) lists, as `postgres_tables` with `postgres_schemas`
+  (`sources/managed-mirror.yaml`) lists, as `postgres_tables` with `postgres_schemas`
   NULL ([HOSTED-MIRRORING](HOSTED-MIRRORING.md), "Mirror only what a reader in
   Snowflake reads"). The list bounds the mirror; it does not fill it. A
   schema-wide mirror is outside this scope.
