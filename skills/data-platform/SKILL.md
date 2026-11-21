@@ -34,7 +34,7 @@ and the environment checks it needs. A route grants no approval, provider reques
 
 1. **Find the state.** With no `edgar-warehouse` on the path, the next action is [Setup](#0-setup), step 1. A source is
    configured when the rules folder (`EDGAR_RULES_ROOT`, else the bundle's read-only copy) holds `sources/<source>/source.yaml`;
-   a run id with Bookkeeping status is retained run evidence.
+   a run id with Bookkeeping status is retained run evidence; a log's `## Resume` record is checked by [Resume](RESUME.md).
 2. **Pick the owner** in [Decisions, artifacts and handoffs](#decisions-artifacts-and-handoffs) whose row fits that state; its
    handoff names the artifact to carry. Open no other reference to choose.
 3. **Name the duty** in the [duty table](CONNECTIONS.md#database-connections-and-duties) (none to read captured files; a load
@@ -126,8 +126,8 @@ Route by the current state, not only the source's age:
 - **Configured source:** a repeat delivery or run goes to Data Operations with the source runbook, delivery location and
   latest Bookkeeping/Journal status ([live state](../data-operations/SKILL.md#start-with-live-state)); a live-rule change
   goes to [Refining Rules](../refining-rules/SKILL.md#modes) with the approved configuration, changed delivery and compare report.
-- **Restart after a completed phase:** that phase's artifacts (profiling's `REPORT.md` and `findings.yaml`; a run's
-  identifier and verified-unit/Journal evidence) go to the first incomplete phase's owner; a completed phase is not repeated.
+- **Restart after a stop:** the source log's `## Resume` record names the first unfinished action and its owner;
+  [Resume](RESUME.md) says when each recorded result is reused, reopened or blocked. A completed phase is not repeated.
 
 These are routing examples, not qualifications or evidence: a phase is complete only under its owning skill's rules.
 
