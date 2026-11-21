@@ -269,6 +269,11 @@ uv run --with duckdb --with pyyaml python profile_data.py run --name "<data set>
   code counts, so after a fix say which sources it changes and profile only
   those. A database input has no file to fingerprint, so it is always profiled
   again.
+- **Resume from the source log.** Use the onboarding log's `## Resume` record ([Data Platform resume](../data-platform/RESUME.md#the-record)); do not make a profiling state file. Record mode, input fingerprints (`unfingerprinted` for a database), profiler version and sha256, settings, the private output folder, each output path and sha256, applicability, and the next unchecked action. `run` retains `REPORT.md`, `findings.yaml`, `fingerprints.json` and `invalid_rows.jsonl`; `compare` also retains `drift.yaml` and names the approved baseline. Names, paths, hashes and counts only.
+
+  Reuse only when input identity, profiler, settings, output paths and hashes still match and the findings are applicable. The matching `run` prints `reused`. A missing or changed output, input, profiler or setting reopens unapproved evidence: keep the old files and write the new run to another folder. Do not replace approved findings; a changed delivery uses `compare`. A database input cannot be reused. If an artifact cannot be checked, the phase is blocked. Leave unfinished review or approval unchecked. Hand the next action to Data Modeling, Data Quality or Data Onboarding as the findings require.
+
+  A matching completed `run` with `review findings` unchecked resumes at review. A changed input hash before approval starts a new `run`. A missing `REPORT.md` is not a reusable phase. After an approved delivery changes, keep that baseline and `compare`; hand `drift.yaml` to Refining Rules. The genericity check does not exercise this.
 - **One run captures everything** (operator: "Do not repeat
   profiling many times do it once and capture all relevant information for
   mdm rdm data quality data catalog and silver"). The one run's findings are
