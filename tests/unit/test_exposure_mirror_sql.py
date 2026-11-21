@@ -67,9 +67,15 @@ def test_the_repository_record_lists_the_masters_the_published_codes_and_every_s
     managed = yaml.safe_load((ROOT / "sources/managed-mirror.yaml").read_text())
     names = mirror_sql.tables(managed, exposure)
     silver = sorted(f"silver.{t['table']}" for t in exposure["tables"] if t["layer"] == "silver")
-    assert names == ["public.mastering_identifier", "public.mastering_master", "rdm.published_code"] + silver and len(names) == 19
+    assert names == ["mdm.mastering_identifier", "mdm.mastering_master", "rdm.published_code"] + silver and len(names) == 19
     assert mirror_sql.unmirrored_reads(views.sources(), managed) == []
     assert managed["verified"] is False  # no mirror exists until a read-back says every table replicates
+
+
+def test_nothing_is_exposed_from_the_public_schema():
+    """Operator, 2026-11-21: "mdm schema never use public ... nothing will be exposed in public" (the audit's SCH control)."""
+    exposure = yaml.safe_load((ROOT / "rules/exposure.yaml").read_text())
+    assert {layer: body["source_schema"] for layer, body in exposure["layers"].items()} == {"silver": "silver", "mdm": "mdm", "rdm": "rdm"}
 
 
 def test_the_plan_is_one_mirror_of_the_data_database_with_its_schemas_and_one_publication():

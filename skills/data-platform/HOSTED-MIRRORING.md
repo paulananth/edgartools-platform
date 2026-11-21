@@ -155,7 +155,7 @@ is refused for an application-owned object; the mirror operator alone gets "Insu
   the configuration, then `DROP_MIRROR(<old mirror>, TRUE)` so its target goes with it;
 - always drop a mirror with the second argument `TRUE`, never `FALSE`.
 
-A mirror's target schema takes the source schema's name in upper case (`rdm` gives `RDM`, `public` gives `PUBLIC`: the exposure list and the Gold configuration name `PUBLIC`, read back from the mirror), so
+A mirror's target schema takes the source schema's name in upper case (`rdm` gives `RDM`, `mdm` gives `MDM`; nothing is exposed from `public`, so a table there is a defect the audit's SCH control and `mirror_sql.py plan` refuse), so
 the readers of a mirror name the target database and that schema.
 
 On permission or extension errors, stop without retrying and direct the

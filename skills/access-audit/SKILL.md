@@ -99,6 +99,7 @@ own access records is no request to a data provider.
 | AUT | No password-only privileged login; service identities use keys or roles | No shared or phishable secret |
 | LPR | No unexpected ownership, grant-management or wildcard-admin power | The escalation path |
 | NET | A network or public-exposure boundary applies | Boundary protection |
+| SCH | Nothing lives in a database's `public` schema; every object is in its store's own schema (PostgreSQL only; read in each platform database) | A schema nobody owns is open to every login, and what is exposed from it is not governed |
 | CST | Cost and capacity guards (monitors, budgets, connection limits) | A runaway cannot spend or exhaust without a stop |
 | TMO | Execution is bounded (statement or session timeouts) | A runaway statement cannot run for days |
 | POL | Credential policies exist, and equal `rules/snowflake_policy.yaml` (Snowflake: values, and the schema they live in; a policy in any other database is drift) | Standards enforced, not hoped for |

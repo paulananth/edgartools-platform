@@ -12,7 +12,8 @@ Parts marked "approval" or "words" wait for the operator's own words before they
 - [ ] `rules/exposure.yaml` and `rules/gold/gold.yaml`: one target database, mdm's source schema `mdm`
 - [ ] Prove on the local test server with the two-database layout: init, a small load, links and master ids, the catalog reader
 - [ ] Readiness: `discovery_reader` (the catalog reader) holds a connection limit (audit CST); the role guards hold it, apply after merge, then the gate
-- [ ] Mastering in `public` is mirrored as `PUBLIC`: decide with the operator whether it moves into schema `mdm` (needs the operator's word)
+- [x] Mastering moved from `public` into schema `mdm`, with audit objective SCH: PR #1997 2026-11-21 09:27 ET
+- [ ] Hosted: the live stores hold the mastering tables in `public` until the next init; a reset (init steps 1-9) creates them in `mdm`, the audit's SCH control passes, and the one mirror is created with `MDM` as the schema
 - [ ] Follow-up (no-DDL rule): the silver writer still stages each delivery in a temporary table, so the databases keep TEMPORARY
 - [ ] Finish under five minutes on this store: rebase `claude/links-reads-one-pass`, merge, rerun `--finish`
 - [ ] The snapshot cost of the one mirror read from metering history against the bounds (5 credits for a mirror)
