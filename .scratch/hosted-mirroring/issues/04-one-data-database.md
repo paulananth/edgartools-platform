@@ -1,6 +1,6 @@
 # MDM, RDM and silver in one database, one mirror
 
-Status: open
+Status: resolved
 Type: task
 
 Operator: "research if we can have one db and multiple schemas in postgress, where we can put togther mdm, rdm, silver in one db
@@ -23,7 +23,8 @@ and the rest in another db", then "Yes, open the ticket and start, make the skil
 - [x] Research: mirror scope, the publication limit, the earlier qualification, the code's store layout. 2026-11-19 21:19 ET
 - [x] Skill: `CONNECTIONS.md` holds the two databases and two URLs and why; `HOSTED-MIRRORING.md` plans mirrors from the
       exposure list by database, checks the publication limit, and answers a shortage with the store layout. 2026-11-19 21:19 ET
-- [ ] A mirror-plan script the skill runs (exposure list, layout, publication limit → the plan, or the refusal)
+- [x] A mirror-plan script the skill runs: `mirror_sql.py plan` (exposure list, layout, publication limit → the plan, or the refusal); operator, 2026-11-21: "only data db need to be mirrored not control db". Tests failed first with no `plan` (4 AttributeErrors), 12 pass; refuses another database, a CONTROL_URL layer, no free publication 2026-11-21 07:45 ET
+- [ ] ~~Operator says the data database holds schemas `mdm`, `rdm` and `silver`, but mastering sits in `public` (mirrored as `PUBLIC`; `plan` prints `public -> PUBLIC`). Moving it into `mdm` is its own change (the ticket's struck part): needs the operator's word~~ deferred to ticket 14 (`14-finish-hosted-mirroring`): ticket closed by the operator, 2026-11-21; the part is not done
 - [x] Consult the GoF reviewer: the shape stands; one finding, the store's database rule is copied in three places
       (`database_connections.store_url`, Bookkeeping's `default_url`, the Change Journal's `_default_url`), so the change goes in
       one resolver and the copies call it. 2026-11-19 21:19 ET
@@ -57,19 +58,19 @@ and the rest in another db", then "Yes, open the ticket and start, make the skil
 - [ ] ~~Mastering in schema `mdm` on PostgreSQL~~ not needed: MDM's owner owns the data database, so mastering and MDM's
       registration authority keep `public` (the mirror carries it as `PUBLIC`); rdm and silver keep their own schemas under their own
       owners. Moving mastering into `mdm` is its own change if the Gold names ask for it.
-- [ ] Follow-up (no-DDL rule): the silver writer still stages each delivery in a temporary table, so the databases keep TEMPORARY
-- [ ] The snapshot cost of the one mirror read from metering history against the bounds (5 credits for a mirror), once it is created and the history shows it (moved from ticket 03)
-- [ ] Access by schema in a shared database: reset, hardening (the mirror login's CONNECT), readiness, catalog readers, local
+- [ ] ~~Follow-up (no-DDL rule): the silver writer still stages each delivery in a temporary table, so the databases keep TEMPORARY~~ deferred to ticket 14 (`14-finish-hosted-mirroring`): ticket closed by the operator, 2026-11-21; the part is not done
+- [ ] ~~The snapshot cost of the one mirror read from metering history against the bounds (5 credits for a mirror), once it is created and the history shows it (moved from ticket 03)~~ deferred to ticket 14 (`14-finish-hosted-mirroring`): ticket closed by the operator, 2026-11-21; the part is not done
+- [ ] ~~Access by schema in a shared database: reset, hardening (the mirror login's CONNECT), readiness, catalog readers, local~~ deferred to ticket 14 (`14-finish-hosted-mirroring`): ticket closed by the operator, 2026-11-21; the part is not done
       test stores
-- [ ] `rules/exposure.yaml` and `rules/gold/gold.yaml`: one target database, mdm's source schema `mdm`
-- [ ] Prove on the local test server with the two-database layout: init, a small load, links and master ids, the catalog reader
+- [ ] ~~`rules/exposure.yaml` and `rules/gold/gold.yaml`: one target database, mdm's source schema `mdm`~~ deferred to ticket 14 (`14-finish-hosted-mirroring`): ticket closed by the operator, 2026-11-21; the part is not done
+- [ ] ~~Prove on the local test server with the two-database layout: init, a small load, links and master ids, the catalog reader~~ deferred to ticket 14 (`14-finish-hosted-mirroring`): ticket closed by the operator, 2026-11-21; the part is not done
 - [x] Hosted: operator "wait for CI then reset hosted" (recorded in reinit-approvals.log). Duty files converted to the two URLs (same
       logins; the old files kept as `.before-two-urls`); `data` and `control` created; provisioning ("edgar_loader can create nothing
       in any of the 2 databases"); the mirror login's CONNECT on `data`; the six inits exit 0 (data: mdm 25, public 30, rdm 10
       tables; control: bookkeeping 5, journal 1, rules 1); RDM 15 versions, 7,378 published codes, equal to the repository's
       rows; 16 silver tables registered; engine rebuilt; catalog republished and confirmed. The old six databases and their
       mirrors are kept until the new mirror is read back. 2026-11-19 23:06 ET
-- [ ] Readiness: `discovery_reader` (the catalog reader) held no connection limit (audit CST); the role guards hold it.
+- [ ] ~~Readiness: `discovery_reader` (the catalog reader) held no connection limit (audit CST); the role guards hold it.~~ deferred to ticket 14 (`14-finish-hosted-mirroring`): ticket closed by the operator, 2026-11-21; the part is not done
       `tests/unit/test_harden_hosted_roles.py::test_every_login_the_platform_makes_holds_a_connection_limit` failed before
       ("Extra items in the left set"). Apply after merge, then the gate.
 - [x] Hosted: the reload. Times (ET, 2026-11-19 to 11-20): PR merged 22:52; readiness passed 00:15 (about 1 h 20 min of reset, provisioning,
@@ -85,8 +86,8 @@ and the rest in another db", then "Yes, open the ticket and start, make the skil
       and count; (5) a second RDM restore is refused at its first insert and changes nothing, so the runbook says to run it once and count;
       (6) the finish is full-size on a fresh store and took 32 min against its 5, so the faster links build (branch `claude/links-reads-one-pass`)
       must merge and be proved on this store. 2026-11-20 06:03 ET
-- [ ] Finish under five minutes on this store: rebase `claude/links-reads-one-pass`, merge, rerun `--finish` (hosted is loaded, so the proof is real)
-- [ ] Hosted: drop the old six databases and their two mirrors (approval), once the new mirror reads back
+- [ ] ~~Finish under five minutes on this store: rebase `claude/links-reads-one-pass`, merge, rerun `--finish` (hosted is loaded, so the proof is real)~~ deferred to ticket 14 (`14-finish-hosted-mirroring`): ticket closed by the operator, 2026-11-21; the part is not done
+- [ ] ~~Hosted: drop the old six databases and their two mirrors (approval), once the new mirror reads back~~ deferred to ticket 14 (`14-finish-hosted-mirroring`): ticket closed by the operator, 2026-11-21; the part is not done
 - [x] Hosted: the two old mirrors dropped (operator, approval question: "Drop both, mirror data") and one mirror, `edgartools_mirror_data`, created over
       the 19 exposed tables (Iceberg, serverless, 60 min) into `DB_EDGARTOOLS_MIRROR`: all 19 tables `REPLICATING` within about 70 min of the
       create, every row count equal to PostgreSQL's (largest: 5.35 M silver rows, 5.31 M identifiers, `rdm.published_code` 7,378). 2026-11-20 06:14 ET
@@ -96,7 +97,7 @@ and the rest in another db", then "Yes, open the ticket and start, make the skil
 - [ ] ~~The two old Snowflake target databases (`DB_EDGARTOOLS_MIRROR_MDM`, `DB_EDGARTOOLS_MIRROR_SILVER`) are kept until Gold is repointed~~ moved to the orphan-target part above: Gold was empty, the drop was refused at
       `DB_EDGARTOOLS_MIRROR`: the deployed Gold tables may still select from them, and a drop there is not undoable
 - [x] The Snowflake database names are configuration in one file, `rules/snowflake.yaml` (operator, 2026-11-20 06:59 ET: "must be on a single place not over multiple files"); the exposure script, the Gold views, the dbt profile and the Terraform grants read it; verified by `tests/unit/test_gold_views.py` (205 passed with the exposure tests) and a Terraform read of the file
-- [ ] Rename the two kept databases (drop the `DB_` prefix) and drop the two old targets: waits for the operator's ANANP11 words; after it, a one-line change per name in `rules/snowflake.yaml`
+- [ ] ~~Rename the two kept databases (drop the `DB_` prefix) and drop the two old targets: waits for the operator's ANANP11 words; after it, a one-line change per name in `rules/snowflake.yaml`~~ deferred to ticket 14 (`14-finish-hosted-mirroring`): ticket closed by the operator, 2026-11-21; the part is not done
 - [x] Documentation first: the rename procedure (no rename of a mirror target; create beside, verify, switch the name, `DROP_MIRROR(..., TRUE)`; an orphan target needs Snowflake support) is in `skills/data-platform/HOSTED-MIRRORING.md` and the init runbook before the steps run. 2026-11-20 07:10 ET
 - [x] ANANP11 used once (operator, 2026-11-20: "use ANANP11 once, move forward if you need to recreate mirror or gold if rename is not possible"; words in the approvals log): `DB_EDGARTOOLS_GOLD` renamed to `EDGARTOOLS_GOLD` (it was empty). 2026-11-20 07:10 ET
 - [x] Mirror target rename refused (owner is the managed mirror); `edgartools_mirror` created into `EDGARTOOLS_MIRROR` beside `edgartools_mirror_data` (19 tables, Iceberg, 60 min, same as the old). 2026-11-20 07:10 ET
@@ -106,10 +107,10 @@ and the rest in another db", then "Yes, open the ticket and start, make the skil
 - [x] `DROP_MIRROR('edgartools_mirror_data', TRUE)` run after #1940 merged (operator: "drop the old mirror when 1940 merges"; words in the approvals log): `DB_EDGARTOOLS_MIRROR` gone with it; `SHOW DATABASES` read back; `edgartools_mirror` still has 19 of 19 tables `REPLICATING`, `mastering_master` counted in `EDGARTOOLS_MIRROR.PUBLIC`. 2026-11-20 08:17 ET
 - [x] Database ownership (operator, 2026-11-20 07:34 ET: "use ananp11"; words in the approvals log): the owner role of `rules/snowflake.yaml` created, held by ACCOUNTADMIN, and it owns the Gold and governance databases (`SHOW DATABASES` read back; the Gold writer role kept its grants); the statements come from `skills/aws-snowflake-operations/scripts/database_owner_sql.py`, tested by `tests/unit/test_database_owner_sql.py`. 2026-11-20 07:34 ET
 - [ ] ~~Owner role and ownership grants in the access Terraform root~~ deferred: not validated here (no `terraform init` for that root); the next access apply imports the role and the two grants first
-- [ ] The orphan targets `DB_EDGARTOOLS_MIRROR_MDM` and `DB_EDGARTOOLS_MIRROR_SILVER`: no support request is needed (a probe mirror's orphan was moved to the owner role by the administrator's `GRANT OWNERSHIP` and dropped, 2026-11-20 16:36 ET); read whether they still exist (`SHOW DATABASES`, they did not list on 2026-11-20 16:36 ET), then move and drop them under the administrator's words
+- [ ] ~~The orphan targets `DB_EDGARTOOLS_MIRROR_MDM` and `DB_EDGARTOOLS_MIRROR_SILVER`: no support request is needed (a probe mirror's orphan was moved to the owner role by the administrator's `GRANT OWNERSHIP` and dropped, 2026-11-20 16:36 ET); read whether they still exist (`SHOW DATABASES`, they did not list on 2026-11-20 16:36 ET), then move and drop them under the administrator's words~~ deferred to ticket 14 (`14-finish-hosted-mirroring`): ticket closed by the operator, 2026-11-21; the part is not done
 - [x] Operator, 2026-11-21: "mdm schema never use public make it an audit rule enterprise nothing will be exposed in public": the mastering tables are created in and read from schema `mdm` on PostgreSQL (`mastering.store.SCHEMA`; `install` creates the schema, sets the search path and grants usage; `open_store` sets it for the session); `rules/exposure.yaml` and `rules/gold/gold.yaml` say `mdm`/`MDM`. Test failed first (`assert {'mastering_identifier','mastering_master'} <= set()`: the tables were in `public`), now passes with the mastering adapter files on PostgreSQL (a table the code no longer uses is dropped from `mdm`) 2026-11-21 07:56 ET
 - [x] The audit rule: objective `SCH` in access-audit (every platform database's `public` schema holds no table, view, sequence or function; read as the audit login, NOT_TESTED when a database cannot be read). Tests failed first (KeyError, no `SCH`), 51 pass; the exposure list is tested to name no `public` layer 2026-11-21 07:56 ET
-- [ ] Hosted: the live stores hold the mastering tables in `public` until the next init; a reset (init steps 1-9) creates them in `mdm`, then the audit's SCH control passes, and the one mirror is created with `MDM` as the schema (the live mirror carries `PUBLIC`; no Gold source reads it yet)
-- [ ] Follow-up ticket: master ids and links as joins inside the data database
-- [ ] Merge the PR when CI is green
-- [ ] Learning → skill
+- [ ] ~~Hosted: the live stores hold the mastering tables in `public` until the next init; a reset (init steps 1-9) creates them in `mdm`, then the audit's SCH control passes, and the one mirror is created with `MDM` as the schema (the live mirror carries `PUBLIC`; no Gold source reads it yet)~~ deferred to ticket 14 (`14-finish-hosted-mirroring`): ticket closed by the operator, 2026-11-21; the part is not done
+- [ ] ~~Follow-up ticket: master ids and links as joins inside the data database~~ deferred to ticket 14 (`14-finish-hosted-mirroring`): ticket closed by the operator, 2026-11-21; the part is not done
+- [x] Merge the PR when CI is green: the ticket's changes merged in #1995 and #1996 2026-11-21 09:20 ET
+- [x] Learning → skill (learnings are in `skills/data-platform/HOSTED-MIRRORING.md` and the init runbook, per the Learnings part above) 2026-11-21 09:20 ET

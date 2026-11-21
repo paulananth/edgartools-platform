@@ -10,7 +10,8 @@ spec = importlib.util.spec_from_file_location("mirror_sql", ROOT / "skills/data-
 mirror_sql = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mirror_sql)
 
-EXPOSURE = {"layers": {"a": {"source_schema": "pub"}, "b": {"source_schema": "ref"}},
+EXPOSURE = {"layers": {"a": {"source_schema": "pub", "connection": "DATA_URL", "target_schema": "PUB"},
+                       "b": {"source_schema": "ref", "connection": "DATA_URL", "target_schema": "REF"}},
             "tables": [{"layer": "b", "table": "codes"}, {"layer": "a", "table": "thing"}]}
 EXPOSURE["tables"].append({"layer": "a", "table": "unread"})
 NAMES = {"mirror": {"database": "INVENTED_MIRROR"}}
@@ -75,3 +76,25 @@ def test_nothing_is_exposed_from_the_public_schema():
     """Operator, 2026-11-21: "mdm schema never use public ... nothing will be exposed in public" (the audit's SCH control)."""
     exposure = yaml.safe_load((ROOT / "rules/exposure.yaml").read_text())
     assert {layer: body["source_schema"] for layer, body in exposure["layers"].items()} == {"silver": "silver", "mdm": "mdm", "rdm": "rdm"}
+
+
+def test_the_plan_is_one_mirror_of_the_data_database_with_its_schemas_and_one_publication():
+    plan = mirror_sql.plan(MANAGED, EXPOSURE, publication_limit=2, publications_held=1)
+    assert "database data" in plan and "1 publication" in plan
+    assert "pub -> PUB: 1 table" in plan and "ref -> REF: 1 table" in plan
+
+
+def test_a_table_of_the_control_database_is_refused():
+    exposure = {**EXPOSURE, "layers": {**EXPOSURE["layers"], "b": {**EXPOSURE["layers"]["b"], "connection": "CONTROL_URL"}}}
+    with pytest.raises(SystemExit, match="b.codes.*CONTROL_URL"):
+        mirror_sql.plan(MANAGED, exposure, publication_limit=2, publications_held=0)
+
+
+def test_a_record_naming_another_database_than_the_data_database_is_refused():
+    with pytest.raises(SystemExit, match="postgres_database"):
+        mirror_sql.plan({**MANAGED, "postgres_database": "control"}, EXPOSURE, publication_limit=2, publications_held=0)
+
+
+def test_no_free_publication_refuses_the_plan():
+    with pytest.raises(SystemExit, match="publication"):
+        mirror_sql.plan(MANAGED, EXPOSURE, publication_limit=2, publications_held=2)

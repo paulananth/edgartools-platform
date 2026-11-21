@@ -6,6 +6,7 @@ format come from the same record, the target database from rules/snowflake.yaml,
 step 5 with Snowflake-managed storage. Run the output as the mirror operator, after the skill's read-only pre-flight and
 the operator's approval:
 
+    python mirror_sql.py plan --publication-limit 2 --publications-held 0   # the one mirror of the data database, or the refusal
     python mirror_sql.py create --instance <instance> > create.sql      # the record, the exposure list and the names file
     snow sql -c <connection> -f create.sql
     python mirror_sql.py alter --mirrored <JSON list of the mirrored schema.table names, read back>   # adds and removes the difference
@@ -40,6 +41,29 @@ def unmirrored_reads(reads: dict, managed: dict) -> list[str]:
     listed = {(entry["layer"], entry["table"]) for entry in managed["tables"]}
     wanted = {(source["name"], table["name"]) for source in reads["sources"] for table in source["tables"]}
     return sorted(f"{layer}.{table}" for layer, table in wanted - listed)
+
+
+DATA_DATABASE = "data"  # the one database the mirror reads (the data stores' database); the control database is never mirrored
+
+
+def plan(managed: dict, exposure: dict, publication_limit: int, publications_held: int) -> str:
+    """The plan for the one mirror, or the refusal: only the data database, each layer a schema, one free publication."""
+    if managed["postgres_database"] != DATA_DATABASE:
+        raise SystemExit(f"postgres_database is {managed['postgres_database']}: only the {DATA_DATABASE} database is mirrored")
+    layers = exposure["layers"]
+    held = {e["layer"]: layers[e["layer"]]["connection"] for e in managed["tables"]}
+    if len(set(held.values())) > 1:
+        spread = sorted(f"{e['layer']}.{e['table']} ({held[e['layer']]})" for e in managed["tables"])
+        raise SystemExit(f"the tables are not all in the data database, so one mirror cannot carry them: {', '.join(spread)}")
+    listed = tables(managed, exposure)
+    if publications_held + 1 > publication_limit:
+        raise SystemExit(f"no free publication: {publications_held} held of {publication_limit}; the mirror needs 1")
+    by_layer = sorted({e["layer"] for e in managed["tables"]})
+    lines = [f"mirror {managed['mirror']}: database {DATA_DATABASE}, {len(listed)} tables, 1 publication ({publications_held} held of {publication_limit})"]
+    for layer in by_layer:
+        count = sum(1 for e in managed["tables"] if e["layer"] == layer)
+        lines.append(f"  {layers[layer]['source_schema']} -> {layers[layer]['target_schema']}: {count} table{'s' if count != 1 else ''}")
+    return "\n".join(lines) + "\n"
 
 
 def quoted(names: list[str]) -> str:
@@ -93,16 +117,22 @@ def release(managed: dict, names: dict) -> str:
 
 def main(argv: list[str] | None = None) -> str:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("action", choices=["create", "alter", "verify", "check", "retire", "release"])
+    parser.add_argument("action", choices=["plan", "create", "alter", "verify", "check", "retire", "release"])
     parser.add_argument("--managed", type=Path, default=SOURCES / "managed-mirror.yaml", help="the managed mirror record")
     parser.add_argument("--exposure", type=Path, default=RULES / "exposure.yaml", help="the exposure list that bounds the record")
     parser.add_argument("--names", type=Path, default=RULES / "snowflake.yaml", help="the file naming the mirror database")
+    parser.add_argument("--publication-limit", type=int, help="snowflake_cdc.max_publications, read from the instance (plan)")
+    parser.add_argument("--publications-held", type=int, help="the publications the instance already holds (plan)")
     parser.add_argument("--instance", help="the Postgres instance (create)")
     parser.add_argument("--reads", type=Path, help="the dbt sources file Gold reads (check)")
     parser.add_argument("--mirrored", type=Path, help="a JSON list of the tables the mirror holds, read back (alter)")
     args = parser.parse_args(argv)
     load = lambda path: yaml.safe_load(path.read_text(encoding="utf-8"))
     managed = load(args.managed)
+    if args.action == "plan":
+        if args.publication_limit is None or args.publications_held is None:
+            parser.error("plan needs --publication-limit and --publications-held")
+        return plan(managed, load(args.exposure), args.publication_limit, args.publications_held)
     if args.action == "verify":
         return verify(managed)
     if args.action == "retire":

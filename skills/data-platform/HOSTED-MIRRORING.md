@@ -132,7 +132,9 @@ each database is one mirror, and each schema keeps its name in the target. Read 
 publications already held; when the databases to mirror outnumber the free publications, the answer is the store layout
 (every exposed store in the data database, [Connection URLs](CONNECTIONS.md)), not a support request or a dropped mirror. The
 data database gives one mirror, the `mirror.database` of `rules/snowflake.yaml`, with one schema per source schema; a plan with more than one target
-database for the exposed stores is a defect.
+database for the exposed stores is a defect. Only the data database is mirrored, never the control database (rules, Bookkeeping, Change Journal):
+`scripts/exposure/mirror_sql.py plan --publication-limit <n> --publications-held <n>` writes the plan (tables per schema, the one publication) or refuses a record
+that names another database, a table whose layer is not on `DATA_URL`, or no free publication.
 
 An instance carries at most two mirrors: each mirror needs one CDC publication and `snowflake_cdc.max_publications`
 is 2, which `POSTGRES_SETTINGS` does not accept ("Unrecognized Postgres setting"). A third mirror needs Snowflake support
