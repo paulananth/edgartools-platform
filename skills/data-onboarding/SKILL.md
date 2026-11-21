@@ -14,7 +14,7 @@ Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#
 Brings something **new** into MDM (and silver): a feed with no rules
 file yet, or a domain (a kind) with no merge rules yet.
 
-For live-source changes and operational work, follow the owner in
+For a live feed, use **refining-rules**. Other handoffs are in
 [Decisions, artifacts and handoffs](#decisions-artifacts-and-handoffs).
 
 ## Hard stops
