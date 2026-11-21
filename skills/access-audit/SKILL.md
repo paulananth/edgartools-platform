@@ -31,31 +31,63 @@ A shared rule keeps its home, named in its row. This table grants no approval, p
 | Accept a risk for the operator, or record an acceptance as given | A signed acceptance is the operator's own words, stamped `{{now}}` (`CLAUDE.md`, "Task checklists"), with the owner, reason and expiry date, given when asked. Accepting a risk is a new kind of decision (`CLAUDE.md`, "Talking with the operator"), never a routine approval |
 | Finalise a skill, role or login with an open FAIL that is not accepted | See the gate below |
 
-## Run it
+## Start here: audit a change
 
-Before a Snowflake or AWS run, open [AWS and Snowflake Operations](../aws-snowflake-operations/SKILL.md) (`CLAUDE.md`,
-"Skills and guides"). The login files and their duties belong to [Connections](../data-platform/CONNECTIONS.md). Reading a
-platform's own access records is no request to a data provider.
+Inputs: the change being finalised and the platforms whose access it touches, each platform's read-only audit connection
+(below), the roles or users the change adds or alters, and the [Objectives](#objectives). Output: a PASS, FAIL and NOT_TESTED
+report with the coverage matrix ([Rating and report](#rating-and-report)), each finding's remediation reference in
+[handoffs](#decisions-artifacts-and-handoffs), and the [gate](#the-gate-before-finalising-a-skill-role-or-login)'s verdict.
+Before a Snowflake or AWS run, open [AWS and Snowflake Operations](../aws-snowflake-operations/SKILL.md) (`CLAUDE.md`, "Skills
+and guides"); the login files and their duties belong to [Connections](../data-platform/CONNECTIONS.md). Reading a platform's
+own access records is no request to a data provider.
+
+1. **Decide applicability.** Name each platform where the change adds or alters a role, login, grant, credential, connection or
+   audited setting. None: record the gate as not applicable with that reason, never PASS, and stop; nothing runs.
+2. **Prepare.** Use a Python where `edgar_warehouse` imports (the installed package, or a checkout's `uv` environment): the
+   postgres adapter imports it on every command, `--list` included. Work in this skill's folder and pass `--repo` the checkout
+   root (`../..` in a checkout): CHG reads tickets under `.scratch/` and Terraform under `infra/` there, and finds none
+   anywhere else. Set only each touched platform's variable, and check it is set without printing it:
+
+| Platform | Set | Evidence | The read-only identity holds |
+|---|---|---|---|
+| Snowflake | `AUDIT_SNOWFLAKE_CONNECTION`: the SnowCLI connection of the auditor role | `ACCOUNT_USAGE` views, `SHOW` of parameters, warehouses and monitors | the security, usage and governance viewer database roles and `MONITOR USAGE ON ACCOUNT` |
+| PostgreSQL | the stores folder's `reader.env` (a hosted store's is `~/.config/edgartools/hosted/`), sourced | catalogs and settings | the diagnostic login (`pg_monitor`) |
+| AWS | `AUDIT_AWS_PROFILE`: a read-only audit profile; an ambient `AWS_PROFILE` or `AWS_ACCESS_KEY_ID` also counts as set | IAM account summary and credential report, CloudTrail, S3 public-access block, budgets | the `SecurityAudit` managed policy (plus `iam:GenerateCredentialReport`) |
+| GitHub | `AUDIT_GITHUB_REPO`: `owner/name`, read with the `gh` CLI | branch protection, secret scanning, the caller's permission | a token with read access to the repository |
+| Workstation | nothing; it always runs | client credential files: counts of plain-text passwords and loose file modes | the operator's own account; values are never read out |
+
+3. **List, then audit** exactly the touched platforms, in one command-scoped subshell with tracing off. Name each new Snowflake
+   role or user with `--principal`: the usage views lag, and the option is read for Snowflake only.
 
 ```bash
-set -a; . ~/.config/edgartools/hosted/reader.env; set +a     # the read-only Postgres login; never print it
-export AUDIT_SNOWFLAKE_CONNECTION=<SnowCLI connection of the read-only auditor role>
-export AUDIT_AWS_PROFILE=<read-only audit profile (SecurityAudit)>
-export AUDIT_GITHUB_REPO=<owner/name>
-python scripts/access_audit.py --list     # which platforms are configured
-python scripts/access_audit.py            # exit 1 when any control fails; --json keeps a record
+( set +x; set -a; . <stores folder>/reader.env; set +a                      # PostgreSQL only; never print it
+  export AUDIT_SNOWFLAKE_CONNECTION=<SnowCLI connection of the auditor role>   # Snowflake only
+  python scripts/access_audit.py --repo ../.. --list
+  python scripts/access_audit.py --repo ../.. --platform <touched> --principal <new role or user>  # --principal: Snowflake only
+)
 ```
 
-A platform is audited when its variable is set; `--platform NAME` limits the run, `--principal NAME` adds a role or user the
-platform's usage views have not shown yet (they lag). The workstation adapter always runs.
+   `--list` is expected to exit 0 and print `configured: <names>`, with `workstation` always among the names. A touched
+   platform that is not listed is a stop. The audit exits in one of three shapes:
+   - **exit 0**: one line per control (`RESULT ID severity title [refs]`, its evidence counts, and its fix when it is not
+     PASS), the matrix, then `== N pass, 0 fail, N not tested`;
+   - **exit 1 with that count line**: at least one FAIL, listed first;
+   - **exit 1 with an error and no count line**: an adapter refused its identity (an administrator, or the operator's own
+     account) or could not read its evidence, such as a platform named with `--platform` whose variable is not set. Every
+     platform is read before any is graded, so nothing was graded.
+   Add `--json` to keep the run's record ([handoffs](#decisions-artifacts-and-handoffs)). It prints the same controls as one
+   list, with no matrix and no count line; the matrix is each `id`'s result, laid out by objective and platform.
+4. **Grade against the [gate](#the-gate-before-finalising-a-skill-role-or-login)** for each touched platform. Name every
+   NOT_TESTED and `-` control as not tested.
+5. **Hand off** each FAIL (control id, evidence counts, the fix it names) to the owner in its
+   [handoffs](#decisions-artifacts-and-handoffs) row. Re-run step 3 on that platform after the fix. Only that re-run's PASS,
+   or the operator's signed acceptance, closes it.
 
-| Platform | Evidence | The read-only identity holds |
-|---|---|---|
-| Snowflake | `ACCOUNT_USAGE` views, `SHOW` of parameters, warehouses and monitors | the security, usage and governance viewer database roles and `MONITOR USAGE ON ACCOUNT` |
-| PostgreSQL | catalogs and settings | the diagnostic login (`pg_monitor`) |
-| AWS | IAM account summary and credential report, CloudTrail, S3 public-access block, budgets | the `SecurityAudit` managed policy (plus `iam:GenerateCredentialReport`) |
-| GitHub | branch protection, secret scanning, the caller's permission | a token with read access to the repository |
-| Workstation | client credential files: counts of plain-text passwords and loose file modes | the operator's own account; values are never read out |
+**Stop**, and name the blocker to its owner, when:
+- a touched platform's variable or file is missing (the operator sets it in their own terminal);
+- a run ends with an error and no count line: that platform is not tested, and its identity is fixed first (never
+  `--as-admin` for the gate: it fails IND);
+- a FAIL that the change touches has no signed acceptance (the gate's one question).
 
 ## Objectives
 
@@ -101,7 +133,7 @@ recreate its report.
 | Decision or artifact | Authoritative owner | Handoff |
 |---|---|---|
 | Objectives, adapters, grading, the PASS/FAIL/NOT_TESTED report and the coverage matrix (`scripts/access_audit.py`) | Access audit | Keep the `--json` record of the run; a later run on the same platform is the recheck. |
-| The read-only audit logins and their connection variables | [Data Platform](../data-platform/CONNECTIONS.md) (the PostgreSQL reader duty) and [AWS and Snowflake Operations](../aws-snowflake-operations/SKILL.md#access-identities-read-only-first) (the Snowflake audit identity); the AWS and GitHub audit identities hold what Run it lists | The audit receives only the variable names listed in Run it; it refuses an administrator identity. |
+| The read-only audit logins and their connection variables | [Data Platform](../data-platform/CONNECTIONS.md) (the PostgreSQL reader duty) and [AWS and Snowflake Operations](../aws-snowflake-operations/SKILL.md#access-identities-read-only-first) (the Snowflake audit identity); the AWS and GitHub audit identities hold what [Start here](#start-here-audit-a-change) lists | The audit receives only the variables listed in Start here; it refuses an administrator identity. |
 | Fixing a Snowflake access finding: the access-admin identity, the Terraform plan, the operator's recorded words and the apply | [AWS and Snowflake Operations](../aws-snowflake-operations/SKILL.md#fixing-an-access-finding) | Carry the finding; after the apply, re-run the audit. Only that re-run's PASS closes it. |
 | Fixing an AWS access finding | [AWS and Snowflake Operations](../aws-snowflake-operations/SKILL.md), which owns every AWS command | Same: carry the finding, re-run the audit after the change. |
 | Fixing a PostgreSQL role guard (connection limit, timeouts, `work_mem`, audit classes) | [Data Operations](../data-operations/HOSTED-LOADS.md#before-a-load-starts) (role guards) | Carry the failing CST, TMO or LOG control; re-run the audit on `postgres` after the guards are applied. |
