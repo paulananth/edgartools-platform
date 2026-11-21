@@ -16,7 +16,7 @@ approval:
 # The managed mirror keeps a PostgreSQL schema's and table's names, upper-cased (snowflake-postgres
 # skill, mirror), in one database with MDM, RDM and SILVER schemas (data-platform
 # SINGLE-DATABASE-ICEBERG.md). It is not built yet, so every Snowflake identity is planned, not read back.
-# Which of these tables the managed mirror carries is rules/managed-mirror.yaml, the system of record for the mirror.
+# Which of these tables the managed mirror carries is sources/managed-mirror.yaml, the system of record for the mirror.
 target:
   names: snowflake.yaml       # the file beside this one that holds the mirror's database name (`mirror.database`)
   verified: false
