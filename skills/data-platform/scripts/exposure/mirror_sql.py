@@ -96,6 +96,11 @@ def verify(managed: dict) -> str:
     return f"CALL SNOWFLAKE.POSTGRES.LIST_MIRRORED_TABLES('{managed['mirror']}');\n"
 
 
+def exists(names: dict) -> str:
+    """The read-back of the one mirror target: absent before a create and after a retire, present while it replicates. Any role that can list databases runs it."""
+    return f"SHOW DATABASES LIKE '{names['mirror']['database']}';\n"
+
+
 def retire(managed: dict) -> str:
     """Always TRUE: a target left behind by FALSE has no mirror to drop it."""
     return f"CALL SNOWFLAKE.POSTGRES.DROP_MIRROR('{managed['mirror']}', TRUE);\n"
@@ -117,7 +122,7 @@ def release(managed: dict, names: dict) -> str:
 
 def main(argv: list[str] | None = None) -> str:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("action", choices=["plan", "create", "alter", "verify", "check", "retire", "release"])
+    parser.add_argument("action", choices=["plan", "create", "alter", "verify", "check", "retire", "release", "exists"])
     parser.add_argument("--managed", type=Path, default=SOURCES / "managed-mirror.yaml", help="the managed mirror record")
     parser.add_argument("--exposure", type=Path, default=SOURCES.parent / "destination" / "authorised_data_sharing.yaml", help="the exposure list that bounds the record")
     parser.add_argument("--names", type=Path, default=RULES / "snowflake.yaml", help="the file naming the mirror database")
@@ -135,6 +140,8 @@ def main(argv: list[str] | None = None) -> str:
         return plan(managed, load(args.exposure), args.publication_limit, args.publications_held)
     if args.action == "verify":
         return verify(managed)
+    if args.action == "exists":
+        return exists(load(args.names))
     if args.action == "retire":
         return retire(managed)
     if args.action == "release":

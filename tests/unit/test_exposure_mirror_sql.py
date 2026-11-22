@@ -98,3 +98,8 @@ def test_a_record_naming_another_database_than_the_data_database_is_refused():
 def test_no_free_publication_refuses_the_plan():
     with pytest.raises(SystemExit, match="publication"):
         mirror_sql.plan(MANAGED, EXPOSURE, publication_limit=2, publications_held=2)
+
+
+def test_exists_reads_back_the_configured_target_database_and_nothing_else():
+    sql = mirror_sql.exists({"mirror": {"database": "INVENTED_MIRROR"}})
+    assert sql == "SHOW DATABASES LIKE 'INVENTED_MIRROR';\n"
