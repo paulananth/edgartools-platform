@@ -22,10 +22,10 @@ def _silver_column(part: dict, name: str) -> dict:
 
 def test_mixed_inputs_keep_repeated_identifiers_and_exact_decimals(tmp_path: Path) -> None:
     measurements = tmp_path / "measurements.csv"
-    lines = ["identifier,name,amount,observed,active"]
+    lines = ["identifier,name,amount,observed,active,ordinary_count"]
     for index in range(160):
         identifier = f"{index % 60 + 1:020d}"
-        lines.append(f"{identifier},Name {index % 60 + 1},12345678901234567.01,2026-01-02,true")
+        lines.append(f"{identifier},Name {index % 60 + 1},12345678901234567.01,2026-01-02,true,7")
     measurements.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     identifiers = tmp_path / "identifiers.json"
@@ -56,10 +56,15 @@ def test_mixed_inputs_keep_repeated_identifiers_and_exact_decimals(tmp_path: Pat
     assert amount["decimal_places"] == 2
     assert amount["distinct"] == 1
     assert _silver_column(measurements_part, "amount")["type"] == "DECIMAL(19,2)"
+    count = _column(measurements_part, "ordinary_count")
+    assert count["stored_type"] == "BIGINT"
+    assert count["outside_bigint"] is False
+    assert _silver_column(measurements_part, "ordinary_count")["type"] == "BIGINT"
     assert _column(measurements_part, "observed")["stored_type"].startswith("DATE")
     assert _column(measurements_part, "active")["stored_type"] == "BOOLEAN"
 
     json_identifier = _column(parts["identifiers"], "identifier")
     assert json_identifier["stored_type"] == "HUGEINT"
     assert json_identifier["distinct"] == 60
+    assert json_identifier["outside_bigint"] is True
     assert _silver_column(parts["identifiers"], "identifier")["type"] == "VARCHAR"

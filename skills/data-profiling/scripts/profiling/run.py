@@ -254,7 +254,9 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed, ca
         hidden = c["name"] in masked
         top = [{"value": sensitivity.mask(t["value"]) if hidden else t["value"], "rows": t["rows"]} for t in c["top"]]
         column_findings.append({
-            "name": c["name"], "type": profile.logical_type(c), "stored_type": c["type"], "fill": c["fill"], "distinct": c["distinct"], "unique": c["unique"],
+            "name": c["name"], "type": profile.logical_type(c), "stored_type": c["type"],
+            **({"outside_bigint": silver.outside_bigint(c)} if profile.is_integer(c) else {}),
+            "fill": c["fill"], "distinct": c["distinct"], "unique": c["unique"],
             "shape": sensitivity.mask(c["shape"]) if c["shape"] else None, "shape_share": c["shape_share"],
             "pattern": sensitivity.mask(c["pattern"]) if c["pattern"] else None, "pattern_share": c["pattern_share"],
             # Measured only for a separated pattern: why it was, or was not, one under one prefix.

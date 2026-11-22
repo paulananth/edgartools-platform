@@ -51,15 +51,22 @@ def keep(column: dict, role: str, key_columns: list[str]) -> bool:
     return True
 
 
+def outside_bigint(column: dict) -> bool:
+    """Whether the profiled integer's exact range exceeds a signed BIGINT."""
+    if column["type"] not in profile.INTEGERS or column.get("min") is None:
+        return False
+    return int(column["min"]) < -(2**63) or int(column["max"]) >= 2**63
+
+
 def _silver_type(column: dict) -> str:
-    """Use BIGINT only when the profiled integer range fits its signed bounds."""
+    """Widen every in-range integer to BIGINT; keep larger ranges as exact text."""
     kind = column.get("stored_type", column.get("type"))
     if kind not in profile.INTEGERS:
         return kind
-    low, high = column.get("min"), column.get("max")
-    if kind != "BIGINT" or low is not None and (int(low) < -(2**63) or int(high) >= 2**63):
-        return "VARCHAR"
-    return SILVER_INTEGER
+    out_of_range = column.get("outside_bigint")
+    if out_of_range is None:
+        out_of_range = outside_bigint(column) or (column.get("min") is None and kind in {"HUGEINT", "UBIGINT"})
+    return "VARCHAR" if out_of_range else SILVER_INTEGER
 
 
 def spec(f: dict, relationships: list[dict], parts: dict) -> dict:
