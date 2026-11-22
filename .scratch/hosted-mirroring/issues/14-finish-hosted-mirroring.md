@@ -9,7 +9,7 @@ Parts marked "approval" or "words" wait for the operator's own words before they
 ## Checklist
 
 - [x] Access by schema in a shared database: covered, split by the operator ("1", 2026-11-22): reset, provisioning and the mirror login's CONNECT were done by the hosted reload in ticket 04 (2026-11-19 23:06 ET); hardening and catalog readers pass `tests/unit/test_harden_hosted_roles.py`, `test_catalog_readers.py`, `test_database_connections.py` and `tests/architecture/test_store_urls_have_one_owner.py` (36 pass); `local-test-server` holds the `data` database with schemas `mdm`, `public`, `rdm`, `silver` 2026-11-22 15:47 ET. The live apply of the `discovery_reader` limit and the gate stay on the Readiness line; the 30 tables left in `public` are not yet explained (see the hosted reset line)
-- [ ] `rules/exposure.yaml` and `rules/gold/gold.yaml`: one target database, mdm's source schema `mdm`
+- [ ] `destination/authorised_data_sharing.yaml` and `destination/gold/gold.yaml` (moved from `rules/`, tickets 12 and 15): one target database, mdm's source schema `mdm`
 - [ ] Prove on the local test server with the two-database layout: init, a small load, links and master ids, the catalog reader
 - [ ] Readiness: `discovery_reader` (the catalog reader) holds a connection limit (audit CST); the role guards hold it, apply after merge, then the gate
 - [x] Mastering moved from `public` into schema `mdm`, with audit objective SCH: PR #1997 2026-11-21 09:27 ET
