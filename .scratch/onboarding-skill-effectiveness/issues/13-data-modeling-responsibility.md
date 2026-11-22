@@ -1,7 +1,7 @@
 # data-modeling: Define one responsibility
 
 Type: task
-Status: open
+Status: resolved
 Priority: P0
 Blocked by: 01, 07
 Labels: wayfinder:task
@@ -35,14 +35,14 @@ These blockers order skill-improvement work. They do not activate optional sourc
 
 - [x] List decisions, inputs and outputs owned here using current repository evidence. Verified by reading the current `data-modeling` skill and REQUIREMENTS.md against `data-profiling`, `data-onboarding` (SKILL.md, MAP.md), `data-quality`, `refining-rules`, `data-catalog` and `mdm-engineering`; recorded in [Decisions, artifacts and handoffs](../../../skills/data-modeling/SKILL.md#decisions-artifacts-and-handoffs). (2026-11-20 18:27 ET)
 - [x] Assign each overlapping responsibility one authoritative owner and a named handoff. Verified by checking each row against the owner's own text: profiling's Data Modeling row, `data-catalog` ("decides the class, the kind..." is Data Modeling's; the catalog projects), [Final exposable tables](../../../skills/data-platform/FINAL-TABLES.md) (onboarding records the selection) and data-quality's hard stops. The lints do not validate ownership. (2026-11-20 18:27 ET)
-- [x] Point data-modeling's code-set hard stop at the owner that drafts RDM versions (Data Onboarding or Refining Rules, by [CODE-SETS.md](../../../skills/data-profiling/CODE-SETS.md)), deferred here by [07](./07-data-profiling-responsibility.md). Verified by reading the edited row against profiling's table row for RDM code set versions. (2026-11-20 18:27 ET)
+- [x] Point data-modeling's code-set hard stop at the owner that drafts RDM versions (Data Onboarding or Refining Rules, by [CODE-SETS.md](../../../skills/data-profiling/CODE-SETS.md)), deferred here by [07](./07-data-profiling-responsibility.md). Verified against profiling's ownership row and CODE-SETS.md steps 4–5: each new relationship-type/capacity version requires explicit operator words before publication; standing routine approval is insufficient. No version was drafted, approved or published. (2026-11-21 19:25 ET; ruling verified 2026-11-21 20:16 ET)
 - [x] Move the new-kind decision wording to Data Modeling, deferred here by [07](./07-data-profiling-responsibility.md): the three tests and their outcomes are decided in [2. A master part: its kind](../../../skills/data-modeling/SKILL.md#2-a-master-part-its-kind); profiling's "Identify an MDM kind" keeps the measurement and the draft in `findings.yaml` and points there. Verified by reading both sections and by grepping every inbound citation of "Identify an MDM kind" (data-onboarding SKILL.md and MAP.md, data-modeling) and `data-modeling/SKILL.md#` anchors, which still resolve to unchanged headings. (2026-11-20 18:27 ET)
 - [ ] ~~Move CODE-SETS.md out of data-profiling~~ deferred to [19](./19-data-onboarding-responsibility.md): data-onboarding receives it; the hard stop already names the owner and links the file where it is.
 - [ ] ~~Fix `data-operations`' readiness step that routes an RDM blocker "through data-profiling's RDM steps" (skills/data-operations/SKILL.md, "Operationalize every domain", step 3, RDM per domain)~~ deferred to [55](./55-data-operations-responsibility.md): that ticket owns data-operations; the owner it should name is Data Onboarding or Refining Rules.
 - [ ] ~~Reconcile "one of `KINDS`" (data-modeling section 2, REQUIREMENTS.md) with profiling's "Nothing else holds a list of kinds" (`mdm-kinds`)~~ deferred to [14](./14-data-modeling-consistent-rules.md): `KINDS` in `edgar_warehouse/mdm/evidence.py` is read from a catalog, and which list is authoritative is a consistency question, not an ownership one.
-- [ ] Demonstrate the boundary on a shared issued identifier, an ambiguous name, a cross-reference-only identifier and an effective-dated relationship; link retained work rather than duplicating it. A documented walkthrough is under `## Answer`. Nothing was executed: this ticket authorizes no scenario code, and a traced walkthrough is not proof on data.
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. The focused checks are recorded under `## Answer`; nothing was committed or pushed and no PR exists.
-- [ ] Learning → skill: proposed lesson: "Data Modeling decides from measurements it does not take; each test it decides on is measured by Data Profiling and each artifact written from its decision belongs to the owner in [Decisions, artifacts and handoffs](../../../skills/data-modeling/SKILL.md#decisions-artifacts-and-handoffs)". Stays unchecked until the change is published and reviewed.
+- [x] Demonstrate the boundary on a shared issued identifier, an ambiguous name, a cross-reference-only identifier and an effective-dated relationship; link retained work rather than duplicating it. Verified as a documentation-only trace against the current model rules and handoff owners: Security Master’s identity findings and load-order proof, Data Profiling’s [NAME-IDS.md](../../../skills/data-profiling/NAME-IDS.md) and Data Modeling’s non-merge rule, MDM Engineering’s [cross-reference guidance](../../../skills/mdm-engineering/CROSS-REFERENCE.md), and Data Quality’s [provisional-date policy](../../../skills/data-quality/SKILL.md#approved-provisional-dates). No scenario code or data run was performed; this verifies documented ownership, not behavior on data. (2026-11-21 19:25 ET)
+- [x] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. Verified in PR #2007 at head `dd000f09748afd0296e38222bab17fba02ffb3b0`: current-head CI passed all 12 checks; no local tests were run for this documentation/skill update. (2026-11-21 20:50 ET)
+- [x] Learning → skill: Data Modeling requires explicit operator words for each new relationship-type/capacity code-set version before publication; standing routine approval is insufficient. Recorded in [section 5](../../../skills/data-modeling/SKILL.md#5-a-relationship-its-type) and verified in PR #2007. (2026-11-21 20:50 ET)
 
 ## Answer
 
@@ -71,6 +71,7 @@ What this branch reconciles:
   MDM kind" keeps the three measurements and the draft in `findings.yaml`.
   The section name is unchanged, so the citations in data-onboarding
   (SKILL.md, MAP.md) still resolve.
+Operator ruling: each new relationship-type or capacity code-set version requires explicit operator words for that specific version before publication; standing routine approval is insufficient. This is recorded in [section 5](../../../skills/data-modeling/SKILL.md#5-a-relationship-its-type), consistent with the approval then publication sequence in [CODE-SETS.md](../../../skills/data-profiling/CODE-SETS.md). The ruling authorizes no code-set publication; no draft, approval or publish command was run.
 
 Documented boundary walkthrough (not executed; each case traced to current
 text, with the retained work linked rather than restated):
@@ -82,12 +83,12 @@ text, with the retained work linked rather than restated):
 | Cross-reference-only identifier (one value on two masters) | The count of values given to two or more masters, and each clash's names and types | Lookup only: it finds records and never joins them (section 3, "Lookup only", "Read a clash") | Data Onboarding maps it under the contract's `cross_references`; a clash that needs a check goes to Data Quality |
 | Effective-dated relationship | Time roles (`time.as_of`, `time.as_at`) and the stated date fields | The type (existing or inverse first), its ends, capacity, `valid_from` / `valid_to` sources, `keeps_start`, `ends_parent_links` ([section 5](../../../skills/data-modeling/SKILL.md#5-a-relationship-its-type), [section 7](../../../skills/data-modeling/SKILL.md#7-time)) | Data Onboarding drafts a new type in `mdm-relationship-types`; an unknown business start under an approved file date is Data Quality's [Approved provisional dates](../../../skills/data-quality/SKILL.md#approved-provisional-dates) |
 
-Baseline: `HEAD` and `origin/main` are both
-`30ae0e7b631df6db9d9560f7da3cb6a1cbe4f4d9`. The prerequisite skill changes
-are on `origin/main`: ticket 01 as `f8233ff2` (PR #1956) and its record as
-`c6bca06e` (PR #1967), ticket 07's skill change as `6c5c5393` (PR #1969).
-Ticket 07's own Status line still reads open; its closeout is separate, and
-this branch does not edit it.
+Baseline: this branch was refreshed against current `origin/main` at
+`5a5eaebd39b7209e9e9e28c5b2c7121d1397a4f4` via PR branch update. Prerequisite
+changes 01 and 07 remain present on this base (PRs #1956 and #1969). The
+handoff, modeling rules and linked retained evidence described above were
+verified against this checkout; no scenario code or data run was authorized
+or performed.
 
 Installed provenance was not verified on this branch: reading
 `~/.agents/skills/write-skill/SKILL.md` was denied, and listing or resolving
@@ -95,7 +96,7 @@ Installed provenance was not verified on this branch: reading
 refused outside the worktree. The installed write-skill guidance was therefore
 not read, and no installed copy was read or changed.
 
-Checks run for this change: `uv run --no-project --with pytest -- pytest -q
+Checks recorded for the earlier skill change: `uv run --no-project --with pytest -- pytest -q
 -p no:cacheprovider tests/unit/test_skills_cite_no_ticket.py
 tests/unit/test_profiling_genericity.py
 tests/unit/test_guides_name_existing_paths.py` — **149 passed**;
@@ -108,4 +109,4 @@ ownership, section anchors or routing behaviour.
 
 ## Completion evidence
 
-Record the answer and artifact links under `## Answer` when resolved. Keep private values out of the public record. A not-applicable phase needs evidence and an explicit applicability disposition, not a false PASS. Do not mark this ticket resolved while a checklist item remains open.
+Record the answer and artifact links under `## Answer` when resolved. Keep private values out of the public record. A not-applicable phase needs evidence and an explicit applicability disposition, not a false PASS. Explicit parts marked `~~...~~ deferred to <ticket>` may remain unchecked; do not leave any other checklist item open when marking the ticket resolved.
