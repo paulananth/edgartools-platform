@@ -1,0 +1,314 @@
+---
+name: refining-rules
+description: Refine an existing feed or domain within MDM Engineering using measured mapping, quality and matching-rule changes. Use data-onboarding for a new feed or domain.
+---
+
+# Refining rules within MDM Engineering
+
+Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#the-seven-wastes) and drop what adds no value.
+
+> A subworkflow of [MDM Engineering](../mdm-engineering/SKILL.md). Use configuration before code;
+> this procedure owns changes to an existing feed's mapping, quality or matching
+> rules. Start at [Data Platform](../data-platform/SKILL.md) for setup.
+
+Changes something **already live**: a feed with a rules file, or a domain
+with merge rules.
+
+**Use the other skill when:**
+- the feed or domain has no rules file yet: use **data-onboarding**;
+- you are carrying out or operationally recovering a configured feed: use
+  **data-operations**; it uses Bookkeeping for run-control semantics and
+  Change Journal for receipt evidence;
+- you are changing run-control or completion semantics: use **bookkeeping**;
+- you are changing or interpreting journal receipts/events: use **change-journal**.
+
+A failure, a surprise or two readings that disagree: find the root cause first, by the [five whys](../data-platform/ROOT-CAUSE.md), silently, and report the conclusion.
+
+## Hard stops
+
+| Never | Instead |
+|---|---|
+| Write a value from the data (a name, an identifier, a record) into a public repository | Counts, and invented examples; real values stay on the machine |
+| Switch on a matching rule with no measured proof | A rule on an issued identifier is deterministic; any other rule needs a proof at its kind's bar |
+| Request anything from a provider the operator has ruled out (data-onboarding, Examples) | Use the captured files and this repo |
+| Read, print or paste a secret | Use the environment variables named in data-onboarding. If one is missing, ask. |
+| Change what identifies a record inside one source code | A new source code (`….v2`) |
+| Rewrite a batch MDM already took | A new version applies to new batches only |
+| Ask several questions at once | Ask one, in plain words, with your recommendation |
+| Put a master data field in silver, alone or as a copy | Every master data field is on its master in MDM, and only there (operator: "silver must not have duplicate fields, it contredits the data governance principle one system of record"): a change that finds one in silver moves it to the kind's fields and the Dataset Contract, then drops it from silver |
+
+When two written decisions disagree, the later operator decision wins. Cite
+both in the log.
+
+## Shared with Data Onboarding
+
+- **The contract language:** [REFERENCE.md](../data-onboarding/REFERENCE.md).
+- **Check and load:** [LOAD.md](../data-onboarding/LOAD.md).
+- **What MDM and RDM hold now:** `edgar-warehouse context <kind|relationship|code set>
+  <key|--search words>` ([REFERENCE.md](../data-onboarding/REFERENCE.md), "Reading MDM's
+  context"). Look up the records, links or codes a change moves, before and after.
+- **How to run commands and the environment variables:** see data-onboarding's SKILL.md,
+  "How to run commands".
+- **The log:** `.scratch/onboarding/<source>/refining-log.md` on your
+  branch, never a temporary folder. In a sandbox or trial, keep the log and
+  your draft rules together, as in data-onboarding's "Where you write"
+  (a copy of `rules/`, passed as `root=` / `--root`). When you follow a data-onboarding step,
+  log it here too. Record each question and its answer, each missing
+  command, and each guess.
+
+## Two targets: MDM and silver
+
+- **MDM target.** A change to a Dataset Contract, a quality check or a
+  merge rule changes what MDM receives or joins. Show the records it moves.
+- **Silver target.** A change to the `bookkeeping` section (the steps that
+  land silver) belongs to the Bookkeeping skill. A quality fix applies to
+  records before MDM; silver keeps the source's values.
+- **Which target a field belongs to.** Review a live contract's MDM fields
+  against data-onboarding's map rules ("Fields"): a date that usually changes
+  stays out of MDM unless it adds meaning to the entity or switches it on or
+  off; evidence about a transaction or a link goes on the silver row; another
+  kind's identifier stays out; a code's label belongs in RDM (operator: "Fix 1, 2 date that changes usually should not be in MDM unless
+  it adds meaning to the entity or turn on or off"). Moving a field the
+  engine or a stored table reads (a column, a matching check) is engine work:
+  name each reader before you change the contract.
+
+## Modes
+
+Every change runs: the change mode → **check and load**.
+
+**A new delivery comes first.** When a live feed's new delivery arrived, run
+[data-profiling](../data-profiling/SKILL.md)'s **compare** against the feed's
+approved findings before changing anything. Each drift item names the skill
+that handles it; the ones for refining-rules are the proposed changes, taken
+one at a time with the modes below. Keep the approved findings'
+`fingerprints.json` beside them: from it, compare also reports, per part,
+whether the feed sends every record or changes only, how many keys persisted,
+and the time between deliveries (`deliveries` in `drift.yaml`); a change of
+delivery kind is a proposed change too (a full-file feed turned into changes
+only changes how records are retired). A feed with no approved findings yet:
+profile it with data-profiling first, and log it. After any change to a rules file, regenerate its Mapping
+Document (`rules mapdoc write --only <source or kind>`) and commit it with
+the change. `rules mapdoc check` and CI fail otherwise.
+Adding or removing a field changes two workbooks: the source's
+`MAPPING.xlsx` and its kind's (`rules/merge/kinds/<kind>.xlsx`, "Who wins each
+field"). Regenerate both (`--only <source>`, then `--only <kind>`).
+A change to a source's steps keeps them the fewest that make its records (data-onboarding, "A source extract
+has the fewest steps that make its records"); a step it finds that only reshapes another's rows is folded in the
+same change, within its own path: a step to MDM and a step to silver stay two.
+
+### change-mapping: a steward changed a Mapping Document
+
+A steward changes a workbook's cells (not only Notes) and commits it in a
+PR.
+
+1. List the changes:
+   ```bash
+   edgar-warehouse rules mapdoc diff --only <source or kind>
+   ```
+   It prints each changed cell: the sheet, row and column, what the rules
+   say, and what the workbook says. A spreadsheet does not show its changes
+   in a PR, so paste this list into the PR.
+2. Turn each change into the rules files:
+
+   | Workbook change | Rules change |
+   |---|---|
+   | A row added to "Critical data elements" | A `present@1` check with `on_fail: exception` in `quality.yaml`, with its reason `quality_<id>` in `nonblocking_deferred_reasons` |
+   | "Preferred sources" reordered | `defaults.sources` in the kind file |
+   | One field's winner changed ("Who wins each field") | `fields.<name>.sources` in the kind file, in the new order. Every other field keeps the default. A source left out is ignored for that field; say so. |
+   | A source added to a kind | Not the steward's decision: it needs the operator's ruling |
+   | An identifier or record key changed | A new source code (`….v2`) |
+   | A check or fix not in REFERENCE.md | New code: log it for a ticket |
+   | A new MDM field or kind | The operator's ruling |
+
+   Before a source order changes, measure it: data-profiling's
+   `rank_sources.py` ("Rank several sources") gives each field's coverage,
+   one-value rate and pairwise agreement per source, and an order. Put its
+   numbers beside the change, and count the master records whose value moves.
+
+   If you cannot make a change, say why in plain words and leave the rules
+   as they are.
+3. Regenerate: `rules mapdoc write --only <source or kind>`. The generated
+   rows replace the steward's, so the steward confirms they say what was
+   meant. Then `rules mapdoc check` must pass.
+4. Continue with **check and load**.
+
+### change-quality: add or change a data quality check or fix
+
+For when the operator asks about a live feed's data quality, a run's quality
+counts look wrong, or **compare** lists drift handled by data-quality:
+1. Read `sources/<source>/quality.yaml`.
+   - The counts of the last runs are in each run's report, if the operator
+     has them.
+   - With no run to read, measure them (step 2).
+2. **Measure on one pinned capture.**
+   - **Pin it:** the capture's `receipts.jsonl` (one line per file: key,
+     sha256, bytes) is its manifest. Its sha256 is the `batch_hash`. Check
+     each file's sha256 against its line. For a file's path, replace the
+     key's leading `warehouse/bronze/` with `<capture>/bronze/`. The
+     manifest lists exactly the files the measurement read: add a joined file another source captured,
+     and leave out a captured file the reading never opens.
+   - **Build the records the checks read.** Run the candidate configured
+     `read:` contract on the pinned files, then select the whole table rows or
+     the explicit `mdm.prepare.record_column` objects. Preserve source types,
+     unknown evidence and immutable input references. Use data-platform
+     [READING.md](../data-platform/READING.md) for supported expressions.
+     Where a live source's configured source extract does not yet cover its whole
+     preparation (its ticket says what is open), the retained preparation
+     stays an equivalence oracle until that part is qualified.
+     Label diagnostic runs on retained preparation as such; they do not prove
+     a configured replacement. Test grammar support before proposing custom
+     code, and use data-platform Mode 6 only for a demonstrated grammar gap.
+   - **Count two ways, and report both:**
+     - **All filers:** `adapters.mapped_values(row, contract)` returns each
+       record's `quality` block.
+     - **What MDM receives:** `adapters.normalize(...)`. It sets aside records the classification
+       rule rejects before the quality checks run, so its counts are
+       smaller. For a capture with one file per record, pass
+       `publication={"artifact_sha256": <that file's sha256>, "member":
+       <its receipt key>, "publication_key": "dry-run", "revision": 0}`.
+       Collect each `UnsupportedRecord` as `{"reason": exc.args[0]}` and
+       pass that list to `quality.counts(records, deferred)`.
+   - **Read the counts carefully:**
+     - A fix counts every record it touched, even when a later fix puts the
+       value back. Report the net change too: records whose final value
+       differs.
+     - A standardising fix (the address one) touches most records. That is
+       expected, not a defect.
+   - **Time:** measure a small pass first (a few hundred documents), then
+     say how long the full pass will take before starting it. `rules mapdoc write` can take 10 minutes.
+   - A zero count is only meaningful if the check can fire. Feed it one
+     made-up record that should trip it, and label that input.
+   - Report up to 10 examples of each check and fix.
+3. **Decide and write with the data-quality skill.** Its
+   [measure](../data-quality/SKILL.md) mode runs the candidate
+   `quality.yaml` on the records built above and fires a planted record per
+   check; its **decide** mode asks the operator about each `on_fail` and each
+   fix, and its **write** mode gives `quality.yaml` a new `version` name. The
+   source's contract changes with it, so this is a new source version, and
+   every record re-read under it gets a new record id (data-quality,
+   **write**). For
+   a new defect a profile found, start at its **plan** mode with the
+   delivery's approved findings.
+
+### change-matching: add or tune a matching rule
+
+For example: a waterfall pass, a name rule, or records waiting for review.
+1. Read `rules/merge/kinds/<kind>.yaml` and `rules/merge/policy.yaml` (which
+   rules are on: those listed under `automatic_rules`).
+2. Describe the change in plain words: what it would join, and what it
+   must never join (parent and subsidiary, a registered agent's address,
+   the same name in two places).
+3. **Know what it does before it is on:** a rule on an issued identifier rests
+   on its Identifier Contract; for any other rule, read a sample of the links
+   it adds and of pairs it must not join.
+4. Show which records it moves. Use a proving run on a disposable
+   PostgreSQL 16 (data-onboarding's test step): counts before and after,
+   with examples.
+5. A rule switched off, or a newer version, leaves the binds it already made
+   standing. A correction batch revokes them and the active rules reconsider
+   those records (`correction.correction_batch`: revoke, quarantine, lift),
+   but it has no command yet: log the records it would move, and
+   ask before coding the command.
+6. Update what a rule change moves, in the same branch: the whole policy's
+   digest pinned as `policy_digest` in the mastering-records fixture under
+   `tests/integration/fixtures/` (the failing test prints the new one), the
+   kind's Mapping Document (`rules mapdoc write`), and the policy layers in
+   `tests/mdm/policy_layers.py` when a kind they peel changes. The
+   installed-bundle test (`tests/engine/test_data_skill_bundle_postgres.py`)
+   builds from the last commit, so it agrees only after the change is
+   committed.
+7. Switch the rule on as in LOAD.md, "A new matching rule". A rule short of its bar stays off, and its records go to
+   review.
+
+**Name matching across two sources.** When two sources share no issued
+identifier, a record joins the other source's master by name, and only
+where the name is unique on both sides:
+1. **Count every name over both whole sources first**: the Name Matching, one
+   file built from the complete captures of both (never from what a Stage
+   holds, so load order cannot change an answer), each name normalized the
+   same way on both sides (legal form kept), the other source's other and
+   transliterated names counted too. Rebuild it whenever a source's names or
+   the matching rules change: it carries the passes' answers.
+2. **A name rule** binds a pair whose name the Name Matching counts once on each
+   side, plus one more agreeing value (a jurisdiction, a postal code);
+   **a waterfall** runs passes strict to loose (name and address parts, then
+   fewer parts), each pass binding one to one over what earlier passes left.
+   A pass part given as a list agrees when any one of its parts does.
+3. The preparation of the source whose records bind reads the Name Matching file,
+   and the Merge Stage re-checks each pair on its own rows.
+4. Measure every new link a rule adds against the rules already on (**Measure it**,
+   above): label each one, plus the risky arms (a match through another
+   name, a conflict in place of incorporation, a name another candidate
+   holds) as the adversarial fixture.
+
+A rule that asks whether two records state the same time compares them as
+instants, never as text: the Stage stores a record's `effective_at` in UTC
+(`+00:00`), while a Name Matching or a source keeps the provider's spelling (`Z`, an
+offset). A source's record-keeping date that only marks a new version is that
+record's effective time, not a field of the master.
+
+### check and load
+
+Use [LOAD.md](../data-onboarding/LOAD.md) for the scoped check of the changed
+source. Run the owning tests for any changed Source Extract. The local commit
+guard checks changed merge and pipeline documents; CI checks the full Rules
+tree. Then load the change into a disposable store. Show what changes, record
+by record.
+
+A test of a source prepares with the keys the source itself declares for its
+`mdm.prepare` step, read from the rules file, never keys the test writes. A
+test that dates its own records passes while a real load, using the declared
+keys, builds nothing; make the test fail first without the fix.
+
+A test that merges runs a policy with every kind it loads: each kind has its
+`kinds` entry, with its field rules inside it, and the policy is registered
+through `register_policy`, which checks it. A policy handed straight to the
+merge skips that check and passes where the real load refuses.
+
+A changed rules file applies to new batches only. Data Operations carries out
+the feed run and operational recovery; Bookkeeping owns run-control and
+completion semantics, and Change Journal owns receipt evidence.
+
+## When a command is missing
+
+Use the table in data-onboarding's SKILL.md, "When a command is missing".
+Never invent a command.
+
+## Examples (this repo's sources)
+
+- A provider ruled out: `sec.gov`.
+- Name matching across two sources: SEC Company to GLEIF. The waterfall pass
+  (`waterfall.py`, from the SEC Companies in the store and the whole GLEIF publication; its answer
+  reaches the merge through `merge.apply_pairs`); the pass `sec-gleif-name-city-or-postcode` (the older name rules and the passes that compared less are deleted)
+  (`waterfall_pass@1`; "name and city or postcode" compares `[[city, postcode]]`); the code in
+  `edgar_warehouse/mdm/waterfall.py` and `waterfall_passes.py`. Name a matching rule by what it compares, never by a pass
+  number (operator). A rename or a deletion moves the policy
+  digest: give each rule a new version named by what it compares (not by the
+  rename), put the same versions in `policy.yaml`, regenerate the kind's Mapping
+  Document, re-pin the Company mastering fixture's `policy_digest` (the failing
+  test prints it), then run the whole CI set (`tests/unit tests/architecture
+  tests/mdm` and the engine and integration files that name the rule), since
+  the mapping-document test, the Company mastering fixture digest and the
+  installed-bundle test each hold the rule list (missing one cost three extra
+  pushes).
+- **A rename stops at what a store already holds.** A word that is only code,
+  a rule's test name or a setting's key renames freely. A word written into a
+  store renames only with a change that reloads it: a name-key role, a key in a
+  record's provenance, a version string a record carries, a reason a set-aside
+  record keeps, and a name inside a stored digest (a matching route's name is
+  in each record's route digest). Renaming one of these alone leaves stored keys
+  that nothing finds, or replays every record. Keep them, list them in the
+  ticket, and rename them with the contract change that reloads the store.
+- Issued identifiers: those with an Identifier Contract in a kind file (today `cik`; GLEIF states `lei`). Name-rule proofs:
+  `.scratch/company-mastering/research/08-*` and `12-*`. A proving run:
+  `.scratch/company-mastering/research/27_proving_run.py`.
+
+
+## Keep business catalog meaning aligned
+
+When a mapping, field, relationship or quality definition changes, refresh its
+business meaning, domain/glossary associations, Mapping Documents and configured
+quality-case metadata through [Business catalog](../data-onboarding/CATALOG.md).
+Correct meaning in its authoritative configuration and regenerate affected
+assets; do not maintain source-specific rename lists or edit the catalog as a
+second rules authority. Retain the existing test, approval and activation gates.
