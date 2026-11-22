@@ -47,7 +47,7 @@ def master(store, requested: str) -> dict:
 def carriers(store, policy: dict, kind: str | None, namespace: str, value: str) -> dict:
     """The masters carrying `namespace:value`, each marked as an identifier or a cross-reference (lookup only)."""
     values = {value} if value else set()
-    for block in policy["kinds"].values():
+    for block in (policy.get("kinds") or {}).values():
         contract = block.get("identifiers", {}).get(namespace)
         normalized = prepare_matching_value(contract["normalizer"], value, block) if contract else None
         if normalized:

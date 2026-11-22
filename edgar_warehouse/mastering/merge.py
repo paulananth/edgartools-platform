@@ -55,9 +55,14 @@ def role_of(namespace: str) -> str:
     return EXACT if namespace == NAME_ID else namespace
 
 
+def _kind_rules(settings: "Settings") -> list[dict]:
+    """Use the same empty-map default as policy validation."""
+    return (settings.policy.get("kinds") or {}).get(settings.kind, {}).get("rules") or []
+
+
 def exact_namespaces(settings: "Settings") -> list[str]:
     """Every cross reference an exact-name rule of this kind keys on, declared or switched on."""
-    rules = settings.policy["kinds"].get(settings.kind, {}).get("rules") or []
+    rules = _kind_rules(settings)
     return sorted({NAME_ID, *(r.get("cross_reference", NAME_ID) for r in rules if r.get("family") == matching.EXACT_NAME_FAMILY)})
 
 
@@ -521,12 +526,12 @@ def _match_names(store, settings: Settings, records, bound: dict, counts: Counte
 
 def _waiting_sources(settings: Settings) -> set[str]:
     """The sources of every switched-on rule of this kind, of any family, that leaves a record waiting when nothing is found."""
-    return {rule["source"] for rule in settings.policy["kinds"][settings.kind].get("rules") or []
+    return {rule["source"] for rule in _kind_rules(settings)
             if rule.get("on_no_match") == "wait" and activated(settings.policy, settings.kind, rule, "bind")}
 
 
 def _exact_rules(settings: Settings) -> list[dict]:
-    return [rule for rule in settings.policy["kinds"][settings.kind].get("rules") or []
+    return [rule for rule in _kind_rules(settings)
             if rule.get("family") == matching.EXACT_NAME_FAMILY and activated(settings.policy, settings.kind, rule, "bind")]
 
 

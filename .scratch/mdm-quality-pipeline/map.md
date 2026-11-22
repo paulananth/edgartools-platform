@@ -42,6 +42,9 @@ production rules or switch on new checks.
 - Disposable recovery qualification for MDM receipt v1 and operator enablement.
   Until that evidence is recorded, leave `mdm.quality.evidence.v1` out of
   production targets and `MDM_QUALITY_EVIDENCE_V1` unset.
+- A separate runtime gap exposed by the synthetic qualification test is
+  tracked in [ticket 05](issues/05-policy-without-kinds.md); it does not
+  change the switch-off requirement.
 
 ## Out of scope
 
