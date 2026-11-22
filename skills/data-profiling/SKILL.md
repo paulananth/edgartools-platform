@@ -330,14 +330,7 @@ uv run --with duckdb --with pyyaml python profile_data.py run --name "<data set>
   parts in the findings before approval. Reuse existing approved findings;
   this reader change calls for a new profile only of affected, unapproved
   inputs, not another scan of unrelated sources.
-  Numeric CSV columns keep nonnumeric inferred types and are promoted only
-  when the complete column fits an exact integer or decimal type. Record
-  integers above signed BIGINT are promoted to HUGEINT when they fit, otherwise
-  kept as exact text; silver stores either case as text rather than a database
-  integer outside BIGINT. CSV integers beyond HUGEINT and decimals needing over
-  38 digits of precision remain text. In keyed records, a large integer mixed
-  with fractions in one field is refused by name. Never round through DOUBLE
-  or recommend BIGINT out of range.
+  Promote numeric text only when the full column fits an exact integer or decimal type. Integers beyond signed BIGINT remain exact text in silver, never BIGINT or HUGEINT. Beyond HUGEINT or 38 decimal digits stays text. A keyed field mixing a large integer and fractions is refused by name. Never use DOUBLE.
 - **Unreadable tables:** a CSV that is not UTF-8 is read as Windows-1252 (else
   Latin-1); its input's `encoding` says so, marked inferred, with the first byte
   that is not UTF-8, and `declare` gives the reading contract's `read.encoding`

@@ -23,16 +23,15 @@ def _silver_column(part: dict, name: str) -> dict:
 def test_mixed_inputs_keep_repeated_identifiers_and_exact_decimals(tmp_path: Path) -> None:
     measurements = tmp_path / "measurements.csv"
     lines = ["identifier,name,amount,observed,active"]
-    for index in range(40):
-        identifier = f"{index % 30:020d}"
-        lines.append(f"{identifier},Name {index % 30},12345678901234567.01,2026-01-02,true")
+    for index in range(160):
+        identifier = f"{index % 60:020d}"
+        lines.append(f"{identifier},Name {index % 60},12345678901234567.01,2026-01-02,true")
     measurements.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     identifiers = tmp_path / "identifiers.json"
     identifiers.write_text(json.dumps([
         {"identifier": 10**21 + index} for index in range(60)
     ]), encoding="utf-8")
-
     out = tmp_path / "findings"
     assert profile_data.main([
         "run", "--name", "exact-number-fixture",
@@ -46,12 +45,12 @@ def test_mixed_inputs_keep_repeated_identifiers_and_exact_decimals(tmp_path: Pat
     measurements_part = parts["measurements"]
     assert measurements_part["record_key"]["columns"] != ["identifier"]
     derived = next(part for part in findings["parts"] if part.get("derived_from") == "measurements")
-    assert derived["rows"] == 30
-    assert _column(derived, "identifier")["distinct"] == 30
+    assert derived["rows"] == 60
+    assert _column(derived, "identifier")["distinct"] == 60
 
     identifier = _column(measurements_part, "identifier")
     assert identifier["stored_type"] == "VARCHAR"
-    assert identifier["distinct"] == 30
+    assert identifier["distinct"] == 60
     amount = _column(measurements_part, "amount")
     assert amount["stored_type"] == "DECIMAL(19,2)"
     assert amount["decimal_places"] == 2
