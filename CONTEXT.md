@@ -337,7 +337,7 @@ An immutable, random-token-scoped warehouse object written before ETag-guarded p
 _Avoid_: Canonical silver, bronze archive, release evidence
 
 **Canonical Silver**:
-Snowflake `EDGARTOOLS_SILVER`, the dbt collapse of the landing zone — the live typed Runtime System of Engagement. The S3 objects that used to hold it (`warehouse/silver/sec/silver.duckdb`, the shards) are retired and expiring under the lifecycle rules duckdb-retirement-cutover Ticket 21 applied; nothing writes or reads them.
+Snowflake `EDGARTOOLS_SILVER`, the dbt collapse of the landing zone — the live typed Runtime System of Engagement. The retired S3 keys (`warehouse/silver/sec/silver.duckdb` and the shards) have no readers or writers.
 _Avoid_: Staged Warehouse Object, identity-refresh run snapshots, historical gold `run_id=` copies
 
 **Joined Live Key**:
