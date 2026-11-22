@@ -25,7 +25,7 @@ def test_a_runs_rules_are_recorded_once_and_read_back(database_factory, monkeypa
     with database_factory(store="rules") as (owner, runtime, role):
         if owner.dialect.name == "mssql":
             pytest.skip("The Rules Database is qualified on PostgreSQL and MySQL")
-        made = {"tables": sorted([TABLE, "policy", "dataset_reading"])}
+        made = {"tables": sorted([TABLE, "policy", "dataset_reading", "draft"])}
         assert migrate(owner, agent_role=role) == made
         assert migrate(owner, agent_role=role) == made  # rerunning changes nothing
         rules = Rules(runtime)
@@ -50,6 +50,37 @@ def test_a_runs_rules_are_recorded_once_and_read_back(database_factory, monkeypa
         monkeypatch.setenv("CONTROL_URL", duty_url(runtime, "rules"))
         assert main(["rules", "status", "--pipeline", "invented.pipeline"]) == 0
         assert [row["digest"] for row in json.loads(capsys.readouterr().out)] == [first["digest"], changed["digest"]]
+
+
+def test_a_draft_is_stored_once_and_the_runtime_cannot_change_it(database_factory):
+    with database_factory(store="rules") as (owner, runtime, role):
+        if owner.dialect.name == "mssql":
+            pytest.skip("The Rules Database is qualified on PostgreSQL and MySQL")
+        migrate(owner, agent_role=role)
+        rules = Rules(runtime)
+        body = {"trim": "quantity", "version": "draft-1"}
+        case = {"family": "example", "inputs": {}, "expected": None, "actual": None, "passed": True,
+                "rule": '{"trim": "quantity", "version": "draft-1"}'}
+        saved = rules.save(kind="try", name="example", version="draft-1", body=body, case=case)
+        assert saved["status"] == "draft"
+        assert saved["digest"] == "d7097b4a191ff17f3098239ce47cc828375d3dc088e6b3ad1ee6178019a6e9fb"
+        assert rules.save(kind="try", name="example", version="draft-1", body=body, case={"family": "example"}) == saved
+        found = rules.draft("try", "example", "draft-1")
+        assert found["body"] == body
+        assert found["case"] == case
+        assert found["status"] == "draft"
+        with pytest.raises(Blocked, match="already stored"):
+            rules.save(kind="try", name="example", version="draft-1",
+                       body={"trim": "other", "version": "draft-1"}, case=case)
+        assert rules.draft("try", "example", "draft-1")["body"] == body
+        upper = {"trim": "quantity", "version": "Draft-1"}
+        rules.save(kind="try", name="example", version="Draft-1", body=upper, case=case)
+        assert rules.draft("try", "example", "Draft-1")["body"] == upper
+        assert rules.draft("try", "example", "draft-1")["body"] == body
+        prefix = "rules." if owner.dialect.name == "postgresql" else ""
+        for sql in (f"DELETE FROM {prefix}draft", f"UPDATE {prefix}draft SET status='active'"):
+            with pytest.raises(DBAPIError), runtime.begin() as conn:
+                conn.execute(text(sql))
 
 
 def test_the_registry_keeps_each_policy_and_each_reading_and_the_runtime_only_reads_it(database_factory):

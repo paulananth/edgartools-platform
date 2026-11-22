@@ -66,7 +66,7 @@ made from it, never edited by hand. Read the table's columns there, or in the Da
 |---|---|
 | MDM | `edgar_warehouse/mdm/migrations/schema.sql` (the init stamp, PostgreSQL) and `edgar_warehouse/mastering/schema/<dialect>.sql` (the mastering tables) |
 | RDM | `edgar_warehouse/rdm/migrations/schema.sql` and the numbered `[0-9]*.sql` files beside it, applied by `rdm init` in order (PostgreSQL); on MySQL, `mysql-v1.sql` and the later numbered `mysql-*.sql` files beside it, applied in order |
-| Rules | `rules_used` and the registry (`policy`, `dataset_reading`), written in Python (`edgar_warehouse/rules/db.py`) so one definition serves every dialect |
+| Rules | `rules_used`, the registry (`policy`, `dataset_reading`), and a draft (`draft`), written in Python (`edgar_warehouse/rules/db.py`) so one definition serves every dialect |
 | Bookkeeping | `edgar_warehouse/bookkeeping/clean/migrations/schema.sql`, with `mysql-v1.sql` |
 | Change Journal | `edgar_warehouse/change_journal/migrations/schema.sql`; `native/` holds one file per dialect |
 | Silver, fixed part | `edgar_warehouse/silver_writer/migrations/schema.sql`, with `mysql-v1.sql` |

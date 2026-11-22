@@ -138,7 +138,8 @@ def _check(args):
 
 
 def _show_try(args):
-    """The try page. This command does not open the Rules Database or read the rules files."""
+    """The try page. Showing the page does not open the Rules Database or read the rules files.
+    Store this draft opens the Rules Database when the pasted rule names a version."""
     from .try_page import MissingFamily, present, press
 
     directory = Path(args.families) if args.families else None
