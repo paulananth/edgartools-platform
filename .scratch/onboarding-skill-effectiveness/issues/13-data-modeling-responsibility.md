@@ -40,8 +40,8 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [ ] ~~Move CODE-SETS.md out of data-profiling~~ deferred to [19](./19-data-onboarding-responsibility.md): data-onboarding receives it; the hard stop already names the owner and links the file where it is.
 - [ ] ~~Fix `data-operations`' readiness step that routes an RDM blocker "through data-profiling's RDM steps" (skills/data-operations/SKILL.md, "Operationalize every domain", step 3, RDM per domain)~~ deferred to [55](./55-data-operations-responsibility.md): that ticket owns data-operations; the owner it should name is Data Onboarding or Refining Rules.
 - [ ] ~~Reconcile "one of `KINDS`" (data-modeling section 2, REQUIREMENTS.md) with profiling's "Nothing else holds a list of kinds" (`mdm-kinds`)~~ deferred to [14](./14-data-modeling-consistent-rules.md): `KINDS` in `edgar_warehouse/mdm/evidence.py` is read from a catalog, and which list is authoritative is a consistency question, not an ownership one.
-- [ ] Demonstrate the boundary on a shared issued identifier, an ambiguous name, a cross-reference-only identifier and an effective-dated relationship; link retained work rather than duplicating it. A documented walkthrough is under `## Answer`. Nothing was executed: this ticket authorizes no scenario code, and a traced walkthrough is not proof on data.
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. The focused checks are recorded under `## Answer`; nothing was committed or pushed and no PR exists.
+- [x] Demonstrate the boundary on a shared issued identifier, an ambiguous name, a cross-reference-only identifier and an effective-dated relationship; link retained work rather than duplicating it. Verified as a documentation-only trace against the current model rules and handoff owners: Security Master’s identity findings and load-order proof, Data Profiling’s [NAME-IDS.md](../../../skills/data-profiling/NAME-IDS.md) and Data Modeling’s non-merge rule, MDM Engineering’s [cross-reference guidance](../../../skills/mdm-engineering/CROSS-REFERENCE.md), and Data Quality’s [provisional-date policy](../../../skills/data-quality/SKILL.md#approved-provisional-dates). No scenario code or data run was performed; this verifies documented ownership, not behavior on data. (2026-11-21 19:25 ET)
+- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. The branch is pushed and draft PR #2007 is open; CI is pending on the current head. No local checks were run for this ticket-only closeout; the focused results below belong to the earlier skill change.
 - [ ] Learning → skill: proposed lesson: "Data Modeling decides from measurements it does not take; each test it decides on is measured by Data Profiling and each artifact written from its decision belongs to the owner in [Decisions, artifacts and handoffs](../../../skills/data-modeling/SKILL.md#decisions-artifacts-and-handoffs)". Stays unchecked until the change is published and reviewed.
 
 ## Answer
@@ -82,12 +82,11 @@ text, with the retained work linked rather than restated):
 | Cross-reference-only identifier (one value on two masters) | The count of values given to two or more masters, and each clash's names and types | Lookup only: it finds records and never joins them (section 3, "Lookup only", "Read a clash") | Data Onboarding maps it under the contract's `cross_references`; a clash that needs a check goes to Data Quality |
 | Effective-dated relationship | Time roles (`time.as_of`, `time.as_at`) and the stated date fields | The type (existing or inverse first), its ends, capacity, `valid_from` / `valid_to` sources, `keeps_start`, `ends_parent_links` ([section 5](../../../skills/data-modeling/SKILL.md#5-a-relationship-its-type), [section 7](../../../skills/data-modeling/SKILL.md#7-time)) | Data Onboarding drafts a new type in `mdm-relationship-types`; an unknown business start under an approved file date is Data Quality's [Approved provisional dates](../../../skills/data-quality/SKILL.md#approved-provisional-dates) |
 
-Baseline: `HEAD` and `origin/main` are both
-`30ae0e7b631df6db9d9560f7da3cb6a1cbe4f4d9`. The prerequisite skill changes
-are on `origin/main`: ticket 01 as `f8233ff2` (PR #1956) and its record as
-`c6bca06e` (PR #1967), ticket 07's skill change as `6c5c5393` (PR #1969).
-Ticket 07's own Status line still reads open; its closeout is separate, and
-this branch does not edit it.
+Baseline: this fresh worktree is based on `origin/main` at
+`a3d2a6173dc96d60875b8d20a0773bb4f76c0645`. Prerequisite changes 01 and 07
+are present on this base (PRs #1956 and #1969). The handoff, modeling rules
+and linked retained evidence described above were verified against this
+checkout; no scenario code or data run was authorized or performed.
 
 Installed provenance was not verified on this branch: reading
 `~/.agents/skills/write-skill/SKILL.md` was denied, and listing or resolving
@@ -95,7 +94,7 @@ Installed provenance was not verified on this branch: reading
 refused outside the worktree. The installed write-skill guidance was therefore
 not read, and no installed copy was read or changed.
 
-Checks run for this change: `uv run --no-project --with pytest -- pytest -q
+Checks recorded for the earlier skill change: `uv run --no-project --with pytest -- pytest -q
 -p no:cacheprovider tests/unit/test_skills_cite_no_ticket.py
 tests/unit/test_profiling_genericity.py
 tests/unit/test_guides_name_existing_paths.py` — **149 passed**;
