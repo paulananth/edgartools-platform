@@ -120,6 +120,7 @@ def test_sampled_csv_and_json_numbers_stay_exact_text(tmp_path: Path) -> None:
     assert json_amount["top"][0]["value"] in json_values
     assert len(json_values) > json_amount["distinct"]
     assert _silver_column(parts["json"], "amount")["type"] == "VARCHAR"
+    json_identifier = _column(parts["json"], "identifier")
     assert json_identifier["stored_type"] == "VARCHAR"
     assert "outside_bigint" not in json_identifier
     assert json_identifier["top"][0]["value"] in json_identifiers
