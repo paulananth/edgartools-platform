@@ -33,8 +33,22 @@ if [[ -n "$closed_prs" ]]; then
   exit 1
 fi
 
+# A branch behind origin/main makes a PR that conflicts or is stale, and GitHub starts no CI on a conflicting PR
+# (#2029, #2034). Check before anything is stamped or staged.
+if ! git fetch -q origin main; then
+  echo "commit_push: STOP. Could not fetch origin/main; no files were stamped or staged." >&2
+  exit 1
+fi
+if ! git merge-base --is-ancestor origin/main HEAD; then
+  echo "commit_push: STOP. Branch '$branch' is behind origin/main. Run 'git rebase origin/main', resolve any conflict, then run this again; no files were stamped or staged." >&2
+  exit 1
+fi
+
 uv run --no-project python "$here/future_stamps.py" --stamp
 git add -A
 bash "$here/overlap_guard.sh"
 git commit -q -F "$message"
-git push -q -u origin HEAD
+# --force-with-lease: a branch rebased onto main after an earlier push is not a fast-forward; the lease still refuses to
+# overwrite a remote commit this clone has not seen (a normal commit is an ordinary push).
+git fetch -q origin "$branch" 2>/dev/null || true
+git push -q -u --force-with-lease origin HEAD

@@ -6,7 +6,8 @@
 # green checks, and a watcher reading them merged code CI had not run (#1185,
 # 2026-10-26; #1245, 2026-10-30). The merge names the head it saw
 # (--match-head-commit), so a push in between makes GitHub refuse it.
-# A base that moved is updated, and the new head waits for its own CI.
+# A base that moved is updated, and the new head waits for its own CI. A PR that conflicts with main gets no CI at
+# all (GitHub starts none), so it stops at once with exit 1 instead of waiting out its deadline: rebase, then push again.
 #
 # After the merge it leaves the worktree and branch alone (operator, 2026-11-03:
 # "you should not be removing worktree dont do it"). Removing the worktree it ran
@@ -14,7 +15,7 @@
 # on a merge that had worked.
 #
 # Exit 0: merged, or the PR was closed or merged by someone else.
-# Exit 1: a run failed or was cancelled. Exit 2: the deadline passed.
+# Exit 1: a run failed or was cancelled, or the PR conflicts with main. Exit 2: the deadline passed.
 # Usage: bash scripts/dev/merge_on_green.sh <pr> [minutes, default 60]
 # MERGE_POLL_SECONDS (default 60) sets the wait between rounds; the tests use 0.
 set -euo pipefail
@@ -28,6 +29,10 @@ while (( $(date +%s) < deadline )); do
   state=$(gh pr view "$pr" --json state -q .state)
   if [[ "$state" != OPEN ]]; then echo "PR $pr is $state"; exit 0; fi
   head=$(gh pr view "$pr" --json headRefOid -q .headRefOid)
+  if [[ $(gh pr view "$pr" --json mergeStateStatus -q .mergeStateStatus) == DIRTY ]]; then
+    echo "PR $pr conflicts with main, so GitHub starts no CI: git rebase origin/main, resolve, push with --force-with-lease, then watch again"
+    exit 1
+  fi
   runs=$(gh run list --commit "$head" --json status,conclusion,name \
            -q '.[] | .name + "\t" + .status + "\t" + (.conclusion // "")')
   [[ -z "$runs" ]] && continue                      # CI not started on this head yet
