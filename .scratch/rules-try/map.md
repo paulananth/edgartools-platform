@@ -12,6 +12,7 @@ A person hand-writes one rule, supplies the input and the expected output, and t
 - Ticket 01 is the only ticket that creates more than one file. Every other ticket adds or replaces the one file it names.
 - The page command is `edgar-warehouse rules try`. The buttons are Try, Show the full rule, Keep a copy, and Store this draft.
 - Examples in the tickets are invented.
+- The remaining work is handed to Claude in [HANDOFF-claude.md](HANDOFF-claude.md). One open ticket, one pull request.
 
 ## Decisions so far
 
