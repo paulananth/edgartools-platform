@@ -11,10 +11,11 @@ control (POL) was therefore never read.
 
 ## Checklist
 
-- [ ] Failing test first: an audit run with an empty environment still reads Snowflake through the auditor connection (`edgartools-audit`) and reports POL as pass or fail, never "not configured"
-- [ ] The audit runs with no exported variable and no `uv sync`: the auditor connection is the default, and every read stays read-only (the audit still refuses an administrator identity)
+- [x] Failing test first (failed: `configured({})` was False; passes now, 55 unit tests green) 2026-11-22 12:22 ET: an audit run with an empty environment still reads Snowflake through the auditor connection (`edgartools-audit`) and reports POL as pass or fail, never "not configured"
+- [x] Snowflake runs with no exported variable (live run read 12 controls as the auditor) 2026-11-22 12:22 ET; ~~no `uv sync`~~ still open: the postgres adapter imports `edgar_warehouse`: the auditor connection is the default, and every read stays read-only (the audit still refuses an administrator identity)
 - [ ] Each failed or not-tested control is published to OpenMetadata as a violation (control id, platform, severity, the fix), with no operator words needed to run or publish
 - [ ] The publication follows the OpenMetadata skill's existing exposure path; no second catalog client
 - [ ] Standards, Spec and GoF review of the diff
 - [ ] Re-run the audit on `snowflake`: POL passes (closes the open line of hosted-mirroring ticket 14)
 - [ ] Learning → skill: name the access-audit skill line this ticket changed, or "none"
+- [ ] Finding: POL is NOT_TESTED because the auditor holds no privilege on the two policies (DESCRIBE fails with "must have at least one privilege granted on POLICY"; SHOW lists none). The only policy privilege that allows it (APPLY) also lets the role attach policies, which breaks read-only: decide the read path (ACCOUNT_USAGE views lack the values) before granting

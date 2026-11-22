@@ -6,7 +6,7 @@ Usage: access_audit.py [--platform NAME ...] [--principal NAME ...] [--as-admin]
 
 The controls are platform-neutral objectives (audit_platforms/base.py); each platform is an adapter module that reads its
 own evidence and grades the objectives it can. A platform is audited when its environment is set:
-  snowflake   AUDIT_SNOWFLAKE_CONNECTION   a SnowCLI connection of the read-only auditor role
+  snowflake   always                       the `edgartools-audit` SnowCLI connection (AUDIT_SNOWFLAKE_CONNECTION overrides it)
   postgres    reader.env sourced           the read-only diagnostic login
   aws         AUDIT_AWS_PROFILE            a read-only audit profile (SecurityAudit)
   github      AUDIT_GITHUB_REPO            owner/name, read with the gh CLI
@@ -93,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     platforms = args.platform or configured
     if not platforms:
-        sys.exit("no platform is configured: set AUDIT_SNOWFLAKE_CONNECTION, source reader.env, set AUDIT_AWS_PROFILE or AUDIT_GITHUB_REPO")
+        sys.exit("no platform is configured: source reader.env, set AUDIT_AWS_PROFILE or AUDIT_GITHUB_REPO")
     results = run(platforms, os.environ, Path(args.repo), args.principal, args.as_admin)
     if args.json:
         print(json.dumps(results))

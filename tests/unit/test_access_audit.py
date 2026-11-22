@@ -270,3 +270,12 @@ def test_a_changed_value_a_missing_policy_and_a_policy_in_another_database_are_e
     assert any("authentication" in d and "missing" in d for d in snowflake.policy_drift(EXPECTED_POLICIES, {**FOUND_POLICIES, "authentication": []}))
     elsewhere = {**FOUND_POLICIES, "password": [{**FOUND_POLICIES["password"][0], "database_name": "UNAPPROVED"}]}
     assert any("UNAPPROVED" in d for d in snowflake.policy_drift(EXPECTED_POLICIES, elsewhere))
+
+
+def test_the_snowflake_audit_needs_no_variable_and_reads_through_the_auditor_connection(monkeypatch):
+    seen = []
+    monkeypatch.setattr(snowflake, "snow", lambda connection, sql, soft=False: seen.append(connection) or [{"ROLE": "ACCOUNTADMIN"}])
+    assert snowflake.configured({}) is True
+    with pytest.raises(SystemExit, match="administrator role"):
+        snowflake.collect({}, as_admin=False)
+    assert seen[0] == "edgartools-audit"

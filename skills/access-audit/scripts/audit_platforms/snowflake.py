@@ -19,8 +19,15 @@ PROTECTED_USERS = {"ANANP11"}
 FORBIDDEN_CONNECTIONS = {"edgartools-prod", "snowconn"}
 
 
+DEFAULT_CONNECTION = "edgartools-audit"  # the read-only auditor's own connection: the audit needs no variable to run
+
+
+def connection_of(env) -> str:
+    return env.get("AUDIT_SNOWFLAKE_CONNECTION") or DEFAULT_CONNECTION
+
+
 def configured(env) -> bool:
-    return bool(env.get("AUDIT_SNOWFLAKE_CONNECTION"))
+    return True
 
 
 def snow(connection: str, sql: str, soft: bool = False):
@@ -28,7 +35,7 @@ def snow(connection: str, sql: str, soft: bool = False):
     if done.returncode:  # its message can quote the account
         if soft:
             return None  # a view the role cannot read: the control is then not tested, never passed
-        sys.exit("a Snowflake read failed (check AUDIT_SNOWFLAKE_CONNECTION and its role)")
+        sys.exit("a Snowflake read failed (check the auditor connection and its role)")
     return json.loads(done.stdout or "[]")
 
 
@@ -91,7 +98,7 @@ def policy_drift(expected: dict, found: dict | None) -> list[str]:
 
 
 def collect(env, as_admin: bool = False) -> dict:
-    connection = env["AUDIT_SNOWFLAKE_CONNECTION"]
+    connection = connection_of(env)
     if connection in FORBIDDEN_CONNECTIONS:
         sys.exit("that connection signs in as the operator's overall administrator account, which the audit never uses: use the auditor connection")
     role = snow(connection, "select current_role() as role")[0]["ROLE"].upper()
