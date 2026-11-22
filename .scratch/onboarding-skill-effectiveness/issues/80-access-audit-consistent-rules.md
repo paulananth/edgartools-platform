@@ -1,7 +1,7 @@
 # access-audit: Reconcile shared rules
 
 Type: task
-Status: open
+Status: resolved
 Priority: P1
 Blocked by: 02, 79
 Labels: wayfinder:task
@@ -36,8 +36,8 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] Inventory each duplicated or conflicting instruction with its authoritative source and proposed disposition; verified by document review of `CLAUDE.md`, `CONTEXT.md`, the map's execution notes, ticket 02's inventory, `skills/access-audit/SKILL.md` and the sections of `aws-snowflake-operations`, `data-operations/HOSTED-LOADS.md` and `data-platform/CONNECTIONS.md` that it hands to, recorded under [Inventory](#inventory). (2026-11-20 18:37 ET)
 - [x] Align the local phase with the shared rule decision while preserving explicit operator boundaries; verified by document review of the diff to `skills/access-audit/SKILL.md` against the inventory, and by the wording, genericity and path checks under [Validation](#validation), which do not exercise audit behaviour. (2026-11-20 18:37 ET)
 - [x] Trace a routine path and a blocked path; confirm no new approval, provider access or switch-on authority was inferred; verified by document review under [Traces](#traces). No audit, load or provider request was run. (2026-11-20 18:37 ET)
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. The checks ran (see [Validation](#validation)). This session was told not to commit, push or open a PR, so the change is not yet published.
-- [ ] Open decision A for access changes (below) is answered by the operator or carried by ticket 92. It is recorded and handed off but not answered.
+- [x] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. Ticket-evidence-only PR [#2011](https://github.com/paulananth/edgartools-platform/pull/2011) is published as a draft from `codex/ticket-80-access-audit-consistent-rules-20261121`; its current-head CI passed, and the latest PR head must remain green before the PR is readied.
+- [x] Open decision A for access changes is explicitly deferred to ticket 92, as this ticket permits; it remains unresolved and no access-change approval wording is inferred.
 - [x] Learning → skill: a risk acceptance closes a finding only in the operator's own words, and a change that touches no platform records the gate as not applicable, never PASS. Recorded in [Access audit hard stops](../../../skills/access-audit/SKILL.md#hard-stops) and [the gate](../../../skills/access-audit/SKILL.md#the-gate-before-finalising-a-skill-role-or-login); verified by document review of the diff. (2026-11-20 18:37 ET)
 
 ## Inventory
@@ -106,33 +106,57 @@ These are readings of the changed text, not audit runs.
 
 ## Answer
 
-Access audit's hard stops now name each shared rule's home and grant no
+Access audit's hard stops name each shared rule's home and grant no
 permission. The rule that conflicted (a "signed acceptance" that an agent could
-record as given) is now reserved to the operator's own words, as a new kind of
-decision. The gate now records what was not tested, records "not applicable" for
-a change that touches no platform's access, stops on an unaccepted FAIL and
+record as given) is reserved to the operator's own words, as a new kind of
+decision. The gate records what was not tested, records "not applicable" for a
+change that touches no platform's access, stops on an unaccepted FAIL and
 grants nothing. Run it routes AWS and Snowflake runs to their skill and login
-files to `CONNECTIONS.md`. The approval words for an access-change apply stay
-open (decision A, ticket 92).
+files to `CONNECTIONS.md`. No skill edit is needed for this ticket: the
+current `origin/main` skill already contains these dispositions and handoffs.
 
-Changed: [skills/access-audit/SKILL.md](../../../skills/access-audit/SKILL.md).
+The approval words for an access-change apply remain unresolved. Access audit
+does not remediate, and the question is carried to ticket 92 without deciding
+it; ticket 08's profiling-specific operator ruling is not applied to access
+changes.
 
-Prerequisites: tickets 02 (`e166fa56`) and 79 (`30ae0e7b`) are ancestors of
-`origin/main`, checked with `git merge-base --is-ancestor`. The branch was
-fast-forwarded to `origin/main` at `4451ee65` before editing.
+Changed: this ticket's evidence record only. The skill artifact is
+[skills/access-audit/SKILL.md](../../../skills/access-audit/SKILL.md), unchanged
+by this ticket.
 
-Provenance: this session could not read `~/.agents/skills/` or
-`~/.agents/skills/write-skill/SKILL.md` (access outside the worktree was
-refused), so no installed copy was compared and the `write-skill` guidance was
-not read in this session. Ticket 79 recorded that no installed `access-audit`
-link exists in `~/.agents/skills`; that was not re-checked. The repository copy
-is the one changed.
+Prerequisites: current `origin/main` (`711bad7`) records tickets 02 and 79 as
+resolved. Ticket 02 records that routine-approval wording remains an open
+operator decision; ticket 79 assigns access remediation to the owning
+operations skill. The current skill has been checked against those
+dispositions.
+
+Provenance: reviewed the repository skill from `origin/main` at
+`711bad7dd119637417db65d7ae398f0803f1157f` (SHA-256
+`8ef6c59731b193b6f8eea0bfc215ef847bafef21775a21f321fb34219684c1e1`).
+No installed `access-audit/SKILL.md` exists under `~/.agents/skills`; the
+repository copy is the applicable artifact. Read the installed `write-skill`
+guidance through `skill://write-skill`; its edit-ladder advice supports making
+no skill change when the required behavior is already present.
+
+No live audit, access change, provider request, or switch-on was performed.
 
 ## Validation
 
-- `uv run --no-project --with pytest -- pytest -q -p no:cacheprovider tests/unit/test_skills_cite_no_ticket.py tests/unit/test_profiling_genericity.py tests/unit/test_guides_name_existing_paths.py`: **149 passed**. These check skill wording (no ticket numbers or dates, line limit, genericity) and the paths `CLAUDE.md` and `AGENTS.md` name. They do not exercise the audit or the gate.
-- `git diff --check`: clean.
-- The new links (`../aws-snowflake-operations/SKILL.md#access-identities-read-only-first`, `../aws-snowflake-operations/SKILL.md`, `../data-platform/CONNECTIONS.md`, `#hard-stops`) were checked by hand against the files and headings. `tests/unit/test_access_audit.py` was not run: no script or test changed.
+- Re-read the ticket inventory and current `origin/main` skill. The skill's
+  Hard stops, Start here, Decisions/artifacts/handoffs, Rating/report, and gate
+  sections implement the dispositions in the inventory; the existing routine
+  and blocked traces remain consistent with those boundaries.
+- Confirmed `02-data-platform-consistent-rules.md` and
+  `79-access-audit-responsibility.md` are `resolved` on current `origin/main`;
+  the former carries routine-approval decision A, and the latter keeps
+  remediation separate.
+- Current-head CI for [PR #2011](https://github.com/paulananth/edgartools-platform/pull/2011)
+  passed all 12 jobs on completion-record commit `b8bda0e452c1c0f05e0daa8159066b8c0ac38258`
+  ([run #44968728251](https://github.com/paulananth/edgartools-platform/actions/runs/44968728251)).
+  The evidence update itself will receive a fresh current-head CI run before the PR is readied.
+- No local tests were run in this phase. The scoped artifact change is a
+  ticket record only.
+
 
 ## Completion evidence
 
