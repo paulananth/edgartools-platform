@@ -280,14 +280,16 @@ for identifier table"). For each identifier, decide which it is:
   name still describes every capacity it holds.
 - **A type is an RDM code before anything names it:** every relationship type
   and every capacity (a child code `<TYPE>:<capacity>`) is added to
-  `mdm-relationship-types` as a new code set version, approved in the
-  operator's words, published, and pinned in `rules/merge/reference-pins.yaml`,
-  before a contract, a rule or a test names it. The same holds for any other
-  type a model uses (a kind's status, an event type, a role): it is a code in
-  an RDM code set, never a list in a rules file, a constant or a test. A
-  source's own value for it (a form's adviser type, a filer type) is read as
-  the source writes it and named in the code's `definition` (its source); a
-  mapping from several source values to one code is that code's `crosswalk`.
+  `mdm-relationship-types` as a new code set version. The operator must give
+  explicit words for that version before it is published; standing routine
+  approval does not authorize publication. Then pin it in
+  `rules/merge/reference-pins.yaml` before a contract, rule or test names it.
+  The same holds for any other type a model uses (a kind's status, an event
+  type, a role): it is a code in an RDM code set, never a list in a rules file,
+  a constant or a test. A source's own value for it (a form's adviser type, a
+  filer type) is read as the source writes it and named in the code's
+  `definition` (its source); a mapping from several source values to one code
+  is that code's `crosswalk`.
 - **A hierarchy** (parent chains): say whether cycles are invalid or reviewed,
   whether one parent at a time holds per scope, and whether an ultimate parent
   is derived.
