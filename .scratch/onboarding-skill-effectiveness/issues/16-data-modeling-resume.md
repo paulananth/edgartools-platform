@@ -1,7 +1,7 @@
 # data-modeling: Make progress resumable
 
 Type: task
-Status: open
+Status: resolved
 Priority: P0
 Blocked by: 04, 10, 15
 Labels: wayfinder:task
@@ -33,12 +33,31 @@ These blockers order skill-improvement work. They do not activate optional sourc
 
 ## Acceptance checklist
 
-- [ ] Specify resume, invalidate and blocked conditions for part decisions, supporting findings, unresolved semantics and downstream contracts affected.
-- [ ] Resume a staged interruption from the recorded artifacts and identify exactly the first unfinished action.
-- [ ] Show changed inputs cannot reuse stale proof and unchanged inputs do not repeat completed work.
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md.
-- [ ] Learning → skill: name the verified reusable lesson and its owning skill section, or record none.
+- [x] Specify resume, invalidate and blocked conditions for part decisions, evidence, unresolved semantics and downstream contracts in the existing source log's `Phase` and `Next action` fields. (2026-11-22 12:21 ET)
+- [x] Trace a staged interruption across two invented parts and identify the first unfinished action without rerunning completed work. (2026-11-22 12:21 ET)
+- [x] Show unchanged evidence reuses only its part decisions; changed evidence reopens the affected part and dependent handoff; unapproved or missing evidence blocks back to Data Profiling. (2026-11-22 12:21 ET)
+- [x] Publish the rebased scoped change in PR #2027; CI run `45068947910` passed all 12 jobs on head `2b15eada98`. (2026-11-22)
+- [x] Learning → skill: `Workflow` now routes resume through the shared source log, preserving part-level decisions and invalidation. (2026-11-22 12:21 ET)
+
+## Answer
+
+Data Modeling resumes part decisions from the shared source log, reusing only matching approved evidence and reopening affected downstream handoffs. The documented trace covers unchanged, changed and blocked evidence without source data or test code. PR #2027 head `2b15eada98` passed all 12 CI jobs in run `45068947910`.
+
+Documentation trace using invented part names only:
+
+| Saved state | Resume result |
+|---|---|
+| `part_alpha` has a completed decision artifact and approved findings hash; `part_beta` has an unresolved identity-versus-lookup question and an unwritten Dataset Contract. The shared record lists the two parts and the next action for `part_beta`. | With unchanged source/rules/findings identities, reuse `part_alpha` and resume at `part_beta`'s first unchecked decision; no profile or decision is repeated for `part_alpha`. |
+| Only `part_beta`'s approved findings identity changes. | Reopen `part_beta` and its dependent Data Onboarding contract; retain `part_alpha` if its evidence is unchanged. Resume at the first unchecked `part_beta` action. |
+| Findings are draft/unapproved or a required identifier measurement is missing. | Block `part_beta` and hand back to Data Profiling; do not create or reuse a model decision. |
+
+The installed `data-modeling` skill is unavailable (`skill://data-modeling` unknown; `gstack-skill-bill data-modeling` found no installed copy). This edit uses the repository skill. Before/after size: 35,513→36,288 bytes. No source, provider or store was accessed; no test code was added.
+
+## Validation
+
+- `uv run --no-project --with pytest -- pytest -q -p no:cacheprovider tests/unit/test_profiling_genericity.py`: **145 passed in 0.22s** (2026-11-22 12:22 ET). This checks generic skill wording, not live resume behavior.
+- No guide was edited, so `test_guides_name_existing_paths.py` was not applicable.
 
 ## Completion evidence
 
-Record the answer and artifact links under `## Answer` when resolved. Keep private values out of the public record. A not-applicable phase needs evidence and an explicit applicability disposition, not a false PASS. Do not mark this ticket resolved while a checklist item remains open.
+Record the answer and artifact links under `## Answer` when resolved. Keep private values out of the public record. A not-applicable phase needs evidence and an explicit applicability disposition, not a false PASS. Do not mark this ticket resolved while any acceptance item remains open.

@@ -79,11 +79,12 @@ No scenario or test code is approved by creating these tickets. Proposed Givenâ€
 - [access-audit: Define one responsibility](issues/79-access-audit-responsibility.md): the auditor owns the grade and the re-run. The fix belongs to the platform's operations skill. PR #1968, merged 2026-11-20 18:08 ET.
 - [data-profiling: Resume a source's work](issues/10-data-profiling-resume.md): reuse only matching source, profiler, settings and artifact identities; record the first unfinished action in the shared source log. PR #1986, merged 2026-11-21 06:51 ET.
 - [data-modeling: Decide one part](issues/15-data-modeling-entrypoint.md): make one model decision from approved findings, then hand configuration to its owner. PR #1985, merged 2026-11-20 20:04 ET.
+- [data-modeling: Make progress resumable](issues/16-data-modeling-resume.md): keep part decisions and supporting findings in the shared source log; reuse only matching evidence, reopen affected downstream handoffs, and block missing approvals. PR #2027.
 - [mdm-engineering: Define one responsibility](issues/37-mdm-engineering-responsibility.md): MDM Engineering owns reusable merge, storage, adapter and migration behavior. PR #1981, merged 2026-11-20 19:44 ET.
 - [mdm-engineering: Reconcile shared rules](issues/38-mdm-engineering-consistent-rules.md): shared rules name their authoritative home; MDM Engineering keeps engine qualification and proof. PR #1987, merged 2026-11-21 06:57 ET.
 - [data-governance: Define one responsibility](issues/61-data-governance-responsibility.md): Governance owns the evidence-backed neutral lineage path; catalog meaning and destination mechanics stay with their owners. PR #1982, merged 2026-11-20 19:49 ET.
 - [data-governance: Reconcile shared rules](issues/62-data-governance-consistent-rules.md): unsupported lineage edges and missing evidence remain explicit gaps, not claims. PR #1988, merged 2026-11-21 07:02 ET.
-- [data-platform: Specify generic verification](issues/05-data-platform-generic-verification.md): the operator-approved scenarios exposed no executable generic route; the limitation is recorded in a separate capability-gap ticket, with no behavioral PASS claimed. PR #1983, merged 2026-11-21 07:33 ET.
+- [data-platform: Specify generic verification](issues/05-data-platform-generic-verification.md): the three approved scenarios revealed no executable generic route; the capability gap is tracked separately and no behavior is claimed. PR #1983, merged 2026-11-21 07:33 ET.
 
 ## Not yet specified
 
