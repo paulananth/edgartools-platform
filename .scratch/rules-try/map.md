@@ -20,7 +20,8 @@ A person hand-writes one rule, supplies the input and the expected output, and t
 - "attach" is the typed word in two families. The page title tells them apart. Each full-rule file refuses the other family's words.
 - Identity consolidation stays on `rules test`. The page does not offer a word for it.
 - Source priority chooses a field value. It does not decide that two masters are the same subject.
-- Ticket 01 opens the try page. A family is the file `bench_families/<name>.py`. Keep a copy and Store this draft refuse and write nothing.
+- Ticket 01 opens the try page. A family is the file `bench_families/<name>.py`. Store this draft refuses until its own ticket.
+- Ticket 02: Keep a copy writes the case JSON to the path the person names. No path is not confirmed and is not written. A path under `rules/` is refused. Store this draft still refuses.
 
 ## Not yet specified
 
