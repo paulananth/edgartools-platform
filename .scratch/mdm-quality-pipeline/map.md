@@ -15,9 +15,7 @@ production rules or switch on new checks.
   `mastering.merge` normalization, before a record is merged. `exception`,
   `withhold`, and `flag` have distinct behaviors; a quality exception does not
   stop the whole run.
-- The MDM path does not yet publish per-check run evidence. Its existing
-  provenance retains failures, but not a complete pass denominator. The
-  `quality.counts` helper is not wired to a verified MDM receipt.
+- The MDM path now publishes per-check run evidence through immutable receipt v1, and Bookkeeping admits it by verified work unit. Parent reran the synthetic D5 disposable PG16 recovery scenario on current `origin/main` (`ba51a974`) from the updated ticket-25 worktree; it passed, qualifying recovery only, not production enablement.
 - Use DataKitchen TestGen as a test-type reference, not as a second runtime.
   Keep the Company Financials silver recommendations distinct from Company,
   Person, and Security master rules. A master identifier-capacity constraint
@@ -34,15 +32,14 @@ production rules or switch on new checks.
 
 - [Decide the MDM Quality Inventory and Scope](issues/01-decide-mdm-quality-inventory-and-scope.md): approved the current source-check inventory, evidence threshold, permitted grains, and unresolved-action policy; no additional evidence-backed check or new check kind is identified.
 - [Decide MDM Check Execution Boundaries](issues/02-decide-mdm-check-execution-boundaries.md): retained current per-record checks in `mastering.merge`; bounded full-publication checks run pre-merge, and persisted-master checks run read-only after merges on a consistent snapshot.
-- [Decide MDM Quality Evidence and Bookkeeping Admission](issues/03-decide-mdm-quality-evidence-and-bookkeeping-admission.md): implemented a source-contract-driven, immutable unit receipt; admitted counts remain distinct from pipeline completion, and receipt v1 stays behind recovery qualification and an explicit switch.
+- [Decide MDM Quality Evidence and Bookkeeping Admission](issues/03-decide-mdm-quality-evidence-and-bookkeeping-admission.md): implemented a source-contract-driven, immutable unit receipt; D5 synthetic disposable PG16 recovery qualification passed on current `origin/main` (`ba51a974`), while production target/switch enablement remains pending explicit operator authorization.
 - [Decide OpenMetadata Projection and Readback](issues/04-decide-openmetadata-projection-and-readback.md): reuses source-contract-generated test cases, maps incomplete admitted evidence to `Aborted`, and requires exact timestamped readback.
 - [Handle accepted policies without `kinds`](issues/05-policy-without-kinds.md): missing optional maps are empty across merge/readback, matching validation; PR #2025 keeps production quality evidence disabled.
 
-## Not yet specified
+## Recovery qualification and production enablement
 
-- Disposable recovery qualification for MDM receipt v1 and operator enablement.
-  Until that evidence is recorded, leave `mdm.quality.evidence.v1` out of
-  production targets and `MDM_QUALITY_EVIDENCE_V1` unset.
+- Parent reran D5 scenario `tests/integration/test_mdm_quality_evidence_postgres.py` on current `origin/main` (`ba51a974`) from the updated ticket-25 worktree: 1 passed in 4.77s on disposable PG16. Receipt-v1 recovery is qualified for this synthetic case only.
+- CI run #45052107235 passed all 12 jobs for PR #2028 head `9649cc0`; the ticket-closeout commit creates a new head, so keep the PR draft until that head's CI passes. Production targets and `MDM_QUALITY_EVIDENCE_V1` stay off until explicit operator enablement; this test grants no production authorization.
 
 ## Out of scope
 
