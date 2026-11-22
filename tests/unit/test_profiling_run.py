@@ -479,7 +479,7 @@ def _write_profile_archive(path):
         archive.writestr("utf8.csv", "utf8_id,label\n1,Alpha\n2,Beta\n")
         archive.writestr("windows1252.csv", b"legacy_id,label\n1,Caf\xe9\n2,Beta\n")
         archive.writestr("unreadable.csv", bytes(range(1, 256)) * 4)
-        archive.writestr("readme.txt", "Synthetic archive fixture.")
+        archive.writestr("readme.md", "Synthetic archive fixture.")
 
 
 def test_run_reports_both_encodings_and_unreadable_archive_members(tmp_path, capsys):
@@ -499,7 +499,7 @@ def test_run_reports_both_encodings_and_unreadable_archive_members(tmp_path, cap
     assert windows1252["encoding"]["declare"] == "windows-1252"
     not_read = findings["dataset"]["not_read"]
     assert {Path(item["location"].rsplit("#", 1)[-1]).name for item in not_read} == {
-        "unreadable.csv", "readme.txt"}
+        "unreadable.csv", "readme.md"}
     assert all(item["reason"] for item in not_read)
     assert "unreadable.csv: not read" in capsys.readouterr().err
 
