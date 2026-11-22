@@ -182,8 +182,12 @@ supported compare command instead:
 
 ```sh
 uv run --with duckdb --with pyyaml python profile_data.py compare \
-  --approved <private folder>/findings.yaml --input <name>=<new delivery> [--input ...] --out <private folder>
+  --approved <approved private folder>/findings.yaml --input <name>=<new delivery> [--input ...] --out <new private folder>
 ```
+
+Use a separate private output folder. `compare` refuses before writing if the
+resolved `--out` is the folder containing `--approved`; the approved findings
+and adjacent artifacts remain unchanged.
 
 Compare requires approved findings and writes private `drift.yaml`; hand its
 changes to Refining Rules. Hand approved new-dataset findings to Data
@@ -465,8 +469,12 @@ that handles it (data-quality, refining-rules or rdm).
 
 ```
 uv run --with duckdb --with pyyaml python profile_data.py compare \
-  --approved <folder>/findings.yaml --input <name>=<new delivery> [--input ...] --out <folder>
+  --approved <approved folder>/findings.yaml --input <name>=<new delivery> [--input ...] --out <new private folder>
 ```
+
+Keep `--out` separate from the approved folder. `compare` refuses before
+writing if both paths resolve to the same folder, preserving the approved
+findings and adjacent artifacts.
 
 It refuses findings that are not approved. Key persistence (the same record
 keeping its key between deliveries), snapshot-or-changes and the refresh rate

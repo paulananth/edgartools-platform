@@ -1,5 +1,6 @@
 """A whole data-profiling run on the synthetic set: classes, links, hierarchies, masking."""
 
+import hashlib
 import json
 import re
 import sys
@@ -132,26 +133,37 @@ def test_report_names_every_part_and_says_advice_only(result):
     assert "advice only" in result["report"]
 
 
-def test_compare_lists_drift_against_approved_findings(result, tmp_path):
+def test_compare_lists_drift_and_preserves_approved_findings(result, tmp_path):
     import shutil
-    approved = result["out"] / "findings.yaml"
-    findings = yaml.safe_load(approved.read_text())
-    findings["approval"]["status"] = "approved"
-    approved_copy = tmp_path / "approved.yaml"
-    approved_copy.write_text(yaml.safe_dump(findings, sort_keys=False))
+
+    approved_dir = tmp_path / "approved"
+    shutil.copytree(result["out"], approved_dir)
+    approved = approved_dir / "findings.yaml"
+    assert profile_data.main(["approve", "--findings", str(approved), "--by", "operator",
+                              "--words", "approved as shown"]) == 0
+    artifacts = ("findings.yaml", "REPORT.md", "fingerprints.json", "invalid_rows.jsonl")
+    before = {name: hashlib.sha256((approved_dir / name).read_bytes()).hexdigest() for name in artifacts}
+
     changed = tmp_path / "set"
     shutil.copytree(result["folder"], changed)
     lines = (changed / "visit.csv").read_text().splitlines()
     lines = [lines[0] + ",channel"] + [line.replace(",", ",9", 1) + ",web" for line in lines[1:]]
     (changed / "visit.csv").write_text("\n".join(lines) + "\n")
     out = tmp_path / "out"
-    assert profile_data.main(["compare", "--approved", str(approved_copy), "--input", f"set={changed}",
+    assert profile_data.main(["compare", "--approved", str(approved), "--input", f"set={changed}",
                               "--out", str(out)]) == 0
     drift = yaml.safe_load((out / "drift.yaml").read_text())["drift"]
     kinds = {(d["drift"], d["part"]) for d in drift}
     assert ("column_new", "visit") in kinds
     assert ("link_broken", "visit") in kinds or ("link_weaker", "visit") in kinds
     assert all(d["handled_by"] in {"data-quality", "refining-rules", "rdm"} for d in drift)
+    assert {name: hashlib.sha256((approved_dir / name).read_bytes()).hexdigest() for name in artifacts} == before
+
+    with pytest.raises(SystemExit, match="separate --out"):
+        profile_data.main(["compare", "--approved", str(approved), "--input", f"set={changed}",
+                           "--out", str(approved_dir)])
+    assert {name: hashlib.sha256((approved_dir / name).read_bytes()).hexdigest() for name in artifacts} == before
+    assert not (approved_dir / "drift.yaml").exists()
 
 
 def test_compare_refuses_findings_that_are_not_approved(result, tmp_path):
