@@ -1,7 +1,7 @@
 # data-modeling: Reconcile shared rules
 
 Type: task
-Status: open
+Status: resolved
 Priority: P0
 Blocked by: 02, 08, 13
 Labels: wayfinder:task
@@ -39,9 +39,7 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] Trace a routine path and a blocked path; confirm no new approval, provider access or switch-on authority was inferred; verified by document review under [Traces](#traces). No source operation, proof program, RDM operation or load was run. (2026-11-21 21:07 ET)
 - [x] Open decision A (routine approvals, carried from tickets 02 and 08) is resolved by the operator: findings and designed keys retain explicit approval (ticket 08); each new relationship-type/capacity code-set version requires exact operator words before publication, and standing routine approval is insufficient. Recorded under [Open decisions](#open-decisions). (2026-11-21 21:07 ET)
 - [x] Learning → skill: exact operator words are required before publishing every new relationship-type/capacity code-set version; standing routine approval is insufficient. Recorded in [Data Modeling hard stops](../../../skills/data-modeling/SKILL.md#hard-stops). (2026-11-21 21:07 ET)
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. Draft until current-head CI is green.
-- [x] Open decision A (routine approvals, carried from tickets 02 and 08) is resolved by the operator: findings and designed keys retain explicit approval (ticket 08); each new relationship-type/capacity code-set version requires exact operator words before publication, and standing routine approval is insufficient. Recorded under [Open decisions](#open-decisions).
-- [x] Learning → skill: exact operator words are required before publishing every new relationship-type/capacity code-set version; standing routine approval is insufficient. Recorded in [Data Modeling hard stops](../../../skills/data-modeling/SKILL.md#hard-stops).
+- [x] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. PR #2016 merged as `e18da5079`; current-head CI run #44974736622 passed all 12 jobs. (2026-11-21 21:17 ET)
 
 ## Inventory
 
@@ -123,24 +121,20 @@ permission. The current-main skill:
   exact operator words for each new relationship-type/capacity code-set
   version before publication.
 
-Decision A is resolved by the operator as quoted under [Open decisions](#open-decisions). No RDM version was drafted, approved or published.
+Decision A is resolved by the operator as quoted under [Open decisions](#open-decisions). No RDM version was drafted, approved or published. The scoped change is in [PR #2016](https://github.com/paulananth/edgartools-platform/pull/2016), merged with all 12 current-head CI jobs passing.
 
 Provenance:
 
-- **Baseline.** `origin/main` at `5b2c90735` (PR #2007); this branch was
-  created from that current-main head after fetching `origin/main`.
-- **Prerequisites.** Tickets 02, 08 and 13 are resolved on current main:
-  `e166fa56` (PR #1966), `d2879db5` (PR #1972) and `5b2c90735` (PR #2007).
-- **Installed copy.** `gstack-skill-bill` found no installed `data-modeling`
-  skill in its configured skill roots. The repository copy is the edit source.
-- **Skill-writing guidance.** `write-skill` was read; the repo skill bill
-  measured the current file before and after the edit (see Validation).
+- **Baseline.** `origin/main` at `e18da5079`, including merged PR #2016; the ticket change was based on `5b2c90735` (PR #2007).
+- **Prerequisites.** Tickets 02, 08 and 13 are resolved on current main: `e166fa56` (PR #1966), `d2879db5` (PR #1972) and `5b2c90735` (PR #2007).
+- **Installed copy.** `gstack-skill-bill` found no installed `data-modeling` skill in its configured skill roots. The repository copy is the edit source.
+- **Skill-writing guidance.** `write-skill` was read; the repo skill bill measured the skill before and after the edit (see Validation).
 
 ## Validation
 
 - The `data-modeling` skill was reviewed against current main, ticket 08's explicit findings/design-key approval ruling, and the operator's exact relationship-type/capacity version ruling. The repository copy was changed; no RDM version was drafted, approved or published.
 - `gstack-skill-bill` on the repository skill: **35,344 → 35,513 bytes**; `SKILL.md` is **491 lines**, within the 500-line limit.
-- No local tests or provider/data operations were run, per assignment; the parent will run the combined focused checks. Current-head CI is still required before this draft PR can be marked ready.
+- No local tests or provider/data operations were run, per assignment; CI run #44974736622 passed on current head `a6b9b021` before PR #2016 was marked ready and merged.
 - `bash scripts/dev/overlap_guard.sh` passed standalone: no overlap (2 files checked against other runtimes).
 
 ## Completion evidence
