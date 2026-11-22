@@ -28,10 +28,10 @@ def connection_of(env) -> str:
 
 def connections() -> set[str]:
     """The SnowCLI connection names on this machine (names only)."""
-    done = subprocess.run(["snow", "connection", "list", "--format", "json"], capture_output=True, text=True, check=False)
     try:
+        done = subprocess.run(["snow", "connection", "list", "--format", "json"], capture_output=True, text=True, check=False)
         return {row["connection_name"] for row in json.loads(done.stdout or "[]")}
-    except (ValueError, KeyError, TypeError):
+    except (OSError, ValueError, KeyError, TypeError):  # no SnowCLI on this machine, or an unreadable list
         return set()
 
 

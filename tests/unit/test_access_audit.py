@@ -299,3 +299,12 @@ def test_policies_are_read_through_the_administrators_procedure_not_a_privilege_
     assert calls == ["call INVENTED_GOLD.control.audit_credential_policies()"]
     monkeypatch.setattr(snowflake, "snow", lambda connection, sql, soft=False: None)
     assert snowflake.found_policies("c", "INVENTED_GOLD") is None
+
+
+def test_a_machine_without_snowcli_skips_snowflake_instead_of_failing(monkeypatch):
+    def missing(*args, **kwargs):
+        raise FileNotFoundError("snow")
+
+    monkeypatch.setattr(snowflake.subprocess, "run", missing)
+    assert snowflake.connections() == set()
+    assert snowflake.configured({}) is False
