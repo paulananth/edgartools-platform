@@ -52,8 +52,10 @@ classification and relationship/hierarchy computation belong to the shared
 Rust/Python engine. Generic configured computation belongs in Rust through
 Python callers; custom functions, coordination and database clients remain
 Python. Keep one policy interpretation and one merge algorithm for all
-engines. A dialect branch must not change which masters bind, which claims
-win, which links exist or which records wait or are rejected.
+engines. Policy validation and every merge/readback reader share optional-map
+defaults: absent `kinds` means no per-kind rules, while required pins and
+unknown rules still fail. A dialect branch must not change which masters bind,
+which claims win, which links exist or which records wait or are rejected.
 
 **Configured vocabulary lives once, in RDM, read by Rust.** A vocabulary MDM
 runs by (the relationship types) is an RDM code set the policy
