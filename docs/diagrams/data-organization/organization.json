@@ -1,0 +1,218 @@
+{
+  "schema_version": 1,
+  "diagram_type": "tree",
+  "meta": {
+    "title": "Data organization and available skills",
+    "locale": "en",
+    "output": "docs/diagrams/data-organization/organization.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/paulananth/edgartools-platform.git",
+      "revision": "a3d2a6173dc96d60875b8d20a0773bb4f76c0645"
+    }
+  },
+  "layout": {
+    "direction": "down",
+    "nodeW": 170,
+    "nodeMaxW": 200,
+    "gapX": 24,
+    "gapY": 55
+  },
+  "nodes": [
+    {
+      "id": "head",
+      "label": "CDO / Head of Data & AI",
+      "sublabel": "Reference organization",
+      "sources": [
+        {
+          "path": "skills/README.md",
+          "line": 13,
+          "end_line": 15,
+          "label": "Maintained lifecycle role map"
+        }
+      ]
+    },
+    {
+      "id": "foundation",
+      "parent": "head",
+      "label": "Infrastructure & systems",
+      "sublabel": "Stages 1–2",
+      "sources": [
+        {
+          "path": "skills/README.md",
+          "line": 17,
+          "end_line": 27,
+          "label": "Maintained lifecycle role map"
+        }
+      ]
+    },
+    {
+      "id": "consumption",
+      "parent": "head",
+      "label": "BI & consumption",
+      "sublabel": "Stage 3",
+      "sources": [
+        {
+          "path": "skills/README.md",
+          "line": 29,
+          "end_line": 35,
+          "label": "Maintained lifecycle role map"
+        }
+      ]
+    },
+    {
+      "id": "advanced",
+      "parent": "head",
+      "label": "Analytics & AI",
+      "sublabel": "Stage 4",
+      "sources": [
+        {
+          "path": "skills/README.md",
+          "line": 37,
+          "end_line": 43,
+          "label": "Maintained lifecycle role map"
+        }
+      ]
+    },
+    {
+      "id": "architect",
+      "parent": "foundation",
+      "label": "Data Architect",
+      "sublabel": "Design • skills available",
+      "sources": [
+        {
+          "path": "skills/README.md",
+          "line": 19,
+          "end_line": 23,
+          "label": "Maintained lifecycle role map"
+        }
+      ]
+    },
+    {
+      "id": "engineer",
+      "parent": "foundation",
+      "label": "Data Engineer",
+      "sublabel": "Production • skills available",
+      "sources": [
+        {
+          "path": "skills/README.md",
+          "line": 25,
+          "end_line": 27,
+          "label": "Maintained lifecycle role map"
+        }
+      ]
+    },
+    {
+      "id": "analyst",
+      "parent": "consumption",
+      "label": "Data Analyst",
+      "sublabel": "Discovery • scoped query skill",
+      "sources": [
+        {
+          "path": "skills/README.md",
+          "line": 31,
+          "end_line": 32,
+          "label": "Maintained lifecycle role map"
+        }
+      ]
+    },
+    {
+      "id": "bi",
+      "parent": "consumption",
+      "label": "BI Developer",
+      "sublabel": "Production • partial coverage",
+      "sources": [
+        {
+          "path": "skills/README.md",
+          "line": 34,
+          "end_line": 35,
+          "label": "Maintained lifecycle role map"
+        }
+      ]
+    },
+    {
+      "id": "scientist",
+      "parent": "advanced",
+      "label": "Data Scientist",
+      "sublabel": "Discovery • general guide",
+      "sources": [
+        {
+          "path": "skills/README.md",
+          "line": 39,
+          "end_line": 40,
+          "label": "Maintained lifecycle role map"
+        }
+      ]
+    },
+    {
+      "id": "ai",
+      "parent": "advanced",
+      "label": "AI / ML Engineer",
+      "sublabel": "Production • workflow gap",
+      "sources": [
+        {
+          "path": "skills/README.md",
+          "line": 42,
+          "end_line": 43,
+          "label": "Maintained lifecycle role map"
+        }
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "slate",
+      "title": "Read the structure",
+      "items": [
+        "Illustrative role organization supplied by the operator; not a staffed reporting chart or live deployment claim.",
+        "Each stage pairs design/discovery with engineering/production. The two roles are peers within their function.",
+        "Lifecycle: 1 ingestion → 2 storage, cleaning and modeling → 3 BI and reporting → 4 advanced analytics and AI. AI may also use governed Silver directly."
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Data Architect — design",
+      "items": [
+        "data-platform • data-profiling • data-modeling",
+        "data-governance • data-catalog",
+        "Define storage responsibilities, identity, relationships, grain, time and trusted lineage."
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Data Engineer — production",
+      "items": [
+        "data-onboarding • refining-rules • data-quality • mdm-engineering • sql-writer",
+        "data-operations • pipeline-orchestration • bookkeeping • change-journal",
+        "database-monitoring • production-support • aws-snowflake-operations • access-audit • openmetadata"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Data Analyst / BI Developer",
+      "items": [
+        "Analyst: auto-ontology-product-query for configured business questions; no general analyst workflow skill.",
+        "BI: semantic-views • auto-ontology • aws-snowflake-operations • data-catalog • openmetadata.",
+        "No generic dashboard-builder, Power BI administration or Tableau administration skill."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Data Scientist / AI–ML Engineer",
+      "items": [
+        "Scientist: data-scientist guides exploration, experimentation and prediction.",
+        "AI/ML Engineer: no maintained end-to-end training, model serving, RAG or agent deployment skill.",
+        "A semantic query integration does not establish production ML capability."
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Platform boundaries",
+      "items": [
+        "Captured files = Bronze; MDM = mastered identities; RDM = reference code sets; Silver = source facts.",
+        "Gold transformations and dashboards are downstream work, not universal deployed stages.",
+        "Skill availability means an operating guide exists; qualification, authorization and activation remain separate."
+      ]
+    }
+  ]
+}
