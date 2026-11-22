@@ -7,7 +7,8 @@
 # no database is created for it. The access audit (control POL) reads the live policies back against the same file.
 locals {
   policy        = yamldecode(file("${path.module}/../../../../../../rules/snowflake_policy.yaml"))
-  gold_database = yamldecode(file("${path.module}/../../../../../../rules/snowflake.yaml"))[local.policy.location.database_of].database
+  names         = yamldecode(file("${path.module}/../../../../../../rules/snowflake.yaml"))
+  gold_database = local.names[local.policy.location.database_of].database
 }
 
 resource "snowflake_schema" "policies" {
@@ -287,5 +288,23 @@ resource "snowflake_grant_privileges_to_account_role" "auditor_policy_reader" {
   on_schema_object {
     object_type = "PROCEDURE"
     object_name = "${local.gold_database}.CONTROL.AUDIT_CREDENTIAL_POLICIES()"
+  }
+}
+
+# --- The database owner ---------------------------------------------------------------------------------------------------
+# The role named `owner` in rules/snowflake.yaml owns the platform's databases (held by the administrator role, whose grants this root never plans), so the Gold database
+# has a role of its own as owner rather than a person's account. Objects that already exist are imported once (terraform import:
+# the role and the ownership), so a plan shows no change.
+resource "snowflake_account_role" "owner" {
+  name    = local.names.owner
+  comment = "Owns the platform's databases (rules/snowflake.yaml owner); held by the administrator role"
+}
+
+resource "snowflake_grant_ownership" "gold_database" {
+  account_role_name   = snowflake_account_role.owner.name
+  outbound_privileges = "COPY"
+  on {
+    object_type = "DATABASE"
+    object_name = local.gold_database
   }
 }
