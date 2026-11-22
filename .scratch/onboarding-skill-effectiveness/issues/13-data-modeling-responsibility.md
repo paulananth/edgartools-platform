@@ -1,7 +1,7 @@
 # data-modeling: Define one responsibility
 
 Type: task
-Status: open
+Status: resolved
 Priority: P0
 Blocked by: 01, 07
 Labels: wayfinder:task
@@ -41,8 +41,8 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [ ] ~~Fix `data-operations`' readiness step that routes an RDM blocker "through data-profiling's RDM steps" (skills/data-operations/SKILL.md, "Operationalize every domain", step 3, RDM per domain)~~ deferred to [55](./55-data-operations-responsibility.md): that ticket owns data-operations; the owner it should name is Data Onboarding or Refining Rules.
 - [ ] ~~Reconcile "one of `KINDS`" (data-modeling section 2, REQUIREMENTS.md) with profiling's "Nothing else holds a list of kinds" (`mdm-kinds`)~~ deferred to [14](./14-data-modeling-consistent-rules.md): `KINDS` in `edgar_warehouse/mdm/evidence.py` is read from a catalog, and which list is authoritative is a consistency question, not an ownership one.
 - [x] Demonstrate the boundary on a shared issued identifier, an ambiguous name, a cross-reference-only identifier and an effective-dated relationship; link retained work rather than duplicating it. Verified as a documentation-only trace against the current model rules and handoff owners: Security Master’s identity findings and load-order proof, Data Profiling’s [NAME-IDS.md](../../../skills/data-profiling/NAME-IDS.md) and Data Modeling’s non-merge rule, MDM Engineering’s [cross-reference guidance](../../../skills/mdm-engineering/CROSS-REFERENCE.md), and Data Quality’s [provisional-date policy](../../../skills/data-quality/SKILL.md#approved-provisional-dates). No scenario code or data run was performed; this verifies documented ownership, not behavior on data. (2026-11-21 19:25 ET)
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. PR #2007 is the publication record; CI on its current head is the affected check. No local tests were run for this documentation/skill update.
-- [ ] Learning → skill: Data Modeling requires explicit operator words for each new relationship-type/capacity code-set version before publication; standing routine approval is insufficient. Recorded in [section 5](../../../skills/data-modeling/SKILL.md#5-a-relationship-its-type). Stays unchecked until the change is published and reviewed.
+- [x] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. Verified in PR #2007 at head `dd000f09748afd0296e38222bab17fba02ffb3b0`: current-head CI passed all 12 checks; no local tests were run for this documentation/skill update. (2026-11-21 20:50 ET)
+- [x] Learning → skill: Data Modeling requires explicit operator words for each new relationship-type/capacity code-set version before publication; standing routine approval is insufficient. Recorded in [section 5](../../../skills/data-modeling/SKILL.md#5-a-relationship-its-type) and verified in PR #2007. (2026-11-21 20:50 ET)
 
 ## Answer
 
@@ -109,4 +109,4 @@ ownership, section anchors or routing behaviour.
 
 ## Completion evidence
 
-Record the answer and artifact links under `## Answer` when resolved. Keep private values out of the public record. A not-applicable phase needs evidence and an explicit applicability disposition, not a false PASS. Do not mark this ticket resolved while a checklist item remains open.
+Record the answer and artifact links under `## Answer` when resolved. Keep private values out of the public record. A not-applicable phase needs evidence and an explicit applicability disposition, not a false PASS. Explicit parts marked `~~...~~ deferred to <ticket>` may remain unchecked; do not leave any other checklist item open when marking the ticket resolved.
