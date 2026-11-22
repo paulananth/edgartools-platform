@@ -30,7 +30,7 @@ qualification, operator activation and cloud deployment are separate gates.
 The configured workers' AWS launch configuration and automated silver pipeline
 landing remain integration work.
 
-**Reading paths:** [Sources](#sources-in-the-repository) · [Architecture](#architecture) · [Skills](#how-the-skills-work)
+**Reading paths:** [Sources](#sources-in-the-repository) · [Architecture](#architecture) · [Roles and skills](#data-organization-and-skills-by-role) · [Skills](#how-the-skills-work)
 · [Onboard a source](#onboard-a-brand-new-data-source) · [Rules guide](#rules-an-easy-guide)
 · [Mastering](#how-mastering-works) · [Data Catalog](#how-the-data-catalog-is-built)
 · [Getting started](#getting-started) · [Technical references](#repository-guide)
@@ -159,6 +159,47 @@ The rule is **prepare in code; validate and commit at the destination**.
 See the [runtime responsibility map](docs/architecture/runtime-responsibilities.md)
 for implementation evidence and qualification boundaries. No separate graph
 database is required for MDM's relationship or agent-context reads.
+
+## Data organization and skills by role
+
+A modern data organization turns disparate source data into trusted datasets,
+reports, predictive models and production AI applications. Each stage pairs
+**design and discovery** with **engineering and production**: one role explores
+and defines the result; its partner automates, operates and verifies it.
+
+**Lifecycle:** ingestion and pipelines → storage, cleaning and modeling → BI
+and reporting → advanced analytics and AI. This is a responsibility map, not a
+mandatory execution sequence: analytics can also consume governed Silver data.
+
+![Reference data organization and role skill availability](docs/diagrams/data-organization/organization.svg)
+
+[Interactive Archify organization chart](docs/diagrams/data-organization/organization.html)
+· [Diagram source and regeneration](docs/diagrams/data-organization/README.md)
+
+The CDO / Head of Data & AI coordinates the three functions. Within each
+function, the two roles are peers; the chart does not imply that engineers
+report to discovery roles. It is an illustrative organization, not a staffing
+claim. Existing operator approvals and skill handoffs retain their authority.
+
+| Stage and role | Responsibility and professional skills | Available repository skills | Coverage boundary |
+| --- | --- | --- | --- |
+| **1–2 · Data Architect** — design | Storage architecture, schema and dimensional design, identity, governance and lineage. | [data-platform](skills/data-platform/SKILL.md), [data-profiling](skills/data-profiling/SKILL.md), [data-modeling](skills/data-modeling/SKILL.md), [data-governance](skills/data-governance/SKILL.md), [data-catalog](skills/data-catalog/SKILL.md) | Platform modeling and governance guides; not blanket implementation of every warehouse methodology. |
+| **1–2 · Data Engineer** — production | Python, SQL, configured reading, quality checks, reliable pipelines, Git and CI/CD. | [data-onboarding](skills/data-onboarding/SKILL.md), [refining-rules](skills/refining-rules/SKILL.md), [data-quality](skills/data-quality/SKILL.md), [mdm-engineering](skills/mdm-engineering/SKILL.md), [sql-writer](skills/sql-writer/SKILL.md), [data-operations](skills/data-operations/SKILL.md), [pipeline-orchestration](skills/pipeline-orchestration/SKILL.md), [bookkeeping](skills/bookkeeping/SKILL.md), [change-journal](skills/change-journal/SKILL.md) | Operations also use [database-monitoring](skills/database-monitoring/SKILL.md), [production-support](skills/production-support/SKILL.md), [aws-snowflake-operations](skills/aws-snowflake-operations/SKILL.md), [access-audit](skills/access-audit/SKILL.md) and [openmetadata](skills/openmetadata/SKILL.md). No generic Spark or Airflow capability is implied. |
+| **3 · Data Analyst** — discovery | Business questions, SQL, spreadsheets, exploratory visualization and storytelling. | [auto-ontology-product-query](skills/auto-ontology-product-query/SKILL.md) | Scoped questions over configured products; no general analyst workflow skill. |
+| **3 · BI Developer** — production | Governed metrics, semantic models, dashboard refresh, access control and query performance. | [semantic-views](skills/semantic-views/SKILL.md), [auto-ontology](skills/auto-ontology/SKILL.md), [aws-snowflake-operations](skills/aws-snowflake-operations/SKILL.md), [data-catalog](skills/data-catalog/SKILL.md), [openmetadata](skills/openmetadata/SKILL.md) | Scoped semantic/query and publication workflows; no generic dashboard builder or Power BI/Tableau administration skill. |
+| **4 · Data Scientist** — discovery | Statistics, Python/R, feature engineering, experiments and predictive model evaluation. | [data-scientist](skills/data-scientist/SKILL.md) | General exploration and prediction guidance, not a production training service. Platform NER mention extraction belongs to Data Profiling; identity resolution belongs to approved modeling and matching rules. |
+| **4 · AI / ML Engineer** — production | Model APIs, containers, CI/CD, model monitoring, LLM evaluation, RAG and agent deployment. | No end-to-end production AI/ML skill maintained here. | Semantic/query integration is adjacent support; it does not establish model serving, vector retrieval or agent deployment capability. |
+
+Repository skills are operating guides, not a claim that a service is deployed
+or a source is qualified. Captured files are Bronze; MDM owns identities, RDM
+owns code sets and Silver holds source facts. Gold transformations, dashboards
+and production AI are downstream responsibilities whose availability must be
+verified separately. The [maintained lifecycle role map](skills/README.md#lifecycle-role-map)
+is the detailed routing authority. Domain guides include
+[security-master](skills/security-master/SKILL.md) and
+[company-financials](skills/company-financials/SKILL.md);
+[data-engineering-fundamentals](skills/data-engineering-fundamentals/SKILL.md)
+provides conceptual learning.
 
 ## How the skills work
 
