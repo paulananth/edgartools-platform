@@ -36,15 +36,13 @@ production rules or switch on new checks.
 - [Decide MDM Check Execution Boundaries](issues/02-decide-mdm-check-execution-boundaries.md): retained current per-record checks in `mastering.merge`; bounded full-publication checks run pre-merge, and persisted-master checks run read-only after merges on a consistent snapshot.
 - [Decide MDM Quality Evidence and Bookkeeping Admission](issues/03-decide-mdm-quality-evidence-and-bookkeeping-admission.md): implemented a source-contract-driven, immutable unit receipt; admitted counts remain distinct from pipeline completion, and receipt v1 stays behind recovery qualification and an explicit switch.
 - [Decide OpenMetadata Projection and Readback](issues/04-decide-openmetadata-projection-and-readback.md): reuses source-contract-generated test cases, maps incomplete admitted evidence to `Aborted`, and requires exact timestamped readback.
+- [Handle accepted policies without `kinds`](issues/05-policy-without-kinds.md): missing optional maps are empty across merge/readback, matching validation; PR #2025 keeps production quality evidence disabled.
 
 ## Not yet specified
 
 - Disposable recovery qualification for MDM receipt v1 and operator enablement.
   Until that evidence is recorded, leave `mdm.quality.evidence.v1` out of
   production targets and `MDM_QUALITY_EVIDENCE_V1` unset.
-- A separate runtime gap exposed by the synthetic qualification test is
-  tracked in [ticket 05](issues/05-policy-without-kinds.md); it does not
-  change the switch-off requirement.
 
 ## Out of scope
 

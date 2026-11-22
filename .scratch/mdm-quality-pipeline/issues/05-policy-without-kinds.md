@@ -1,7 +1,7 @@
 # Runtime gap: accepted policy without `kinds` fails in mastering
 
 Type: task
-Status: open
+Status: resolved
 Priority: P0
 Blocked by: none
 Labels: wayfinder:task
@@ -36,9 +36,9 @@ The D5 disposable PG16 receipt-recovery test is a separate ticket-25 qualificati
 
 - [x] Run the focused accepted-policy regression covering exact namespaces, waiting sources, exact rules and carrier readback: `tests/mdm/test_policy_without_kinds.py` — 1 passed in 0.27s. (2026-11-22 11:26 ET)
 - [x] Use one shared empty-map default for merge rules and the same validation default for carrier readback; no policy schema or production switch changed. (2026-11-22 11:26 ET)
-- [ ] Publish this ticket's change in its own PR and pass affected checks and current-head CI.
+- [x] Publish this ticket's change in PR #2025; all 12 CI jobs passed on code head `a59d5e5` (run #45046002178). The final ticket-closeout head remains draft until its current-head CI passes. (2026-11-22 12:12 ET)
 - [x] Learning → MDM Engineering: the [Database-agnostic merge logic](../../../skills/mdm-engineering/SKILL.md#database-agnostic-merge-logic) now requires merge/readback readers to share validation's optional-map defaults. (2026-11-22 11:26 ET)
 
 ## Answer
 
-`mastering.merge` now centralizes per-kind rule lookup through `_kind_rules`, and `mastering.reads.carriers` uses the validator's empty-map default. The focused accepted-policy regression passes. Ticket 25's receipt-recovery gate remains separate and must be rerun after this compatibility change merges; production remains disabled.
+`mastering.merge` centralizes per-kind rule lookup through `_kind_rules`, and `mastering.reads.carriers` uses the validator's empty-map default. The accepted-policy regression passed; CI passed all 12 jobs on code head `a59d5e5`. Ticket 25's receipt-recovery qualification remains separate and must be rerun after this fix merges. Production remains disabled.
