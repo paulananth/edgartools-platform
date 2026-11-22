@@ -1,7 +1,7 @@
 # Capability gap: compare can replace approved findings
 
 Type: task
-Status: claimed
+Status: resolved
 Priority: P0
 Blocked by: none
 Labels: wayfinder:task
@@ -31,7 +31,7 @@ Local proof after rebasing onto latest `origin/main` (`2956c2def9`): `TESTMON_DA
 - [x] Prior probe reproduced the destructive same-folder behavior on invented inputs; the regression test captures before/after findings SHA-256 and verifies equality after the fix. (2026-11-22 07:41 ET; the earlier probe did not retain literal digests.)
 - [x] Add a generic pre-write refusal and a test proving the approved findings and adjacent artifact hashes remain unchanged; local focused test: 46 passed, skill-length test: 6 passed, and genericity lint: 145 passed after latest rebase. (2026-11-22)
 - [x] Update both Data Profiling compare examples to use a distinct private output folder and document the pre-write refusal. PR #2015 is merged, so the update is based on its current skill text. (2026-11-22)
-- [ ] Publish this ticket's change in its own PR and pass affected checks and current-head CI.
+- [x] Publish this ticket's change in draft PR #2030; all 12 CI jobs passed on code head `36df9a052d` in run `45070323188`. The closeout-only head still requires CI before merge.
 - [x] Learning → skill: the separate-output and approval-preservation rule is in Data Profiling's compare guidance. (2026-11-22)
 
 
