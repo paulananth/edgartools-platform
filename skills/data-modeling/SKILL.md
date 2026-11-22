@@ -31,7 +31,7 @@ A shared rule names its home beside it; the rest are this phase's own. This list
 
 | Never | Instead |
 |---|---|
-| Approve findings or a code set version, or write words the operator did not say | Ask one question, then wait; findings are approved through [Data Profiling](../data-profiling/SKILL.md#hard-stops), a code set version by [CODE-SETS.md](../data-profiling/CODE-SETS.md), and switching a rule on is the operator's (`CONTEXT.md`, "Rule Activation Approval") |
+| Approve findings, a designed key or a code set version, or write words the operator did not say | Findings and designed keys require explicit approval in the operator's exact words ([Data Profiling](../data-profiling/SKILL.md#hard-stops)); each new relationship-type/capacity code-set version requires exact operator words before publication—standing routine approval is insufficient ([CODE-SETS.md](../data-profiling/CODE-SETS.md)); switching a rule on remains the operator's (`CONTEXT.md`, "Rule Activation Approval") |
 | Guess a class, a key, a link or a meaning | Leave it unknown and name the failing tests from the findings |
 | Add a kind, or treat a profile as a kind | A missing kind is an operator ruling |
 | Treat an NER mention or name similarity as identity, join on a lookup-only identifier, or merge text matches | NER locates mention spans; resolution uses a kind's Identifier Contract or operator-switched matching rule. Ambiguity remains review, never an automatic merge. |
