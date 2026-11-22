@@ -2,8 +2,8 @@
 
     uv run --with duckdb --with pyyaml python profile_data.py run --name <set> \
         --input <part>=<file|folder|zip|db file|env:VARIABLE> ... --out <folder>
-    uv run --with duckdb --with pyyaml python profile_data.py compare --approved <folder>/findings.yaml \
-        --input <part>=<new delivery> ... --out <folder>
+    uv run --with duckdb --with pyyaml python profile_data.py compare --approved <approved folder>/findings.yaml \
+        --input <part>=<new delivery> ... --out <comparison folder>
     uv run --with duckdb --with pyyaml python profile_data.py approve --findings <folder>/findings.yaml \
         --by <operator> --words "<their exact words>"
     uv run --with duckdb --with pyyaml python profile_data.py catalog --findings <folder>/findings.yaml \
@@ -143,6 +143,9 @@ def main(argv: list[str] | None = None) -> int:
         approved = yaml.safe_load(args.approved.read_text(encoding="utf-8"))
         if approved["approval"]["status"] != "approved":
             raise SystemExit(f"{args.approved} is not approved: approve it before comparing")
+        if args.out.resolve() == args.approved.resolve().parent:
+            raise SystemExit(f"{args.out} contains the approved findings {args.approved}; "
+                             "choose a separate --out")
         report.read_fingerprints(approved, args.approved.parent)
         sources = dict(item.split("=", 1) for item in args.input)
         # The entities the approved findings carry inside a part stay parts in the new delivery.

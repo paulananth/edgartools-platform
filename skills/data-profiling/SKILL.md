@@ -182,14 +182,13 @@ supported compare command instead:
 
 ```sh
 uv run --with duckdb --with pyyaml python profile_data.py compare \
-  --approved <private folder>/findings.yaml --input <name>=<new delivery> [--input ...] --out <private folder>
+  --approved <approved private folder>/findings.yaml --input <name>=<new delivery> [--input ...] --out <new private folder>
 ```
 
-Compare requires approved findings and writes private `drift.yaml`; hand its
-changes to Refining Rules. Hand approved new-dataset findings to Data
-Onboarding, with `quality` and `invalid_rows.jsonl` available to Data Quality.
-Keep all these evidence files outside the repository. The Hard stops above
-remain in force throughout this route.
+
+Compare requires approved findings and writes private `drift.yaml` to a separate folder. It refuses before writing if resolved `--out` is the approved folder, preserving the findings and adjacent artifacts. Hand its changes to Refining Rules.
+Hand approved new-dataset findings to Data Onboarding, with `quality` and `invalid_rows.jsonl` available to Data Quality. Keep these evidence files outside the repository.
+The Hard stops above remain in force throughout this route.
 
 ## Tell the discovery story as you work
 
@@ -465,10 +464,11 @@ that handles it (data-quality, refining-rules or rdm).
 
 ```
 uv run --with duckdb --with pyyaml python profile_data.py compare \
-  --approved <folder>/findings.yaml --input <name>=<new delivery> [--input ...] --out <folder>
+  --approved <approved folder>/findings.yaml --input <name>=<new delivery> [--input ...] --out <new private folder>
 ```
 
-It refuses findings that are not approved. Key persistence (the same record
+
+It refuses same-folder output before writing and rejects findings that are not approved. Key persistence (the same record
 keeping its key between deliveries), snapshot-or-changes and the refresh rate
 need two deliveries: a single run leaves them for `compare`, which
 measures them from each part's key sample (`deliveries` in `drift.yaml`).
