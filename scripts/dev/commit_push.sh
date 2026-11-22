@@ -13,7 +13,27 @@ set -euo pipefail
 message="${1:?usage: commit_push.sh <commit-message-file>}"
 here="$(dirname "$0")"
 
-python3 "$here/future_stamps.py" --stamp
+# Do this before stamping or staging: reusing a branch after its PR is closed
+# can push commits that have no open review.
+branch="$(git branch --show-current)"
+if [[ -z "$branch" ]]; then
+  echo "commit_push: STOP. Cannot determine the current branch; no files were stamped or staged." >&2
+  exit 1
+fi
+
+if ! closed_prs="$(gh pr list --state all --head "$branch" --limit 1000 --json number,state \
+  --jq '.[] | select(.state == "CLOSED" or .state == "MERGED") | "#\(.number) (\(.state))"')"; then
+  echo "commit_push: STOP. Could not check GitHub PR state for '$branch'; no files were stamped or staged." >&2
+  exit 1
+fi
+
+if [[ -n "$closed_prs" ]]; then
+  printf "commit_push: STOP. Branch '%s' already has closed PR(s):\n%s\n" "$branch" "$closed_prs" >&2
+  echo "Create a fresh branch for follow-up work; no files were stamped or staged." >&2
+  exit 1
+fi
+
+uv run --no-project python "$here/future_stamps.py" --stamp
 git add -A
 bash "$here/overlap_guard.sh"
 git commit -q -F "$message"
