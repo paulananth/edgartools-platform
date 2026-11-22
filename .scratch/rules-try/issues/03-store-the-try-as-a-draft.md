@@ -17,7 +17,7 @@ Replace `bench_store.py` only. Store this draft calls `Rules.save` under the ver
 - [x] The draft is stored under the typed version label. The label is the `version` string in the pasted rule, compared exactly, including case. A rule with no version is not stored and the database is not opened. A label longer than 128 characters is refused as too long and is not truncated. (2026-11-22 08:40 ET: the same unit file; case distinction on PostgreSQL and MySQL in the adapter test)
 - [x] The case is kept beside that draft. Storing the same body again leaves the first case. A different body under that version is refused. (2026-11-22 08:40 ET: the same unit file and the adapter test)
 - [x] Approve and activate are not called. The stored status stays draft, and the runtime login cannot change or delete the row. (2026-11-22 08:40 ET: the adapter test on both engines)
-- [x] Learning → skill: `skills/data-platform/STORES.md` now lists the draft table beside `rules_used` and the registry
+- [x] Learning → skill: `skills/data-platform/STORES.md` now lists the draft table beside `rules_used` and the registry (2026-11-22 08:41 ET)
 
 ## Answer
 
