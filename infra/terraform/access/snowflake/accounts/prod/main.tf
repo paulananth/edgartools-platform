@@ -292,17 +292,12 @@ resource "snowflake_grant_privileges_to_account_role" "auditor_policy_reader" {
 }
 
 # --- The database owner ---------------------------------------------------------------------------------------------------
-# The role named `owner` in rules/snowflake.yaml owns the platform's databases and is held by ACCOUNTADMIN, so the Gold database
-# has a role of its own as owner rather than a person's account. Created by hand before this root existed: the next access apply
-# imports the role, the grant of the role and the ownership first (terraform import), so a plan shows no change.
+# The role named `owner` in rules/snowflake.yaml owns the platform's databases (held by the administrator role, whose grants this root never plans), so the Gold database
+# has a role of its own as owner rather than a person's account. Objects that already exist are imported once (terraform import:
+# the role and the ownership), so a plan shows no change.
 resource "snowflake_account_role" "owner" {
   name    = local.names.owner
-  comment = "Owns the platform's databases (rules/snowflake.yaml owner); held by ACCOUNTADMIN"
-}
-
-resource "snowflake_grant_account_role" "owner_held_by_admin" {
-  role_name        = snowflake_account_role.owner.name
-  parent_role_name = "ACCOUNTADMIN"
+  comment = "Owns the platform's databases (rules/snowflake.yaml owner); held by the administrator role"
 }
 
 resource "snowflake_grant_ownership" "gold_database" {

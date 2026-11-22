@@ -21,3 +21,7 @@ def test_the_owner_role_and_the_gold_database_ownership_are_declared_from_the_na
     assert 'resource "snowflake_account_role" "owner"' in text and "local.names.owner" in text
     assert 'resource "snowflake_grant_ownership" "gold_database"' in text
     assert 'resource "snowflake_database"' not in text
+
+
+def test_the_root_never_plans_a_grant_to_the_administrator_role():
+    assert "ACCOUNTADMIN" not in (ACCESS / "accounts" / "prod" / "main.tf").read_text().split("resource \"snowflake_account_role\" \"owner\"")[1]
