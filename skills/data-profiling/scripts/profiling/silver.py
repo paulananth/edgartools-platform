@@ -51,6 +51,25 @@ def keep(column: dict, role: str, key_columns: list[str]) -> bool:
     return True
 
 
+def outside_bigint(column: dict) -> bool:
+    """Whether the profiled integer's exact range exceeds a signed BIGINT."""
+    if column["type"] not in profile.INTEGERS or column.get("min") is None:
+        return False
+    return int(column["min"]) < -(2**63) or int(column["max"]) >= 2**63
+
+
+def _silver_type(column: dict) -> str:
+    """Widen proven in-range integers to BIGINT; keep unproven wide kinds as text."""
+    kind = column.get("stored_type", column.get("type"))
+    if kind not in profile.INTEGERS:
+        return column.get("type", kind)
+    out_of_range = column.get("outside_bigint")
+    if out_of_range is None:
+        # Without the full-read range flag, HUGEINT/UBIGINT may exceed BIGINT.
+        out_of_range = kind in {"HUGEINT", "UBIGINT"}
+    return "VARCHAR" if out_of_range else SILVER_INTEGER
+
+
 def spec(f: dict, relationships: list[dict], parts: dict) -> dict:
     """The silver table spec (findings spec section 6): numbers, identifiers, and
     material commentary. Links point to masters only: a link to another transaction or reference
@@ -81,7 +100,7 @@ def spec(f: dict, relationships: list[dict], parts: dict) -> dict:
     return {
         "table": f["part"].replace(".", "_").lower(),
         "grain": f"one row per {' + '.join(f['record_key']['columns'])}",
-        "columns": [{"name": c["name"], "type": SILVER_INTEGER if c["type"] in profile.INTEGERS else c["type"],
+        "columns": [{"name": c["name"], "type": _silver_type(c),
                      "nullable": c["fill"] < 1.0, "definition": None,
                      "source": f"{f['part']}.{c['name']}", "sensitivity": c["sensitivity"]} for c in columns],
         "key": f["record_key"]["columns"],

@@ -33,6 +33,7 @@ import re
 import shutil
 import zipfile
 from dataclasses import dataclass, field
+from decimal import Decimal
 from pathlib import Path
 from typing import Callable, Iterator
 from xml.etree import ElementTree
@@ -160,13 +161,13 @@ class Flattener:
             # Entries from different keys/documents can now share a column.
             # Refuse a new lossy DOUBLE inference before any table is loaded.
             for column, value in flat.items():
-                kind = "float" if type(value) is float else (
+                kind = "fractional" if isinstance(value, (float, Decimal)) else (
                     "large_integer" if type(value) is int and abs(value) > 2**53 else None)
                 if kind:
                     kinds = self.numeric_kinds.setdefault((part, column), set())
                     kinds.add(kind)
                     if len(kinds) == 2:
-                        raise ValueError("keyed-object column mixes large integers and fractional numbers; "
+                        raise ValueError(f"keyed-object column {column!r} mixes large integers and fractional numbers; "
                                          "an explicit exact-number reading is required")
         self.out.setdefault(part, []).append(flat)
         return flat
@@ -217,7 +218,7 @@ def _json_records(stream, size: int) -> tuple[str | None, Iterator[dict]]:
     record at a time, so it never has to fit in memory.
     """
     if size <= WHOLE:
-        data = json.load(stream)
+        data = json.load(stream, parse_float=Decimal)
         if isinstance(data, dict) and (table := _split_table(data)) is not None:
             return None, iter(table)
         if isinstance(data, list):
@@ -252,7 +253,7 @@ def _stream_json(stream) -> tuple[str | None, Iterator[dict]]:
     """
     if not isinstance(stream, io.TextIOBase):
         stream = io.TextIOWrapper(stream, encoding="utf-8")  # a character may span two chunks
-    decoder = json.JSONDecoder()
+    decoder = json.JSONDecoder(parse_float=Decimal)
     buffer, pos = "", 0
 
     def fill() -> bool:
@@ -300,7 +301,7 @@ def _jsonl_records(stream) -> Iterator[dict]:
     for line in stream:
         line = line.decode("utf-8") if isinstance(line, bytes) else line
         if line.strip():
-            item = json.loads(line)
+            item = json.loads(line, parse_float=Decimal)
             yield item if isinstance(item, dict) else {"value": item}
 
 
@@ -645,6 +646,8 @@ def _tabular(con, name: str, tables: list[Table], limit: int, sample: int, seed:
     rows = f" USING SAMPLE reservoir({int(sample)} ROWS) REPEATABLE ({int(seed)})" if sampled else ""
     try:
         con.execute(f"CREATE TABLE {sql_name(name)} AS SELECT * FROM {source}{rows}")
+        if fmt == "csv" and not sampled:
+            _exact_csv(con, name)
         problems = [] if fmt != "csv" else [
             (t, why) for t in tables
             if (why := _irregular(con, t.readable, None if sampled or len(tables) > 1 else
@@ -653,6 +656,8 @@ def _tabular(con, name: str, tables: list[Table], limit: int, sample: int, seed:
         if len(tables) > 1:
             return each()
         return unread(str(exc).splitlines()[0])
+
+
     if problems:
         con.execute(f"DROP TABLE {sql_name(name)}")
         if len(tables) > 1:
@@ -666,11 +671,109 @@ def _tabular(con, name: str, tables: list[Table], limit: int, sample: int, seed:
     return [part]
 
 
+def _numeric_text_types(con, table: str, columns: list[str], marked: bool = False) -> tuple[dict[str, str], set[str]]:
+    """Infer exact types for text columns in one aggregate scan of the table."""
+    if not columns:
+        return {}, set()
+    aggregates = []
+    for i, name in enumerate(columns):
+        c = sql_name(name)
+        if marked:
+            is_number = f"starts_with({c}, {sql_text(EXACT_NUMBER_PREFIX + 'N')})"
+            is_marked = f"starts_with({c}, {sql_text(EXACT_NUMBER_PREFIX)})"
+            value = f"trim(substr({c}, {len(EXACT_NUMBER_PREFIX) + 2}))"
+        else:
+            is_number = f"{c} IS NOT NULL"
+            is_marked = "FALSE"
+            value = f"trim({c})"
+        integer = f"regexp_full_match({value}, '[+-]?[0-9]+')"
+        decimal = f"regexp_full_match({value}, '[+-]?[0-9]+([.][0-9]+)?')"
+        hugeint = f"TRY_CAST({value} AS HUGEINT)"
+        aggregates.extend((
+            f"count({c})",
+            f"count(*) FILTER (WHERE {is_number})",
+            f"count(*) FILTER (WHERE {is_marked})",
+            f"count(*) FILTER (WHERE {is_number} AND NOT {integer})",
+            f"count(*) FILTER (WHERE {is_number} AND regexp_matches({value}, '^[+-]?0[0-9]+$'))",
+            f"count(*) FILTER (WHERE {is_number} AND {hugeint} IS NULL)",
+            f"min({hugeint}) FILTER (WHERE {is_number})",
+            f"max({hugeint}) FILTER (WHERE {is_number})",
+            f"count(*) FILTER (WHERE {is_number} AND NOT {decimal})",
+            f"count(*) FILTER (WHERE {is_number} AND position('.' IN {value}) > 0)",
+            f"max(length(regexp_extract({value}, '^[+-]?([0-9]+)', 1))) FILTER (WHERE {is_number})",
+            f"max(length(regexp_extract({value}, '[.]([0-9]+)$', 1))) FILTER (WHERE {is_number})",
+        ))
+    values = con.execute(f"SELECT {', '.join(aggregates)} FROM {sql_name(table)}").fetchone()
+    types, marked_columns = {}, set()
+    for i, name in enumerate(columns):
+        total, number_count, marker_count, integer_invalid, padded, too_wide, low, high, \
+            decimal_invalid, has_fraction, integer_digits, scale = values[i * 12:(i + 1) * 12]
+        if marker_count:
+            marked_columns.add(name)
+        if not number_count or (marked and number_count != total):
+            continue
+        if integer_invalid == 0:
+            if padded or too_wide or low is None:
+                continue
+            types[name] = "BIGINT" if -(2**63) <= low and high < 2**63 else "HUGEINT"
+        elif decimal_invalid == 0 and has_fraction:
+            precision = max(1, integer_digits) + scale
+            if precision <= 38:
+                types[name] = f"DECIMAL({precision},{scale})"
+    return types, marked_columns
+
+
+def _rewrite_numeric_table(con, table: str, types: dict[str, str],
+                           marked_columns: set[str] | None = None) -> None:
+    """Apply all exact conversions in one table projection, not one pass per column."""
+    marked_columns = marked_columns or set()
+    if not types and not marked_columns:
+        return
+    number_marker = sql_text(EXACT_NUMBER_PREFIX + "N")
+    text_marker = sql_text(EXACT_NUMBER_PREFIX + "S")
+    projection = []
+    for name, *_ in con.execute(f"DESCRIBE {sql_name(table)}").fetchall():
+        c = sql_name(name)
+        if name in types:
+            expression = (f"TRY_CAST(substr({c}, {len(EXACT_NUMBER_PREFIX) + 2}) AS {types[name]})"
+                          if name in marked_columns else f"TRY_CAST(trim({c}) AS {types[name]})")
+        elif name in marked_columns:
+            expression = (f"CASE WHEN starts_with({c}, {number_marker}) THEN "
+                          f"substr({c}, {len(EXACT_NUMBER_PREFIX) + 2}) "
+                          f"WHEN starts_with({c}, {text_marker}) THEN "
+                          f"substr({c}, {len(EXACT_NUMBER_PREFIX) + 2}) ELSE {c} END")
+        else:
+            expression = c
+        projection.append(f"{expression} AS {c}")
+    stage = "__omp_exact_number_stage"
+    suffix = 0
+    while _exists(con, stage):
+        suffix += 1
+        stage = f"__omp_exact_number_stage_{suffix}"
+    con.execute("BEGIN TRANSACTION")
+    try:
+        con.execute(f"CREATE TABLE {sql_name(stage)} AS SELECT {', '.join(projection)} FROM {sql_name(table)}")
+        con.execute(f"DROP TABLE {sql_name(table)}")
+        con.execute(f"ALTER TABLE {sql_name(stage)} RENAME TO {sql_name(table)}")
+        con.execute("COMMIT")
+    except Exception:
+        con.execute("ROLLBACK")
+        raise
+
+
+def _exact_csv(con, table: str) -> None:
+    """Promote numeric CSV text using one aggregate scan and one table projection."""
+    columns = [name for name, kind, *_ in con.execute(f"DESCRIBE {sql_name(table)}").fetchall()
+               if kind == "VARCHAR"]
+    types, _ = _numeric_text_types(con, table, columns)
+    _rewrite_numeric_table(con, table, types)
+
 def _reader(file: Path, source) -> str:
-    """The DuckDB reader for a tabular file; CSV types come from a full scan, not a sample."""
+    """Keep nonnumeric CSV types while preventing floating-point numeric inference."""
     if format_of(file) == "parquet":
         return f"read_parquet({sql_text(source)})"
-    return f"read_csv({sql_text(source)}, sample_size=-1)"
+    return (f"read_csv({sql_text(source)}, sample_size=-1, "
+            "auto_type_candidates=['BOOLEAN','DATE','TIME','TIMESTAMP','TIMESTAMPTZ','VARCHAR'])")
 
 
 def register(con: duckdb.DuckDBPyConnection, name: str, location: str, work: Path,
@@ -704,6 +807,32 @@ def register(con: duckdb.DuckDBPyConnection, name: str, location: str, work: Pat
     return parts
 
 
+EXACT_NUMBER_PREFIX = "__omp_exact_number__:"
+
+
+def _json_safe(value):
+    """Tag JSON numerics and escape text that could be mistaken for an internal tag."""
+    if isinstance(value, Decimal) or type(value) is int:
+        return EXACT_NUMBER_PREFIX + "N" + str(value)
+    if isinstance(value, str) and value.startswith(EXACT_NUMBER_PREFIX):
+        return EXACT_NUMBER_PREFIX + "S" + value
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    return value
+
+
+def _exact_json_numbers(con, table: str, promote: bool = True) -> None:
+    """Unescape JSON numeric markers and promote only when the full input was loaded."""
+    columns = [name for name, kind, *_ in con.execute(f"DESCRIBE {sql_name(table)}").fetchall()
+               if kind == "VARCHAR"]
+    if promote:
+        types, marked = _numeric_text_types(con, table, columns, marked=True)
+    else:
+        types, marked = {}, set(columns)
+    _rewrite_numeric_table(con, table, types, marked)
+
 def _write_records(con, name: str, records: Iterator[dict], work: Path, scan: str, sample: int, seed: int) -> list[Part]:
     work.mkdir(parents=True, exist_ok=True)
     flattener = Flattener()
@@ -714,7 +843,7 @@ def _write_records(con, name: str, records: Iterator[dict], work: Path, scan: st
         for part, rows in flattener.take().items():
             target = files.setdefault(part, work / f"{part}.jsonl.gz")
             with gzip.open(target, "at", encoding="utf-8", compresslevel=1) as handle:
-                handle.writelines(json.dumps(row, default=str) + "\n" for row in rows)
+                handle.writelines(json.dumps(_json_safe(row), default=str) + "\n" for row in rows)
 
     if scan == "sampled":
         chosen: list[dict] = []
@@ -732,7 +861,7 @@ def _write_records(con, name: str, records: Iterator[dict], work: Path, scan: st
     spill()
     parts = []
     for part, path in sorted(files.items()):
-        _load_json_lines(con, part, path)
+        _load_json_lines(con, part, path, promote=scan != "sampled")
         path.unlink()
     for part in sorted(files, key=lambda n: -n.count(".")):  # deepest first
         _fold_single_items(con, part)
@@ -748,7 +877,7 @@ def _enclosing(part: str, parts) -> str:
     return parent
 
 
-def _load_json_lines(con, part: str, path: Path) -> None:
+def _load_json_lines(con, part: str, path: Path, promote: bool = True) -> None:
     """Load flattened rows with types from a full read.
 
     DuckDB fixes one format per date column; if a later value has another
@@ -764,6 +893,7 @@ def _load_json_lines(con, part: str, path: Path) -> None:
                  for name, kind, *_ in described}
         columns = "{" + ", ".join(f"{sql_text(n)}: {sql_text(t)}" for n, t in types.items()) + "}"
         con.execute(f"CREATE TABLE {sql_name(part)} AS SELECT * FROM {source}, columns={columns})")
+    _exact_json_numbers(con, part, promote=promote)
 
 
 def _fold_single_items(con, child: str) -> None:
