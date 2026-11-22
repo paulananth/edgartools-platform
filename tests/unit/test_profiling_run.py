@@ -472,6 +472,59 @@ def test_one_field_names_mark_their_part_personal_and_mask_its_address(tmp_path)
     assert not [h for h in holders if h.split(",")[1] in text or h.split(",")[2] in text]
 
 
+def _write_profile_archive(path):
+    import zipfile
+
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("utf8.csv", "utf8_id,label\n1,Alpha\n2,Beta\n")
+        archive.writestr("windows1252.csv", b"legacy_id,label\n1,Caf\xe9\n2,Beta\n")
+        archive.writestr("unreadable.csv", bytes(range(1, 256)) * 4)
+        archive.writestr("readme.md", "Synthetic archive fixture.")
+
+
+def test_run_reports_both_encodings_and_unreadable_archive_members(tmp_path, capsys):
+    archive = tmp_path / "profile.zip"
+    _write_profile_archive(archive)
+    out = tmp_path / "out"
+
+    assert profile_data.main(["run", "--name", "archive fixture", "--input", f"archive={archive}",
+                              "--out", str(out)]) == 0
+
+    findings = yaml.safe_load((out / "findings.yaml").read_text())
+    inputs = findings["dataset"]["inputs"]
+    assert len(inputs) == 2
+    assert all(item["sha256"] and len(item["sha256"]) == 64 for item in inputs)
+    windows1252, = [item for item in inputs if item.get("encoding", {}).get("read_as") == "windows-1252"]
+    assert windows1252["encoding"]["inferred"] is True
+    assert windows1252["encoding"]["declare"] == "windows-1252"
+    not_read = findings["dataset"]["not_read"]
+    assert {Path(item["location"].rsplit("#", 1)[-1]).name for item in not_read} == {
+        "unreadable.csv", "readme.md"}
+    assert all(item["reason"] for item in not_read)
+    assert "unreadable.csv: not read" in capsys.readouterr().err
+
+
+def test_approved_archive_run_reuses_unchanged_findings_and_fingerprints(tmp_path, capsys):
+    import hashlib
+
+    archive = tmp_path / "profile.zip"
+    _write_profile_archive(archive)
+    out = tmp_path / "out"
+    argv = ["run", "--name", "archive fixture", "--input", f"archive={archive}", "--out", str(out)]
+    assert profile_data.main(argv) == 0
+    assert profile_data.main(["approve", "--findings", str(out / "findings.yaml"),
+                              "--by", "operator", "--words", "approved synthetic scenario"]) == 0
+    capsys.readouterr()
+    findings_sha256 = hashlib.sha256((out / "findings.yaml").read_bytes()).hexdigest()
+    fingerprints_sha256 = hashlib.sha256((out / "fingerprints.json").read_bytes()).hexdigest()
+
+    assert profile_data.main(argv) == 0
+    assert "reused" in capsys.readouterr().out
+    assert hashlib.sha256((out / "findings.yaml").read_bytes()).hexdigest() == findings_sha256
+    assert hashlib.sha256((out / "fingerprints.json").read_bytes()).hexdigest() == fingerprints_sha256
+    assert yaml.safe_load((out / "findings.yaml").read_text())["approval"]["status"] == "approved"
+
+
 def test_unchanged_inputs_and_profiler_reuse_the_findings(tmp_path, capsys):
     # Operator, 2026-10-14: "profile only once and reuse if not changed".
     folder = build(tmp_path / "set")
