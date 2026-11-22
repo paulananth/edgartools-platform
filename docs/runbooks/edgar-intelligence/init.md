@@ -40,8 +40,8 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    A fresh instance gets its two databases (`data`: mdm, rdm and silver; `control`: rules, bookkeeping and the change journal,
    each store a schema) and their restricted logins from the stores folder's own files, each login with the password its URL already holds (no login
    is rotated; the first confirmed run also makes the diagnostic login `ops_reader`, with `pg_monitor` and no store, and its
-   `reader.env`). Each login gets CONNECT and TEMPORARY on its databases and PUBLIC gets nothing: a load stages its rows in a
-   temporary table, and without that right a silver load stops with SQLSTATE 42501 in its step's message. Every URL then
+   `reader.env`). Each login gets CONNECT on its databases, never TEMPORARY, and PUBLIC gets nothing: no load creates a
+   table, temporary or not. Every URL then
    names the new instance, and the administrator's URLs its new password:
    ```bash
    python <data-platform skill>/scripts/provision_hosted_store.py --service <the instance's saved service>            # lists

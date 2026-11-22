@@ -146,9 +146,11 @@ front of it silently orders by the wrong one, so order by the alias instead.
 
 ## The hosted MDM store
 
-- **A login needs `TEMPORARY` as well as `CONNECT`.** Revoking PUBLIC from a database removes its default right to
-  temporary tables, and a silver load stages each write in one: it stops with SQLSTATE 42501 (a missing right, not a value).
-  `provision_hosted_store.py` grants both.
+- **A login holds `CONNECT`, never `TEMPORARY`.** Run-time code creates no table, temporary ones included: the silver
+  writer applies each batch straight into its table and the financials builds run as one statement
+  (`tests/architecture/test_no_temporary_tables_at_run_time.py` refuses one). `provision_hosted_store.py` revokes PUBLIC
+  from each database and grants its logins `CONNECT` only. A live store provisioned earlier keeps `TEMPORARY` until the
+  next provisioning or reset.
 - **One instance holds all six stores.** The hosted instance carries the databases `mdm`, `rdm`, `rules`,
   `bookkeeping`, `change_journal` and `silver`, not MDM alone. Before any drop, list its databases and name every
   store it holds to the operator: `DROP POSTGRES INSTANCE` deletes them all, with no undrop and no backup unless one

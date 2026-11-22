@@ -106,8 +106,8 @@ def test_the_logins_groups_and_memberships_of_each_duty_are_made():
     assert "put edgar_loader in silver_runtime" in steps and "put governance in mdm_governance" in steps
     assert "put governance in rules_governance" in steps and "put rules_governance in rules_agent" in steps
     assert "give ops_reader pg_monitor: sessions, locks and statistics, no table" in steps
-    assert "data: connect and temporary tables for edgar_loader, governance" in steps
-    assert "control: connect and temporary tables for edgar_loader, governance" in steps
+    assert "data: connect for edgar_loader, governance (never TEMPORARY: run-time code creates no table)" in steps
+    assert "control: connect for edgar_loader, governance (never TEMPORARY: run-time code creates no table)" in steps
     assert "control: connect for ops_reader" in steps
     assert DATABASES == ("data", "control")
 
@@ -124,12 +124,14 @@ def test_a_database_another_role_owns_is_never_adopted():
         provision(_Server(owner="someone_else"), HELD, "admin", confirm=False)
 
 
-def test_a_login_connects_and_uses_temporary_tables_on_its_databases_and_public_gets_nothing():
+def test_a_login_connects_to_its_databases_never_holds_temporary_and_public_gets_nothing():
+    # Run-time code creates no temporary table (operator, 2026-11-22: "no temp table usage"), so no login holds the right.
     server = _Server(owner="admin")
     provision(server, HELD, "admin", confirm=True)
     assert any("REVOKE ALL ON DATABASE" in s for s in server.statements)
-    grants = [s for s in server.statements if "GRANT CONNECT, TEMPORARY" in s]
-    assert any("edgar_loader" in s for s in grants) and not any("ops_reader" in s for s in grants)
+    grants = [s for s in server.statements if "GRANT CONNECT ON DATABASE" in s]
+    assert any("edgar_loader" in s for s in grants)
+    assert not any("TEMPORARY" in s for s in server.statements)
 
 
 def test_a_url_the_parser_refuses_prints_its_class_never_its_password(tmp_path, monkeypatch, capsys):

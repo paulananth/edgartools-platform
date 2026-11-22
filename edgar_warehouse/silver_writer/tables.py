@@ -144,7 +144,7 @@ def data_table(spec, dialect, *, temporary=None):
     if not temporary:
         columns += [Column(c, UTCDateTime(), nullable=False) for c in specs.added_time(spec)]
     table = Table(temporary or spec["table"], metadata, *columns,
-                 prefixes=["TEMPORARY"] if temporary and dialect == "postgresql" else [], mysql_engine="InnoDB",
+                 mysql_engine="InnoDB",
                  mysql_charset="utf8mb4", mysql_collate="utf8mb4_0900_bin")
     if dialect == "mysql" and not temporary:
         from sqlalchemy import Computed

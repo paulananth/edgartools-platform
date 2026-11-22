@@ -1,6 +1,5 @@
 """One atomic delivery implementation over typed selected-database storage."""
 from datetime import UTC, datetime
-from uuid import uuid4
 
 from sqlalchemy import and_, delete, exists, func, insert, or_, select, text, update
 from sqlalchemy.exc import DBAPIError, StatementError
@@ -56,8 +55,10 @@ class DatabaseSink:
         # Refuse a supplied spec that differs from the registered authority.
         if spec != self.spec(spec["table"]):
             raise Blocked("Silver delivery spec differs from its registration")
+        if self.engine.dialect.name == "postgresql":
+            return self._write_postgres(spec, rows)
         target = data_table(spec, self.engine.dialect.name)
-        stage = data_table(spec, self.engine.dialect.name, temporary=staging_name(spec) if self.engine.dialect.name == "mysql" else "silver_in_" + uuid4().hex)
+        stage = data_table(spec, self.engine.dialect.name, temporary=staging_name(spec))
         source = [c["name"] for c in spec["columns"]]
         groups = {"mdm_ids_updated": specs.mdm_id_columns(spec), "quality_updated": specs.quality_columns(spec)}
         staged = source + groups["mdm_ids_updated"] + groups["quality_updated"]
@@ -146,6 +147,107 @@ class DatabaseSink:
             raise Blocked(delivery_refusal(spec["table"], exc)) from None
         return {"table": spec["table"], "rows": count, "inserted": inserted, "changed": changed,
                 "deleted": deleted, **updates}
+
+    def _write_postgres(self, spec, rows):
+        """Each batch straight into silver.<table>, with no staging table: the missing keys are inserted (a key another
+        delivery inserted first is left to it), then one query finds the rows that differ, and only those are
+        updated. An append table refuses a changed row, and the whole delivery rolls back. A snapshot locks its table,
+        and once every row is in, the rows whose key it did not deliver are removed: both key sets are written as text
+        by PostgreSQL and compared on disk in sorted runs, so neither is held whole in memory. A key repeated in one
+        delivery is source processing's to refuse (a declared key, CONTEXT.md Silver Landing)."""
+        from sqlalchemy import Text, bindparam, cast, column, literal, values
+        from sqlalchemy.dialects.postgresql import ARRAY, insert as pg_insert
+        from .keyset import KeySet
+
+        target = data_table(spec, "postgresql")
+        keys, source = list(spec["key"]), [c["name"] for c in spec["columns"]]
+        groups = {"mdm_ids_updated": specs.mdm_id_columns(spec), "quality_updated": specs.quality_columns(spec)}
+        written = source + groups["mdm_ids_updated"] + groups["quality_updated"]
+        added, snapshot, append = specs.added_time(spec), spec["load_mode"] == "snapshot", spec["load_mode"] == "append"
+        counts = {"rows": 0, "inserted": 0, "changed": 0, "deleted": 0,
+                  **{name: 0 for name, columns in groups.items() if columns or name == "mdm_ids_updated"}}
+        now = datetime.now(UTC)
+        differs = lambda incoming, fields: or_(*(target.c[c].is_distinct_from(incoming.c[c]) for c in fields))
+
+        # A batch travels as one typed array per column, unnested into rows: each statement below is compiled once per
+        # delivery and run per batch with new arrays, never re-rendered with the rows written into its text.
+        arrays = [cast(bindparam(f"c{i}", type_=ARRAY(target.c[c].type, dimensions=1)),
+                       ARRAY(target.c[c].type, dimensions=1))
+                  for i, c in enumerate(written)]
+        incoming = func.unnest(*arrays).table_valued(
+            *(column(c, target.c[c].type) for c in written), name="incoming").render_derived()
+        match = and_(*(target.c[k] == incoming.c[k] for k in keys))
+        missing = select(*(incoming.c[c] for c in written), *(literal(now, type_=target.c[c].type) for c in added)) \
+            .where(~exists(select(1).select_from(target).where(match))).order_by(*(incoming.c[k] for k in keys))
+        insert_missing = pg_insert(target).from_select(written + added, missing) \
+            .on_conflict_do_nothing(index_elements=[target.c[k] for k in keys])
+        find_differing = select(differs(incoming, source).label("source")).select_from(
+            incoming.join(target, match)).where(differs(incoming, written))
+        update_groups = {name: update(target).where(match, differs(incoming, columns)).values(
+            {c: incoming.c[c] for c in columns}) for name, columns in groups.items() if columns}
+        update_changed = update(target).where(match, differs(incoming, source)).values(
+            {**{c: incoming.c[c] for c in written}, **{c: now for c in added}})
+        delivered_keys = select(*(cast(incoming.c[k], Text) for k in keys))
+
+        def merge(conn, batch, delivered):
+            batch = {f"c{i}": [row[i] for row in batch] for i in range(len(written))}
+            counts["inserted"] += conn.execute(insert_missing, batch).rowcount
+            found = conn.execute(find_differing, batch).scalars().all()
+            changed = sum(1 for flag in found if flag)
+            if changed and append:
+                raise Blocked(f"silver.{spec['table']} is append only: delivered rows change rows already landed under the same key")
+            if found:
+                for name, statement in update_groups.items():
+                    counts[name] += conn.execute(statement, batch).rowcount
+                if changed:
+                    conn.execute(update_changed, batch)
+                counts["changed"] += changed
+            if delivered is not None:
+                delivered.add(tuple(r) for r in conn.execute(delivered_keys, batch))
+
+        def remove_absent(conn, delivered):
+            removed = 0
+            with KeySet() as held:
+                held.add(tuple(r) for r in conn.execute(  # streamed: this statement only, never the deletes after it
+                    select(*(cast(target.c[k], Text) for k in keys)).execution_options(stream_results=True, yield_per=10_000)))
+                absent, wanted = [], iter(delivered.sorted())
+                ahead = next(wanted, None)
+                for key in held.sorted():
+                    while ahead is not None and ahead < key:
+                        ahead = next(wanted, None)
+                    if ahead != key:
+                        absent.append(key)
+                    if len(absent) == BATCH:
+                        removed += delete_keys(conn, absent); absent = []
+                if absent:
+                    removed += delete_keys(conn, absent)
+            return removed
+
+        def delete_keys(conn, absent):
+            gone = values(*(column(k, Text) for k in keys), name="gone").data(absent)
+            return conn.execute(delete(target).where(exists(select(1).select_from(gone).where(
+                and_(*(target.c[k] == cast(gone.c[k], target.c[k].type) for k in keys)))))).rowcount
+
+        try:
+            with self.engine.begin() as conn, KeySet() as delivered:
+                if snapshot:
+                    lock(conn, spec)
+                batch = []
+                for row in rows:
+                    prepared = bound_row(spec, row)
+                    batch.append(tuple(prepared.get(c) for c in written))
+                    counts["rows"] += 1
+                    if len(batch) == BATCH:
+                        merge(conn, batch, delivered if snapshot else None); batch = []
+                if batch:
+                    merge(conn, batch, delivered if snapshot else None)
+                if snapshot:
+                    if not counts["rows"]:
+                        raise Blocked(f"silver.{spec['table']} is a snapshot: an empty delivery would empty it; refused")
+                    counts["deleted"] = remove_absent(conn, delivered)
+        except (DBAPIError, StatementError) as exc:
+            raise Blocked(delivery_refusal(spec["table"], exc)) from None
+        return {"table": spec["table"], **counts}
 
     def link_keys(self, spec, link):
         from sqlalchemy import cast, Text
