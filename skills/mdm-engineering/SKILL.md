@@ -1,33 +1,34 @@
 ---
 name: mdm-engineering
-description: Engineer database-agnostic MDM merge logic and its storage adapters for PostgreSQL, MySQL or SQL Server Express. Use before writing or reviewing MDM code or migrations, qualifying native cross-reference lookup, adding database support, diagnosing a slow or refused mastering run, or choosing its proof. Data-operations applies silver DDL.
+description: Own MDM implementation and refinement. Use for an existing feed's mapping, quality or matching-rule changes, or for database-agnostic merge code, adapters, migrations, lookup qualification and mastering performance. Route configuration-first refinement to REFINING-RULES.md; data-operations applies silver DDL.
 ---
 
 # MDM Engineering
 
 Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#the-seven-wastes) and drop what adds no value.
 
-> Part of the **data-platform** skill set. The data skills (data-onboarding,
-> refining-rules, data-quality) change rules as data; this skill is for a
-> change to the MDM engine and store themselves.
+> Part of **data-platform**. MDM Engineering contains rule refinement and
+> engine/store engineering; use configuration first and add code only for a gap.
 
 It answers: **is this change to the MDM store lean, fast on the engine it
 runs on, safe to migrate, and proved by the cheapest check that proves it?**
 
+## Refining rules
+For an existing feed's mapping, quality or matching changes, follow [REFINING-RULES.md](REFINING-RULES.md), this skill's configuration-first subworkflow. The `refining-rules` skill is its forwarding entry point; a new feed still starts with Data Onboarding. For governance, domain design, stewardship and publication responsibilities, read [MDM-LIFECYCLE.md](MDM-LIFECYCLE.md).
+
 ## Decisions, artifacts and handoffs
 
-MDM Engineering owns decisions about reusable merge behavior, durable MDM
-storage, adapter operations and migrations, and the proof needed for a
-demonstrated engine or storage change. Its inputs are a configured policy or
+MDM Engineering owns rule refinement through the subworkflow above, reusable merge behavior, durable MDM
+storage, adapter operations and migrations, and their proof. Refinement takes approved findings and a proposed change; engine work takes a configured policy or
 contract, an observed behavior gap that configuration cannot express, and the
-selected engine's requirements. Its outputs are shared engine or adapter
+selected engine's requirements. Its outputs are measured configuration changes or shared engine/adapter
 changes, migrations where needed, and qualification evidence for the affected
 behavior. It does not decide what a source field means or refactor the engine
 to accommodate a source mapping.
 
 | Decision or artifact | Owner | Handoff |
 |---|---|---|
-| Source mapping, matching policy or quality rule when the existing engine can express it | [Data Onboarding](../data-onboarding/SKILL.md) for new configuration; [Refining Rules](../refining-rules/SKILL.md) for a live feed | The configured contract and rules identify the requested behavior; use MDM Engineering only if a demonstrated gap remains. |
+| Source mapping, matching policy or quality rule when the existing engine can express it | [Data Onboarding](../data-onboarding/SKILL.md) for new configuration; MDM Engineering's [Refining Rules](REFINING-RULES.md) for a live feed | Use the refinement procedure for supported configuration; change engine code only for a demonstrated gap. |
 | A part's class, kind, identifiers, relationship meaning and time model | [Data Modeling](../data-modeling/SKILL.md) | The approved model and contract become MDM Engineering inputs when they require reusable engine behavior or storage. |
 | Merge decisions, identity replay, relationship computation, persistence, adapter parity, migrations and their qualification | MDM Engineering | Return the supported behavior, migration requirements and proof evidence to the caller. |
 | Silver table specification and load, monitoring or recovery of a configured feed | [Data Operations](../data-operations/SKILL.md); [Bookkeeping](../bookkeeping/SKILL.md) owns run control and recovery | MDM Engineering supplies the MDM behavior and store contract; operations owns the run and silver DDL. |
