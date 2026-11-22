@@ -1,7 +1,7 @@
 # data-modeling: Make progress resumable
 
 Type: task
-Status: claimed
+Status: resolved
 Priority: P0
 Blocked by: 04, 10, 15
 Labels: wayfinder:task
@@ -36,12 +36,12 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] Specify resume, invalidate and blocked conditions for part decisions, evidence, unresolved semantics and downstream contracts in the existing source log's `Phase` and `Next action` fields. (2026-11-22 12:21 ET)
 - [x] Trace a staged interruption across two invented parts and identify the first unfinished action without rerunning completed work. (2026-11-22 12:21 ET)
 - [x] Show unchanged evidence reuses only its part decisions; changed evidence reopens the affected part and dependent handoff; unapproved or missing evidence blocks back to Data Profiling. (2026-11-22 12:21 ET)
-- [ ] Publish the rebased scoped change in PR #2027 and pass current-head CI. The local branch is rebased onto latest `origin/main` (`505dc839`); the remote PR still points to pre-rebase head `ec61d4e27a`. CI on the updated head is pending.
+- [x] Publish the rebased scoped change in PR #2027; CI run `45068947910` passed all 12 jobs on head `2b15eada98`. (2026-11-22)
 - [x] Learning → skill: `Workflow` now routes resume through the shared source log, preserving part-level decisions and invalidation. (2026-11-22 12:21 ET)
 
 ## Answer
 
-Data Modeling resumes part decisions from the shared source log, reusing only matching approved evidence and reopening affected downstream handoffs. The documented trace covers unchanged, changed and blocked evidence without source data or test code. The branch was rebased onto latest `origin/main` (`505dc839`); keep PR #2027 draft until the updated head's CI passes.
+Data Modeling resumes part decisions from the shared source log, reusing only matching approved evidence and reopening affected downstream handoffs. The documented trace covers unchanged, changed and blocked evidence without source data or test code. PR #2027 head `2b15eada98` passed all 12 CI jobs in run `45068947910`.
 
 Documentation trace using invented part names only:
 
