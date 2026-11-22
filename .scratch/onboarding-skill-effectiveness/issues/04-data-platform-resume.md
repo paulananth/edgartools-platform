@@ -1,7 +1,7 @@
 # data-platform: Make progress resumable
 
 Type: task
-Status: open
+Status: resolved
 Priority: P0
 Blocked by: 03
 Labels: wayfinder:task
@@ -37,11 +37,11 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] Specify resume, invalidate and blocked conditions for selected source, current phase, owning skill, installed bundle revision and configured connection names. Done in the [record table](../../../skills/data-platform/RESUME.md#the-record), plus a Next action row. Verified by document review against the rules each condition cites: the Change Journal skip (`CLAUDE.md`, "Loads"), mdm-engineering's carry-forward row, [Source readiness](../../../skills/data-platform/SKILL.md#source-readiness), and the `.installed-by-edgar-warehouse` marker (`install()` and `_tree()` in `edgar_warehouse/bundle.py`). (2026-11-20 19:12 ET)
 - [x] Resume a staged interruption from the recorded artifacts and identify exactly the first unfinished action. Verified by the document trace under [Trace](#trace), case A. It is a reading of the text, not a source run. (2026-11-20 19:12 ET)
 - [x] Show changed inputs cannot reuse stale proof and unchanged inputs do not repeat completed work. Verified by the document traces under [Trace](#trace), cases A, B and C. They show what the text decides. They do not show that any code enforces it: the resume decision is made by the reader, and only the Change Journal's file skip is enforced by code (not exercised here). (2026-11-20 19:12 ET)
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. Checks ran (see [Validation](#validation)). Not committed, pushed or opened as a PR in this session (the session's instructions).
-- [ ] Read the installed `write-skill` guidance (`~/.agents/skills/write-skill/SKILL.md`): not read. The session's permissions refused both a direct read and loading it as the `write-skill` skill.
-- [ ] Compare the installed `data-platform` copy with the repository copy: not done. Both `~/.agents/skills/data-platform` and `~/.claude/skills/data-platform` link to `~/.local/share/edgartools/skill-source/skills/data-platform`, and the sandbox refused a `diff` outside this worktree. The repository copy is the one changed.
+- [x] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. The resume guide and pointers were published in PR #1979, merged 2026-11-20 19:32 ET; all 12 CI checks passed. This branch records the closeout evidence.
+- [x] Read the current installed `write-skill` guidance at `~/.agents/skills/gstack/write-skill/SKILL.md`; used its user-skill edit and evidence rules. (2026-11-21 19:14 ET)
+- [x] Check the installed `data-platform` copy against the repository copy: both aliases point to a missing local target (`test -e` false; read returned not found). No installed content exists to compare, so the comparison is not applicable; no link repair was made. (2026-11-21 19:14 ET)
 - [ ] ~~Add the `## Resume` section to data-onboarding's and refining-rules' log instructions~~ deferred to tickets 22 and 34 (their skills' resume steps): this ticket defines the record in Data Platform and does not edit another skill's procedure.
-- [ ] Learning → skill: proposed lesson, in [Resume](../../../skills/data-platform/RESUME.md#resume): a resume record holds hashes and names, never a copy of unit state, so Bookkeeping and the Change Journal stay the only authority for runs. Not ticked until the change is published and reviewed.
+- [x] Learning → skill: the resume record stores hashes and names, never a copy of unit state, so Bookkeeping and the Change Journal stay authoritative for runs. Verified in [Resume](../../../skills/data-platform/RESUME.md#resume). (2026-11-21 19:14 ET)
 
 ## Changes
 
@@ -88,9 +88,9 @@ installed bundle revision, the duty and the connection variable names (never val
 checklist. A field that matches is reused. A changed rules identity, another selected delivery or a changed revision
 reopens that phase and every later one, and the old artifacts are kept but not reused. A missing input, or a recorded
 capture that no longer hashes as recorded, blocks the resume. An unreadable revision, or an engine ref never
-recorded, counts as changed. A Bookkeeping run keeps its frozen runtime, so a new engine ref does not reopen it. Run state stays in
-Bookkeeping and the Change Journal. Not resolved: publication, the `write-skill` read, the installed-copy comparison
-and the learning remain open.
+recorded, counts as changed. A Bookkeeping run keeps its frozen runtime, so a new engine ref does not reopen it. Run state stays in Bookkeeping and the Change Journal.
+
+The resume guide and its Data Platform pointers were published in PR #1979; it merged at 2026-11-20 19:32 ET with all 12 CI checks passing. This closeout records the ticket completion. The installed `write-skill` guidance was read. The configured Data Platform skill aliases point to a missing target, so an installed-copy comparison is not applicable; the repository copy remains available. The reusable resume rule is recorded in `RESUME.md`.
 
 ## Validation
 
@@ -100,6 +100,7 @@ and the learning remain open.
 - `git diff --check`: clean.
 - `uv run --no-project --with pytest --with pyyaml --with sqlalchemy --with 'psycopg[binary]' -- pytest -q -p no:cacheprovider tests/unit/test_skill_bundle_portability.py tests/unit/test_role_skills.py tests/unit/test_rules_skill_commands.py`: **10 passed, 2 failed**. `test_skill_commands_and_links_resolve_without_checkout` and `test_role_skills_name_registered_commands` failed on import with `ModuleNotFoundError: No module named 'source_contract'`, because the Rust engine is not built in this worktree (no `.venv/bin/pytest`). Command resolution for `RESUME.md` is unproven here; CI runs it.
 - Not run: `edgar-warehouse doctor` (not installed).
+- Current closeout: `uv run --no-project --with pytest -- pytest -q -p no:cacheprovider tests/unit/test_profiling_genericity.py` — **143 passed**; validates genericity, not resume behavior.
 
 ## Completion evidence
 
