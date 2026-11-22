@@ -137,6 +137,57 @@ def _check(args):
     return 0 if all(value == "ok" for value in results.values()) else 1
 
 
+def _show_try(args):
+    """The try page. This command does not open the Rules Database or read the rules files."""
+    from .try_page import MissingFamily, present, press
+
+    directory = Path(args.families) if args.families else None
+    if not args.family:
+        print(json.dumps({"refused": "Name the family to try."}))
+        return 1
+    inputs = _try_inputs(args.input)
+    if inputs is None:
+        print(json.dumps({"refused": "An input is name=text."}))
+        return 1
+    expected, refused = _try_expected(args.expected)
+    if refused:
+        print(json.dumps(refused))
+        return 1
+    try:
+        if not args.button:
+            print(present(args.family, directory))
+            return 0
+        result = press(args.button, args.family, rule=args.rule, inputs=inputs,
+                       expected=expected, path=Path(args.path) if args.path else None,
+                       directory=directory)
+    except MissingFamily as error:
+        print(json.dumps({"refused": str(error)}))
+        return 1
+    print(json.dumps(result, sort_keys=True))
+    if set(result) == {"refused"} or result.get("passed") is False:
+        return 1
+    return 0
+
+
+def _try_inputs(pairs):
+    found = {}
+    for pair in pairs or []:
+        name, separator, value = pair.partition("=")
+        if not separator or not name:
+            return None
+        found[name] = value
+    return found
+
+
+def _try_expected(text):
+    if not text:
+        return None, None
+    try:
+        return json.loads(text), None
+    except json.JSONDecodeError:
+        return None, {"refused": "Expected output is not JSON."}
+
+
 def _results(args) -> dict:
     from edgar_warehouse.silver_writer import results
 
@@ -572,6 +623,17 @@ def register(subparsers):
     check.add_argument("--source", action="append", help="Only this source (repeatable); default every file")
     check.add_argument("--root", default=str(files.ROOT))
     check.set_defaults(handler=_check)
+    trying = commands.add_parser(
+        "try", help="Try one rule: the family's inputs, the rule, and the expected output")
+    trying.add_argument("--family", help="The family to try")
+    trying.add_argument("--families", help="The folder of family files")
+    trying.add_argument("--button", choices=("Try", "Show the full rule", "Keep a copy", "Store this draft"),
+                        help="Press one button. Omit it to show the page")
+    trying.add_argument("--rule", default="")
+    trying.add_argument("--expected", default="", help="The expected output, as JSON")
+    trying.add_argument("--input", action="append", default=None, help="One pasted input, as name=text")
+    trying.add_argument("--path", help="The path Keep a copy would write, once that button is available")
+    trying.set_defaults(handler=_show_try)
     entity_types = commands.add_parser("entity-types", help="Where each source's records get their entity type")
     entity_types.set_defaults(handler=_handle)
     for operation in ("status", "run"):
