@@ -121,7 +121,14 @@ Add `audit_platforms/<name>.py` with `NAME`, `configured(env)`, `collect(env, as
 refuse an administrator identity), `principals(evidence)` (the roles and users to check for a change record) and
 `controls(evidence)` returning `base.control(NAME, objective, ok, evidence, fix, tested=...)` for each objective it can
 test; list it in `PLATFORMS` in `access_audit.py`, then add its clean case and one weakness per objective to
-`tests/unit/test_access_audit.py`. Databricks, OpenMetadata and any further cloud follow this contract. The code and its tests
+`tests/unit/test_access_audit.py`. Databricks, OpenMetadata and any further cloud follow this contract.
+
+**Credential-policy values.** Where a platform keeps a policy a role cannot read without a privilege that could also change it
+(Snowflake's `APPLY`), the platform's administrator owns a read-only reader that returns the policies as
+`{"password": [...], "authentication": [...]}` (each `{database_name, schema_name, name, properties}`), and the auditor holds
+use of that reader only. Snowflake's is the procedure `AUDIT_CREDENTIAL_POLICIES` in the Gold database's `CONTROL` schema
+(`infra/terraform/access/snowflake`). A new platform returns the same shape from its own reader; `policy_drift` compares it
+with the policy file, whatever the vendor. The code and its tests
 follow `CLAUDE.md`'s "Code review" and test-writing rules.
 
 ## Decisions, artifacts and handoffs

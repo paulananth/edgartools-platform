@@ -279,3 +279,17 @@ def test_the_snowflake_audit_needs_no_variable_and_reads_through_the_auditor_con
     with pytest.raises(SystemExit, match="administrator role"):
         snowflake.collect({}, as_admin=False)
     assert seen[0] == "edgartools-audit"
+
+
+def test_policies_are_read_through_the_administrators_procedure_not_a_privilege_on_them(monkeypatch):
+    calls = []
+
+    def fake(connection, sql, soft=False):
+        calls.append(sql)
+        return [{"AUDIT_CREDENTIAL_POLICIES": json.dumps(FOUND_POLICIES)}]
+
+    monkeypatch.setattr(snowflake, "snow", fake)
+    assert snowflake.found_policies("c", "INVENTED_GOLD") == FOUND_POLICIES
+    assert calls == ["call INVENTED_GOLD.control.audit_credential_policies()"]
+    monkeypatch.setattr(snowflake, "snow", lambda connection, sql, soft=False: None)
+    assert snowflake.found_policies("c", "INVENTED_GOLD") is None

@@ -54,22 +54,11 @@ def expected_policies() -> dict:
     return {**policy, "location": {"database": names[where["database_of"]]["database"], "schema": where["schema"]}}
 
 
-def found_policies(connection: str):
-    """The live password and authentication policies of the account, each with its properties; None when they cannot be read."""
-    found = {}
-    for kind in ("password", "authentication"):
-        listed = snow(connection, f"show {kind} policies in account", soft=True)
-        if listed is None:
-            return None
-        found[kind] = []
-        for row in lower(listed):
-            full = ".".join(f'"{row[k]}"' for k in ("database_name", "schema_name", "name"))
-            described = snow(connection, f"describe {kind} policy {full}", soft=True)
-            if described is None:
-                return None
-            found[kind].append({**{k: row[k] for k in ("database_name", "schema_name", "name")},
-                                "properties": {r["property"].lower(): str(r["value"]) for r in lower(described)}})
-    return found
+def found_policies(connection: str, database: str):
+    """The live password and authentication policies with their properties, read through the administrator's read-only procedure
+    (the auditor holds no privilege on a policy: the only one that reads it also lets a role attach it); None when unreadable."""
+    rows = snow(connection, f"call {database}.control.audit_credential_policies()", soft=True)
+    return json.loads(next(iter(rows[0].values()))) if rows else None
 
 
 def policy_drift(expected: dict, found: dict | None) -> list[str]:
@@ -114,7 +103,7 @@ def collect(env, as_admin: bool = False) -> dict:
         "monitors": len(snow(connection, "show resource monitors")),
         "warehouses": lower(snow(connection, "show warehouses")),
         "statement_timeout": int(next(r["value"] for r in lower(snow(connection, "show parameters like 'STATEMENT_TIMEOUT_IN_SECONDS' in account")))),
-        "policy_drift": policy_drift(expected_policies(), found_policies(connection)),
+        "policy_drift": policy_drift(expected_policies(), found_policies(connection, expected_policies()["location"]["database"])),
         "password_policies": len(snow(connection, f"select name from {USAGE}.password_policies where deleted is null")),
         "authentication_policies": (lambda rows: None if rows is None else len(rows))(
             snow(connection, f"select name from {USAGE}.authentication_policies where deleted is null", soft=True)),
