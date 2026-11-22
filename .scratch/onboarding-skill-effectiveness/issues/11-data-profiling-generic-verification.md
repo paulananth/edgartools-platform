@@ -37,7 +37,7 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] Record distinct Given–When–Then scenarios and obtain approval before test implementation. Main confirmed: “The operator approved the exact four scenarios you listed.” Approval was received before the scenario tests were written. (2026-11-21 19:43 ET)
 - [ ] Use the existing generic path to prove all four scenarios end to end. Tests were added for the archive/unreadable-member and unchanged-run outcomes. Exact decimal/long-integer preservation and compare's refusal to overwrite approved findings are blocked by the linked capability gaps; leave this ticket open until those gaps are fixed and the remaining scenarios pass.
 - [ ] Record stored outcomes, affected checks and limitations; no mock-call-only, static-text or tautological proof. New tests invoke the real `profile_data.main` path on invented files. Their outcomes are pending the parent's focused checks; known unsupported outcomes and prior probe evidence are below.
-- [ ] Publish this scoped change in a ticket-specific draft PR; keep it draft until current-head CI passes. (2026-11-21 19:43 ET)
+- [ ] Publish this scoped change in a ticket-specific draft PR and complete the affected checks. Draft [PR #2010](https://github.com/paulananth/edgartools-platform/pull/2010) is open; keep it draft until current-head CI passes. (2026-11-21 19:43 ET)
 - [x] Learning → skill: no skill edit. `Modes` already documents zip members/readme handling and `Profile once` already documents identical-run reuse; the new cases exercise those existing claims, not a new rule. (2026-11-21 19:43 ET)
 
 ## Completion evidence
@@ -78,4 +78,5 @@ The four scenarios below were approved by the operator before implementation; Ma
 - The archive's top-level input has one overall sha256; a changed member causes the archive input to be profiled again. Reuse is whole-input, not per-member. After approval, a changed delivery uses `compare`.
 - The repository skill on this branch is the current `origin/main` copy. The installed `data-profiling` skill was read; it differs from the repository skill and does not include the repository's current `Run this phase` entrypoint/resume guidance. The repo test exercises `skills/data-profiling/scripts/profile_data.py`, not the installed copy.
 - No provider request, source load, or mutation of approved real findings was performed. The skill needs no change for the verified reusable lessons: archive member/readme behavior and profile-once reuse are already in `Modes` and `Profile once`.
+- Draft PR: [#2010](https://github.com/paulananth/edgartools-platform/pull/2010), currently draft; current-head CI and the parent's focused checks are pending.
 
