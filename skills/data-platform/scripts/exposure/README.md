@@ -2,15 +2,15 @@
 
 ## The manifest (qualified)
 
-`exposure_manifest.py` resolves an exposure list (the repository's is `rules/exposure.yaml`) against the
+`exposure_manifest.py` resolves an exposure list (the repository's is `destination/authorised_data_sharing.yaml`) against the
 stores it names: each listed table's columns, types and comments are read from its PostgreSQL catalog,
 read-only. Run it with the store's private env file, never a value on the command line:
 
 ```bash
 uv run --no-project --with pyyaml --with 'psycopg[binary]' python <SKILL_DIR>/scripts/exposure/exposure_manifest.py \
-  generate --config rules/exposure.yaml --env <private worker.env> --out <manifest.json>
+  generate --config destination/authorised_data_sharing.yaml --env <private worker.env> --out <manifest.json>
 uv run --no-project --with pyyaml python <SKILL_DIR>/scripts/exposure/exposure_manifest.py \
-  check --config rules/exposure.yaml --manifest <manifest.json>
+  check --config destination/authorised_data_sharing.yaml --manifest <manifest.json>
 ```
 
 A table or column the store lacks, a table with no definition in the store or the list, and a name with a
@@ -30,7 +30,7 @@ published. A repeat publish changes no table's version.
 ```bash
 set +x; set -a; source <private OpenMetadata env file>; set +a
 uv run --no-project --with pyyaml python <SKILL_DIR>/scripts/exposure/exposure_publish.py \
-  --manifest <manifest.json> --config rules/exposure.yaml   # add --check to read back only
+  --manifest <manifest.json> --config destination/authorised_data_sharing.yaml   # add --check to read back only
 ```
 
 An expired token answers HTTP 401 on every call but `/system/version`: renew the token, and never print it.

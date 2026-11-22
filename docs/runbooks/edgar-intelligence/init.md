@@ -258,7 +258,7 @@ critical path (`load_chain.py --status` shows each step's progress and `chain-<R
 ## Mirror the final tables
 
 After the load (and `--finish`), the Snowflake mirrors of the final tables are created from the repository's exposure list
-(`rules/exposure.yaml`), for those tables only. One mirror reads one source database, so there is one for each store that has listed
+(`destination/authorised_data_sharing.yaml`), for those tables only. One mirror reads one source database, so there is one for each store that has listed
 tables: MDM, Silver and RDM (`rdm.published_code`), each with its own target database. The procedure, its read-only checks and its approvals
 (one create plan per mirror) are
 [the data-platform skill's hosted mirroring guide](../../../skills/data-platform/HOSTED-MIRRORING.md#after-the-first-load-mirror-only-the-exposed-subset).

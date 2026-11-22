@@ -27,8 +27,8 @@ manifest to the list and to the version of every requirement it names: given the
 manifest they no longer make.
 
     uv run --no-project --with pyyaml --with 'psycopg[binary]' python exposure_manifest.py generate \\
-        --config rules/exposure.yaml --env <private env file> --out <manifest.json>
-    ... exposure_manifest.py check --config rules/exposure.yaml --manifest <manifest.json>
+        --config destination/authorised_data_sharing.yaml --env <private env file> --out <manifest.json>
+    ... exposure_manifest.py check --config destination/authorised_data_sharing.yaml --manifest <manifest.json>
 """
 
 from __future__ import annotations

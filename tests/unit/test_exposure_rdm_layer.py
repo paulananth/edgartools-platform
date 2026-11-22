@@ -12,6 +12,6 @@ from exposure_manifest import load_config  # noqa: E402
 
 
 def test_the_list_exposes_rdms_published_codes_only():
-    config = load_config(ROOT / "rules" / "exposure.yaml")
+    config = load_config(ROOT / "destination" / "authorised_data_sharing.yaml")
     assert [entry["table"] for entry in config["tables"] if entry["layer"] == "rdm"] == ["published_code"]
     assert config["layers"]["rdm"]["source_schema"] == "rdm"
