@@ -335,6 +335,11 @@ authority for syntax and protected identity fields.
 
 ## Rules: an easy guide
 
+Start with the [engine rules primer](docs/engine-rules-primer.md) for supported
+functions and examples, grouped into reading, values, text, conditions, lookups,
+aggregation, MDM mapping, quality, matching, field selection, relationships and
+workflow control.
+
 **Rules are the agreed instructions for interpreting and mastering data.**
 They answer different questions; one rule should not silently answer another.
 
