@@ -52,6 +52,8 @@ a later delivery of the same row, which the per-key apply already leaves unchang
 - [ ] Failing test first, at the public `write`: a PostgreSQL delivery on a role that holds no `TEMPORARY` privilege succeeds, and a duplicate key still refuses
 - [ ] One batched upsert path for every load mode; MySQL's shared staging table is handled in the same change or kept as its own deferred part
 - [ ] Storage-adapter tests on PostgreSQL and MySQL (`bash scripts/dev/adapter_test.sh`)
-- [ ] `TEMPORARY` revoked from the loader in provisioning and the reset script, tested
+- [ ] Decision (operator), found checking against company financials: the line-item build also creates temporary tables (`edgar_warehouse/financials/sql.py`, `statements()`: each step a `CREATE TEMPORARY TABLE ... ON COMMIT DROP` then `ANALYZE`, because as one statement the planner guessed hundreds of rows for millions and never finished in 30 minutes; as steps the cohort builds in 14 s, company-financials skill). Revoking `TEMPORARY` needs that build to run without them, a choice between the no-DDL rule and that measured speed
+- [ ] The snapshot path stays: `company_line_item` and `company_measure` are rebuilt whole and the writer removes a row a delivery lacks (company-financials skill, "Running the facts through Bookkeeping"); the company-facts cohort is the proof before and after the writer change. Before (today's writer, the declared `company_fact` key in force, disposable local environment): 368 documents in 450 s; `company_fact` 5,134,979 rows for 329 companies, `company_line_item` 96,807, `company_measure` 168,360; no key repeated 2026-11-22 17:52 ET
+- [ ] `TEMPORARY` revoked from the loader in provisioning and the reset script, tested (waits for the decision above)
 - [ ] Standards, Spec and GoF review of the diff
 - [ ] Learning → skill: name the skill line this ticket changed, or "none"
