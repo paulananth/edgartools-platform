@@ -1,7 +1,7 @@
 # data-governance: Make the entrypoint executable
 
 Type: task
-Status: open
+Status: resolved
 Priority: P1
 Blocked by: 03, 15, 62
 Labels: wayfinder:task
@@ -36,7 +36,7 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] Produce an entrypoint that consumes source declarations, target contracts, step checks and independently verified outputs and yields a governed lineage contract and explicit coverage or evidence gaps; verified by the new [Start here section](../../../skills/data-governance/SKILL.md#start-here-trace-one-configured-target), which maps configured input and evidence to a scoped graph, gaps and owners. (2026-11-21 19:25 ET)
 - [x] Verify referenced paths and supported commands; retain mandatory stops and discoverability of optional detail; verified by resolving each new relative link and confirming owner anchors, checking `rules check --source`/`--root` against `edgar_warehouse/rules/cli.py` and its JSON output against `files.py`, and confirming Shared rules remains before Start here. (2026-11-21 19:25 ET)
 - [x] Walk one applicable example to its handoff without loading unrelated references or repeating another skill's procedure; verified by tracing the SEC Company mastering contract and its neutral lineage example under [Trace](#trace), then handing business meaning to Data Catalog, publication/readback to the selected destination, and missing run evidence to Data Operations. This is a document trace, not a source run. (2026-11-21 19:25 ET)
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md.
+- [x] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. [PR #2008](https://github.com/paulananth/edgartools-platform/pull/2008) opened on `116025e`; all 12 CI checks passed for that head. This ticket closeout commit remains draft until current-head CI passes. (2026-11-21 19:35 ET)
 - [x] Learning → skill: validate the source contract offline, but keep configuration success distinct from run completion and destination state; recorded in [Start here](../../../skills/data-governance/SKILL.md#start-here-trace-one-configured-target). (2026-11-21 19:25 ET)
 
 ## Trace
