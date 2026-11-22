@@ -401,6 +401,10 @@ reality"). Before a build starts:
    join or what a row is, before any build starts.
 8. **Hand off** by "Decisions, artifacts and handoffs". Do not restate that skill's steps.
 
+**Resume from the shared source log.** Use the existing `## Resume` record in the source's onboarding or refining log ([Data Platform](../data-platform/RESUME.md)); do not create a separate Data Modeling state file. Keep each part as its own checklist item. In `Phase`, link the decision artifact and approved findings hashes, and name unresolved semantics plus downstream contracts affected; `Next action` is the earliest unchecked part decision.
+
+Reuse a part decision only while its source, approved findings and decision artifact identities still match. If relevant evidence changes, reopen that part and its dependent handoffs only; unchanged parts remain complete. Unapproved findings or a required missing measurement block that part and return it to Data Profiling.
+
 ## Reviewing the model itself
 
 Asked to review the model, check:
