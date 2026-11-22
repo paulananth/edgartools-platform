@@ -93,6 +93,8 @@ def collect(env, as_admin: bool = False) -> dict:
     role = snow(connection, "select current_role() as role")[0]["ROLE"].upper()
     if role in ADMIN and not as_admin:
         sys.exit("the Snowflake connection runs as an administrator role: use the read-only auditor role, or pass --as-admin to record the gap")
+    expected = expected_policies()
+    policies = found_policies(connection, expected["location"]["database"])
     risky = ", ".join(f"'{p}'" for p in RISKY)
     return {
         "audit_role": role,
@@ -103,10 +105,9 @@ def collect(env, as_admin: bool = False) -> dict:
         "monitors": len(snow(connection, "show resource monitors")),
         "warehouses": lower(snow(connection, "show warehouses")),
         "statement_timeout": int(next(r["value"] for r in lower(snow(connection, "show parameters like 'STATEMENT_TIMEOUT_IN_SECONDS' in account")))),
-        "policy_drift": policy_drift(expected_policies(), found_policies(connection, expected_policies()["location"]["database"])),
-        "password_policies": len(snow(connection, f"select name from {USAGE}.password_policies where deleted is null")),
-        "authentication_policies": (lambda rows: None if rows is None else len(rows))(
-            snow(connection, f"select name from {USAGE}.authentication_policies where deleted is null", soft=True)),
+        "policy_drift": policy_drift(expected, policies),
+        "password_policies": len(policies["password"]) if policies else 0,  # read from the live reader: the usage views lag by hours
+        "authentication_policies": len(policies["authentication"]) if policies else None,
         "risky_grants": lower(snow(connection, f"select grantee_name, privilege from {USAGE}.grants_to_roles where deleted_on is null and granted_on in "
                                    f"('ACCOUNT', 'ROLE', 'WAREHOUSE', 'DATABASE') and privilege in ({risky}) and grantee_name not in "
                                    "('ACCOUNTADMIN', 'SECURITYADMIN', 'SYSADMIN', 'USERADMIN', 'ORGADMIN')")),
