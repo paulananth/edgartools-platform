@@ -36,12 +36,12 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] Specify resume, invalidate and blocked conditions for part decisions, evidence, unresolved semantics and downstream contracts in the existing source log's `Phase` and `Next action` fields. (2026-11-22 12:21 ET)
 - [x] Trace a staged interruption across two invented parts and identify the first unfinished action without rerunning completed work. (2026-11-22 12:21 ET)
 - [x] Show unchanged evidence reuses only its part decisions; changed evidence reopens the affected part and dependent handoff; unapproved or missing evidence blocks back to Data Profiling. (2026-11-22 12:21 ET)
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md.
+- [ ] Publish the rebased scoped change in PR #2027 and pass current-head CI. The local branch is rebased onto `origin/main` (`8e3fe60f`); the remote PR still points to pre-rebase head `99dcd980d4`, whose 12 checks passed. Rebased-head CI is pending.
 - [x] Learning → skill: `Workflow` now routes resume through the shared source log, preserving part-level decisions and invalidation. (2026-11-22 12:21 ET)
 
 ## Answer
 
-Data Modeling resumes from the source's existing `## Resume` record, not a new state file. Its `Phase` entries link each part's model-decision artifact and approved findings identity; its `Next action` checklist names unresolved semantics, affected downstream contracts and the first unfinished decision. A part decision is reused only while its source, approved findings and decision-artifact identities match. A changed part reopens its dependent handoff; unchanged parts remain complete. Draft findings or missing required measurements block the part and return to Data Profiling.
+Data Modeling resumes part decisions from the shared source log, reusing only matching approved evidence and reopening affected downstream handoffs. The documented trace covers unchanged, changed and blocked evidence without source data or test code. The branch was rebased onto `origin/main` (`8e3fe60f`); keep PR #2027 draft until the rebased head's CI passes.
 
 Documentation trace using invented part names only:
 
