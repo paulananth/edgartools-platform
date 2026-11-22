@@ -84,7 +84,7 @@ text, with the retained work linked rather than restated):
 | Effective-dated relationship | Time roles (`time.as_of`, `time.as_at`) and the stated date fields | The type (existing or inverse first), its ends, capacity, `valid_from` / `valid_to` sources, `keeps_start`, `ends_parent_links` ([section 5](../../../skills/data-modeling/SKILL.md#5-a-relationship-its-type), [section 7](../../../skills/data-modeling/SKILL.md#7-time)) | Data Onboarding drafts a new type in `mdm-relationship-types`; an unknown business start under an approved file date is Data Quality's [Approved provisional dates](../../../skills/data-quality/SKILL.md#approved-provisional-dates) |
 
 Baseline: this branch was refreshed against current `origin/main` at
-`76282c80ed6d9fa7c206ad01188cd6cdba6ef83f` via PR branch update. Prerequisite
+`5a5eaebd39b7209e9e9e28c5b2c7121d1397a4f4` via PR branch update. Prerequisite
 changes 01 and 07 remain present on this base (PRs #1956 and #1969). The
 handoff, modeling rules and linked retained evidence described above were
 verified against this checkout; no scenario code or data run was authorized
