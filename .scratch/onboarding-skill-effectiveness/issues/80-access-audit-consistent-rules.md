@@ -36,7 +36,7 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] Inventory each duplicated or conflicting instruction with its authoritative source and proposed disposition; verified by document review of `CLAUDE.md`, `CONTEXT.md`, the map's execution notes, ticket 02's inventory, `skills/access-audit/SKILL.md` and the sections of `aws-snowflake-operations`, `data-operations/HOSTED-LOADS.md` and `data-platform/CONNECTIONS.md` that it hands to, recorded under [Inventory](#inventory). (2026-11-20 18:37 ET)
 - [x] Align the local phase with the shared rule decision while preserving explicit operator boundaries; verified by document review of the diff to `skills/access-audit/SKILL.md` against the inventory, and by the wording, genericity and path checks under [Validation](#validation), which do not exercise audit behaviour. (2026-11-20 18:37 ET)
 - [x] Trace a routine path and a blocked path; confirm no new approval, provider access or switch-on authority was inferred; verified by document review under [Traces](#traces). No audit, load or provider request was run. (2026-11-20 18:37 ET)
-- [x] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. Ticket-evidence-only PR [#2011](https://github.com/paulananth/edgartools-platform/pull/2011) is published as a draft from `codex/ticket-80-access-audit-consistent-rules-20261121`; its first current-head CI run passed, and CI will rerun for this completion-record commit before the PR is readied.
+- [x] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. Ticket-evidence-only PR [#2011](https://github.com/paulananth/edgartools-platform/pull/2011) is published as a draft from `codex/ticket-80-access-audit-consistent-rules-20261121`; its current-head CI passed, and the latest PR head must remain green before the PR is readied.
 - [x] Open decision A for access changes is explicitly deferred to ticket 92, as this ticket permits; it remains unresolved and no access-change approval wording is inferred.
 - [x] Learning → skill: a risk acceptance closes a finding only in the operator's own words, and a change that touches no platform records the gate as not applicable, never PASS. Recorded in [Access audit hard stops](../../../skills/access-audit/SKILL.md#hard-stops) and [the gate](../../../skills/access-audit/SKILL.md#the-gate-before-finalising-a-skill-role-or-login); verified by document review of the diff. (2026-11-20 18:37 ET)
 
@@ -150,10 +150,10 @@ No live audit, access change, provider request, or switch-on was performed.
   `79-access-audit-responsibility.md` are `resolved` on current `origin/main`;
   the former carries routine-approval decision A, and the latter keeps
   remediation separate.
-- First-head CI for [PR #2011](https://github.com/paulananth/edgartools-platform/pull/2011)
-  passed all 12 jobs on commit `55c184410fc87fd8b950f7e3eac0b84f0345a756`
-  ([run #44968140505](https://github.com/paulananth/edgartools-platform/actions/runs/44968140505)).
-  Current-head CI will be checked again after the completion-record commit.
+- Current-head CI for [PR #2011](https://github.com/paulananth/edgartools-platform/pull/2011)
+  passed all 12 jobs on completion-record commit `b8bda0e452c1c0f05e0daa8159066b8c0ac38258`
+  ([run #44968728251](https://github.com/paulananth/edgartools-platform/actions/runs/44968728251)).
+  The evidence update itself will receive a fresh current-head CI run before the PR is readied.
 - No local tests were run in this phase. The scoped artifact change is a
   ticket record only.
 
