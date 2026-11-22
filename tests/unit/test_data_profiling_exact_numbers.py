@@ -24,8 +24,8 @@ def test_mixed_inputs_keep_repeated_identifiers_and_exact_decimals(tmp_path: Pat
     measurements = tmp_path / "measurements.csv"
     lines = ["identifier,name,amount,observed,active"]
     for index in range(160):
-        identifier = f"{index % 60:020d}"
-        lines.append(f"{identifier},Name {index % 60},12345678901234567.01,2026-01-02,true")
+        identifier = f"{index % 60 + 1:020d}"
+        lines.append(f"{identifier},Name {index % 60 + 1},12345678901234567.01,2026-01-02,true")
     measurements.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     identifiers = tmp_path / "identifiers.json"

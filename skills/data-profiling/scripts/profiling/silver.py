@@ -52,12 +52,12 @@ def keep(column: dict, role: str, key_columns: list[str]) -> bool:
 
 
 def _silver_type(column: dict) -> str:
-    """Store out-of-BIGINT integers as text; silver databases do not share HUGEINT."""
-    kind = column["type"]
+    """Use BIGINT only when the profiled integer range fits its signed bounds."""
+    kind = column.get("stored_type", column.get("type"))
     if kind not in profile.INTEGERS:
         return kind
     low, high = column.get("min"), column.get("max")
-    if low is not None and (int(low) < -(2**63) or int(high) >= 2**63):
+    if kind != "BIGINT" or low is not None and (int(low) < -(2**63) or int(high) >= 2**63):
         return "VARCHAR"
     return SILVER_INTEGER
 
