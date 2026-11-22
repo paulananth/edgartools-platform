@@ -208,22 +208,56 @@ required evidence, outputs and approval gates. The agent follows the guide;
 the CLI and workers execute the processing. Skills make the workflow repeatable
 without giving an agent authority to approve its own findings or activate rules.
 
-| Skill | Question it answers | Result or handoff |
-| --- | --- | --- |
-| [data-platform](skills/data-platform/SKILL.md) | Where do I start, and how do I run the whole flow? | Setup, reading, combining, mastering, recovery and links to specialist skills. |
-| [data-operations](skills/data-operations/SKILL.md) | How do agents manage recurring loads as deliveries and capacity change? | Delivery readiness, changed/renamed files, resource sizing, run monitoring, recovery and a maintained operational runbook using Bookkeeping and Change Journal. |
-| [data-profiling](skills/data-profiling/SKILL.md) | What is in this delivery, and how do its parts connect? | Human report, machine-readable findings, keys, quality requirements, code sets and silver specifications. Approved findings can produce a public catalog summary. |
-| [data-modeling](skills/data-modeling/SKILL.md) | What does each part mean in the model? | Evidence-based decisions about master kinds, identity identifiers, cross-references, relationships, code sets and time. |
-| [data-onboarding](skills/data-onboarding/SKILL.md) | How do we introduce a new feed or master kind? | Contracts, mappings, quality checks, generated metadata and test evidence, followed by operator approval and activation. Master parts first, then needed reference data, then silver. |
-| [data-quality](skills/data-quality/SKILL.md) | Which checks or fixes are needed, and what do they do? | Measured proposals and approved MDM input checks in `quality.yaml`; unresolved cases remain explicit. |
-| [MDM Engineering → refining rules](skills/mdm-engineering/REFINING-RULES.md) | How do we safely change an existing feed? | Configuration-first delivery comparison, measured mapping/quality/matching changes and regenerated metadata. The [refining-rules entry point](skills/refining-rules/SKILL.md) forwards here. |
-| [bookkeeping](skills/bookkeeping/SKILL.md) | How do we plan, run, verify and resume processing? | Declared work, worker execution, progress and recovery. |
-| [change-journal](skills/change-journal/SKILL.md) | How do we inspect and recover durable journal delivery? | Verified events and receipts, with recovery coordinated by the producer that owns delivery. |
-| [mdm-engineering](skills/mdm-engineering/SKILL.md) | How do we implement and refine MDM? | Owns existing-rule refinement and reusable engine/store changes, using configuration first and the cheapest sufficient proof. New-source onboarding retains its own workflow. |
+The repository provides **26 skill entry points**. The descriptions below
+summarize when to use each guide; the linked skill owns its detailed procedure
+and boundaries. `refining-rules` is the compatible entry point for the procedure
+inside MDM Engineering.
 
-For conceptual learning and analysis, the repository also includes
-[data engineering fundamentals](skills/data-engineering-fundamentals/SKILL.md)
-and [data scientist](skills/data-scientist/SKILL.md) guides.
+### Discovery, configuration and MDM engineering
+
+| Skill | Description |
+| --- | --- |
+| [data-platform](skills/data-platform/SKILL.md) | Starting point for data work: setup, connections, readiness and the route from captured evidence to verified operation. Coordinates specialist skills and their handoffs. |
+| [data-profiling](skills/data-profiling/SKILL.md) | Reads captured deliveries and records structure, keys, relationships, time roles, code-set needs and quality findings. Produces a report and machine-readable findings; compares new deliveries with approved findings. |
+| [data-modeling](skills/data-modeling/SKILL.md) | Turns approved profiling evidence into model decisions: data class, master kind, identity versus lookup identifiers, relationships, hierarchies, grain and time. Defines approved Gold facts and dimensions when required. |
+| [data-onboarding](skills/data-onboarding/SKILL.md) | Configures a new feed or domain from approved findings and model decisions: readers, Dataset Contracts, mappings, targets and steward metadata. Hands execution and proof to their owning skills. |
+| [data-quality](skills/data-quality/SKILL.md) | Investigates defects and traces mastered data into downstream fields. Proposes and measures checks and fixes, then turns approved findings into configured input quality rules. |
+| [mdm-engineering](skills/mdm-engineering/SKILL.md) | Owns MDM implementation and refinement: configuration-first changes, shared merge behavior, storage adapters, migrations and qualification. Adds engine code only for a demonstrated capability gap. |
+| [MDM Engineering → refining-rules](skills/refining-rules/SKILL.md) | An MDM Engineering subworkflow for existing feeds: measure mapping, quality, matching and survivorship changes on pinned evidence, regenerate Mapping Documents and follow testing, approval and activation gates. |
+| [sql-writer](skills/sql-writer/SKILL.md) | Renders portable table definitions, migrations and queries for the selected database using SQLAlchemy or SQLGlot. Keeps dialect differences out of copied business logic. |
+
+### Execution, operations and access
+
+| Skill | Description |
+| --- | --- |
+| [data-operations](skills/data-operations/SKILL.md) | Makes configured stores operational, applies approved schemas and Silver specifications, and runs loads. Owns delivery readiness, backlog, resource sizing, verification, recovery and the operational runbook. |
+| [pipeline-orchestration](skills/pipeline-orchestration/SKILL.md) | Schedules and sequences qualified pipelines, with dependency, concurrency and start/stop controls on approved platforms. Leaves work execution and recovery semantics with Bookkeeping and Data Operations. |
+| [bookkeeping](skills/bookkeeping/SKILL.md) | Controls declared work, frozen inputs, leases, checkpoints, retries and verified completion. Workers execute and verify their own work; Bookkeeping does not interpret source data. |
+| [change-journal](skills/change-journal/SKILL.md) | Maintains durable event and receipt evidence, including processing identity used to recognize unchanged inputs. Guides initialization, migration, delivery inspection and producer-controlled recovery; does not schedule work. |
+| [database-monitoring](skills/database-monitoring/SKILL.md) | Reads hosted PostgreSQL performance, locks, long transactions, costly statements and sanitized server logs. Reports bottlenecks through diagnostic logins without changing settings or stopping sessions. |
+| [production-support](skills/production-support/SKILL.md) | Produces bounded incident and efficiency diagnoses from run evidence, telemetry and logs, with architecture and security consultation. Recommends recovery or optimization without inventing a continuously running agent. |
+| [aws-snowflake-operations](skills/aws-snowflake-operations/SKILL.md) | Guides this platform's AWS and Snowflake administration: target selection, Terraform, hosted stores, credit usage, ECR images and deployment procedures. Required before related infrastructure commands. |
+| [access-audit](skills/access-audit/SKILL.md) | Independently assesses permissions and access controls using read-only evidence. Produces PASS/FAIL/NOT_TESTED findings and a coverage matrix; remediation belongs to the platform's operations owner. |
+
+### Governance, catalogs and semantic consumption
+
+| Skill | Description |
+| --- | --- |
+| [data-governance](skills/data-governance/SKILL.md) | Defines which evidence, processing steps and checks belong on a trusted source-to-output lineage path. Separates configured intent from completed, verified processing. |
+| [data-catalog](skills/data-catalog/SKILL.md) | Organizes business domains, glossary terms, assets and lineage into understandable, configuration-derived descriptions. Keeps business meaning independent of the chosen catalog or visualization destination. |
+| [openmetadata](skills/openmetadata/SKILL.md) | Publishes, repairs and reads back the platform's catalog in OpenMetadata. Owns destination-specific API mechanics; business definitions remain with Data Catalog and lineage policy with Data Governance. |
+| [auto-ontology](skills/auto-ontology/SKILL.md) | Guides AutoOntology setup, reset and qualification as a read-only semantic consumer of permitted MDM, RDM and Silver tables. Preserves store authority, table-scope controls and existing inference permissions. |
+| [auto-ontology-product-query](skills/auto-ontology-product-query/SKILL.md) | Builds and qualifies business-question workflows over configured data products in AutoOntology Chat/MCP. Checks product scope, definitions, joins, generated SQL, answers and unsupported-question behavior. |
+| [semantic-views](skills/semantic-views/SKILL.md) | Drafts, certifies and deploys Explore-only Snowflake semantic views for one approved Gold fact grain. Defines dimensions, joins, facts, metrics and verified questions without multiplying that grain. |
+
+### Domain rules and learning
+
+| Skill | Description |
+| --- | --- |
+| [security-master](skills/security-master/SKILL.md) | Defines the Security domain's source evidence, keys, identifiers, listings, matching, survivorship and run order. Consult before changing Security contracts, rules or loads. |
+| [company-financials](skills/company-financials/SKILL.md) | Defines reported financial figures, fiscal-year identity, year-end changes, standard line items and fundamental measures. Consult before changing financial mappings, calculations or interpretation. |
+| [data-engineering-fundamentals](skills/data-engineering-fundamentals/SKILL.md) | Teaches pipeline, ETL, storage, SQL, batch/streaming, scheduling and parallel/cloud computing concepts. A learning guide for understanding data engineering rather than an operational runbook. |
+| [data-scientist](skills/data-scientist/SKILL.md) | Guides dataset preparation, exploration, visualization, experimentation and prediction, including A/B tests, forecasting and clustering. General analysis guidance rather than a production ML deployment workflow. |
 
 In practice, a new feed follows **profile → model → map and check → test →
 approve → activate → run and verify**. The Mapping Document is a generated
