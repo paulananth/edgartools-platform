@@ -18,7 +18,7 @@ Parts marked "approval" or "words" wait for the operator's own words before they
 - [ ] Finish under five minutes on this store: rebase `claude/links-reads-one-pass`, merge, rerun `--finish`
 - [ ] The snapshot cost of the one mirror read from metering history against the bounds (5 credits for a mirror)
 - [ ] Hosted: rename the two kept databases (drop the `DB_` prefix) and drop the two old targets (waits for the operator's ANANP11 words); a one-line change per name in `rules/snowflake.yaml`
-- [ ] The orphan targets `DB_EDGARTOOLS_MIRROR_MDM` and `DB_EDGARTOOLS_MIRROR_SILVER`: read whether they still exist (`SHOW DATABASES`), then move and drop them under the administrator's words
+- [x] The orphan targets `DB_EDGARTOOLS_MIRROR_MDM` and `DB_EDGARTOOLS_MIRROR_SILVER`: dropped (operator, 2026-11-22: "dropped targets ... check and update"); verified `SHOW DATABASES LIKE '%EDGARTOOLS%'` as the auditor role lists only `EDGARTOOLS_GOLD` and `EDGARTOOLS_GOVERNANCE` 2026-11-22 12:08 ET (the auditor sees only databases its role can see)
 - [ ] Owner role and ownership grants in the access Terraform root (the next access apply imports the role and the two grants first)
 - [ ] Hosted RDM still holds the six old code-set versions: its own command or ticket (ticket 07's deferred part)
 - [ ] Follow-up ticket: master ids and links as joins inside the data database
