@@ -646,7 +646,7 @@ def _tabular(con, name: str, tables: list[Table], limit: int, sample: int, seed:
     rows = f" USING SAMPLE reservoir({int(sample)} ROWS) REPEATABLE ({int(seed)})" if sampled else ""
     try:
         con.execute(f"CREATE TABLE {sql_name(name)} AS SELECT * FROM {source}{rows}")
-        if fmt == "csv":
+        if fmt == "csv" and not sampled:
             _exact_csv(con, name)
         problems = [] if fmt != "csv" else [
             (t, why) for t in tables
@@ -823,11 +823,14 @@ def _json_safe(value):
     return value
 
 
-def _exact_json_numbers(con, table: str) -> None:
-    """Unescape tagged values and promote columns containing only exact JSON numbers."""
+def _exact_json_numbers(con, table: str, promote: bool = True) -> None:
+    """Unescape JSON numeric markers and promote only when the full input was loaded."""
     columns = [name for name, kind, *_ in con.execute(f"DESCRIBE {sql_name(table)}").fetchall()
                if kind == "VARCHAR"]
-    types, marked = _numeric_text_types(con, table, columns, marked=True)
+    if promote:
+        types, marked = _numeric_text_types(con, table, columns, marked=True)
+    else:
+        types, marked = {}, set(columns)
     _rewrite_numeric_table(con, table, types, marked)
 
 def _write_records(con, name: str, records: Iterator[dict], work: Path, scan: str, sample: int, seed: int) -> list[Part]:
@@ -858,7 +861,7 @@ def _write_records(con, name: str, records: Iterator[dict], work: Path, scan: st
     spill()
     parts = []
     for part, path in sorted(files.items()):
-        _load_json_lines(con, part, path)
+        _load_json_lines(con, part, path, promote=scan != "sampled")
         path.unlink()
     for part in sorted(files, key=lambda n: -n.count(".")):  # deepest first
         _fold_single_items(con, part)
@@ -874,7 +877,7 @@ def _enclosing(part: str, parts) -> str:
     return parent
 
 
-def _load_json_lines(con, part: str, path: Path) -> None:
+def _load_json_lines(con, part: str, path: Path, promote: bool = True) -> None:
     """Load flattened rows with types from a full read.
 
     DuckDB fixes one format per date column; if a later value has another
@@ -890,7 +893,7 @@ def _load_json_lines(con, part: str, path: Path) -> None:
                  for name, kind, *_ in described}
         columns = "{" + ", ".join(f"{sql_text(n)}: {sql_text(t)}" for n, t in types.items()) + "}"
         con.execute(f"CREATE TABLE {sql_name(part)} AS SELECT * FROM {source}, columns={columns})")
-    _exact_json_numbers(con, part)
+    _exact_json_numbers(con, part, promote=promote)
 
 
 def _fold_single_items(con, child: str) -> None:

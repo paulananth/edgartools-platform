@@ -83,3 +83,44 @@ def test_mixed_inputs_keep_repeated_identifiers_and_exact_decimals(tmp_path: Pat
     assert json_identifier["distinct"] == 60
     assert json_identifier["outside_bigint"] is True
     assert _silver_column(parts["identifiers"], "identifier")["type"] == "VARCHAR"
+
+
+def test_sampled_csv_and_json_numbers_stay_exact_text(tmp_path: Path) -> None:
+    csv_values = ["12345678901234567.12345678", "98765432101234567.87654321"]
+    csv_path = tmp_path / "sampled.csv"
+    csv_path.write_text("amount\n" + "\n".join(csv_values) + "\n", encoding="utf-8")
+    json_values = ["12345678901234567.12345678", "98765432101234567.87654321"]
+    json_identifiers = ["1234567890123456789012", "9876543210987654321098"]
+    json_path = tmp_path / "sampled.json"
+    records = [f'{{"identifier":{identifier},"amount":{amount}}}'
+               for identifier, amount in zip(json_identifiers, json_values)]
+    json_path.write_text("[" + ",".join(records) + "]", encoding="utf-8")
+
+    out = tmp_path / "sampled-findings"
+    assert profile_data.main([
+        "run", "--name", "sampled-exact-number-fixture",
+        "--input", f"csv={csv_path}",
+        "--input", f"json={json_path}",
+        "--out", str(out), "--limit-gb", "0.000000001", "--sample", "1", "--seed", "11",
+    ]) == 0
+    findings = yaml.safe_load((out / "findings.yaml").read_text(encoding="utf-8"))
+    parts = {part["part"]: part for part in findings["parts"]}
+    assert all(parts[name]["scan"] == "sampled" and parts[name]["rows"] == 1 for name in ("csv", "json"))
+
+    csv_amount = _column(parts["csv"], "amount")
+    assert csv_amount["stored_type"] == "VARCHAR"
+    assert "outside_bigint" not in csv_amount and "decimal_places" not in csv_amount
+    assert csv_amount["top"][0]["value"] in csv_values
+    assert _silver_column(parts["csv"], "amount")["type"] == "VARCHAR"
+    assert len(csv_values) > csv_amount["distinct"]  # at least one wide value was outside the sample
+
+    json_amount = _column(parts["json"], "amount")
+    assert json_amount["stored_type"] == "VARCHAR"
+    assert "outside_bigint" not in json_amount and "decimal_places" not in json_amount
+    assert json_amount["top"][0]["value"] in json_values
+    assert len(json_values) > json_amount["distinct"]
+    assert _silver_column(parts["json"], "amount")["type"] == "VARCHAR"
+    assert json_identifier["stored_type"] == "VARCHAR"
+    assert "outside_bigint" not in json_identifier
+    assert json_identifier["top"][0]["value"] in json_identifiers
+    assert _silver_column(parts["json"], "identifier")["type"] == "VARCHAR"
