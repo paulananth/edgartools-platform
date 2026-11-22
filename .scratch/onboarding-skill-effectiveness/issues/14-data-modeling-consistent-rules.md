@@ -34,12 +34,14 @@ These blockers order skill-improvement work. They do not activate optional sourc
 ## Acceptance checklist
 
 - [x] Inventory each duplicated or conflicting instruction with its authoritative source and proposed disposition; verified by document review of `CLAUDE.md`, `CONTEXT.md`, the data-platform, data-onboarding and data-profiling hard stops, `CODE-SETS.md`, the map's execution note and the data-modeling `SKILL.md` and `REQUIREMENTS.md`; recorded under [Inventory](#inventory). (2026-11-20 19:11 ET)
-- [x] Align the local phase with the shared rule decision while preserving explicit operator boundaries; verified by document review of the diff to `skills/data-modeling/SKILL.md` and `REQUIREMENTS.md` against the inventory. The approval boundary is unchanged. (2026-11-20 19:11 ET)
+- [x] Align the local phase with the shared rule decision while preserving explicit operator boundaries; verified against the current-main skill and the operator ruling recorded under [Open decisions](#open-decisions). Findings and designed keys remain explicitly approved; each new relationship-type/capacity code-set version needs the operator's exact words before publication. No approval, provider access or switch-on authority is inferred. (2026-11-21 21:07 ET)
 - [x] Reconcile "one of `KINDS`" with `mdm-kinds` as the one list of kinds (deferred here by [13](./13-data-modeling-responsibility.md)); verified by code reading: `rules/mastering/engine-v1.yaml` pins `mdm-kinds` version 1, and `edgar_warehouse/mdm/catalog.py` `_read` fills `kinds` from that published code set, which `evidence.py` reads as `KINDS`. Section 2 and REQUIREMENTS name `mdm-kinds`. No behaviour test was run. (2026-11-20 19:11 ET)
-- [x] Trace a routine path and a blocked path; confirm no new approval, provider access or switch-on authority was inferred; verified by document review under [Traces](#traces). No source operation, proof program or load was run. (2026-11-20 19:11 ET)
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. The checks ran (see [Validation](#validation)). Nothing has been committed, pushed or opened as a PR.
-- [ ] Open decision A (routine approvals, carried from tickets 02 and 08) is answered by the operator for this skill's part: findings it reads, a proposed new kind, and a relationship type "approved in the operator's words" (section 5). Recorded under [Open decisions](#open-decisions); not settled here.
-- [ ] Learning → skill: proposed lesson for [Data Modeling hard stops](../../../skills/data-modeling/SKILL.md#hard-stops): "a standard published by the data's own provider is a provider request; researching it needs the operator's permission for that request". Stays unchecked until the change is published and reviewed.
+- [x] Trace a routine path and a blocked path; confirm no new approval, provider access or switch-on authority was inferred; verified by document review under [Traces](#traces). No source operation, proof program, RDM operation or load was run. (2026-11-21 21:07 ET)
+- [x] Open decision A (routine approvals, carried from tickets 02 and 08) is resolved by the operator: findings and designed keys retain explicit approval (ticket 08); each new relationship-type/capacity code-set version requires exact operator words before publication, and standing routine approval is insufficient. Recorded under [Open decisions](#open-decisions). (2026-11-21 21:07 ET)
+- [x] Learning → skill: exact operator words are required before publishing every new relationship-type/capacity code-set version; standing routine approval is insufficient. Recorded in [Data Modeling hard stops](../../../skills/data-modeling/SKILL.md#hard-stops). (2026-11-21 21:07 ET)
+- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. Draft until current-head CI is green.
+- [x] Open decision A (routine approvals, carried from tickets 02 and 08) is resolved by the operator: findings and designed keys retain explicit approval (ticket 08); each new relationship-type/capacity code-set version requires exact operator words before publication, and standing routine approval is insufficient. Recorded under [Open decisions](#open-decisions).
+- [x] Learning → skill: exact operator words are required before publishing every new relationship-type/capacity code-set version; standing routine approval is insufficient. Recorded in [Data Modeling hard stops](../../../skills/data-modeling/SKILL.md#hard-stops).
 
 ## Inventory
 
@@ -50,7 +52,7 @@ a rule list names each shared rule's home and grants no permission.
 | # | Local instruction (data-modeling) | Authoritative source | Finding | Disposition |
 |---|---|---|---|---|
 | 1 | Hard stops had no statement of what the list is | Tickets 02 and 08 disposition | Gap | Added the line data-profiling uses: a shared rule names its home; the list grants no permission |
-| 2 | Hard stop "Approve findings or a code set version, or write words the operator did not say" | data-profiling hard stops (`approve`); `CODE-SETS.md` step 4; `CONTEXT.md` "Rule Activation Approval"; `CLAUDE.md` "Do not ask for approval" | Duplicate of the owners' rules; the routine-approval conflict is open decision A | Boundary unchanged; the row now names where each approval is recorded and that switching a rule on is the operator's |
+| 2 | Hard stop "Approve findings or a code set version, or write words the operator did not say" | data-profiling hard stops (`approve`); `CODE-SETS.md` step 4; `CONTEXT.md` "Rule Activation Approval"; `CLAUDE.md` "Do not ask for approval"; ticket 08's operator ruling | The shared-rule conflict is settled: findings and designed keys retain explicit approval; each relationship-type/capacity code-set version requires exact operator words before publication | The row names the approval owners and records the specific version gate; standing routine approval is insufficient, and switching a rule on remains the operator's |
 | 3 | Hard stop and refusal "Request anything from a provider's live service" | `CLAUDE.md` "Commits, PRs and secrets" (site, API or documentation, permission per request); data-platform hard stops | Conflict: "live service" left documentation uncovered | Widened to site, API or documentation, with permission per request. The permission path differs from data-profiling's row (which has none) because row 4's provider-published standard needs it; the "Instead" column still names the blocker to the operator and stops, and never self-requests |
 | 4 | Hard stop "Propose a domain rule … First find how a public standard or the main vendors do it" | `CLAUDE.md` provider rule | Conflict: read as leave to fetch a standard the data's own provider publishes | Added: a standard published by the data's own provider is a provider request and needs permission for that request |
 | 5 | Examples "*Proving it.*" named a real company | `CLAUDE.md` "This repository is public: counts and invented examples only"; data-onboarding hard stops | Conflict | Replaced by its shape ("a large US common stock"). New hard stop and refusal: no data value in a public repository (a committed decision, proof report or example). The rule covers the public record only; a real public record shown in chat when the operator asks for an example is unaffected. Place codes, namespace names and relationship-type names are vocabulary, not records: consistent |
@@ -65,7 +67,7 @@ a rule list names each shared rule's home and grants no permission.
 | 14 | Configuration only: "does not … write configuration"; hard stop "Write rules, contracts, quality files, or a code set version" | data-onboarding hard stop "Configuration only" | Consistent: this skill writes no configuration or code | No change |
 | 15 | Secrets | `CLAUDE.md` secrets rule; data-platform hard stops | data-modeling handles no credential | No change |
 | 16 | REQUIREMENTS "First written by Grok; handed to Claude…" and heading "Settled since the first version"; Examples "OpenFIGI had been loaded as … replaced them" | `CLAUDE.md` "Say what is, never what was" | Conflict: history wording | Removed the provenance sentence; heading is "Built"; the example states the current one-target load |
-| 17 | Section 5 "approved in the operator's words, published, and pinned" | `CODE-SETS.md` step 4; `CLAUDE.md` "Do not ask for approval" | The same conflict as row 2 | Covered by open decision A; not edited |
+| 17 | Section 5 "approved in the operator's words, published, and pinned" | `CODE-SETS.md` step 4; ticket 08's approval ruling; the operator's ruling recorded below | Resolved: findings/design keys remain explicitly approved; every new relationship-type/capacity code-set version requires exact operator words before publication | The wording in section 5 aligns with the RDM approval gate; no standing routine approval can authorize publication |
 
 Findings outside this ticket's topics, not edited here:
 
@@ -79,41 +81,33 @@ Findings outside this ticket's topics, not edited here:
 
 ## Open decisions
 
-- **A. Routine approvals (from tickets 02 and 08), this skill's part.**
-  `CLAUDE.md` says not to ask for approval and to record a step's approval as
-  given, stopping only for a switch-on or a new kind of decision. Data
-  Modeling approves nothing, but it reads findings approved in the operator's
-  own words, sends a proposed new kind to the operator, and section 5 requires
-  a relationship type "approved in the operator's words". This branch keeps
-  the stricter boundary. A new kind and a new identity namespace are probably
-  "a new kind of decision" either way; whether a relationship-type code set
-  version is routine is the operator's ruling.
+- **A. Routine approvals (from tickets 02 and 08), this skill's part — resolved by the operator.** Ticket 08's ruling keeps explicit approval for findings and designed keys; its private, sanitized review view is only a review aid, not consent (`approve --words` remains the approval record). The operator's ruling for this skill is: "each new relationship-type/capacity code-set version requires exact operator words before publication; standing routine approval is insufficient." Therefore, the exact words must be recorded for each version before publication; the skill grants no standing approval. The finding/design-key approvals remain required and do not substitute for approval of a code-set version.
 
 ## Traces
 
 These are readings of the current text, not runs.
 
-- **Routine path:** Data Onboarding hands over a part with approved findings
-  that name an existing kind and identifiers its Identifier Contract already
-  declares. Data Modeling reads the findings and `mdm-kinds`, decides the
-  class, the kind, which identifiers match and which are lookup only, and the
-  time columns, and writes the decision in counts and shapes. It does not
-  change how records join, so section 9 is not required. It hands the
-  decision to Data Onboarding, which writes the configuration. No approval,
-  provider request or switch-on is part of this path.
-- **Blocked path:** a part whose key rule the captures do not settle, and the
-  only standard for it is the data provider's own documentation. The "domain
-  rule" hard stop sends Data Modeling to a standard first; that standard is a
-  provider request, so it names the blocker to the operator and stops that
-  part, carrying on with the others (Workflow step 6). If the part also needs
-  a new kind, that is one question with a recommendation, and the part waits.
-  Neither the stop nor the question grants permission, approval or a
-  switch-on, and no proof program or test is written for it.
+- **Routine path:** Data Onboarding hands over findings whose `approval.status`
+  is `approved`, including explicit operator approval of the findings and any
+  designed key (ticket 08). The part uses an existing kind, declared
+  identifiers and an already published relationship type/capacity. Data
+  Modeling decides the class, kind, identity versus lookup-only identifiers
+  and time columns, then hands off the decision. No new code-set publication,
+  provider request or switch-on occurs; routine use of an existing version
+  does not stand in for explicit findings or designed-key approval.
+- **Blocked path:** a part needs a new relationship type or capacity not held
+  in the pinned RDM version. Data Modeling names the gap and hands the proposal
+  to the code-set owner; it does not draft, approve or publish. The owner must
+  show the exact draft and diff and record the operator's exact words for that
+  version before publication. A standing routine approval is insufficient.
+  If the proposal depends on documentation only the provider holds, that
+  request separately needs the operator's permission; name the blocker and
+  stop. Neither path grants provider access or switch-on authority.
 
 ## Answer
 
-Data Modeling's hard stops now name each shared rule's home and grant no
-permission. The skill:
+Data Modeling's hard stops name each shared rule's home and grant no
+permission. The current-main skill:
 
 - covers a provider's site, API and documentation, with permission per
   request, including a standard the data's own provider publishes;
@@ -124,35 +118,30 @@ permission. The skill:
   gives each count with where it was measured;
 - points to `CODE-SETS.md` for publishing instead of restating the step;
 - names `mdm-kinds` as the one list of kinds;
-- drops history wording from REQUIREMENTS and the Examples.
+- drops history wording from REQUIREMENTS and the Examples;
+- requires explicit operator approval of findings and designed keys, and
+  exact operator words for each new relationship-type/capacity code-set
+  version before publication.
 
-The approval boundary is unchanged. Open decision A remains for the operator.
+Decision A is resolved by the operator as quoted under [Open decisions](#open-decisions). No RDM version was drafted, approved or published.
 
 Provenance:
 
-- **Baseline.** `HEAD` and `origin/main` are both
-  `c9b1c18fa7d363814edf87860f2aa73436db391d` (ticket 03, PR #1975).
-- **Prerequisites.** `git merge-base --is-ancestor` exited 0 against
-  `origin/main` for `e166fa56` (ticket 02, PR #1966), `d2879db5` (ticket 08,
-  PR #1972), `576904f0` (ticket 13, PR #1971), `750c06f2` (ticket 80,
-  PR #1973) and `c9b1c18f` (ticket 03, PR #1975). Tickets 08 and 13 still
-  read `Status: open`; their files were not edited.
-- **Installed copies.** Listing `~/.agents/skills/data-modeling` was refused
-  outside the worktree, so the installed copy was not compared. The
-  repository copy is the one changed.
-- **write-skill guidance.** Reading `~/.agents/skills/write-skill/SKILL.md`
-  was not granted in this session (two attempts), so that guidance was not
-  read.
+- **Baseline.** `origin/main` at `5b2c90735` (PR #2007); this branch was
+  created from that current-main head after fetching `origin/main`.
+- **Prerequisites.** Tickets 02, 08 and 13 are resolved on current main:
+  `e166fa56` (PR #1966), `d2879db5` (PR #1972) and `5b2c90735` (PR #2007).
+- **Installed copy.** `gstack-skill-bill` found no installed `data-modeling`
+  skill in its configured skill roots. The repository copy is the edit source.
+- **Skill-writing guidance.** `write-skill` was read; the repo skill bill
+  measured the current file before and after the edit (see Validation).
 
 ## Validation
 
-- `uv run --no-project --with pytest -- pytest -q -p no:cacheprovider --rootdir <worktree> tests/unit/test_skills_cite_no_ticket.py tests/unit/test_profiling_genericity.py tests/unit/test_guides_name_existing_paths.py`: **149 passed**. These check skill wording (no ticket numbers or dates, the 500-line limit, genericity) and the paths the guides name. They do not exercise approval, provider access, privacy or routing behaviour.
-- `git diff --check`: clean.
-- The rewritten OpenFIGI example ("one target … whether the question was a CUSIP or an ISIN") was checked against `rules/sources/openfigi/source.yaml` `bookkeeping.targets` (one target over both kinds asked). A broader clause about source rules pairing the two was dropped: `rules/sources/sec.nport.security/source.yaml` reads a CUSIP–ISIN pair set.
-- `skills/data-modeling/SKILL.md`: 477 lines. No heading was renamed; the REQUIREMENTS heading "Built" has no inbound link (grep of `skills`, `tests`, `docs`).
-- New links (`../data-profiling/SKILL.md#hard-stops`, `../data-platform/SKILL.md#hard-stops`, `../data-onboarding/SKILL.md#hard-stops`, `../mdm-engineering/SKILL.md#choose-the-cheapest-proof`, `CODE-SETS.md` step 5) were checked by hand against those files' headings and steps.
-- `tests/unit/test_role_skills.py` (names data-modeling) and `tests/unit/test_skill_bundle_portability.py` did not run: both import `edgar_warehouse`, and this worktree has no synced environment (`.venv/bin/pytest` is absent).
-- `bash scripts/dev/overlap_guard.sh` was not run: nothing is committed, and the `2026-11-20 19:11 ET` stamps are filled only by `commit_push.sh`.
+- The `data-modeling` skill was reviewed against current main, ticket 08's explicit findings/design-key approval ruling, and the operator's exact relationship-type/capacity version ruling. The repository copy was changed; no RDM version was drafted, approved or published.
+- `gstack-skill-bill` on the repository skill: **35,344 → 35,513 bytes**; `SKILL.md` is **491 lines**, within the 500-line limit.
+- No local tests or provider/data operations were run, per assignment; the parent will run the combined focused checks. Current-head CI is still required before this draft PR can be marked ready.
+- `bash scripts/dev/overlap_guard.sh` passed standalone: no overlap (2 files checked against other runtimes).
 
 ## Completion evidence
 
