@@ -120,7 +120,7 @@ Two permissions a mirror needs beyond the sub-skill's grant sequence:
 database, refresh interval, table format, the operator's words and whether a read-back verified it), and the mirror SQL is written from that file alone. Mirror only what a reader in Snowflake
 reads: Gold (its dbt sources file, `models/sources.yml`, written from its configuration) may read only what the record lists
 (`mirror_sql.py check --reads <sources file>`, and a unit test on the repository's files), and the record may list only what
-`rules/exposure.yaml` lets leave the stores. The exposure list is the upper bound, not the list: a listed table the exposure list does not name is refused,
+`destination/authorised_data_sharing.yaml` lets leave the stores. The exposure list is the upper bound, not the list: a listed table the exposure list does not name is refused,
 and an exposed table nothing in Snowflake reads stays out (the catalog publishes it from the stores, not the mirror). Changing the list is changing the mirror:
 edit the record with the operator's words, then `mirror_sql.py alter`. Working tables (the merge stage, reviews, decisions, lookups, progress) are never
 mirrored. Each mirrored table is a full copy kept current at the refresh interval, so its size is a cost: say each table's size in the
@@ -150,7 +150,7 @@ database that already exists (even one the mirror operator owns, so ownership ca
 `DROP_MIRROR(<mirror>, FALSE)` has no mirror, and the administrator can then `GRANT OWNERSHIP ON DATABASE <name> TO ROLE <owner role>` (without `COPY CURRENT GRANTS`, which
 is refused for an application-owned object; the mirror operator alone gets "Insufficient privileges") and the owner role drops it: no support request. `scripts/exposure/mirror_sql.py release` writes both steps for a mirror whose target the owner role should own: the data stays, but nothing refreshes it. So:
 - rename by recreating, with `scripts/exposure/mirror_sql.py` (it writes the `CREATE_MIRROR`, `ALTER_MIRROR`, `LIST_MIRRORED_TABLES` and `DROP_MIRROR`
-  text from `sources/managed-mirror.yaml`, `rules/exposure.yaml` and `rules/snowflake.yaml`, so no call is typed by hand): `CREATE_MIRROR` (the skill's SETUP) with the new target name and a new mirror name, as the mirror operator, while
+  text from `sources/managed-mirror.yaml`, `destination/authorised_data_sharing.yaml` and `rules/snowflake.yaml`, so no call is typed by hand): `CREATE_MIRROR` (the skill's SETUP) with the new target name and a new mirror name, as the mirror operator, while
   the old mirror still replicates (an instance holds two); when every table reads `REPLICATING` with equal counts, move the readers and
   the configuration, then `DROP_MIRROR(<old mirror>, TRUE)` so its target goes with it;
 - always drop a mirror with the second argument `TRUE`, never `FALSE`.
@@ -177,7 +177,7 @@ only when requested; the mirror owns target writes.
 ## After the first load: mirror only what Gold reads
 
 The mirror is created after the stores' first load, and again after a reset, for the tables `sources/managed-mirror.yaml` lists and no others
-(Gold reads only those; each must be on `rules/exposure.yaml`, which [Final exposable tables](FINAL-TABLES.md) owns). A read table must
+(Gold reads only those; each must be on `destination/authorised_data_sharing.yaml`, which [Final exposable tables](FINAL-TABLES.md) owns). A read table must
 exist before a mirror can take it, so the order is the load, then:
 
 1. Resolve the exposure list against the loaded stores, read-only, with the exposure tooling ([its README](scripts/exposure/README.md):

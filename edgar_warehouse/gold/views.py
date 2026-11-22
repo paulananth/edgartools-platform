@@ -64,7 +64,7 @@ def silver_facts(config: dict) -> list[dict]:
     rule = config.get("silver_facts")
     if not rule:
         return []
-    exposure = files.load(files.ROOT / rule["exposure"])
+    exposure = files.load(files.ROOT.parent / "destination" / rule["exposure"])
     dimensions = {item["master_kind"]: item["name"] for item in config["objects"] if item["kind"] == "dimension"}
     taken = {item.get("source") for item in config["objects"]}
     facts = []

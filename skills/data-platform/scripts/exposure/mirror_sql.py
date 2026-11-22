@@ -1,7 +1,7 @@
 """The SQL that creates, changes, checks and retires the managed mirror. It prints text and connects to nothing.
 
 The tables are the ones sources/managed-mirror.yaml lists, the system of record for the mirror; each must be on
-rules/exposure.yaml, whose layers give the PostgreSQL schemas. The mirror's name, database, refresh interval and table
+destination/authorised_data_sharing.yaml, whose layers give the PostgreSQL schemas. The mirror's name, database, refresh interval and table
 format come from the same record, the target database from rules/snowflake.yaml, and the call is the mirror skill's SETUP
 step 5 with Snowflake-managed storage. Run the output as the mirror operator, after the skill's read-only pre-flight and
 the operator's approval:
@@ -119,7 +119,7 @@ def main(argv: list[str] | None = None) -> str:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("action", choices=["plan", "create", "alter", "verify", "check", "retire", "release"])
     parser.add_argument("--managed", type=Path, default=SOURCES / "managed-mirror.yaml", help="the managed mirror record")
-    parser.add_argument("--exposure", type=Path, default=RULES / "exposure.yaml", help="the exposure list that bounds the record")
+    parser.add_argument("--exposure", type=Path, default=SOURCES.parent / "destination" / "authorised_data_sharing.yaml", help="the exposure list that bounds the record")
     parser.add_argument("--names", type=Path, default=RULES / "snowflake.yaml", help="the file naming the mirror database")
     parser.add_argument("--publication-limit", type=int, help="snowflake_cdc.max_publications, read from the instance (plan)")
     parser.add_argument("--publications-held", type=int, help="the publications the instance already holds (plan)")

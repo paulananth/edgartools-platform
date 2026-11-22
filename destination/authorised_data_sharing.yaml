@@ -18,7 +18,7 @@ approval:
 # SINGLE-DATABASE-ICEBERG.md). It is not built yet, so every Snowflake identity is planned, not read back.
 # Which of these tables the managed mirror carries is sources/managed-mirror.yaml, the system of record for the mirror.
 target:
-  names: snowflake.yaml       # the file beside this one that holds the mirror's database name (`mirror.database`)
+  names: ../rules/snowflake.yaml       # the rules file that holds the mirror's database name (`mirror.database`)
   verified: false
 
 # Each layer: the store's connection setting (its name, never its value), its PostgreSQL schema, the

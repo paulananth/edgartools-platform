@@ -32,7 +32,7 @@ requirements:
 # Every silver table on the exposure list gets a fact view made from its spec (data-modeling GOLD.md, "No silver table
 # is silver-only"); an object below that reads the table as its source replaces the generated one.
 silver_facts:
-  exposure: exposure.yaml
+  exposure: authorised_data_sharing.yaml
   requirement: silver_spec
 
 # RDM publishes one view per code set (data-modeling GOLD.md, "RDM publishes one view per code set"): each folder of

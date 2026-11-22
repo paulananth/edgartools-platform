@@ -54,7 +54,7 @@ these three stores. Apply that standing authorization on subsequent syncs.
 Keep generated concepts as proposals until reviewed.
 
 Use one SELECT-only source login for the stores, holding CONNECT on each store's database and SELECT on exactly the exposure list's tables of
-that store (`rules/exposure.yaml`), granted table by table; each store's URL in `reader.env` names that login and its own database. Never a schema-wide or future-table grant, since a draft or control table in the same
+that store (`destination/authorised_data_sharing.yaml`), granted table by table; each store's URL in `reader.env` names that login and its own database. Never a schema-wide or future-table grant, since a draft or control table in the same
 schema would then be readable. The provisioning command proves the effective grants against the list (an extension's own views, such as
 the statement statistics, are not counted). A reader file left by an earlier deployment that names another instance is set aside, kept,
 not adopted. A missing reader is provisioned by

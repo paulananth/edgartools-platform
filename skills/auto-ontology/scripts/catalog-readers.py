@@ -3,7 +3,7 @@
 
 Run with uv run --no-project --with 'psycopg[binary]' --with pyyaml python.
 
-A reader holds SELECT on exactly the tables of the exposure list (rules/exposure.yaml) and nothing else: no schema-wide or future-table
+A reader holds SELECT on exactly the tables of the exposure list (destination/authorised_data_sharing.yaml) and nothing else: no schema-wide or future-table
 grant, so a table that is not on the list, such as a draft or a control table, is unreadable to it.
 """
 
@@ -68,7 +68,7 @@ def pg_url(value):
     return urlunsplit(("postgresql", parsed.netloc, parsed.path, parsed.query, ""))
 
 
-EXPOSURE = Path(__file__).resolve().parents[3] / "rules" / "exposure.yaml"
+EXPOSURE = Path(__file__).resolve().parents[3] / "destination" / "authorised_data_sharing.yaml"
 
 
 def exposed(path, layer):

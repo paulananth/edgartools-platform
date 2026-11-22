@@ -151,7 +151,7 @@ def test_each_object_is_one_dbt_view_that_reads_the_mirror_through_source_and_go
 
 def test_the_dbt_sources_name_the_mirror_database_and_only_the_tables_the_views_read():
     found = {s["name"]: (s["database"], s["schema"], [t["name"] for t in s["tables"]]) for s in views.sources()["sources"]}
-    exposed = sorted(t["table"] for t in files.load(files.ROOT / "exposure.yaml")["tables"] if t["layer"] == "silver")
+    exposed = sorted(t["table"] for t in files.load(files.ROOT.parent / "destination" / "authorised_data_sharing.yaml")["tables"] if t["layer"] == "silver")
     assert found["silver"] == (MIRROR, "SILVER", exposed)   # every exposed silver table has its fact
     assert found["mdm"] == (MIRROR, "MDM", ["mastering_identifier", "mastering_master"])
 
@@ -169,7 +169,7 @@ def test_each_database_is_named_once_and_the_committed_dbt_profile_follows_it():
     config = views.load()
     assert config["mirror"]["database"] == MIRROR
     assert "database" not in files.load(views.CONFIG)["mirror"] and "destination" not in files.load(views.CONFIG)
-    assert "database" not in files.load(files.ROOT / "exposure.yaml")["target"]
+    assert "database" not in files.load(files.ROOT.parent / "destination" / "authorised_data_sharing.yaml")["target"]
     committed = (files.ROOT.parent / "infra" / "dbt" / "gold" / "profiles.yml").read_text()
     assert views.profile(committed) == committed
     assert f"database: {DEST}" in committed
@@ -181,7 +181,7 @@ def test_the_exposure_scripts_take_the_mirror_name_from_the_same_file():
     import sys
     sys.path.insert(0, str(files.ROOT.parent / "skills" / "data-platform" / "scripts" / "exposure"))
     import exposure_manifest
-    assert exposure_manifest.load_config(files.ROOT / "exposure.yaml")["target"]["database"] == MIRROR
+    assert exposure_manifest.load_config(files.ROOT.parent / "destination" / "authorised_data_sharing.yaml")["target"]["database"] == MIRROR
 
 
 def test_the_one_names_file_also_names_the_owner_role():
@@ -191,7 +191,7 @@ def test_the_one_names_file_also_names_the_owner_role():
 def test_each_exposed_silver_table_gets_a_fact_made_from_its_spec_and_an_explicit_object_wins():
     config = views.load()
     facts = {item["source"]: item for item in config["objects"] if item["kind"] == "fact"}
-    exposed = {f"silver.{t['table']}" for t in files.load(files.ROOT / "exposure.yaml")["tables"] if t["layer"] == "silver"}
+    exposed = {f"silver.{t['table']}" for t in files.load(files.ROOT.parent / "destination" / "authorised_data_sharing.yaml")["tables"] if t["layer"] == "silver"}
     assert exposed <= set(facts)
     nport = facts["silver.nport_holding"]
     assert nport["key"] == ["accession_number", "holding_id"] and nport["requirement"] == "silver_spec"

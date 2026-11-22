@@ -16,7 +16,7 @@ Publishing the same manifest again changes no entity's version: that is what ide
 `verify` reads it back.
 
     uv run --no-project --with pyyaml python exposure_publish.py --manifest <manifest.json> \\
-        --config rules/exposure.yaml [--root .] --service <name> [--check]
+        --config destination/authorised_data_sharing.yaml [--root .] --service <name> [--check]
 
 It reads `OPENMETADATA_URL` and `OPENMETADATA_TOKEN` from the environment (a private file, never an argument).
 """

@@ -7,7 +7,7 @@ from unittest.mock import Mock
 import pytest
 
 
-EXPOSURE_FILE = Path(__file__).parents[2] / "rules" / "exposure.yaml"
+EXPOSURE_FILE = Path(__file__).parents[2] / "destination" / "authorised_data_sharing.yaml"
 
 
 @pytest.fixture
