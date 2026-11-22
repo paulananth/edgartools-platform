@@ -24,7 +24,7 @@ duplicate check and staging table are the same work done a second time (Over-pro
 ## What silver still has to do, and what is open
 
 - [ ] Apply by key, idempotently, in batches: insert a missing key, update a changed one, leave an equal one (a retry lands the same rows again with no change). Append tables refuse a changed row.
-- [ ] Where the duplicate-key refusal now lives: in source processing. Read what `source.read` already guarantees before dropping silver's check, and prove it with a test at the reading.
+- [ ] Where the duplicate-key refusal now lives: in source processing. Finding (read 2026-11-22): a Source Extract does not guarantee it. The source-contract engine rejects duplicate JSON keys and header names, not a table's silver key; the source-contract spec (section 13.1) only *proposes* a validator that an adapter's record key columns are unique, and `source.combine` groups and joins by declared key without a uniqueness check. Silver's check is today the only one, so it stays until source processing refuses a repeated key (a declared check in the contract or in `source.combine`), proved by a test at the source extract.
 - [ ] Snapshot tables (three of the registered specs): who removes a row the final list no longer holds. Recommendation: source processing hands the removal with the list, since it holds the previous final list; silver deletes by key.
 
 ## Checklist
