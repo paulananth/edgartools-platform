@@ -9,7 +9,10 @@ staffing, deployment or a new approval hierarchy. The lifecycle and skills
 coverage are explained in the repository README.
 
 Skill availability follows the maintained [role map](../../../skills/README.md#lifecycle-role-map)
-at `a3d2a6173dc96d60875b8d20a0773bb4f76c0645`; the candidate pins that evidence.
+at `369b09f3ff4054a5dc02a61b1d1f8556c382939d`; the candidate pins that evidence.
+The Data Engineer branch contains MDM Engineering, which contains the refining
+rules subworkflow. These two nested entries describe skill ownership, not
+additional employee reporting lines.
 The chart includes both available guides and explicit gaps. No job-listing
 statistics or claims of production AI/ML readiness are implied.
 
