@@ -257,20 +257,16 @@ critical path (`load_chain.py --status` shows each step's progress and `chain-<R
 
 ## Mirror the final tables
 
-After the load (and `--finish`), the Snowflake mirrors of the final tables are created from the repository's exposure list
-(`destination/authorised_data_sharing.yaml`), for those tables only. One mirror reads one source database, so there is one for each store that has listed
-tables: MDM, Silver and RDM (`rdm.published_code`), each with its own target database. The procedure, its read-only checks and its approvals
-(one create plan per mirror) are
+After the load (and `--finish`), one Snowflake mirror of the data database carries the final tables: the tables named in `sources/managed-mirror.yaml`, each of
+which `destination/authorised_data_sharing.yaml` lets leave the stores. Its schemas are `MDM`, `RDM` and `SILVER` (the source schema's name in upper case), and
+its target database is `mirror.database` in `rules/snowflake.yaml`. The procedure, its read-only checks and its approval (one create plan) are
 [the data-platform skill's hosted mirroring guide](../../../skills/data-platform/HOSTED-MIRRORING.md#after-the-first-load-mirror-only-the-exposed-subset).
-Done when each mirror lists exactly its configured tables, each replicating, with none missing or unexpected.
+Done when the mirror lists exactly its recorded tables, each replicating, with none missing or unexpected.
 
-The mirrors are rebuilt as a step of every load, after `--finish`, in this order: (1) `exposure_manifest.py generate`, then `check` (read-only: 19 tables
-today, 16 silver, 2 mdm, 1 rdm); (2) the guide's read-only pre-flight on each store (instance `STANDARD_*` or `HIGHMEM_*`, target database absent, a key and a
-supported type on every column); (3) one create plan for the three mirrors, approved by the operator before any `CREATE_MIRROR` (billable). The plan the operator
-approved on 2026-11-19: targets `DB_EDGARTOOLS_MIRROR_MDM`, `DB_EDGARTOOLS_MIRROR_SILVER` and `DB_EDGARTOOLS_MIRROR_RDM`, Iceberg on Snowflake-managed storage,
-serverless apply, a refresh every 10 minutes, created after the load ends so the first snapshot copies the loaded rows once (created while the tables were empty
-would also work and replicate as the load runs). A target name cannot be reused, so a mirror that is dropped and made again takes a new name (add a suffix).
-The reset of 2026-11-19 found no mirror in the account, so none had to be dropped first.
+The mirror is made, in this order, after `--finish`: (1) `exposure_manifest.py generate`, then `check` (read-only); (2) the guide's read-only pre-flight on the data
+database (instance `STANDARD_*` or `HIGHMEM_*`, a key and a supported type on every column) and `mirror_sql.py exists`, which must show the target absent before a
+create; (3) `mirror_sql.py plan`, approved by the operator before any `CREATE_MIRROR` (billable), then `mirror_sql.py create`. The target is Iceberg on
+Snowflake-managed storage with serverless apply. A target name cannot be reused, so a mirror that is dropped and made again takes a new name.
 
 The Snowflake database names are in `rules/snowflake.yaml`, nowhere else. A target database cannot be renamed, and while its mirror replicates the Snowflake application owns it (the owner role can own it only after `DROP_MIRROR(<mirror>, FALSE)`, [HOSTED-MIRRORING](../../../skills/data-platform/HOSTED-MIRRORING.md)), so a new
 name means a new mirror: create it beside the old one, wait until every table reads `REPLICATING` with equal counts, change the name in
