@@ -253,3 +253,39 @@ resource "snowflake_execute" "mirror_operator_owns_instance" {
   revert     = "GRANT OWNERSHIP ON POSTGRES INSTANCE ${var.postgres_instance} TO ROLE ACCOUNTADMIN COPY CURRENT GRANTS"
   depends_on = [snowflake_grant_account_role.mirror_operator_to_admin]
 }
+
+# --- Policy reader for the audit -------------------------------------------------------------------------------------------
+# A role can DESCRIBE a policy only with a privilege on it, and the one that allows that (APPLY) also lets it attach the policy.
+# So the audit reads through this owner's-rights procedure, which returns the policies' properties and changes nothing; the
+# auditor holds USAGE on the procedure only. Same JSON shape for any platform's reader: {"password": [...], "authentication": [...]}.
+resource "snowflake_procedure_javascript" "audit_credential_policies" {
+  database            = local.gold_database
+  schema              = "CONTROL"
+  name                = "AUDIT_CREDENTIAL_POLICIES"
+  execute_as          = "OWNER"
+  return_type         = "VARCHAR"
+  procedure_definition = <<-JS
+    const out = {password: [], authentication: []};
+    for (const kind of ["password", "authentication"]) {
+      const listed = snowflake.execute({sqlText: "show " + kind + " policies in account"});
+      const rows = [];
+      while (listed.next()) rows.push({db: listed.getColumnValue("database_name"), sc: listed.getColumnValue("schema_name"), name: listed.getColumnValue("name")});
+      for (const r of rows) {
+        const d = snowflake.execute({sqlText: "describe " + kind + " policy \"" + r.db + "\".\"" + r.sc + "\".\"" + r.name + "\""});
+        const properties = {};
+        while (d.next()) properties[String(d.getColumnValue("property")).toLowerCase()] = String(d.getColumnValue("value"));
+        out[kind].push({database_name: r.db, schema_name: r.sc, name: r.name, properties: properties});
+      }
+    }
+    return JSON.stringify(out);
+  JS
+}
+
+resource "snowflake_grant_privileges_to_account_role" "auditor_policy_reader" {
+  account_role_name = snowflake_account_role.auditor.name
+  privileges        = ["USAGE"]
+  on_schema_object {
+    object_type = "PROCEDURE"
+    object_name = "${local.gold_database}.CONTROL.AUDIT_CREDENTIAL_POLICIES()"
+  }
+}

@@ -23,5 +23,5 @@ Parts marked "approval" or "words" wait for the operator's own words before they
 - [ ] Hosted RDM still holds the six old code-set versions: its own command or ticket (ticket 07's deferred part)
 - [ ] Follow-up ticket: master ids and links as joins inside the data database
 - [x] Credential policies: created both in `EDGARTOOLS_GOLD.POLICIES` from `rules/snowflake_policy.yaml`, attached (password policy to the account, keypair-only to the 4 service users; live `POLICY_REFERENCES` read), `EDGARTOOLS_GOVERNANCE` dropped as the administrator on the operator's words 2026-11-22 ("use ananp11 to drop the governance", option "move, then drop") 2026-11-22 12:12 ET. Done by SQL, not the access Terraform root (no access-admin identity yet): the next access apply imports the schema, two policies and attachments first
-- [ ] Re-run the audit on `snowflake`: POL passes once the policies sit in the Gold database and equal the file (not run yet: the audit script needs `uv sync` for `edgar_warehouse`)
+- [x] Re-run the audit on `snowflake`: POL PASS, live read through the policy reader procedure (ticket access-audit 02) 2026-11-22 12:34 ET
 - [ ] Learning → skill: name the skill line this ticket changed, or "none"

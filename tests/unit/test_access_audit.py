@@ -270,3 +270,41 @@ def test_a_changed_value_a_missing_policy_and_a_policy_in_another_database_are_e
     assert any("authentication" in d and "missing" in d for d in snowflake.policy_drift(EXPECTED_POLICIES, {**FOUND_POLICIES, "authentication": []}))
     elsewhere = {**FOUND_POLICIES, "password": [{**FOUND_POLICIES["password"][0], "database_name": "UNAPPROVED"}]}
     assert any("UNAPPROVED" in d for d in snowflake.policy_drift(EXPECTED_POLICIES, elsewhere))
+
+
+def test_the_snowflake_audit_needs_no_variable_and_reads_through_the_auditor_connection(monkeypatch):
+    seen = []
+    monkeypatch.setattr(snowflake, "snow", lambda connection, sql, soft=False: seen.append(connection) or [{"ROLE": "ACCOUNTADMIN"}])
+    monkeypatch.setattr(snowflake, "connections", lambda: {"edgartools-audit"})
+    assert snowflake.configured({}) is True
+    monkeypatch.setattr(snowflake, "connections", lambda: set())
+    assert snowflake.configured({}) is False  # a machine without the connection skips Snowflake, it does not end the audit
+    with pytest.raises(SystemExit, match="administrator role"):
+        snowflake.collect({}, as_admin=False)
+    assert seen[0] == "edgartools-audit"
+    ev = snowflake_clean()
+    ev["password_policies"], ev["authentication_policies"] = None, None
+    assert [r for r in snowflake.controls(ev) if r["id"] == "POL.snowflake"][0]["result"] == "NOT_TESTED"
+
+
+def test_policies_are_read_through_the_administrators_procedure_not_a_privilege_on_them(monkeypatch):
+    calls = []
+
+    def fake(connection, sql, soft=False):
+        calls.append(sql)
+        return [{"AUDIT_CREDENTIAL_POLICIES": json.dumps(FOUND_POLICIES)}]
+
+    monkeypatch.setattr(snowflake, "snow", fake)
+    assert snowflake.found_policies("c", "INVENTED_GOLD") == FOUND_POLICIES
+    assert calls == ["call INVENTED_GOLD.control.audit_credential_policies()"]
+    monkeypatch.setattr(snowflake, "snow", lambda connection, sql, soft=False: None)
+    assert snowflake.found_policies("c", "INVENTED_GOLD") is None
+
+
+def test_a_machine_without_snowcli_skips_snowflake_instead_of_failing(monkeypatch):
+    def missing(*args, **kwargs):
+        raise FileNotFoundError("snow")
+
+    monkeypatch.setattr(snowflake.subprocess, "run", missing)
+    assert snowflake.connections() == set()
+    assert snowflake.configured({}) is False

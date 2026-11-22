@@ -50,7 +50,7 @@ own access records is no request to a data provider.
 
 | Platform | Set | Evidence | The read-only identity holds |
 |---|---|---|---|
-| Snowflake | `AUDIT_SNOWFLAKE_CONNECTION`: the SnowCLI connection of the auditor role | `ACCOUNT_USAGE` views, `SHOW` of parameters, warehouses and monitors | the security, usage and governance viewer database roles and `MONITOR USAGE ON ACCOUNT` |
+| Snowflake | none to set: the `edgartools-audit` SnowCLI connection of the auditor role (`AUDIT_SNOWFLAKE_CONNECTION` overrides it) | `ACCOUNT_USAGE` views, `SHOW` of parameters, warehouses and monitors | the security, usage and governance viewer database roles and `MONITOR USAGE ON ACCOUNT` |
 | PostgreSQL | the stores folder's `reader.env` (a hosted store's is `~/.config/edgartools/hosted/`), sourced | catalogs and settings | the diagnostic login (`pg_monitor`) |
 | AWS | `AUDIT_AWS_PROFILE`: a read-only audit profile; an ambient `AWS_PROFILE` or `AWS_ACCESS_KEY_ID` also counts as set | IAM account summary and credential report, CloudTrail, S3 public-access block, budgets | the `SecurityAudit` managed policy (plus `iam:GenerateCredentialReport`) |
 | GitHub | `AUDIT_GITHUB_REPO`: `owner/name`, read with the `gh` CLI | branch protection, secret scanning, the caller's permission | a token with read access to the repository |
@@ -121,7 +121,14 @@ Add `audit_platforms/<name>.py` with `NAME`, `configured(env)`, `collect(env, as
 refuse an administrator identity), `principals(evidence)` (the roles and users to check for a change record) and
 `controls(evidence)` returning `base.control(NAME, objective, ok, evidence, fix, tested=...)` for each objective it can
 test; list it in `PLATFORMS` in `access_audit.py`, then add its clean case and one weakness per objective to
-`tests/unit/test_access_audit.py`. Databricks, OpenMetadata and any further cloud follow this contract. The code and its tests
+`tests/unit/test_access_audit.py`. Databricks, OpenMetadata and any further cloud follow this contract.
+
+**Credential-policy values.** Where a platform keeps a policy a role cannot read without a privilege that could also change it
+(Snowflake's `APPLY`), the platform's administrator owns a read-only reader that returns the policies as
+`{"password": [...], "authentication": [...]}` (each `{database_name, schema_name, name, properties}`), and the auditor holds
+use of that reader only. Snowflake's is the procedure `AUDIT_CREDENTIAL_POLICIES` in the Gold database's `CONTROL` schema
+(`infra/terraform/access/snowflake`). A new platform returns the same shape from its own reader; `policy_drift` compares it
+with the policy file, whatever the vendor. The code and its tests
 follow `CLAUDE.md`'s "Code review" and test-writing rules.
 
 ## Decisions, artifacts and handoffs

@@ -19,8 +19,25 @@ PROTECTED_USERS = {"ANANP11"}
 FORBIDDEN_CONNECTIONS = {"edgartools-prod", "snowconn"}
 
 
+DEFAULT_CONNECTION = "edgartools-audit"  # the read-only auditor's own connection: the audit needs no variable to run
+
+
+def connection_of(env) -> str:
+    return env.get("AUDIT_SNOWFLAKE_CONNECTION") or DEFAULT_CONNECTION
+
+
+def connections() -> set[str]:
+    """The SnowCLI connection names on this machine (names only)."""
+    try:
+        done = subprocess.run(["snow", "connection", "list", "--format", "json"], capture_output=True, text=True, check=False)
+        return {row["connection_name"] for row in json.loads(done.stdout or "[]")}
+    except (OSError, ValueError, KeyError, TypeError):  # no SnowCLI on this machine, or an unreadable list
+        return set()
+
+
 def configured(env) -> bool:
-    return bool(env.get("AUDIT_SNOWFLAKE_CONNECTION"))
+    """Audited whenever its connection exists: the default auditor connection needs no variable, and a machine without it skips Snowflake instead of ending the whole audit."""
+    return connection_of(env) in connections()
 
 
 def snow(connection: str, sql: str, soft: bool = False):
@@ -28,7 +45,7 @@ def snow(connection: str, sql: str, soft: bool = False):
     if done.returncode:  # its message can quote the account
         if soft:
             return None  # a view the role cannot read: the control is then not tested, never passed
-        sys.exit("a Snowflake read failed (check AUDIT_SNOWFLAKE_CONNECTION and its role)")
+        sys.exit("a Snowflake read failed (check the auditor connection and its role)")
     return json.loads(done.stdout or "[]")
 
 
@@ -47,22 +64,11 @@ def expected_policies() -> dict:
     return {**policy, "location": {"database": names[where["database_of"]]["database"], "schema": where["schema"]}}
 
 
-def found_policies(connection: str):
-    """The live password and authentication policies of the account, each with its properties; None when they cannot be read."""
-    found = {}
-    for kind in ("password", "authentication"):
-        listed = snow(connection, f"show {kind} policies in account", soft=True)
-        if listed is None:
-            return None
-        found[kind] = []
-        for row in lower(listed):
-            full = ".".join(f'"{row[k]}"' for k in ("database_name", "schema_name", "name"))
-            described = snow(connection, f"describe {kind} policy {full}", soft=True)
-            if described is None:
-                return None
-            found[kind].append({**{k: row[k] for k in ("database_name", "schema_name", "name")},
-                                "properties": {r["property"].lower(): str(r["value"]) for r in lower(described)}})
-    return found
+def found_policies(connection: str, database: str):
+    """The live password and authentication policies with their properties, read through the administrator's read-only procedure
+    (the auditor holds no privilege on a policy: the only one that reads it also lets a role attach it); None when unreadable."""
+    rows = snow(connection, f"call {database}.control.audit_credential_policies()", soft=True)
+    return json.loads(next(iter(rows[0].values()))) if rows else None
 
 
 def policy_drift(expected: dict, found: dict | None) -> list[str]:
@@ -91,12 +97,14 @@ def policy_drift(expected: dict, found: dict | None) -> list[str]:
 
 
 def collect(env, as_admin: bool = False) -> dict:
-    connection = env["AUDIT_SNOWFLAKE_CONNECTION"]
+    connection = connection_of(env)
     if connection in FORBIDDEN_CONNECTIONS:
         sys.exit("that connection signs in as the operator's overall administrator account, which the audit never uses: use the auditor connection")
     role = snow(connection, "select current_role() as role")[0]["ROLE"].upper()
     if role in ADMIN and not as_admin:
         sys.exit("the Snowflake connection runs as an administrator role: use the read-only auditor role, or pass --as-admin to record the gap")
+    expected = expected_policies()
+    policies = found_policies(connection, expected["location"]["database"])
     risky = ", ".join(f"'{p}'" for p in RISKY)
     return {
         "audit_role": role,
@@ -107,10 +115,9 @@ def collect(env, as_admin: bool = False) -> dict:
         "monitors": len(snow(connection, "show resource monitors")),
         "warehouses": lower(snow(connection, "show warehouses")),
         "statement_timeout": int(next(r["value"] for r in lower(snow(connection, "show parameters like 'STATEMENT_TIMEOUT_IN_SECONDS' in account")))),
-        "policy_drift": policy_drift(expected_policies(), found_policies(connection)),
-        "password_policies": len(snow(connection, f"select name from {USAGE}.password_policies where deleted is null")),
-        "authentication_policies": (lambda rows: None if rows is None else len(rows))(
-            snow(connection, f"select name from {USAGE}.authentication_policies where deleted is null", soft=True)),
+        "policy_drift": policy_drift(expected, policies),
+        "password_policies": len(policies["password"]) if policies else None,  # read from the live reader: the usage views lag by hours
+        "authentication_policies": len(policies["authentication"]) if policies else None,
         "risky_grants": lower(snow(connection, f"select grantee_name, privilege from {USAGE}.grants_to_roles where deleted_on is null and granted_on in "
                                    f"('ACCOUNT', 'ROLE', 'WAREHOUSE', 'DATABASE') and privilege in ({risky}) and grantee_name not in "
                                    "('ACCOUNTADMIN', 'SECURITYADMIN', 'SYSADMIN', 'USERADMIN', 'ORGADMIN')")),
@@ -150,7 +157,7 @@ def controls(ev: dict) -> list[dict]:
           "Set an account network policy; add one per service user"),
         c("CST", not ungoverned, {"warehouses_without_monitor": len(ungoverned), "monitors": ev["monitors"]}, "Create a resource monitor with a credit quota"),
         c("TMO", ev["statement_timeout"] <= MAX_TIMEOUT, {"statement_timeout_s": ev["statement_timeout"]}, "Set a timeout on the account or on each service user"),
-        c("POL", ev["password_policies"] > 0 and (ev["authentication_policies"] or 0) > 0 and not ev.get("policy_drift"),
+        c("POL", (ev["password_policies"] or 0) > 0 and (ev["authentication_policies"] or 0) > 0 and not ev.get("policy_drift"),
           {"password_policies": ev["password_policies"], "authentication_policies": ev["authentication_policies"], "drift_from_snowflake_policy_yaml": ev.get("policy_drift")},
           "Apply the access Terraform root from rules/snowflake_policy.yaml (policies live in the Gold database's POLICIES schema, no other database)",
           tested=ev["authentication_policies"] is not None),
