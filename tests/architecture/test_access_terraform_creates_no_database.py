@@ -14,3 +14,10 @@ def test_the_access_root_declares_no_database():
 def test_the_policies_are_read_from_the_policy_file_not_written_in_terraform():
     text = (ACCESS / "accounts" / "prod" / "main.tf").read_text()
     assert "rules/snowflake_policy.yaml" in text and "min_length           = 14" not in text
+
+
+def test_the_owner_role_and_the_gold_database_ownership_are_declared_from_the_names_file():
+    text = (ACCESS / "accounts" / "prod" / "main.tf").read_text()
+    assert 'resource "snowflake_account_role" "owner"' in text and "local.names.owner" in text
+    assert 'resource "snowflake_grant_ownership" "gold_database"' in text
+    assert 'resource "snowflake_database"' not in text
