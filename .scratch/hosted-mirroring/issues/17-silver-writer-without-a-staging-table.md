@@ -38,14 +38,16 @@ a later delivery of the same row, which the per-key apply already leaves unchang
 
 ## Checklist
 
-- [ ] Spec first: `docs/specs/source-contract/spec.md` section 8.4 gains `key` on a table and the refusal; the section 13.1 proposal becomes the rule
-- [ ] Test first at the source extract: a table with a repeated key is refused (names the table and columns, no value); a table with distinct keys passes
-- [ ] The engine enforces it (the Rust crate and its Python caller), by the cheapest proof for a large extract (sorted keys, not an in-memory set of every row)
+- [x] Spec: `docs/specs/source-contract/spec.md` section 8.4 gains `key` on a table and the `repeated_key` refusal; section 13.1's proposed validator now points to it 2026-11-22 17:29 ET
+- [x] Test first at the source extract: `crates/source-contract/tests/table_key.rs` failed (a repeated key was read; a key naming an unknown column was accepted), passes now; the crate's 237 tests pass 2026-11-22 17:29 ET
+- [x] The engine enforces it: `check_key` after a table's rows are built, a table-level rule like `record_count` (GoF consult: not a per-record check, which sees one row); the set holds one key per kept row of one source extract, which the engine already holds in memory and bounds by `max_records` 2026-11-22 17:29 ET
+- [ ] The Python side: rebuild the engine wheel and run the Python tests that load contracts
 - [ ] The catalog check: a declared contract key must equal the registered silver spec's key
 - [ ] Every source in `sources/` declares its tables' keys; the sources already holding repeated keys are listed and fixed in their own parts
 
 
-- [ ] Consult `/gof-refactor-reviewer` on `relational.py` before code (more than ten lines)
+- [x] Consult `/gof-refactor-reviewer` (haiku) on the engine's key check: its own `key` field checked after the row loop, following `record_count` 2026-11-22 17:29 ET
+- [ ] Consult `/gof-refactor-reviewer` on `relational.py` before the silver writer change
 - [ ] Failing test first, at the public `write`: a PostgreSQL delivery on a role that holds no `TEMPORARY` privilege succeeds, and a duplicate key still refuses
 - [ ] One batched upsert path for every load mode; MySQL's shared staging table is handled in the same change or kept as its own deferred part
 - [ ] Storage-adapter tests on PostgreSQL and MySQL (`bash scripts/dev/adapter_test.sh`)

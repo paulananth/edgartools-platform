@@ -348,6 +348,7 @@ impl Engine {
                 }
                 rows.push(record.values);
             }
+            check_key(&name, table, rows)?;
         }
         Ok(reading)
     }
@@ -500,6 +501,21 @@ fn uses_python_text(read: &Value) -> bool {
     uses_feature(read, |expr| ["text", "date"].iter().any(|name| expr.get(*name).is_some_and(|args| setting(args, "coerce") == Some("python"))))
 }
 
+/// A table that declares a key holds each key once in one source extract. The refusal names the table and the key
+/// columns, never a value. Only kept rows count: a row its checks set aside is not in the table.
+fn check_key(name: &str, table: &Value, rows: &[Row]) -> Result<(), Rejected> {
+    let Some(columns) = table.get("key").and_then(Value::as_sequence) else { return Ok(()) };
+    let columns: Vec<&str> = columns.iter().filter_map(Value::as_str).collect();
+    let mut seen = std::collections::HashSet::with_capacity(rows.len());
+    for row in rows {
+        let key: Vec<String> = columns.iter().map(|c| format!("{:?}", row.get(*c))).collect();
+        if !seen.insert(key) {
+            return Err(Rejected::new("repeated_key", format!("{name}: key [{}] repeats", columns.join(", "))));
+        }
+    }
+    Ok(())
+}
+
 fn validate_coerce(args: &Value) -> Result<(), String> {
     if args.get("coerce").is_some_and(|value| !matches!(value.as_str(), Some("scalar" | "python"))) {
         return Err("coerce is scalar or python".into());
@@ -622,6 +638,14 @@ fn validate(read: &Value, steps: &Steps) -> Result<(), String> {
             validate_expr(expr, steps)?;
         }
         let known = |column: &str| columns.contains_key(Value::String(column.into()));
+        if let Some(key) = table.get("key") {
+            let parts = key.as_sequence().ok_or(format!("{name}: key is a list of columns"))?;
+            if parts.is_empty() { return Err(format!("{name}: key names no column")); }
+            for part in parts {
+                let column = part.as_str().ok_or(format!("{name}: key is a list of columns"))?;
+                if !known(column) { return Err(format!("{name}: key names unknown column {column}")); }
+            }
+        }
         for check in table.get("checks").and_then(Value::as_sequence).into_iter().flatten() {
             let kind = setting(check, "check").ok_or("a check has no check")?;
             if !CHECKS.contains(&kind) {
