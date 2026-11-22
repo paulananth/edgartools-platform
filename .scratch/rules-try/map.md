@@ -22,6 +22,7 @@ A person hand-writes one rule, supplies the input and the expected output, and t
 - Source priority chooses a field value. It does not decide that two masters are the same subject.
 - Ticket 01 opens the try page. A family is the file `bench_families/<name>.py`. Store this draft refuses until its own ticket.
 - Ticket 02: Keep a copy writes the case JSON to the path the person names. No path is not confirmed and is not written. A path under `rules/` is refused. Store this draft still refuses.
+- Ticket 03: Store this draft calls `Rules.save` under the `version` in the pasted rule and keeps the case beside that draft. A rule with no version is not stored. The draft is not switched on.
 
 ## Not yet specified
 

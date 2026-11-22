@@ -13,7 +13,7 @@ import re
 from datetime import UTC, datetime
 
 from sqlalchemy import BigInteger, Column, MetaData, String, Table, Text, select
-from sqlalchemy.dialects.mysql import LONGTEXT
+from sqlalchemy.dialects.mysql import LONGTEXT, VARCHAR
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
 
@@ -21,6 +21,7 @@ from edgar_warehouse.bookkeeping.clean.config import Blocked, canonical, digest
 from edgar_warehouse.database_types import UTCDateTime
 
 TABLE = "rules_used"
+DRAFT = "draft"
 
 
 def get_engine(url=None):
@@ -34,7 +35,8 @@ def get_engine(url=None):
 def tables(dialect: str) -> dict[str, Table]:
     """`rules_used`: a document's kind, name and digest, its body, and when a run first used it. `policy`: each
     registered Mastering Policy under its digest. `dataset_reading`: each reading of a Dataset Contract, numbered
-    from 1 per source code, with the frozen rules version it was registered from."""
+    from 1 per source code, with the frozen rules version it was registered from. `draft`: one immutable draft
+    under the version label the person typed, with the case kept beside it. A draft is not switched on."""
     body = Text().with_variant(LONGTEXT(charset="utf8mb4", collation="utf8mb4_0900_bin"), "mysql")
     metadata = MetaData(schema="rules" if dialect == "postgresql" else None)
     return {
@@ -49,6 +51,15 @@ def tables(dialect: str) -> dict[str, Table]:
                                  Column("registry_version", String(36), nullable=False),
                                  Column("body", body, nullable=False),
                                  Column("registered_at", UTCDateTime(), nullable=False)),
+        DRAFT: Table(DRAFT, metadata,
+                     Column("kind", _exact(16), primary_key=True),
+                     Column("name", _exact(128), primary_key=True),
+                     Column("version", _exact(128), primary_key=True),
+                     Column("digest", String(64), nullable=False),
+                     Column("body", body, nullable=False),
+                     Column("case_body", body, nullable=False),
+                     Column("status", String(16), nullable=False),
+                     Column("saved_at", UTCDateTime(), nullable=False)),
     }
 
 
@@ -56,10 +67,15 @@ def table(dialect: str) -> Table:
     return tables(dialect)[TABLE]
 
 
+def _exact(size: int):
+    """A label is compared exactly. MySQL's default collation folds case and accents."""
+    return String(size).with_variant(VARCHAR(size, charset="utf8mb4", collation="utf8mb4_0900_bin"), "mysql")
+
+
 def migrate(engine, *, agent_role: str | None = None, registrar_role: str | None = None) -> dict:
     """Create the tables (rerunning changes nothing). On PostgreSQL they sit in the `rules` schema. The agent
-    role, when named, may add to `rules_used` and read the registry, which the workers read; the registrar role,
-    when named, may add to the registry. Nothing may change or delete a row."""
+    role, when named, may add to `rules_used` and to a draft, and read the registry, which the workers read; the
+    registrar role, when named, may add to the registry. Nothing may change or delete a row."""
     made = tables(engine.dialect.name)
     roles = [role for role in (agent_role, registrar_role) if role]
     if any(not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,62}", role) for role in roles):
@@ -70,7 +86,8 @@ def migrate(engine, *, agent_role: str | None = None, registrar_role: str | None
             conn.exec_driver_sql("CREATE SCHEMA IF NOT EXISTS rules")
         for target in made.values():
             target.create(conn, checkfirst=True)
-        grants = [(agent_role, "SELECT, INSERT", [TABLE]), (agent_role, "SELECT", ["policy", "dataset_reading"]),
+        grants = [(agent_role, "SELECT, INSERT", [TABLE, DRAFT]),
+                  (agent_role, "SELECT", ["policy", "dataset_reading"]),
                   (registrar_role, "SELECT, INSERT", ["policy", "dataset_reading"])]
         for role, privileges, names in grants:
             if not role:
@@ -122,3 +139,50 @@ class Rules:
         if row is None:
             raise Blocked("No run recorded these rules")
         return json.loads(row[0])
+
+    def save(self, *, kind: str, name: str, version: str, body: dict, case: dict) -> dict:
+        """Store canonical JSON and its SHA-256 as an immutable draft. The case sits beside that draft.
+        The same body under the same version is left as it is. A different body is refused. Nothing is
+        approved or switched on."""
+        if (not isinstance(kind, str) or not kind or len(kind) > 16
+                or not isinstance(name, str) or not name or len(name) > 128
+                or not isinstance(version, str) or not version.strip() or len(version) > 128
+                or not isinstance(body, dict) or not isinstance(case, dict)):
+            raise Blocked("A draft names its kind, name and version")
+        content = digest(body)
+        target = tables(self.engine.dialect.name)[DRAFT]
+        key = {"kind": kind, "name": name, "version": version}
+        try:
+            with self.engine.begin() as conn:
+                row = _draft_row(conn, target, key)
+                if row is not None:
+                    if row.digest != content:
+                        raise Blocked("This version is already stored")
+                    return {**key, "digest": content, "status": row.status}
+                conn.execute(target.insert().values(
+                    **key, digest=content, body=canonical(body), case_body=canonical(case),
+                    status="draft", saved_at=datetime.now(UTC)))
+        except IntegrityError:
+            with self.engine.connect() as conn:
+                row = _draft_row(conn, target, key)
+            if row is None or row.digest != content:
+                raise Blocked("This version is already stored")
+            return {**key, "digest": content, "status": row.status}
+        return {**key, "digest": content, "status": "draft"}
+
+    def draft(self, kind: str, name: str, version: str) -> dict:
+        """The stored draft and the case beside it."""
+        import json
+
+        target = tables(self.engine.dialect.name)[DRAFT]
+        with self.engine.connect() as conn:
+            row = _draft_row(conn, target, {"kind": kind, "name": name, "version": version})
+        if row is None:
+            raise Blocked("No draft is stored under this version")
+        return {"kind": kind, "name": name, "version": version, "digest": row.digest, "status": row.status,
+                "body": json.loads(row.body), "case": json.loads(row.case_body)}
+
+
+def _draft_row(conn, target, key: dict):
+    return conn.execute(select(target.c.digest, target.c.status, target.c.body, target.c.case_body).where(
+        *(target.c[column] == value for column, value in key.items()))).first()

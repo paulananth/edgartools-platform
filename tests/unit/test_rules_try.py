@@ -1,4 +1,5 @@
-"""The try page shows one family's inputs. Keep a copy writes a confirmed path."""
+"""The try page shows one family's inputs. Keep a copy writes a confirmed path.
+Store this draft keeps a versioned draft."""
 import json
 from pathlib import Path
 
@@ -138,11 +139,56 @@ def test_a_folder_path_is_not_written(tmp_path):
     assert not any(folder.iterdir())
 
 
-def test_store_this_draft_still_refuses(tmp_path):
-    case = build_case("example", "{}", {"document": "12"}, {"a": 1}, {"a": 1})
-    path = tmp_path / "case.json"
-    assert store_draft(case) == {"refused": "Store this draft is not available yet"}
-    assert not path.exists()
+def _rules_engine(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine
+
+    from edgar_warehouse.rules.db import migrate
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'rules.db'}")
+    migrate(engine)
+    monkeypatch.setattr("edgar_warehouse.rules.db.get_engine", lambda url=None: engine)
+    return engine
+
+
+def test_a_rule_with_no_version_is_not_stored(monkeypatch):
+    def opened(url=None):
+        raise AssertionError("database opened")
+
+    monkeypatch.setattr("edgar_warehouse.rules.db.get_engine", opened)
+    for rule in ("", "{}", '{"trim": "quantity"}', "not json", '{"version": ""}',
+                 '{"version": "   "}', '{"version": 1}', "[]"):
+        assert store_draft(build_case("example", rule, {}, None, None)) == {
+            "refused": "The version label is not there."
+        }
+    assert store_draft(build_case("example", json.dumps({"version": "v" * 129}), {}, None, None)) == {
+        "refused": "The version label is too long."
+    }
+    assert store_draft({"rule": '{"version": "draft-1"}'}) == {"refused": "The draft is not stored."}
+
+
+def test_a_draft_is_stored_under_the_typed_version_and_the_case_stays_beside_it(tmp_path, monkeypatch):
+    engine = _rules_engine(tmp_path, monkeypatch)
+    rule = '{"trim": "quantity", "version": "draft-1"}'
+    case = build_case("example", rule, {"document": "12"}, {"a": 1}, {"a": 1})
+    stored = store_draft(case)
+    assert stored == {
+        "digest": "d7097b4a191ff17f3098239ce47cc828375d3dc088e6b3ad1ee6178019a6e9fb",
+        "status": "draft",
+        "stored": "draft-1",
+    }
+    from edgar_warehouse.rules.db import Rules
+
+    found = Rules(engine).draft("try", "example", "draft-1")
+    assert found["status"] == "draft"
+    assert found["body"] == {"trim": "quantity", "version": "draft-1"}
+    assert found["case"] == case
+    again = build_case("example", rule, {"document": "99"}, {"a": 1}, {"a": 1})
+    assert store_draft(again) == stored
+    assert Rules(engine).draft("try", "example", "draft-1")["case"] == case
+    other = build_case("example", '{"trim": "other", "version": "draft-1"}', {}, None, None)
+    assert store_draft(other) == {"refused": "This version is already stored."}
+    assert Rules(engine).draft("try", "example", "draft-1")["body"] == {
+        "trim": "quantity", "version": "draft-1"}
 
 
 def test_try_refuses_until_the_family_can_run_and_returns_one_object(tmp_path):
@@ -210,11 +256,35 @@ def test_keep_a_copy_on_the_command_reloads_as_the_same_json(capsys, tmp_path):
     }
 
 
-def test_store_this_draft_on_the_command_refuses(capsys, tmp_path):
+def test_store_this_draft_on_the_command_refuses_without_a_version(capsys, tmp_path, monkeypatch):
+    def opened(url=None):
+        raise AssertionError("database opened")
+
+    monkeypatch.setattr("edgar_warehouse.rules.db.get_engine", opened)
     _family(tmp_path)
     assert main(["rules", "try", "--family", "example", "--families", str(tmp_path),
                  "--button", "Store this draft"]) == 1
-    assert json.loads(capsys.readouterr().out) == {"refused": "Store this draft is not available yet"}
+    assert json.loads(capsys.readouterr().out) == {"refused": "The version label is not there."}
+
+
+def test_store_this_draft_on_the_command_stores_the_typed_version(capsys, tmp_path, monkeypatch):
+    _family(tmp_path)
+    engine = _rules_engine(tmp_path, monkeypatch)
+    rule = '{"version": "draft-1"}'
+    assert main(["rules", "try", "--family", "example", "--families", str(tmp_path),
+                 "--button", "Store this draft", "--rule", rule]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["stored"] == "draft-1"
+    assert result["status"] == "draft"
+    from edgar_warehouse.rules.db import Rules
+
+    found = Rules(engine).draft("try", "example", "draft-1")
+    assert found["body"] == {"version": "draft-1"}
+    assert found["status"] == "draft"
+    assert found["case"]["rule"] == rule
+    assert found["case"]["family"] == "example"
+    assert found["case"]["passed"] is True
+    assert result["digest"] == found["digest"]
 
 
 def test_show_the_full_rule_refuses_when_the_family_has_no_short_words(tmp_path):
