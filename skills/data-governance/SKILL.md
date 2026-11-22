@@ -46,6 +46,39 @@ for configuration-only work and public data; and [Data Operations](../data-opera
 for local proof and run evidence. Create or run only a test scenario the task
 explicitly authorizes.
 
+## Start here: trace one configured target
+
+Use for a governed lineage claim. Read [LINEAGE.md](LINEAGE.md) first. Start
+from `sources/<source>/source.yaml` beside the active rules folder; read the
+target under `bookkeeping.targets`, its source reads, and the checks declared
+for its steps (including `sources/<source>/quality.yaml` when present).
+
+1. If the source contract needs validation, run
+   `edgar-warehouse rules check --source <source>` (add `--root <rules-folder>`
+   only for a non-default rules folder). Its JSON should give
+   `"source:<source>": "ok"`. A refused or missing source is a configuration
+   gap, not a lineage decision; hand it to [Data Onboarding](../data-onboarding/SKILL.md)
+   for a new source or [Refining Rules](../refining-rules/SKILL.md) for a live source.
+2. Apply the contract to the selected target: identify its configured feed and
+   named reference inputs, material run controls, failable steps and their
+   declared checks, then the trusted outputs. Exclude plumbing and files the
+   target itself writes as sources. Use only supported domain and product
+   links.
+3. Separate configured intent from observed completion. Claim completion only
+   where verified run evidence supports it. Name uncovered targets, inputs,
+   checks, run evidence or destination readback as gaps; leave unsupported
+   edges unclaimed.
+4. Hand off the neutral contract and its gaps: [Data Catalog](../data-catalog/SKILL.md)
+   owns business meaning and presentation; the selected destination skill, such
+   as [OpenMetadata](../openmetadata/SKILL.md), owns publication and native
+   readback; [Data Operations](../data-operations/SKILL.md) owns execution and
+   recovery. Stop at the applicable owner instead of repeating its procedure.
+
+The output is a scoped graph from sources and controls through failable steps
+with declared checks to trusted outputs and supported domains/products, plus
+named coverage and evidence gaps. `rules check` validates configuration
+offline; it does not prove a run or destination state.
+
 ## Completion
 
 The proposed lineage matches [LINEAGE.md](LINEAGE.md). A destination's native
