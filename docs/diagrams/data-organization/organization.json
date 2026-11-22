@@ -8,7 +8,7 @@
     "quality_profile": "showcase",
     "repository": {
       "url": "https://github.com/paulananth/edgartools-platform.git",
-      "revision": "a3d2a6173dc96d60875b8d20a0773bb4f76c0645"
+      "revision": "369b09f3ff4054a5dc02a61b1d1f8556c382939d"
     }
   },
   "layout": {
@@ -157,6 +157,34 @@
           "label": "Maintained lifecycle role map"
         }
       ]
+    },
+    {
+      "id": "mdm_engineering",
+      "parent": "engineer",
+      "label": "MDM Engineering",
+      "sublabel": "Rules + engine + store",
+      "sources": [
+        {
+          "path": "skills/mdm-engineering/SKILL.md",
+          "line": 10,
+          "end_line": 17,
+          "label": "MDM owns refinement"
+        }
+      ]
+    },
+    {
+      "id": "refinement",
+      "parent": "mdm_engineering",
+      "label": "Refining rules",
+      "sublabel": "Configuration-first subworkflow",
+      "sources": [
+        {
+          "path": "skills/mdm-engineering/REFINING-RULES.md",
+          "line": 1,
+          "end_line": 18,
+          "label": "Owned refinement procedure"
+        }
+      ]
     }
   ],
   "cards": [
@@ -182,7 +210,8 @@
       "dot": "emerald",
       "title": "Data Engineer — production",
       "items": [
-        "data-onboarding • refining-rules • data-quality • mdm-engineering • sql-writer",
+        "data-onboarding • data-quality • sql-writer",
+        "MDM Engineering contains refining rules: mapping, quality, matching and survivorship changes.",
         "data-operations • pipeline-orchestration • bookkeeping • change-journal",
         "database-monitoring • production-support • aws-snowflake-operations • access-audit • openmetadata"
       ]
@@ -212,6 +241,15 @@
         "Captured files = Bronze; MDM = mastered identities; RDM = reference code sets; Silver = source facts.",
         "Gold transformations and dashboards are downstream work, not universal deployed stages.",
         "Skill availability means an operating guide exists; qualification, authorization and activation remain separate."
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "MDM people and process",
+      "items": [
+        "Governance leaders set policies; architects/modelers define domains; stewards resolve exceptions; integration engineers automate approved flows.",
+        "Govern → profile and model → configure integration → check and match → steward → validate relationships → publish and verify.",
+        "Operational golden records and analytical linked views are consumption patterns; generic source-system write-back is not implied."
       ]
     }
   ]

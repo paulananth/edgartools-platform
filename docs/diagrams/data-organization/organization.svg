@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg viewBox="0 0 1276 497" role="img" lang="en" aria-labelledby="archify-diagram-title archify-diagram-description" data-animation="trace" data-preset="classic" data-quality-profile="showcase" data-tree-ui="" data-tree-direction="down" data-reader-fit="intrinsic-height" data-reader-min-text="7.5" style="--flow-cycle: 4.459s; width: 1276px; height: 497px; min-width: 0px;" width="1276" height="497" xmlns="http://www.w3.org/2000/svg" data-theme="light"><style>
+<svg viewBox="0 0 1280 775" role="img" lang="en" aria-labelledby="archify-diagram-title archify-diagram-description" data-animation="trace" data-preset="classic" data-quality-profile="showcase" data-tree-ui="" data-tree-direction="down" data-reader-fit="intrinsic-height" data-reader-min-text="7.5" style="--flow-cycle: 5.481s; width: 1280px; height: 775px; min-width: 0px;" width="1280" height="775" xmlns="http://www.w3.org/2000/svg" data-theme="light"><style>
 /*
 JetBrains Mono variable WOFF2 subsets from Google Fonts service revision v24.
 These fixed bytes are shared by the viewer and its SVG/raster exports.
@@ -143,11 +143,11 @@ svg { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consol
 [data-preset="editorial"][data-theme="dark"] { --bg: #181611; --grid: #39342a; --panel: rgba(35, 31, 24, 0.96); --panel-border: #625a4a; --lane-fill: rgba(52, 46, 35, 0.46); --lane-stroke: #726957; --text: #f4eddf; --text-muted: #b9ae9b; --text-dim: #776e60; --text-faint: #9d917e; --mask: #231f18; --frontend-fill: rgba(43, 133, 142, 0.16); --frontend-stroke: #7fc6c7; --backend-fill: rgba(63, 132, 92, 0.16); --backend-stroke: #8fc29e; --database-fill: rgba(117, 91, 141, 0.17); --database-stroke: #c0a4d0; --cloud-fill: rgba(170, 119, 49, 0.16); --cloud-stroke: #d8ad68; --security-fill: rgba(157, 69, 65, 0.17); --security-stroke: #df9085; --messagebus-fill: rgba(174, 79, 42, 0.16); --messagebus-stroke: #df946f; --external-fill: rgba(126, 115, 96, 0.18); --external-stroke: #b8ad99; --arrow: #948978; --arrow-emphasis: #dd6b3d; --toolbar-bg: rgba(35, 31, 24, 0.92); --toolbar-border: #625a4a; --toolbar-text: #eee5d5; --toolbar-hover: #302a20; --toolbar-menu-bg: #231f18; }
 [data-preset="editorial"][data-theme="light"] { --bg: #f2eee5; --grid: #d8d0c2; --panel: rgba(251, 248, 241, 0.97); --panel-border: #c4b9a6; --lane-fill: rgba(229, 221, 207, 0.42); --lane-stroke: #b8aa94; --text: #242018; --text-muted: #6f6658; --text-dim: #a09788; --text-faint: #817767; --mask: #fbf8f1; --frontend-fill: rgba(31, 117, 126, 0.09); --frontend-stroke: #287e84; --backend-fill: rgba(42, 119, 75, 0.09); --backend-stroke: #397b53; --database-fill: rgba(105, 75, 130, 0.09); --database-stroke: #765d86; --cloud-fill: rgba(157, 103, 31, 0.1); --cloud-stroke: #9a671f; --security-fill: rgba(153, 58, 52, 0.09); --security-stroke: #9e463f; --messagebus-fill: rgba(182, 70, 27, 0.09); --messagebus-stroke: #ad4b25; --external-fill: rgba(101, 91, 75, 0.09); --external-stroke: #746b5e; --arrow: #8a806f; --arrow-emphasis: #bb4c23; --toolbar-bg: rgba(251, 248, 241, 0.94); --toolbar-border: #c4b9a6; --toolbar-text: #40392f; --toolbar-hover: #fffdf8; --toolbar-menu-bg: #fbf8f1; }
 svg { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono CJK SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", monospace; width: 100%; min-width: min(900px, 100%); display: block; transform-origin: 0px 0px; transition: transform 0.18s; }
-@keyframes archify-lens-in { 
+@keyframes archify-lens-in {
   0% { opacity: 0; transform: translateY(5px) scale(0.985); }
   100% { opacity: 1; transform: translateY(0px) scale(1); }
 }
-@keyframes archify-guide-in { 
+@keyframes archify-guide-in {
   0% { opacity: 0; transform: translateY(-5px) scale(0.985); }
   100% { opacity: 1; transform: translateY(0px) scale(1); }
 }
@@ -159,7 +159,7 @@ svg { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consol
 [data-theme="dark"] .toolbar .preset-menu, [data-theme="dark"] .toolbar .export-menu { border-color: rgba(148, 163, 184, 0.16); box-shadow: rgba(0, 0, 0, 0.3) 0px 1px 2px, rgba(0, 0, 0, 0.6) 0px 18px 44px -12px; }
 [data-theme="light"] .preset-option-swatch.classic { background: radial-gradient(circle at 1px 1px, rgb(217, 222, 229) 0.6px, transparent 0.9px) 0px 0px / 5px 5px, rgb(255, 255, 255); }
 [data-theme="light"] .preset-option-swatch.classic::before { border-color: rgb(27, 135, 163); background: rgba(14, 116, 144, 0.08); box-shadow: rgba(17, 24, 39, 0.12) 0px 2px 4px; }
-@keyframes archify-motion-dot-breathe { 
+@keyframes archify-motion-dot-breathe {
   0%, 100% { opacity: 1; transform: scale(1); }
   46% { opacity: 0.55; transform: scale(0.72); }
 }
@@ -334,231 +334,265 @@ svg[data-preset="editorial"] .ambient-flow-fill { --flow-peak: 0.2; }
 svg[data-preset="editorial"] .ambient-flow-playhead-glow { --flow-peak: 0.14; }
 svg[data-preset="blueprint"] .ambient-edge-flow { stroke-linecap: square; }
 svg[data-preset="editorial"] { --flow-halo-peak: 0.07; --flow-glow-peak: 0.28; --flow-tail-peak: 0.2; --flow-head-peak: 0.7; --flow-wake-peak: 0.14; --flow-ripple-peak: 0.3; }
-@keyframes archify-node-enter { 
+@keyframes archify-node-enter {
   0% { opacity: 0; }
   100% { opacity: 1; }
 }
-@keyframes archify-node-pulse { 
+@keyframes archify-node-pulse {
   0%, 72%, 100% { filter: none; stroke-width: 1.5; }
   18%, 36% { filter: drop-shadow(0 0 8px var(--arrow-emphasis)); stroke-width: 2.4; }
 }
-@keyframes archify-blueprint-node-pulse { 
+@keyframes archify-blueprint-node-pulse {
   0%, 72%, 100% { opacity: 1; filter: none; }
   18%, 36% { opacity: 0.72; filter: drop-shadow(0 0 2px var(--frontend-stroke)); }
 }
-@keyframes archify-editorial-node-pulse { 
+@keyframes archify-editorial-node-pulse {
   0%, 72%, 100% { opacity: 1; filter: none; }
   18%, 36% { opacity: 0.78; filter: drop-shadow(0 2px 2px color-mix(in srgb, var(--text) 18%, transparent)); }
 }
-@keyframes archify-signal-scan { 
+@keyframes archify-signal-scan {
   0%, 18% { opacity: 1; transform: translateX(-70%); }
   70% { opacity: 1; transform: translateX(70%); }
   100% { opacity: 0; transform: translateX(70%); }
 }
-@keyframes archify-radar-live { 
+@keyframes archify-radar-live {
   0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--backend-stroke) 52%, transparent); }
   55%, 100% { box-shadow: transparent 0px 0px 0px 0.32rem; }
 }
-@keyframes archify-intent-trace-flow { 
+@keyframes archify-intent-trace-flow {
   0% { opacity: 0.28; stroke-dashoffset: 0; }
   12%, 78% { opacity: 0.94; }
   100% { opacity: 0; stroke-dashoffset: -1; }
 }
-@keyframes archify-route-probe-flow { 
+@keyframes archify-route-probe-flow {
   0% { stroke-dashoffset: 0; opacity: 0.96; }
   78% { stroke-dashoffset: -1; opacity: 0.96; }
   100% { stroke-dasharray: none; stroke-dashoffset: 0; opacity: 0.58; }
 }
-@keyframes archify-route-journey-flow { 
+@keyframes archify-route-journey-flow {
   0% { opacity: 0.16; stroke-dashoffset: 0; }
   14%, 76% { opacity: 1; }
   100% { opacity: 0; stroke-dashoffset: -1; }
 }
-@keyframes archify-semantic-lens-flow { 
+@keyframes archify-semantic-lens-flow {
   0% { opacity: 0.2; stroke-dashoffset: 0; }
   12%, 78% { opacity: 0.9; }
   100% { opacity: 0; stroke-dashoffset: -1; }
 }
-@keyframes archify-relationship-pulse { 
+@keyframes archify-relationship-pulse {
   0% { opacity: 0.18; stroke-dashoffset: 0; }
   10%, 76% { opacity: 0.98; }
   100% { opacity: 0; stroke-dashoffset: -1; }
 }
-@keyframes archify-relationship-token-life { 
+@keyframes archify-relationship-token-life {
   0%, 7% { opacity: 0; }
   13%, 82% { opacity: 1; }
   100% { opacity: 0; }
 }
-@keyframes archify-share-cue-enter { 
+@keyframes archify-share-cue-enter {
   0% { opacity: 0; transform: translate(-50%, -0.45rem); }
   100% { opacity: 1; transform: translate(-50%, 0px); }
 }
-@keyframes archify-share-cue-pulse { 
+@keyframes archify-share-cue-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.48; transform: scale(0.78); }
 }
-@keyframes archify-relay-ripple { 
+@keyframes archify-relay-ripple {
   0% { r: 2px; opacity: var(--flow-peak, 0.6); }
-  16.821%, 100% { r: 20px; opacity: 0; }
+  13.684%, 100% { r: 20px; opacity: 0; }
 }
-@keyframes archify-relay-comet-0 { 
+@keyframes archify-relay-comet-0 {
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  2.691% { opacity: var(--flow-peak, 0.9); }
-  33.641% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  37.23%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  2.189% { opacity: var(--flow-peak, 0.9); }
+  27.368% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  30.287%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
-@keyframes archify-relay-wake-0 { 
+@keyframes archify-relay-wake-0 {
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  33.641% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  53.826%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  27.368% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  43.788%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
-@keyframes archify-relay-comet-1 { 
+@keyframes archify-relay-comet-1 {
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  1.884% { opacity: var(--flow-peak, 0.9); }
-  9.42% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  13.008%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.533% { opacity: var(--flow-peak, 0.9); }
+  7.663% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  10.582%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
-@keyframes archify-relay-wake-1 { 
+@keyframes archify-relay-wake-1 {
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  9.42% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  29.604%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  7.663% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  24.083%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
-@keyframes archify-relay-comet-2 { 
+@keyframes archify-relay-comet-2 {
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  2.691% { opacity: var(--flow-peak, 0.9); }
-  33.641% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  37.23%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  2.189% { opacity: var(--flow-peak, 0.9); }
+  27.368% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  30.287%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
-@keyframes archify-relay-wake-2 { 
+@keyframes archify-relay-wake-2 {
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  33.641% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  53.826%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  27.368% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  43.788%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
-@keyframes archify-relay-comet-3 { 
+@keyframes archify-relay-comet-3 {
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  2.41% { opacity: var(--flow-peak, 0.9); }
-  12.052% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  15.64%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.974% { opacity: var(--flow-peak, 0.9); }
+  9.87% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  12.789%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
-@keyframes archify-relay-wake-3 { 
+@keyframes archify-relay-wake-3 {
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  12.052% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  32.237%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  9.87% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  26.29%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
-@keyframes archify-relay-comet-4 { 
+@keyframes archify-relay-comet-4 {
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  2.41% { opacity: var(--flow-peak, 0.9); }
-  12.052% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  15.64%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.974% { opacity: var(--flow-peak, 0.9); }
+  9.87% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  12.789%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
-@keyframes archify-relay-wake-4 { 
+@keyframes archify-relay-wake-4 {
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  12.052% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  32.237%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  9.87% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  26.29%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
-@keyframes archify-relay-comet-5 { 
+@keyframes archify-relay-comet-5 {
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  2.314% { opacity: var(--flow-peak, 0.9); }
-  11.571% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  15.16%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.883% { opacity: var(--flow-peak, 0.9); }
+  9.413% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  12.333%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
-@keyframes archify-relay-wake-5 { 
+@keyframes archify-relay-wake-5 {
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  11.571% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  31.756%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  9.413% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  25.834%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
-@keyframes archify-relay-comet-6 { 
+@keyframes archify-relay-comet-6 {
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  2.314% { opacity: var(--flow-peak, 0.9); }
-  11.571% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  15.16%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  1.883% { opacity: var(--flow-peak, 0.9); }
+  9.413% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  12.333%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
-@keyframes archify-relay-wake-6 { 
+@keyframes archify-relay-wake-6 {
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  11.571% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  31.756%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  9.413% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  25.834%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
-@keyframes archify-relay-comet-7 { 
+@keyframes archify-relay-comet-7 {
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  2.507% { opacity: var(--flow-peak, 0.9); }
-  12.533% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  16.121%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  2.039% { opacity: var(--flow-peak, 0.9); }
+  10.195% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  13.115%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
-@keyframes archify-relay-wake-7 { 
+@keyframes archify-relay-wake-7 {
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  12.533% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  32.717%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  10.195% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  26.616%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
-@keyframes archify-relay-comet-8 { 
+@keyframes archify-relay-comet-8 {
   0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  2.507% { opacity: var(--flow-peak, 0.9); }
-  12.533% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
-  16.121%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+  2.039% { opacity: var(--flow-peak, 0.9); }
+  10.195% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  13.115%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
 }
-@keyframes archify-relay-wake-8 { 
+@keyframes archify-relay-wake-8 {
   0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
-  12.533% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
-  32.717%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+  10.195% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  26.616%, 100% { stroke-dashoffset: 0px; opacity: 0; }
 }
-@keyframes archify-relay-node-0 { 
+@keyframes archify-relay-comet-9 {
+  0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
+  1.533% { opacity: var(--flow-peak, 0.9); }
+  7.663% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  10.582%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+}
+@keyframes archify-relay-wake-9 {
+  0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
+  7.663% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  24.083%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+}
+@keyframes archify-relay-comet-10 {
+  0% { stroke-dashoffset: calc(var(--flow-len, 0px) + var(--flow-shift, 0px)); opacity: 0; animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
+  1.533% { opacity: var(--flow-peak, 0.9); }
+  7.663% { stroke-dashoffset: var(--flow-shift, 0px); opacity: var(--flow-peak, 0.9); }
+  10.582%, 100% { stroke-dashoffset: var(--flow-shift, 0px); opacity: 0; }
+}
+@keyframes archify-relay-wake-10 {
+  0% { stroke-dashoffset: var(--flow-len, 0px); opacity: var(--flow-peak, 0.3); animation-timing-function: cubic-bezier(0.45, 0.05, 0.35, 1); }
+  7.663% { stroke-dashoffset: 0px; opacity: var(--flow-peak, 0.3); }
+  24.083%, 100% { stroke-dashoffset: 0px; opacity: 0; }
+}
+@keyframes archify-relay-node-0 {
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
   0% { filter: var(--ambient-node-base-filter, none); }
-  2.691%, 9.42% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  26.913% { filter: var(--ambient-node-base-filter, none); }
+  2.189%, 7.663% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  21.894% { filter: var(--ambient-node-base-filter, none); }
 }
-@keyframes archify-relay-node-1 { 
+@keyframes archify-relay-node-1 {
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  33.641% { filter: var(--ambient-node-base-filter, none); }
-  36.333%, 43.061% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  60.554% { filter: var(--ambient-node-base-filter, none); }
+  27.368% { filter: var(--ambient-node-base-filter, none); }
+  29.557%, 35.03% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  49.262% { filter: var(--ambient-node-base-filter, none); }
 }
-@keyframes archify-relay-node-2 { 
+@keyframes archify-relay-node-2 {
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  9.42% { filter: var(--ambient-node-base-filter, none); }
-  12.111%, 18.839% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  36.333% { filter: var(--ambient-node-base-filter, none); }
+  7.663% { filter: var(--ambient-node-base-filter, none); }
+  9.852%, 15.326% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  29.557% { filter: var(--ambient-node-base-filter, none); }
 }
-@keyframes archify-relay-node-3 { 
+@keyframes archify-relay-node-3 {
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  33.641% { filter: var(--ambient-node-base-filter, none); }
-  36.333%, 43.061% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  60.554% { filter: var(--ambient-node-base-filter, none); }
+  27.368% { filter: var(--ambient-node-base-filter, none); }
+  29.557%, 35.03% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  49.262% { filter: var(--ambient-node-base-filter, none); }
 }
-@keyframes archify-relay-node-4 { 
+@keyframes archify-relay-node-4 {
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  23.234% { filter: var(--ambient-node-base-filter, none); }
-  25.925%, 32.653% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  50.147% { filter: var(--ambient-node-base-filter, none); }
+  18.901% { filter: var(--ambient-node-base-filter, none); }
+  21.09%, 26.564% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  40.795% { filter: var(--ambient-node-base-filter, none); }
 }
-@keyframes archify-relay-node-5 { 
+@keyframes archify-relay-node-5 {
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  23.234% { filter: var(--ambient-node-base-filter, none); }
-  25.925%, 32.653% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  50.147% { filter: var(--ambient-node-base-filter, none); }
+  18.901% { filter: var(--ambient-node-base-filter, none); }
+  21.09%, 26.564% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  40.795% { filter: var(--ambient-node-base-filter, none); }
 }
-@keyframes archify-relay-node-6 { 
+@keyframes archify-relay-node-6 {
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  47.936% { filter: var(--ambient-node-base-filter, none); }
-  50.627%, 57.356% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  74.849% { filter: var(--ambient-node-base-filter, none); }
+  39.062% { filter: var(--ambient-node-base-filter, none); }
+  41.251%, 46.725% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  60.956% { filter: var(--ambient-node-base-filter, none); }
 }
-@keyframes archify-relay-node-7 { 
+@keyframes archify-relay-node-7 {
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  47.936% { filter: var(--ambient-node-base-filter, none); }
-  50.627%, 57.356% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  74.849% { filter: var(--ambient-node-base-filter, none); }
+  39.062% { filter: var(--ambient-node-base-filter, none); }
+  41.251%, 46.725% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  60.956% { filter: var(--ambient-node-base-filter, none); }
 }
-@keyframes archify-relay-node-8 { 
+@keyframes archify-relay-node-8 {
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  48.417% { filter: var(--ambient-node-base-filter, none); }
-  51.108%, 57.836% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  75.33% { filter: var(--ambient-node-base-filter, none); }
+  39.387% { filter: var(--ambient-node-base-filter, none); }
+  41.577%, 47.05% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  61.281% { filter: var(--ambient-node-base-filter, none); }
 }
-@keyframes archify-relay-node-9 { 
+@keyframes archify-relay-node-9 {
   0%, 100% { filter: var(--ambient-node-base-filter, none); }
-  48.417% { filter: var(--ambient-node-base-filter, none); }
-  51.108%, 57.836% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
-  75.33% { filter: var(--ambient-node-base-filter, none); }
+  39.387% { filter: var(--ambient-node-base-filter, none); }
+  41.577%, 47.05% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  61.281% { filter: var(--ambient-node-base-filter, none); }
+}
+@keyframes archify-relay-node-10 {
+  0%, 100% { filter: var(--ambient-node-base-filter, none); }
+  48.549% { filter: var(--ambient-node-base-filter, none); }
+  50.738%, 56.212% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  70.443% { filter: var(--ambient-node-base-filter, none); }
+}
+@keyframes archify-relay-node-11 {
+  0%, 100% { filter: var(--ambient-node-base-filter, none); }
+  58.036% { filter: var(--ambient-node-base-filter, none); }
+  60.226%, 65.699% { filter: var(--ambient-node-base-filter,) drop-shadow(0 0 10px var(--arrow-emphasis)); }
+  79.93% { filter: var(--ambient-node-base-filter, none); }
 }
 svg[data-tree-ui] .tree-hue-root { --tree-hue: var(--text-muted); --tree-wash: transparent; }
 svg[data-tree-ui] .tree-hue-backend { --tree-hue: var(--backend-stroke); --tree-wash: var(--backend-fill); }
@@ -598,7 +632,7 @@ svg[data-tree-ui] [data-tree-expand-all] rect { fill: var(--mask); stroke: var(-
 svg[data-tree-ui] [data-tree-expand-all]:is(:hover, :focus-visible) rect { stroke: var(--arrow-emphasis); stroke-width: 2; }
 svg[data-tree-ui]:not([data-tree-any-collapsed]) [data-tree-expand-all] { display: none; }
 :root, svg { --bg: #f4f5f7; --grid: #e9edf2; --canvas-dot: #e2e7ec; --text: #111827; --text-muted: #5b6474; --text-dim: #9aa3b2; --text-faint: #6b7280; --panel: #ffffff; --panel-border: #e5e7eb; --lane-fill: rgba(248, 250, 252, 0.65); --lane-stroke: #cbd5e1; --arrow: #64748b; --arrow-emphasis: #059669; --mask: #ffffff; --frontend-fill: rgba(34, 211, 238, 0.15); --frontend-stroke: #0891b2; --backend-fill: rgba(52, 211, 153, 0.18); --backend-stroke: #059669; --database-fill: rgba(167, 139, 250, 0.2); --database-stroke: #7c3aed; --cloud-fill: rgba(251, 191, 36, 0.18); --cloud-stroke: #d97706; --security-fill: rgba(251, 113, 133, 0.15); --security-stroke: #e11d48; --messagebus-fill: rgba(251, 146, 60, 0.15); --messagebus-stroke: #ea580c; --external-fill: rgba(148, 163, 184, 0.18); --external-stroke: #64748b; --toolbar-bg: rgba(255, 255, 255, 0.92); --toolbar-border: #cbd5e1; --toolbar-text: #334155; --toolbar-hover: #ffffff; --toolbar-menu-bg: #ffffff; --flow-cycle: ; --flow-halo-peak: ; --flow-glow-peak: ; --flow-tail-peak: ; --flow-head-peak: ; --flow-wake-peak: ; --flow-ripple-peak: ; --flow-peak: ; --tree-hue: ; --tree-wash: ; }
-</style><rect x="0" y="0" width="1276" height="497" fill="#f4f5f7"/>
+</style><rect x="0" y="0" width="1280" height="775" fill="#f4f5f7"/>
         <title id="archify-diagram-title">Data organization and available skills</title>
         <desc id="archify-diagram-description">A hierarchy diagram generated by Archify.</desc>
         <!-- Definitions -->
@@ -665,56 +699,58 @@ svg[data-tree-ui]:not([data-tree-any-collapsed]) [data-tree-expand-all] { displa
         <rect width="100%" height="100%" fill="url(#grid)"/>
 
         <!-- Containment links -->
-        <path data-edge-from="head" data-edge-to="foundation" data-edge-key="0" data-tree-ancestors="head" data-composition-points="626,158;626,185.5;232,185.5;232,213" d="M 626 158 L 626 175.5 Q 626 185.5 616 185.5 L 242 185.5 Q 232 185.5 232 195.5 L 232 213" class="a-default tree-edge tree-edge-trunk" data-animate="edge" style="--step: 1;" stroke-width="1.8"/>
-        <path data-edge-from="head" data-edge-to="consumption" data-edge-key="1" data-tree-ancestors="head" data-composition-points="626,158;626,213" d="M 626 158 L 626 213" class="a-default tree-edge tree-edge-trunk" data-animate="edge" style="--step: 1;" stroke-width="1.8"/>
-        <path data-edge-from="head" data-edge-to="advanced" data-edge-key="2" data-tree-ancestors="head" data-composition-points="626,158;626,185.5;1038,185.5;1038,213" d="M 626 158 L 626 175.5 Q 626 185.5 636 185.5 L 1028 185.5 Q 1038 185.5 1038 195.5 L 1038 213" class="a-default tree-edge tree-edge-trunk" data-animate="edge" style="--step: 1;" stroke-width="1.8"/>
-        <path data-edge-from="foundation" data-edge-to="architect" data-edge-key="3" data-tree-ancestors="foundation head" data-composition-points="232,307;232,334.5;129,334.5;129,362" d="M 232 307 L 232 324.5 Q 232 334.5 222 334.5 L 139 334.5 Q 129 334.5 129 344.5 L 129 362" class="a-default tree-edge tree-edge-hued tree-hue-backend" data-animate="edge" style="--step: 2;" stroke-width="1.5"/>
-        <path data-edge-from="foundation" data-edge-to="engineer" data-edge-key="4" data-tree-ancestors="foundation head" data-composition-points="232,307;232,334.5;335,334.5;335,362" d="M 232 307 L 232 324.5 Q 232 334.5 242 334.5 L 325 334.5 Q 335 334.5 335 344.5 L 335 362" class="a-default tree-edge tree-edge-hued tree-hue-backend" data-animate="edge" style="--step: 2;" stroke-width="1.5"/>
-        <path data-edge-from="consumption" data-edge-to="analyst" data-edge-key="5" data-tree-ancestors="consumption head" data-composition-points="626,307;626,334.5;529,334.5;529,362" d="M 626 307 L 626 324.5 Q 626 334.5 616 334.5 L 539 334.5 Q 529 334.5 529 344.5 L 529 362" class="a-default tree-edge tree-edge-hued tree-hue-database" data-animate="edge" style="--step: 2;" stroke-width="1.5"/>
-        <path data-edge-from="consumption" data-edge-to="bi" data-edge-key="6" data-tree-ancestors="consumption head" data-composition-points="626,307;626,334.5;723,334.5;723,362" d="M 626 307 L 626 324.5 Q 626 334.5 636 334.5 L 713 334.5 Q 723 334.5 723 344.5 L 723 362" class="a-default tree-edge tree-edge-hued tree-hue-database" data-animate="edge" style="--step: 2;" stroke-width="1.5"/>
-        <path data-edge-from="advanced" data-edge-to="scientist" data-edge-key="7" data-tree-ancestors="advanced head" data-composition-points="1038,307;1038,334.5;929,334.5;929,362" d="M 1038 307 L 1038 324.5 Q 1038 334.5 1028 334.5 L 939 334.5 Q 929 334.5 929 344.5 L 929 362" class="a-default tree-edge tree-edge-hued tree-hue-cloud" data-animate="edge" style="--step: 2;" stroke-width="1.5"/>
-        <path data-edge-from="advanced" data-edge-to="ai" data-edge-key="8" data-tree-ancestors="advanced head" data-composition-points="1038,307;1038,334.5;1147,334.5;1147,362" d="M 1038 307 L 1038 324.5 Q 1038 334.5 1048 334.5 L 1137 334.5 Q 1147 334.5 1147 344.5 L 1147 362" class="a-default tree-edge tree-edge-hued tree-hue-cloud" data-animate="edge" style="--step: 2;" stroke-width="1.5"/>
+        <path data-edge-from="head" data-edge-to="foundation" data-edge-key="0" data-tree-ancestors="head" data-composition-points="630,158;630,185.5;233,185.5;233,213" d="M 630 158 L 630 175.5 Q 630 185.5 620 185.5 L 243 185.5 Q 233 185.5 233 195.5 L 233 213" class="a-default tree-edge tree-edge-trunk" data-animate="edge" style="--step: 1;" stroke-width="1.8"/>
+        <path data-edge-from="head" data-edge-to="consumption" data-edge-key="1" data-tree-ancestors="head" data-composition-points="630,158;630,213" d="M 630 158 L 630 213" class="a-default tree-edge tree-edge-trunk" data-animate="edge" style="--step: 1;" stroke-width="1.8"/>
+        <path data-edge-from="head" data-edge-to="advanced" data-edge-key="2" data-tree-ancestors="head" data-composition-points="630,158;630,185.5;1042,185.5;1042,213" d="M 630 158 L 630 175.5 Q 630 185.5 640 185.5 L 1032 185.5 Q 1042 185.5 1042 195.5 L 1042 213" class="a-default tree-edge tree-edge-trunk" data-animate="edge" style="--step: 1;" stroke-width="1.8"/>
+        <path data-edge-from="foundation" data-edge-to="architect" data-edge-key="3" data-tree-ancestors="foundation head" data-composition-points="233,307;233,334.5;129,334.5;129,362" d="M 233 307 L 233 324.5 Q 233 334.5 223 334.5 L 139 334.5 Q 129 334.5 129 344.5 L 129 362" class="a-default tree-edge tree-edge-hued tree-hue-backend" data-animate="edge" style="--step: 2;" stroke-width="1.5"/>
+        <path data-edge-from="foundation" data-edge-to="engineer" data-edge-key="4" data-tree-ancestors="foundation head" data-composition-points="233,307;233,334.5;337,334.5;337,362" d="M 233 307 L 233 324.5 Q 233 334.5 243 334.5 L 327 334.5 Q 337 334.5 337 344.5 L 337 362" class="a-default tree-edge tree-edge-hued tree-hue-backend" data-animate="edge" style="--step: 2;" stroke-width="1.5"/>
+        <path data-edge-from="consumption" data-edge-to="analyst" data-edge-key="5" data-tree-ancestors="consumption head" data-composition-points="630,307;630,334.5;533,334.5;533,362" d="M 630 307 L 630 324.5 Q 630 334.5 620 334.5 L 543 334.5 Q 533 334.5 533 344.5 L 533 362" class="a-default tree-edge tree-edge-hued tree-hue-database" data-animate="edge" style="--step: 2;" stroke-width="1.5"/>
+        <path data-edge-from="consumption" data-edge-to="bi" data-edge-key="6" data-tree-ancestors="consumption head" data-composition-points="630,307;630,334.5;727,334.5;727,362" d="M 630 307 L 630 324.5 Q 630 334.5 640 334.5 L 717 334.5 Q 727 334.5 727 344.5 L 727 362" class="a-default tree-edge tree-edge-hued tree-hue-database" data-animate="edge" style="--step: 2;" stroke-width="1.5"/>
+        <path data-edge-from="advanced" data-edge-to="scientist" data-edge-key="7" data-tree-ancestors="advanced head" data-composition-points="1042,307;1042,334.5;933,334.5;933,362" d="M 1042 307 L 1042 324.5 Q 1042 334.5 1032 334.5 L 943 334.5 Q 933 334.5 933 344.5 L 933 362" class="a-default tree-edge tree-edge-hued tree-hue-cloud" data-animate="edge" style="--step: 2;" stroke-width="1.5"/>
+        <path data-edge-from="advanced" data-edge-to="ai" data-edge-key="8" data-tree-ancestors="advanced head" data-composition-points="1042,307;1042,334.5;1151,334.5;1151,362" d="M 1042 307 L 1042 324.5 Q 1042 334.5 1052 334.5 L 1141 334.5 Q 1151 334.5 1151 344.5 L 1151 362" class="a-default tree-edge tree-edge-hued tree-hue-cloud" data-animate="edge" style="--step: 2;" stroke-width="1.5"/>
+        <path data-edge-from="engineer" data-edge-to="mdm_engineering" data-edge-key="9" data-tree-ancestors="engineer foundation head" data-composition-points="337,453;337,508" d="M 337 453 L 337 508" class="a-default tree-edge tree-edge-hued tree-hue-backend" data-animate="edge" style="--step: 3;" stroke-width="1.5"/>
+        <path data-edge-from="mdm_engineering" data-edge-to="refinement" data-edge-key="10" data-tree-ancestors="mdm_engineering engineer foundation head" data-composition-points="337,585;337,640" d="M 337 585 L 337 640" class="a-default tree-edge tree-edge-hued tree-hue-backend" data-animate="edge" style="--step: 4;" stroke-width="1.5"/>
 
         <!-- Nodes -->
         <g id="node-head" data-node-id="head" data-node-label="CDO / Head of Data &amp; AI" tabindex="0" role="button" aria-label="Focus CDO / Head of Data &amp; AI, Reference organization, Root" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="Reference organization" data-node-context="Root" data-tree-depth="0" class="tree-hue-root">
           <title>CDO / Head of Data &amp; AI · Reference organization · Root</title>
-          <rect data-tree-stack="" x="544" y="69" width="174" height="94" rx="10" class="tree-stack-frontend" stroke-width="1.2"/>
-          <rect x="539" y="64" width="174" height="94" rx="10" class="c-mask"/>
-          <rect x="539" y="64" width="174" height="94" rx="10" class="c-frontend tree-root" data-animate="node" style="--step: 0; --flow-node-name: archify-relay-node-0;" stroke-width="0"/>
+          <rect data-tree-stack="" x="548" y="69" width="174" height="94" rx="10" class="tree-stack-frontend" stroke-width="1.2"/>
+          <rect x="543" y="64" width="174" height="94" rx="10" class="c-mask"/>
+          <rect x="543" y="64" width="174" height="94" rx="10" class="c-frontend tree-root" data-animate="node" style="--step: 0; --flow-node-name: archify-relay-node-0;" stroke-width="0"/>
 
 
-          <text data-node-label="" x="626" class="t-primary tree-label" font-size="14.5" font-weight="750" text-anchor="middle"><tspan x="626" y="106.5">CDO / Head of</tspan><tspan x="626" y="123.5">Data &amp; AI</tspan></text>
-          <text x="626" class="t-muted tree-sublabel" font-size="11" text-anchor="middle"><tspan x="626" y="142.5">Reference organization</tspan></text>
+          <text data-node-label="" x="630" class="t-primary tree-label" font-size="14.5" font-weight="750" text-anchor="middle"><tspan x="630" y="106.5">CDO / Head of</tspan><tspan x="630" y="123.5">Data &amp; AI</tspan></text>
+          <text x="630" class="t-muted tree-sublabel" font-size="11" text-anchor="middle"><tspan x="630" y="142.5">Reference organization</tspan></text>
         </g>
         <g id="node-foundation" data-node-id="foundation" data-node-label="Infrastructure &amp; systems" tabindex="0" role="button" aria-label="Focus Infrastructure &amp; systems, Stages 1–2, Branch" aria-pressed="false" data-node-kind="backend" data-node-sublabel="Stages 1–2" data-node-context="Branch" data-tree-depth="1" data-tree-ancestors="head" class="tree-hue-backend">
           <title>Infrastructure &amp; systems · Stages 1–2 · Branch</title>
-          <rect data-tree-stack="" x="152" y="218" width="170" height="94" rx="10" class="tree-stack-backend" stroke-width="1.2"/>
-          <rect x="147" y="213" width="170" height="94" rx="10" class="c-mask"/>
-          <rect x="147" y="213" width="170" height="94" rx="10" class="c-backend tree-branch" data-animate="node" style="--step: 1; --flow-node-name: archify-relay-node-1;" stroke-width="1.2"/>
+          <rect data-tree-stack="" x="153" y="218" width="170" height="94" rx="10" class="tree-stack-backend" stroke-width="1.2"/>
+          <rect x="148" y="213" width="170" height="94" rx="10" class="c-mask"/>
+          <rect x="148" y="213" width="170" height="94" rx="10" class="c-backend tree-branch" data-animate="node" style="--step: 1; --flow-node-name: archify-relay-node-1;" stroke-width="1.2"/>
 
-          <circle cx="232" cy="213" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="232" class="t-primary tree-label" font-size="13" font-weight="700" text-anchor="middle"><tspan x="232" y="255.5">Infrastructure &amp;</tspan><tspan x="232" y="272.5">systems</tspan></text>
-          <text x="232" class="t-muted tree-sublabel" font-size="11" text-anchor="middle"><tspan x="232" y="291.5">Stages 1–2</tspan></text>
+          <circle cx="233" cy="213" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="233" class="t-primary tree-label" font-size="13" font-weight="700" text-anchor="middle"><tspan x="233" y="255.5">Infrastructure &amp;</tspan><tspan x="233" y="272.5">systems</tspan></text>
+          <text x="233" class="t-muted tree-sublabel" font-size="11" text-anchor="middle"><tspan x="233" y="291.5">Stages 1–2</tspan></text>
         </g>
         <g id="node-consumption" data-node-id="consumption" data-node-label="BI &amp; consumption" tabindex="0" role="button" aria-label="Focus BI &amp; consumption, Stage 3, Branch" aria-pressed="false" data-node-kind="backend" data-node-sublabel="Stage 3" data-node-context="Branch" data-tree-depth="1" data-tree-ancestors="head" class="tree-hue-database">
           <title>BI &amp; consumption · Stage 3 · Branch</title>
-          <rect data-tree-stack="" x="546" y="218" width="170" height="94" rx="10" class="tree-stack-backend" stroke-width="1.2"/>
-          <rect x="541" y="213" width="170" height="94" rx="10" class="c-mask"/>
-          <rect x="541" y="213" width="170" height="94" rx="10" class="c-backend tree-branch" data-animate="node" style="--step: 1; --flow-node-name: archify-relay-node-2;" stroke-width="1.2"/>
+          <rect data-tree-stack="" x="550" y="218" width="170" height="94" rx="10" class="tree-stack-backend" stroke-width="1.2"/>
+          <rect x="545" y="213" width="170" height="94" rx="10" class="c-mask"/>
+          <rect x="545" y="213" width="170" height="94" rx="10" class="c-backend tree-branch" data-animate="node" style="--step: 1; --flow-node-name: archify-relay-node-2;" stroke-width="1.2"/>
 
-          <circle cx="626" cy="213" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="626" class="t-primary tree-label" font-size="13" font-weight="700" text-anchor="middle"><tspan x="626" y="264">BI &amp; consumption</tspan></text>
-          <text x="626" class="t-muted tree-sublabel" font-size="11" text-anchor="middle"><tspan x="626" y="283">Stage 3</tspan></text>
+          <circle cx="630" cy="213" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="630" class="t-primary tree-label" font-size="13" font-weight="700" text-anchor="middle"><tspan x="630" y="264">BI &amp; consumption</tspan></text>
+          <text x="630" class="t-muted tree-sublabel" font-size="11" text-anchor="middle"><tspan x="630" y="283">Stage 3</tspan></text>
         </g>
         <g id="node-advanced" data-node-id="advanced" data-node-label="Analytics &amp; AI" tabindex="0" role="button" aria-label="Focus Analytics &amp; AI, Stage 4, Branch" aria-pressed="false" data-node-kind="backend" data-node-sublabel="Stage 4" data-node-context="Branch" data-tree-depth="1" data-tree-ancestors="head" class="tree-hue-cloud">
           <title>Analytics &amp; AI · Stage 4 · Branch</title>
-          <rect data-tree-stack="" x="958" y="218" width="170" height="94" rx="10" class="tree-stack-backend" stroke-width="1.2"/>
-          <rect x="953" y="213" width="170" height="94" rx="10" class="c-mask"/>
-          <rect x="953" y="213" width="170" height="94" rx="10" class="c-backend tree-branch" data-animate="node" style="--step: 1; --flow-node-name: archify-relay-node-3;" stroke-width="1.2"/>
+          <rect data-tree-stack="" x="962" y="218" width="170" height="94" rx="10" class="tree-stack-backend" stroke-width="1.2"/>
+          <rect x="957" y="213" width="170" height="94" rx="10" class="c-mask"/>
+          <rect x="957" y="213" width="170" height="94" rx="10" class="c-backend tree-branch" data-animate="node" style="--step: 1; --flow-node-name: archify-relay-node-3;" stroke-width="1.2"/>
 
-          <circle cx="1038" cy="213" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="1038" class="t-primary tree-label" font-size="13" font-weight="700" text-anchor="middle"><tspan x="1038" y="264">Analytics &amp; AI</tspan></text>
-          <text x="1038" class="t-muted tree-sublabel" font-size="11" text-anchor="middle"><tspan x="1038" y="283">Stage 4</tspan></text>
+          <circle cx="1042" cy="213" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="1042" class="t-primary tree-label" font-size="13" font-weight="700" text-anchor="middle"><tspan x="1042" y="264">Analytics &amp; AI</tspan></text>
+          <text x="1042" class="t-muted tree-sublabel" font-size="11" text-anchor="middle"><tspan x="1042" y="283">Stage 4</tspan></text>
         </g>
         <g id="node-architect" data-node-id="architect" data-node-label="Data Architect" tabindex="0" role="button" aria-label="Focus Data Architect, Design • skills available, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="Design • skills available" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="foundation head" class="tree-hue-backend">
           <title>Data Architect · Design • skills available · Leaf</title>
@@ -726,96 +762,136 @@ svg[data-tree-ui]:not([data-tree-any-collapsed]) [data-tree-expand-all] { displa
           <text data-node-label="" x="129" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="middle"><tspan x="129" y="411.5">Data Architect</tspan></text>
           <text x="129" class="t-muted tree-sublabel" font-size="11" text-anchor="middle"><tspan x="129" y="430.5">Design • skills available</tspan></text>
         </g>
-        <g id="node-engineer" data-node-id="engineer" data-node-label="Data Engineer" tabindex="0" role="button" aria-label="Focus Data Engineer, Production • skills available, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="Production • skills available" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="foundation head" class="tree-hue-backend">
-          <title>Data Engineer · Production • skills available · Leaf</title>
+        <g id="node-engineer" data-node-id="engineer" data-node-label="Data Engineer" tabindex="0" role="button" aria-label="Focus Data Engineer, Production • skills available, Branch" aria-pressed="false" data-node-kind="backend" data-node-sublabel="Production • skills available" data-node-context="Branch" data-tree-depth="2" data-tree-ancestors="foundation head" class="tree-hue-backend">
+          <title>Data Engineer · Production • skills available · Branch</title>
+          <rect data-tree-stack="" x="257" y="367" width="170" height="91" rx="10" class="tree-stack-backend" stroke-width="1.2"/>
+          <rect x="252" y="362" width="170" height="91" rx="10" class="c-mask"/>
+          <rect x="252" y="362" width="170" height="91" rx="10" class="c-backend tree-branch" data-animate="node" style="--step: 2; --flow-node-name: archify-relay-node-7;" stroke-width="1.2"/>
 
-          <rect x="250" y="362" width="170" height="91" rx="10" class="c-mask"/>
-          <rect x="250" y="362" width="170" height="91" rx="10" class="c-external tree-leaf" data-animate="node" style="--step: 2; --flow-node-name: archify-relay-node-7;" stroke-width="1"/>
-
-          <circle cx="335" cy="362" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="335" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="middle"><tspan x="335" y="404.5">Data Engineer</tspan></text>
-          <text x="335" class="t-muted tree-sublabel" font-size="11" text-anchor="middle"><tspan x="335" y="423.5">Production • skills</tspan><tspan x="335" y="437.5">available</tspan></text>
+          <circle cx="337" cy="362" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="337" class="t-primary tree-label" font-size="13" font-weight="700" text-anchor="middle"><tspan x="337" y="404.5">Data Engineer</tspan></text>
+          <text x="337" class="t-muted tree-sublabel" font-size="11" text-anchor="middle"><tspan x="337" y="423.5">Production • skills</tspan><tspan x="337" y="437.5">available</tspan></text>
         </g>
         <g id="node-analyst" data-node-id="analyst" data-node-label="Data Analyst" tabindex="0" role="button" aria-label="Focus Data Analyst, Discovery • scoped query skill, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="Discovery • scoped query skill" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="consumption head" class="tree-hue-database">
           <title>Data Analyst · Discovery • scoped query skill · Leaf</title>
 
-          <rect x="444" y="362" width="170" height="91" rx="10" class="c-mask"/>
-          <rect x="444" y="362" width="170" height="91" rx="10" class="c-external tree-leaf" data-animate="node" style="--step: 2; --flow-node-name: archify-relay-node-4;" stroke-width="1"/>
+          <rect x="448" y="362" width="170" height="91" rx="10" class="c-mask"/>
+          <rect x="448" y="362" width="170" height="91" rx="10" class="c-external tree-leaf" data-animate="node" style="--step: 2; --flow-node-name: archify-relay-node-4;" stroke-width="1"/>
 
-          <circle cx="529" cy="362" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="529" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="middle"><tspan x="529" y="404.5">Data Analyst</tspan></text>
-          <text x="529" class="t-muted tree-sublabel" font-size="11" text-anchor="middle"><tspan x="529" y="423.5">Discovery • scoped</tspan><tspan x="529" y="437.5">query skill</tspan></text>
+          <circle cx="533" cy="362" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="533" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="middle"><tspan x="533" y="404.5">Data Analyst</tspan></text>
+          <text x="533" class="t-muted tree-sublabel" font-size="11" text-anchor="middle"><tspan x="533" y="423.5">Discovery • scoped</tspan><tspan x="533" y="437.5">query skill</tspan></text>
         </g>
         <g id="node-bi" data-node-id="bi" data-node-label="BI Developer" tabindex="0" role="button" aria-label="Focus BI Developer, Production • partial coverage, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="Production • partial coverage" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="consumption head" class="tree-hue-database">
           <title>BI Developer · Production • partial coverage · Leaf</title>
 
-          <rect x="638" y="362" width="170" height="91" rx="10" class="c-mask"/>
-          <rect x="638" y="362" width="170" height="91" rx="10" class="c-external tree-leaf" data-animate="node" style="--step: 2; --flow-node-name: archify-relay-node-5;" stroke-width="1"/>
+          <rect x="642" y="362" width="170" height="91" rx="10" class="c-mask"/>
+          <rect x="642" y="362" width="170" height="91" rx="10" class="c-external tree-leaf" data-animate="node" style="--step: 2; --flow-node-name: archify-relay-node-5;" stroke-width="1"/>
 
-          <circle cx="723" cy="362" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="723" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="middle"><tspan x="723" y="404.5">BI Developer</tspan></text>
-          <text x="723" class="t-muted tree-sublabel" font-size="11" text-anchor="middle"><tspan x="723" y="423.5">Production • partial</tspan><tspan x="723" y="437.5">coverage</tspan></text>
+          <circle cx="727" cy="362" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="727" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="middle"><tspan x="727" y="404.5">BI Developer</tspan></text>
+          <text x="727" class="t-muted tree-sublabel" font-size="11" text-anchor="middle"><tspan x="727" y="423.5">Production • partial</tspan><tspan x="727" y="437.5">coverage</tspan></text>
         </g>
         <g id="node-scientist" data-node-id="scientist" data-node-label="Data Scientist" tabindex="0" role="button" aria-label="Focus Data Scientist, Discovery • general guide, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="Discovery • general guide" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="advanced head" class="tree-hue-cloud">
           <title>Data Scientist · Discovery • general guide · Leaf</title>
 
-          <rect x="832" y="362" width="194" height="91" rx="10" class="c-mask"/>
-          <rect x="832" y="362" width="194" height="91" rx="10" class="c-external tree-leaf" data-animate="node" style="--step: 2; --flow-node-name: archify-relay-node-8;" stroke-width="1"/>
+          <rect x="836" y="362" width="194" height="91" rx="10" class="c-mask"/>
+          <rect x="836" y="362" width="194" height="91" rx="10" class="c-external tree-leaf" data-animate="node" style="--step: 2; --flow-node-name: archify-relay-node-8;" stroke-width="1"/>
 
-          <circle cx="929" cy="362" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="929" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="middle"><tspan x="929" y="411.5">Data Scientist</tspan></text>
-          <text x="929" class="t-muted tree-sublabel" font-size="11" text-anchor="middle"><tspan x="929" y="430.5">Discovery • general guide</tspan></text>
+          <circle cx="933" cy="362" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="933" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="middle"><tspan x="933" y="411.5">Data Scientist</tspan></text>
+          <text x="933" class="t-muted tree-sublabel" font-size="11" text-anchor="middle"><tspan x="933" y="430.5">Discovery • general guide</tspan></text>
         </g>
         <g id="node-ai" data-node-id="ai" data-node-label="AI / ML Engineer" tabindex="0" role="button" aria-label="Focus AI / ML Engineer, Production • workflow gap, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="Production • workflow gap" data-node-context="Leaf" data-tree-depth="2" data-tree-ancestors="advanced head" class="tree-hue-cloud">
           <title>AI / ML Engineer · Production • workflow gap · Leaf</title>
 
-          <rect x="1050" y="362" width="194" height="91" rx="10" class="c-mask"/>
-          <rect x="1050" y="362" width="194" height="91" rx="10" class="c-external tree-leaf" data-animate="node" style="--step: 2; --flow-node-name: archify-relay-node-9;" stroke-width="1"/>
+          <rect x="1054" y="362" width="194" height="91" rx="10" class="c-mask"/>
+          <rect x="1054" y="362" width="194" height="91" rx="10" class="c-external tree-leaf" data-animate="node" style="--step: 2; --flow-node-name: archify-relay-node-9;" stroke-width="1"/>
 
-          <circle cx="1147" cy="362" r="2.6" class="tree-socket" stroke-width="1.4"/>
-          <text data-node-label="" x="1147" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="middle"><tspan x="1147" y="411.5">AI / ML Engineer</tspan></text>
-          <text x="1147" class="t-muted tree-sublabel" font-size="11" text-anchor="middle"><tspan x="1147" y="430.5">Production • workflow gap</tspan></text>
+          <circle cx="1151" cy="362" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="1151" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="middle"><tspan x="1151" y="411.5">AI / ML Engineer</tspan></text>
+          <text x="1151" class="t-muted tree-sublabel" font-size="11" text-anchor="middle"><tspan x="1151" y="430.5">Production • workflow gap</tspan></text>
+        </g>
+        <g id="node-mdm_engineering" data-node-id="mdm_engineering" data-node-label="MDM Engineering" tabindex="0" role="button" aria-label="Focus MDM Engineering, Rules + engine + store, Branch" aria-pressed="false" data-node-kind="backend" data-node-sublabel="Rules + engine + store" data-node-context="Branch" data-tree-depth="3" data-tree-ancestors="engineer foundation head" class="tree-hue-backend">
+          <title>MDM Engineering · Rules + engine + store · Branch</title>
+          <rect data-tree-stack="" x="255" y="513" width="174" height="77" rx="10" class="tree-stack-backend" stroke-width="1.2"/>
+          <rect x="250" y="508" width="174" height="77" rx="10" class="c-mask"/>
+          <rect x="250" y="508" width="174" height="77" rx="10" class="c-backend tree-branch" data-animate="node" style="--step: 3; --flow-node-name: archify-relay-node-10;" stroke-width="1.2"/>
+
+          <circle cx="337" cy="508" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="337" class="t-primary tree-label" font-size="13" font-weight="700" text-anchor="middle"><tspan x="337" y="550.5">MDM Engineering</tspan></text>
+          <text x="337" class="t-muted tree-sublabel" font-size="11" text-anchor="middle"><tspan x="337" y="569.5">Rules + engine + store</tspan></text>
+        </g>
+        <g id="node-refinement" data-node-id="refinement" data-node-label="Refining rules" tabindex="0" role="button" aria-label="Focus Refining rules, Configuration-first subworkflow, Leaf" aria-pressed="false" data-node-kind="external" data-node-sublabel="Configuration-first subworkflow" data-node-context="Leaf" data-tree-depth="4" data-tree-ancestors="mdm_engineering engineer foundation head" class="tree-hue-backend">
+          <title>Refining rules · Configuration-first subworkflow · Leaf</title>
+
+          <rect x="252" y="640" width="170" height="91" rx="10" class="c-mask"/>
+          <rect x="252" y="640" width="170" height="91" rx="10" class="c-external tree-leaf" data-animate="node" style="--step: 4; --flow-node-name: archify-relay-node-11;" stroke-width="1"/>
+
+          <circle cx="337" cy="640" r="2.6" class="tree-socket" stroke-width="1.4"/>
+          <text data-node-label="" x="337" class="t-primary tree-label" font-size="13" font-weight="560" text-anchor="middle"><tspan x="337" y="682.5">Refining rules</tspan></text>
+          <text x="337" class="t-muted tree-sublabel" font-size="11" text-anchor="middle"><tspan x="337" y="701.5">Configuration-first</tspan><tspan x="337" y="715.5">subworkflow</tspan></text>
         </g>
 
         <!-- Branch toggles -->
-        <g data-tree-toggle="head" data-tree-count="9" data-tree-label-collapse="Collapse CDO / Head of Data &amp; AI (9 below)" data-tree-label-expand="Expand CDO / Head of Data &amp; AI (9 hidden)" role="button" tabindex="0" aria-expanded="true" aria-label="Collapse CDO / Head of Data &amp; AI (9 below)" class="tree-hue-root">
-          <circle cx="626" cy="158" r="14.5" class="tree-toggle-hit"/>
-          <circle cx="626" cy="158" r="7.5" class="tree-toggle-disc" stroke-width="1.2"/>
-          <path class="tree-toggle-glyph" d="M 622.85 158 H 629.15" stroke-width="1.5" stroke-linecap="round"/>
-          <path class="tree-toggle-glyph tree-toggle-plus" d="M 626 154.85 V 161.15" stroke-width="1.5" stroke-linecap="round"/>
+        <g data-tree-toggle="head" data-tree-count="11" data-tree-label-collapse="Collapse CDO / Head of Data &amp; AI (11 below)" data-tree-label-expand="Expand CDO / Head of Data &amp; AI (11 hidden)" role="button" tabindex="0" aria-expanded="true" aria-label="Collapse CDO / Head of Data &amp; AI (11 below)" class="tree-hue-root">
+          <circle cx="630" cy="158" r="14.5" class="tree-toggle-hit"/>
+          <circle cx="630" cy="158" r="7.5" class="tree-toggle-disc" stroke-width="1.2"/>
+          <path class="tree-toggle-glyph" d="M 626.85 158 H 633.15" stroke-width="1.5" stroke-linecap="round"/>
+          <path class="tree-toggle-glyph tree-toggle-plus" d="M 630 154.85 V 161.15" stroke-width="1.5" stroke-linecap="round"/>
           <g class="tree-toggle-count">
-            <rect x="636.5" y="150.5" width="17.2" height="15" rx="7.5" class="tree-count-pill"/>
-            <text x="645.1" y="161.6" class="t-primary" font-size="10" font-weight="700" text-anchor="middle">9</text>
+            <rect x="640.5" y="150.5" width="23.4" height="15" rx="7.5" class="tree-count-pill"/>
+            <text x="652.2" y="161.6" class="t-primary" font-size="10" font-weight="700" text-anchor="middle">11</text>
           </g>
         </g>
-        <g data-tree-toggle="foundation" data-tree-count="2" data-tree-ancestors="head" data-tree-label-collapse="Collapse Infrastructure &amp; systems (2 below)" data-tree-label-expand="Expand Infrastructure &amp; systems (2 hidden)" role="button" tabindex="0" aria-expanded="true" aria-label="Collapse Infrastructure &amp; systems (2 below)" class="tree-hue-backend">
-          <circle cx="232" cy="307" r="14.5" class="tree-toggle-hit"/>
-          <circle cx="232" cy="307" r="7.5" class="tree-toggle-disc" stroke-width="1.2"/>
-          <path class="tree-toggle-glyph" d="M 228.85 307 H 235.15" stroke-width="1.5" stroke-linecap="round"/>
-          <path class="tree-toggle-glyph tree-toggle-plus" d="M 232 303.85 V 310.15" stroke-width="1.5" stroke-linecap="round"/>
+        <g data-tree-toggle="foundation" data-tree-count="4" data-tree-ancestors="head" data-tree-label-collapse="Collapse Infrastructure &amp; systems (4 below)" data-tree-label-expand="Expand Infrastructure &amp; systems (4 hidden)" role="button" tabindex="0" aria-expanded="true" aria-label="Collapse Infrastructure &amp; systems (4 below)" class="tree-hue-backend">
+          <circle cx="233" cy="307" r="14.5" class="tree-toggle-hit"/>
+          <circle cx="233" cy="307" r="7.5" class="tree-toggle-disc" stroke-width="1.2"/>
+          <path class="tree-toggle-glyph" d="M 229.85 307 H 236.15" stroke-width="1.5" stroke-linecap="round"/>
+          <path class="tree-toggle-glyph tree-toggle-plus" d="M 233 303.85 V 310.15" stroke-width="1.5" stroke-linecap="round"/>
           <g class="tree-toggle-count">
-            <rect x="242.5" y="299.5" width="17.2" height="15" rx="7.5" class="tree-count-pill"/>
-            <text x="251.1" y="310.6" class="t-primary" font-size="10" font-weight="700" text-anchor="middle">2</text>
+            <rect x="243.5" y="299.5" width="17.2" height="15" rx="7.5" class="tree-count-pill"/>
+            <text x="252.1" y="310.6" class="t-primary" font-size="10" font-weight="700" text-anchor="middle">4</text>
           </g>
         </g>
         <g data-tree-toggle="consumption" data-tree-count="2" data-tree-ancestors="head" data-tree-label-collapse="Collapse BI &amp; consumption (2 below)" data-tree-label-expand="Expand BI &amp; consumption (2 hidden)" role="button" tabindex="0" aria-expanded="true" aria-label="Collapse BI &amp; consumption (2 below)" class="tree-hue-database">
-          <circle cx="626" cy="307" r="14.5" class="tree-toggle-hit"/>
-          <circle cx="626" cy="307" r="7.5" class="tree-toggle-disc" stroke-width="1.2"/>
-          <path class="tree-toggle-glyph" d="M 622.85 307 H 629.15" stroke-width="1.5" stroke-linecap="round"/>
-          <path class="tree-toggle-glyph tree-toggle-plus" d="M 626 303.85 V 310.15" stroke-width="1.5" stroke-linecap="round"/>
+          <circle cx="630" cy="307" r="14.5" class="tree-toggle-hit"/>
+          <circle cx="630" cy="307" r="7.5" class="tree-toggle-disc" stroke-width="1.2"/>
+          <path class="tree-toggle-glyph" d="M 626.85 307 H 633.15" stroke-width="1.5" stroke-linecap="round"/>
+          <path class="tree-toggle-glyph tree-toggle-plus" d="M 630 303.85 V 310.15" stroke-width="1.5" stroke-linecap="round"/>
           <g class="tree-toggle-count">
-            <rect x="636.5" y="299.5" width="17.2" height="15" rx="7.5" class="tree-count-pill"/>
-            <text x="645.1" y="310.6" class="t-primary" font-size="10" font-weight="700" text-anchor="middle">2</text>
+            <rect x="640.5" y="299.5" width="17.2" height="15" rx="7.5" class="tree-count-pill"/>
+            <text x="649.1" y="310.6" class="t-primary" font-size="10" font-weight="700" text-anchor="middle">2</text>
           </g>
         </g>
         <g data-tree-toggle="advanced" data-tree-count="2" data-tree-ancestors="head" data-tree-label-collapse="Collapse Analytics &amp; AI (2 below)" data-tree-label-expand="Expand Analytics &amp; AI (2 hidden)" role="button" tabindex="0" aria-expanded="true" aria-label="Collapse Analytics &amp; AI (2 below)" class="tree-hue-cloud">
-          <circle cx="1038" cy="307" r="14.5" class="tree-toggle-hit"/>
-          <circle cx="1038" cy="307" r="7.5" class="tree-toggle-disc" stroke-width="1.2"/>
-          <path class="tree-toggle-glyph" d="M 1034.85 307 H 1041.15" stroke-width="1.5" stroke-linecap="round"/>
-          <path class="tree-toggle-glyph tree-toggle-plus" d="M 1038 303.85 V 310.15" stroke-width="1.5" stroke-linecap="round"/>
+          <circle cx="1042" cy="307" r="14.5" class="tree-toggle-hit"/>
+          <circle cx="1042" cy="307" r="7.5" class="tree-toggle-disc" stroke-width="1.2"/>
+          <path class="tree-toggle-glyph" d="M 1038.85 307 H 1045.15" stroke-width="1.5" stroke-linecap="round"/>
+          <path class="tree-toggle-glyph tree-toggle-plus" d="M 1042 303.85 V 310.15" stroke-width="1.5" stroke-linecap="round"/>
           <g class="tree-toggle-count">
-            <rect x="1048.5" y="299.5" width="17.2" height="15" rx="7.5" class="tree-count-pill"/>
-            <text x="1057.1" y="310.6" class="t-primary" font-size="10" font-weight="700" text-anchor="middle">2</text>
+            <rect x="1052.5" y="299.5" width="17.2" height="15" rx="7.5" class="tree-count-pill"/>
+            <text x="1061.1" y="310.6" class="t-primary" font-size="10" font-weight="700" text-anchor="middle">2</text>
+          </g>
+        </g>
+        <g data-tree-toggle="engineer" data-tree-count="2" data-tree-ancestors="foundation head" data-tree-label-collapse="Collapse Data Engineer (2 below)" data-tree-label-expand="Expand Data Engineer (2 hidden)" role="button" tabindex="0" aria-expanded="true" aria-label="Collapse Data Engineer (2 below)" class="tree-hue-backend">
+          <circle cx="337" cy="453" r="14.5" class="tree-toggle-hit"/>
+          <circle cx="337" cy="453" r="7.5" class="tree-toggle-disc" stroke-width="1.2"/>
+          <path class="tree-toggle-glyph" d="M 333.85 453 H 340.15" stroke-width="1.5" stroke-linecap="round"/>
+          <path class="tree-toggle-glyph tree-toggle-plus" d="M 337 449.85 V 456.15" stroke-width="1.5" stroke-linecap="round"/>
+          <g class="tree-toggle-count">
+            <rect x="347.5" y="445.5" width="17.2" height="15" rx="7.5" class="tree-count-pill"/>
+            <text x="356.1" y="456.6" class="t-primary" font-size="10" font-weight="700" text-anchor="middle">2</text>
+          </g>
+        </g>
+        <g data-tree-toggle="mdm_engineering" data-tree-count="1" data-tree-ancestors="engineer foundation head" data-tree-label-collapse="Collapse MDM Engineering (1 below)" data-tree-label-expand="Expand MDM Engineering (1 hidden)" role="button" tabindex="0" aria-expanded="true" aria-label="Collapse MDM Engineering (1 below)" class="tree-hue-backend">
+          <circle cx="337" cy="585" r="14.5" class="tree-toggle-hit"/>
+          <circle cx="337" cy="585" r="7.5" class="tree-toggle-disc" stroke-width="1.2"/>
+          <path class="tree-toggle-glyph" d="M 333.85 585 H 340.15" stroke-width="1.5" stroke-linecap="round"/>
+          <path class="tree-toggle-glyph tree-toggle-plus" d="M 337 581.85 V 588.15" stroke-width="1.5" stroke-linecap="round"/>
+          <g class="tree-toggle-count">
+            <rect x="347.5" y="577.5" width="17.2" height="15" rx="7.5" class="tree-count-pill"/>
+            <text x="356.1" y="588.6" class="t-primary" font-size="10" font-weight="700" text-anchor="middle">1</text>
           </g>
         </g>
 

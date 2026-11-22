@@ -1,8 +1,13 @@
+---
+name: refining-rules
+description: Refine an existing feed or domain within MDM Engineering using measured mapping, quality and matching-rule changes. Use data-onboarding for a new feed or domain.
+---
+
 # Refining rules within MDM Engineering
 
 Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#the-seven-wastes) and drop what adds no value.
 
-> A subworkflow of [MDM Engineering](SKILL.md). Use configuration before code;
+> A subworkflow of [MDM Engineering](../mdm-engineering/SKILL.md). Use configuration before code;
 > this procedure owns changes to an existing feed's mapping, quality or matching
 > rules. Start at [Data Platform](../data-platform/SKILL.md) for setup.
 
