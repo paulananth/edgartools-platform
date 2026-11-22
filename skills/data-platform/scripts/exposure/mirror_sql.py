@@ -6,6 +6,7 @@ format come from the same record, the target database from rules/snowflake.yaml,
 step 5 with Snowflake-managed storage. Run the output as the mirror operator, after the skill's read-only pre-flight and
 the operator's approval:
 
+    python mirror_sql.py exists                                         # read-back: does the target database exist (absent before a create)
     python mirror_sql.py plan --publication-limit 2 --publications-held 0   # the one mirror of the data database, or the refusal
     python mirror_sql.py create --instance <instance> > create.sql      # the record, the exposure list and the names file
     snow sql -c <connection> -f create.sql
