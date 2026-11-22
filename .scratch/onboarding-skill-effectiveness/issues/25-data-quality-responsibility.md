@@ -1,7 +1,7 @@
 # data-quality: Define one responsibility
 
 Type: task
-Status: open
+Status: resolved
 Priority: P0
 Blocked by: 01, 07, 13
 Labels: wayfinder:task
@@ -36,7 +36,7 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] List decisions, inputs and outputs owned here using current repository evidence. Verified against the current Data Quality skill, Data Profiling and Data Modeling ownership tables, Data Onboarding's quality step, Refining Rules' change-quality step, Business Catalog, and Bookkeeping recovery; recorded in [Decisions, artifacts and handoffs](../../../skills/data-quality/SKILL.md#decisions-artifacts-and-handoffs). (2026-11-20 19:43 ET)
 - [x] Assign each overlapping responsibility one authoritative owner and a named handoff. Verified by reconciling the skill index and inbound references from profiling, modeling, onboarding, refining-rules and data-catalog with the cited owner sections; the index already routes each activity to its owner. (2026-11-20 19:43 ET)
 - [x] Demonstrate the boundary on valid and invalid rows, a deferred identity and a failing check that must survive into stored quality evidence; link retained work rather than duplicating it. The synthetic [MDM receipt recovery scenario](../../../tests/integration/test_mdm_quality_evidence_postgres.py) passed when parent reran it on current `origin/main` (`ba51a974`) from the updated ticket-25 worktree: 1 passed in 4.77s on disposable PG16 (2026-11-22). It verifies check identity/action/counts, deferred-identity separation, receipt privacy and immutable replay after a lost report, Bookkeeping admission, and unchanged full MDM count/digest readback. This qualifies receipt-v1 recovery only for synthetic disposable storage; production enablement remains pending. Keep `mdm.quality.evidence.v1` out of production targets and `MDM_QUALITY_EVIDENCE_V1` unset.
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. Keep the draft PR and ticket open until current-head CI passes; no production enablement is authorized by the recovery test.
+- [x] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. Draft PR #2028's head `9649cc0` passed all 12 CI jobs in run #45052107235, in addition to the D5 disposable PG16 scenario. The ticket-closeout commit creates a new head; keep the PR draft until that head's CI is green. No production enablement is authorized by the recovery test.
 - [x] Learning → skill: Data Quality owns check/fix meaning and measured dispositions; onboarding/refining-rules own the lifecycle-specific configuration handoff, Data Catalog owns business definitions, and Bookkeeping owns receipt admission. Recorded in [Decisions, artifacts and handoffs](../../../skills/data-quality/SKILL.md#decisions-artifacts-and-handoffs). (2026-11-20 19:43 ET)
 
 ## Answer
@@ -71,9 +71,13 @@ scenario verifies the stored MDM evidence path. Parent reran it on current
 disposable PG16 (1 passed in 4.77s), including check identity/action/counts,
 a deferred identity distinct from a failing flagged check, receipt privacy,
 immutable replay after a lost Bookkeeping report, unchanged MDM readback, and
-Bookkeeping admission. This qualifies receipt-v1 recovery only for this
-synthetic case. Production target activation and the `MDM_QUALITY_EVIDENCE_V1`
-switch remain off pending explicit operator enablement and current-head CI.
+Bookkeeping admission.
+
+CI run #45052107235 passed all 12 jobs for PR #2028 head `9649cc0`. Ticket 25
+is resolved on that evidence. The closeout-only commit creates a new head and
+the PR remains draft until its current-head CI passes. Production target
+activation and the `MDM_QUALITY_EVIDENCE_V1` switch remain off pending explicit
+operator enablement.
 
 Baseline and provenance: `HEAD` is
 `4881e8322909888860db576f65730bc4889dc5a4`. A live `git ls-remote origin

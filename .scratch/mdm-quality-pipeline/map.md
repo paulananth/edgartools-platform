@@ -39,7 +39,7 @@ production rules or switch on new checks.
 ## Recovery qualification and production enablement
 
 - Parent reran D5 scenario `tests/integration/test_mdm_quality_evidence_postgres.py` on current `origin/main` (`ba51a974`) from the updated ticket-25 worktree: 1 passed in 4.77s on disposable PG16. Receipt-v1 recovery is qualified for this synthetic case only.
-- Current-head CI for the draft PR remains pending. Production targets and `MDM_QUALITY_EVIDENCE_V1` stay off until explicit operator enablement; this test grants no production authorization.
+- CI run #45052107235 passed all 12 jobs for PR #2028 head `9649cc0`; the ticket-closeout commit creates a new head, so keep the PR draft until that head's CI passes. Production targets and `MDM_QUALITY_EVIDENCE_V1` stay off until explicit operator enablement; this test grants no production authorization.
 
 ## Out of scope
 
