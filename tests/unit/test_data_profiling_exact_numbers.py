@@ -6,6 +6,7 @@ import json
 import sys
 from pathlib import Path
 
+import duckdb
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills/data-profiling/scripts"))
@@ -32,11 +33,20 @@ def test_mixed_inputs_keep_repeated_identifiers_and_exact_decimals(tmp_path: Pat
     identifiers.write_text(json.dumps([
         {"identifier": 10**21 + index} for index in range(60)
     ]), encoding="utf-8")
+
+    text_dates = tmp_path / "text-dates.parquet"
+    connection = duckdb.connect()
+    connection.execute("CREATE TABLE text_dates AS SELECT value AS reported_on FROM "
+                       "(VALUES ('2026-01-02'), ('2026-01-03')) AS dates(value)")
+    path = str(text_dates).replace("'", "''")
+    connection.execute(f"COPY text_dates TO '{path}' (FORMAT PARQUET)")
+    connection.close()
     out = tmp_path / "findings"
     assert profile_data.main([
         "run", "--name", "exact-number-fixture",
         "--input", f"measurements={measurements}",
         "--input", f"identifiers={identifiers}",
+        "--input", f"text_dates={text_dates}",
         "--out", str(out),
     ]) == 0
     findings = yaml.safe_load((out / "findings.yaml").read_text(encoding="utf-8"))
@@ -62,6 +72,11 @@ def test_mixed_inputs_keep_repeated_identifiers_and_exact_decimals(tmp_path: Pat
     assert _silver_column(measurements_part, "ordinary_count")["type"] == "BIGINT"
     assert _column(measurements_part, "observed")["stored_type"].startswith("DATE")
     assert _column(measurements_part, "active")["stored_type"] == "BOOLEAN"
+
+    text_date = _column(parts["text_dates"], "reported_on")
+    assert text_date["stored_type"] == "VARCHAR"
+    assert text_date["type"] == "DATE"
+    assert _silver_column(parts["text_dates"], "reported_on")["type"] == "DATE"
 
     json_identifier = _column(parts["identifiers"], "identifier")
     assert json_identifier["stored_type"] == "HUGEINT"

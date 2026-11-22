@@ -62,7 +62,7 @@ def _silver_type(column: dict) -> str:
     """Widen every in-range integer to BIGINT; keep larger ranges as exact text."""
     kind = column.get("stored_type", column.get("type"))
     if kind not in profile.INTEGERS:
-        return kind
+        return column.get("type", kind)
     out_of_range = column.get("outside_bigint")
     if out_of_range is None:
         out_of_range = outside_bigint(column) or (column.get("min") is None and kind in {"HUGEINT", "UBIGINT"})
