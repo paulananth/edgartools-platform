@@ -1,7 +1,7 @@
 # access-audit: Make the entrypoint executable
 
 Type: task
-Status: open
+Status: resolved
 Priority: P1
 Blocked by: 03, 80
 Labels: wayfinder:task
@@ -36,11 +36,11 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] Produce an entrypoint that consumes platform applicability, read-only audit connections, changed roles and existing control objectives and yields PASS, FAIL and NOT_TESTED evidence with a coverage matrix and separate remediation references; verified by document review of [Start here: audit a change](../../../skills/access-audit/SKILL.md#start-here-audit-a-change), its exit shapes and output lines matched to `main()` in `skills/access-audit/scripts/access_audit.py` and the adapters' `configured()`, `collect()` and `principals()`. (2026-11-20 19:10 ET)
 - [x] Verify referenced paths and supported commands; retain mandatory stops and discoverability of optional detail; verified by a no-import link check (22 relative links and their anchors resolve), by `bundle.py`'s `_CHECKOUT_ONLY` pattern over the edited file (no match), by matching every flag the text names (`--list`, `--repo`, `--platform`, `--principal`, `--json`, `--as-admin`) to `main()`'s parser, and by one read-only `--list` run (see [Validation](#validation)). Hard stops stay first and unchanged. (2026-11-20 19:10 ET)
 - [x] Walk one applicable example to its handoff without loading unrelated references or repeating another skill's procedure; verified by the document trace under [Trace](#trace). It is a reading of the text, not a live audit. (2026-11-20 19:10 ET)
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. The checks ran (see [Validation](#validation)). Nothing was committed, pushed or opened as a PR in this session.
-- [ ] Read the installed `write-skill` guidance (`~/.agents/skills/write-skill/SKILL.md`). It was not read: the session's permissions refused both a direct read and loading it as the `write-skill` skill.
-- [ ] Compare the installed `access-audit` copy with the repository copy. Not compared: `readlink` on `~/.agents/skills/access-audit` and `~/.claude/skills/access-audit` exited 1, and listing those paths was refused, so whether an installed copy exists is unknown. `access-audit` is not among this session's available skills. The repository copy is the one changed.
-- [ ] This ticket's own access gate: not applicable. The change edits skill text only and adds or alters no role, login, grant, credential, connection or audited setting. Ticked with publication.
-- [ ] Learning → skill: proposed lesson for [Start here: audit a change](../../../skills/access-audit/SKILL.md#start-here-audit-a-change). An entrypoint names each exit shape a command can produce, from its code, and says which one means "nothing was graded". Here, an error with no count line is NOT_TESTED, never a FAIL to fix. Not ticked until the change is published and reviewed.
+- [x] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. The entrypoint was published in [PR #1977](https://github.com/paulananth/edgartools-platform/pull/1977), merged; its verification records 149 passing tests. This closeout updates only this ticket record on a separate branch/PR.
+- [x] Read the installed `write-skill` guidance through `skill://write-skill`; its edit ladder supports no skill change when the required behavior is already present.
+- [x] Compare the installed `access-audit` location with the repository copy: neither `~/.agents/skills/access-audit` nor `~/.claude/skills/access-audit` exists, so there is no installed copy to compare; the applicable artifact is the published repository copy.
+- [x] This ticket's own access gate: not applicable. The skill edit is already published, and this closeout edits ticket text only; neither change alters a role, login, grant, credential, connection or audited setting. No audit or access operation is authorized or needed.
+- [x] Learning → skill: [Start here: audit a change](../../../skills/access-audit/SKILL.md#start-here-audit-a-change) states the three exit shapes, including that an error without a count line means nothing was graded. This lesson is already present in the published skill, so no duplicate text is added.
 
 ## Changes
 
@@ -79,14 +79,11 @@ No other skill's procedure is repeated.
 
 ## Answer
 
-The shortest sufficient entrypoint replaces Run it, in its place right after Hard stops. It holds the inputs and output, five
-steps, the per-platform variables, one command block, the expected `--list` output and the three exit shapes, and the stop
-conditions. Objectives, grading, report and handoffs stay where they are, reached by link. Not resolved: publication, the
-`write-skill` read, the installed-copy comparison, the not-applicable gate record and the learning remain open.
+The entrypoint already published in [PR #1977](https://github.com/paulananth/edgartools-platform/pull/1977) replaces **Run it** in place after Hard stops. Its five steps cover applicability, preparation, listing and audit, gate grading, and handoff; the platform variables, expected `--list` output, run exit shapes and stop conditions are present. The objectives, grading, report and handoffs remain linked in place. The current repository copy matches that published entrypoint; no skill edit is needed for this closeout.
 
-Provenance: the branch head is `c9b1c18f`, which is `origin/main` (fetched this session). That covers ticket 03 (#1975,
-`c9b1c18f`), ticket 08 (#1972, `d2879db5`), ticket 13 (#1971, `576904f0`) and ticket 80 (#1973, `750c06f2`), as shown by
-`git log origin/main`. Their ticket files are not edited here.
+Prerequisites: upstream `main` at `90ef96a778784edf3d6f529bb4eb932ad0763fc5` has ticket 03 and ticket 80 marked resolved. Upstream `skills/access-audit/SKILL.md` contains the Start here entrypoint. PR #1977 is merged; its published verification records 149 passing tests and no live audit. Installed-skill check on this machine: neither `~/.agents/skills/access-audit` nor `~/.claude/skills/access-audit` exists, so the installed-copy comparison is not applicable.
+
+No live audit, access change, provider request, or switch-on was performed.
 
 ## Validation
 
@@ -106,6 +103,4 @@ Provenance: the branch head is `c9b1c18f`, which is `origin/main` (fetched this 
   command resolution is still unproven here. CI runs it.
 - Not run: a live audit on any platform. The ticket's own change touches no access, and no audit connection was configured.
 
-## Completion evidence
-
-Record the answer and artifact links under `## Answer` when resolved. Keep private values out of the public record. A not-applicable phase needs evidence and an explicit applicability disposition, not a false PASS. Do not mark this ticket resolved while a checklist item remains open.
+Completion evidence is recorded above. The entrypoint's implementation is already published; this ticket-only closeout preserves the existing access boundary and does not duplicate skill text.
