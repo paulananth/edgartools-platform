@@ -29,6 +29,14 @@ The approved scenario's exact-number outcome is therefore not expressible by the
 - Integers wider than `BIGINT` retain every digit or the run refuses and names the column.
 - Tests on invented input assert exact stored type, `decimal_places` or `distinct`, and silver type. The two demonstrated cases must fail on current code; only add other formats after a probe demonstrates a failure.
 
+## Acceptance checklist
+
+- [ ] Reproduce the evidenced CSV-decimal and long-JSON-integer failures on invented inputs.
+- [ ] Fix number reading generically and add tests proving exact types, decimal places/distinct counts, and silver types.
+- [ ] Publish this ticket's change in its own PR and pass the affected checks and current-head CI.
+- [ ] Learning → skill: record the verified exact-number rule in Data Profiling, or record none.
+
+
 ## Ticket 11 linkage
 
 [Ticket 11](./11-data-profiling-generic-verification.md) remains incomplete until this capability is fixed and verified.

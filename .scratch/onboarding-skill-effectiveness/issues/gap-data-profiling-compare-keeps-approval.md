@@ -24,6 +24,14 @@ Ticket 11's approved changed-delivery scenario requires the approved findings to
 - The skill names a separate output folder from the approved baseline.
 - A test on invented inputs verifies refusal and that approved `findings.yaml` retains its sha256.
 
+## Acceptance checklist
+
+- [ ] Reproduce compare writing into an approved output folder with invented inputs and record before/after findings sha256.
+- [ ] Add a generic pre-write refusal and a test proving the approved findings and adjacent artifacts remain unchanged.
+- [ ] Update the Data Profiling compare instructions to use a separate output folder; publish this ticket's change in its own PR and pass affected checks and current-head CI.
+- [ ] Learning → skill: record the verified approval-preservation rule in Data Profiling, or record none.
+
+
 ## Ticket 11 linkage
 
 [Ticket 11](./11-data-profiling-generic-verification.md) remains incomplete until this capability is fixed and verified.
