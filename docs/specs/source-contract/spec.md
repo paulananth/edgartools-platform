@@ -290,7 +290,8 @@ read:
 - A table has **either** `columns` **or** a `custom_reader`, never both.
 - A table that declares `key` holds each key once in one source extract. A repeated key refuses the whole source
   extract with `repeated_key`, naming the table and the key columns and never a value. A row its checks set aside is
-  not counted. The key names declared columns. Silver applies the rows by key and does not check them again
+  not counted. The key names declared columns, so a `custom_reader` table, which has none, declares no key. Keys
+  compare by value and type: a number and its text are two keys, and a null is a value of its own. Silver applies the rows by key and does not check them again
   (CONTEXT.md, Silver Landing).
 
 ### 8.5 Expressions

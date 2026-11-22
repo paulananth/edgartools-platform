@@ -43,7 +43,8 @@ a later delivery of the same row, which the per-key apply already leaves unchang
 - [x] The engine enforces it: `check_key` after a table's rows are built, a table-level rule like `record_count` (GoF consult: not a per-record check, which sees one row); the set holds one key per kept row of one source extract, which the engine already holds in memory and bounds by `max_records` 2026-11-22 17:29 ET
 - [ ] The Python side: rebuild the engine wheel and run the Python tests that load contracts
 - [ ] The catalog check: a declared contract key must equal the registered silver spec's key
-- [ ] Every source in `sources/` declares its tables' keys; the sources already holding repeated keys are listed and fixed in their own parts
+- [x] Local proof on one source with both MDM and silver, `iapd.adv` (operator: "pick a source that has both mdm and silver test it locally"): `custody_facts` declares `key: [filing_id, row]` (its silver spec's key); on a disposable local environment with the March 2026 ADV capture, custodians, mastering and silver loaded in 1 s, 19 s and 5 s; MDM holds 14,758 company masters; `silver.adv_custody` holds 15,482 rows, 15,482 distinct keys, each with its adviser's master id; a forced replay of the silver target left 15,482 rows (landing again changes nothing). Finding: the shared local server's rules store lacks `rules.policy` (older schema), so the proof ran on its own environment 2026-11-22 17:36 ET
+- [ ] Every other source in `sources/` declares its tables' keys; the sources already holding repeated keys are listed and fixed in their own parts
 
 
 - [x] Consult `/gof-refactor-reviewer` (haiku) on the engine's key check: its own `key` field checked after the row loop, following `record_count` 2026-11-22 17:29 ET
