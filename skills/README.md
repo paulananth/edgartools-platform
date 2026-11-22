@@ -23,7 +23,7 @@ The source order is capture, profile, model, approved configuration, then MDM/Si
 - [data-governance](data-governance/SKILL.md) and [data-catalog](data-catalog/SKILL.md) govern definitions, lineage and catalog meaning.
 
 **Data Engineer — engineering and production**
-- New/live source configuration and checks: [data-onboarding](data-onboarding/SKILL.md), [refining-rules](refining-rules/SKILL.md), [data-quality](data-quality/SKILL.md).
+- New source configuration and checks: [data-onboarding](data-onboarding/SKILL.md), [data-quality](data-quality/SKILL.md). Existing-rule refinement sits inside [MDM Engineering](mdm-engineering/SKILL.md#refining-rules); [refining-rules](refining-rules/SKILL.md) forwards to its procedure.
 - Runtime and stores: [mdm-engineering](mdm-engineering/SKILL.md), [sql-writer](sql-writer/SKILL.md), [bookkeeping](bookkeeping/SKILL.md), [change-journal](change-journal/SKILL.md), [data-operations](data-operations/SKILL.md), [pipeline-orchestration](pipeline-orchestration/SKILL.md), [database-monitoring](database-monitoring/SKILL.md), [production-support](production-support/SKILL.md), [aws-snowflake-operations](aws-snowflake-operations/SKILL.md), [access-audit](access-audit/SKILL.md) and [openmetadata](openmetadata/SKILL.md).
 
 ### Stage 3: BI and consumption
