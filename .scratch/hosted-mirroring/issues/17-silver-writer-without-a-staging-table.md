@@ -15,10 +15,17 @@ data-platform skill) and needs the `TEMPORARY` privilege, which the no-DDL rule 
 3. Updates the MDM id and quality columns where they differ.
 4. For a snapshot table, deletes the rows the delivery does not hold, after refusing an empty delivery.
 
-## Decision to take (one at a time, with a recommendation)
+## Ruling (operator, 2026-11-22)
 
-- [ ] Duplicate keys in one delivery without a staging table. Recommendation: the batched upsert stamps each row it writes with the delivery's own time, so a key met a second time finds its row already stamped by this delivery and refuses. Needs the added-time column on every spec: read which specs lack it first.
-- [ ] Snapshot deletes without a staging table. Recommendation: the delivered keys are held on disk in sorted runs (`keyset.py` already does this) and the table's keys are read in key order and compared with them; absent keys are deleted in batches. Alternative: stamp every delivered row (writes unchanged rows too).
+"why do we have a staging before silver the staging is part of source processing all that silver needs is final list of tables".
+Source processing owns the final rows of a table, so it owns a key delivered twice; silver applies the rows by key. Silver's own
+duplicate check and staging table are the same work done a second time (Over-processing).
+
+## What silver still has to do, and what is open
+
+- [ ] Apply by key, idempotently, in batches: insert a missing key, update a changed one, leave an equal one (a retry lands the same rows again with no change). Append tables refuse a changed row.
+- [ ] Where the duplicate-key refusal now lives: in source processing. Read what `source.read` already guarantees before dropping silver's check, and prove it with a test at the reading.
+- [ ] Snapshot tables (three of the registered specs): who removes a row the final list no longer holds. Recommendation: source processing hands the removal with the list, since it holds the previous final list; silver deletes by key.
 
 ## Checklist
 
