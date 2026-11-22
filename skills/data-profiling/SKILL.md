@@ -330,7 +330,8 @@ uv run --with duckdb --with pyyaml python profile_data.py run --name "<data set>
   parts in the findings before approval. Reuse existing approved findings;
   this reader change calls for a new profile only of affected, unapproved
   inputs, not another scan of unrelated sources.
-  Promote numeric text only when the full column fits an exact integer or decimal type. Integers beyond signed BIGINT remain exact text in silver, never BIGINT or HUGEINT. Beyond HUGEINT or 38 decimal digits stays text. A keyed field mixing a large integer and fractions is refused by name. Never use DOUBLE.
+  Promote numeric text only from a full scan that proves exact integer/decimal types. Integers beyond signed BIGINT stay exact text in silver, never BIGINT or HUGEINT. Beyond HUGEINT or 38 decimal digits stays text. A keyed field mixing large integers and fractions is refused by name. Never use DOUBLE.
+  Sampled numeric values stay exact text; their range and decimal scale are unproven, so no out-of-BIGINT flag is published. Promotion requires a full scan.
 - **Unreadable tables:** a CSV that is not UTF-8 is read as Windows-1252 (else
   Latin-1); its input's `encoding` says so, marked inferred, with the first byte
   that is not UTF-8, and `declare` gives the reading contract's `read.encoding`

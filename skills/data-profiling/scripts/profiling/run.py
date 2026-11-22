@@ -262,6 +262,7 @@ def _part(con, p, parts, profiles, record_key, found_links, kinds, confirmed, ca
             "pattern": sensitivity.mask(c["pattern"]) if c["pattern"] else None, "pattern_share": c["pattern_share"],
             # Measured only for a separated pattern: why it was, or was not, one under one prefix.
             **{k: c[k] for k in ("prefix_share", "pattern_temporal_share") if k in c},
+            "top": top, "role": role, "silver_field": silver.keep(c, role, record_key["columns"]),
             **({k: c[k] for k in ("zero_rows", "negative_rows", "decimal_places") if k in c}
                if parts[p].scan != "sampled" else {}),
             "sensitivity": tagged["sensitivity"], "sensitivity_signals": tagged["signals"],
