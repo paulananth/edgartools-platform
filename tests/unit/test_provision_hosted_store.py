@@ -131,7 +131,9 @@ def test_a_login_connects_to_its_databases_never_holds_temporary_and_public_gets
     assert any("REVOKE ALL ON DATABASE" in s for s in server.statements)
     grants = [s for s in server.statements if "GRANT CONNECT ON DATABASE" in s]
     assert any("edgar_loader" in s for s in grants)
-    assert not any("TEMPORARY" in s for s in server.statements)
+    assert not any("GRANT" in s and "TEMPORARY" in s for s in server.statements)
+    # A store provisioned earlier holds TEMPORARY: each login loses it.
+    assert any("REVOKE TEMPORARY ON DATABASE" in s and "edgar_loader" in s for s in server.statements)
 
 
 def test_a_url_the_parser_refuses_prints_its_class_never_its_password(tmp_path, monkeypatch, capsys):

@@ -110,9 +110,8 @@ Evidence and sources: `.scratch/company-financials/research/02-vendor-standards.
   planner kept off nested loops for its transaction (`statements()`:
   `SET LOCAL enable_nestloop = off`): left alone, the planner guesses hundreds
   of rows for millions and never finishes. Never a temporary table: run-time
-  code issues no DDL (operator, 2026-11-22: "no temp table usage"). On one local
-  store the cohort's line items build in 28 s, its measures in 12 s. Never test
-  its speed under `count(*)`, which skips the select list.
+  code issues no DDL (operator: "no temp table usage"). Never test its speed
+  under `count(*)`, which skips the select list.
 - **A cover-page figure is read from the year's own annual report, at its own
   date** (operator: "Annual report's cover (Recommended)"): the
   shares-outstanding fallback takes the cover-page count filed in the annual

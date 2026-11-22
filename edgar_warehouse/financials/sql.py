@@ -32,7 +32,6 @@ def query(steps: list[tuple[str, str]], final: str) -> str:
 
 def steered(steps: list[tuple[str, str]], final: str) -> list[str]:
     """The query as one statement, with the planner kept off nested loops for its transaction: left to guess each
-    step's rows, PostgreSQL picks nested loops over millions of facts (30 minutes, not finished). A session setting,
-    not a temporary table: run-time code issues no DDL. On the company-facts cohort it gives the same rows as the
-    counted steps did, faster (line items 28 s against 98 s, measures 12 s against 13 s, on one local store)."""
+    step's rows, PostgreSQL picks nested loops over millions of facts and never finishes. A session setting, not a
+    temporary table: run-time code issues no DDL. Both statements run in one transaction, or `SET LOCAL` is lost."""
     return ["SET LOCAL enable_nestloop = off", query(steps, final)]

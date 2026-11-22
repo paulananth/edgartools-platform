@@ -46,7 +46,7 @@ def lock(conn, spec):
 
 
 class DatabaseSink:
-    """The normal sink, with one delivery algorithm for PostgreSQL and MySQL."""
+    """The normal sink: PostgreSQL lands each batch straight into its table; MySQL stages in a permanent table."""
     def __init__(self, engine): self.engine = engine
 
     def spec(self, table): return registered_spec(self.engine, table)
@@ -57,31 +57,29 @@ class DatabaseSink:
             raise Blocked("Silver delivery spec differs from its registration")
         if self.engine.dialect.name == "postgresql":
             return self._write_postgres(spec, rows)
-        target = data_table(spec, self.engine.dialect.name)
-        stage = data_table(spec, self.engine.dialect.name, temporary=staging_name(spec))
+        if self.engine.dialect.name != "mysql":
+            raise Blocked("Silver currently supports PostgreSQL and MySQL")
+        return self._write_mysql(spec, rows)
+
+    def _write_mysql(self, spec, rows):
+        """MySQL stages a delivery in the table's permanent staging table, made at registration (no DDL at run time).
+        The staging table is shared, so the table's lock comes first."""
+        from sqlalchemy import LargeBinary, cast, literal
+        target = data_table(spec, "mysql")
+        stage = data_table(spec, "mysql", temporary=staging_name(spec))
         source = [c["name"] for c in spec["columns"]]
         groups = {"mdm_ids_updated": specs.mdm_id_columns(spec), "quality_updated": specs.quality_columns(spec)}
         staged = source + groups["mdm_ids_updated"] + groups["quality_updated"]
-        match = and_(*(target.c[k] == stage.c[k] for k in spec["key"]))
-        if self.engine.dialect.name == "mysql":
-            from sqlalchemy import LargeBinary, cast
-            key_types = {c["name"]: specs.postgres_type(c["type"]) for c in spec["columns"]}
-            key_values = [func.hex(stage.c[k]) if key_types[k] == "bytea" else
-                          func.nullif(stage.c[k], 0) if key_types[k] == "double precision" else stage.c[k] for k in spec["key"]]
-            match = and_(target.c._silver_key == func.sha2(cast(func.json_array(*key_values), LargeBinary), 256), match)
+        key_types = {c["name"]: specs.postgres_type(c["type"]) for c in spec["columns"]}
+        key_values = [func.hex(stage.c[k]) if key_types[k] == "bytea" else
+                      func.nullif(stage.c[k], 0) if key_types[k] == "double precision" else stage.c[k] for k in spec["key"]]
+        silver_key = func.sha2(cast(func.json_array(*key_values), LargeBinary), 256)
+        match = and_(target.c._silver_key == silver_key, *(target.c[k] == stage.c[k] for k in spec["key"]))
         differs = lambda fields: or_(*(target.c[c].is_distinct_from(stage.c[c]) for c in fields))
         try:
             with self.engine.begin() as conn:
-                # PostgreSQL stages into a table of this session, so deliveries stage side by side. A snapshot deletes
-                # the rows it does not hold, so it locks the table for its merge; any other PostgreSQL delivery merges
-                # by row (the key is the primary key), beside other deliveries. MySQL's staging table is shared, so its
-                # lock comes first.
-                staged_alone = conn.dialect.name == "postgresql"
-                by_row = staged_alone and spec["load_mode"] != "snapshot"
-                if staged_alone: stage.create(conn)
-                else:
-                    lock(conn, spec)
-                    conn.execute(delete(stage))
+                lock(conn, spec)
+                conn.execute(delete(stage))
                 try:
                     count, batch = 0, []
                     for row in rows:
@@ -91,42 +89,18 @@ class DatabaseSink:
                         if len(batch) == BATCH:
                             conn.execute(insert(stage), batch); batch = []
                     if batch: conn.execute(insert(stage), batch)
-                    if staged_alone and not by_row: lock(conn, spec)
                     if not count and spec["load_mode"] == "snapshot":
                         raise Blocked(f"silver.{spec['table']} is a snapshot: an empty delivery would empty it; refused")
-                    group_keys = [stage.c[k] for k in spec["key"]]
-                    if conn.dialect.name == "mysql":
-                        from sqlalchemy import cast, LargeBinary
-                        group_keys = [func.sha2(cast(func.json_array(*key_values), LargeBinary), 256)]
-                    duplicates = select(func.count()).select_from(stage).group_by(*group_keys).having(func.count() > 1)
+                    duplicates = select(func.count()).select_from(stage).group_by(silver_key).having(func.count() > 1)
                     if conn.execute(duplicates.limit(1)).first():
                         raise Blocked(f"silver.{spec['table']}: the delivery holds a key more than once")
                     now = datetime.now(UTC)
-                    from sqlalchemy import literal
                     values = [stage.c[c] for c in staged] + [literal(now, type_=target.c[c].type) for c in specs.added_time(spec)]
                     incoming = select(*values).select_from(stage).where(~exists(select(1).select_from(target).where(match)))
-
-                    def insert_missing():
-                        if not by_row:
-                            return conn.execute(insert(target).from_select(staged + specs.added_time(spec), incoming)).rowcount
-                        # In key order, so deliveries that share keys meet in the same order; a row another delivery
-                        # inserted first is left to it (a changed value is then found below).
-                        from sqlalchemy.dialects.postgresql import insert as pg_insert
-                        return conn.execute(pg_insert(target).from_select(
-                            staged + specs.added_time(spec), incoming.order_by(*(stage.c[k] for k in spec["key"]))
-                        ).on_conflict_do_nothing(index_elements=[target.c[k] for k in spec["key"]])).rowcount
-
-                    def count_changed():
-                        found = conn.scalar(select(func.count()).select_from(stage.join(target, match)).where(differs(source)))
-                        if found and spec["load_mode"] == "append":
-                            raise Blocked(f"silver.{spec['table']} is append only: delivered rows change rows already landed under the same key")
-                        return found
-
-                    # By row, the insert comes first: it waits for a delivery still holding the same key, and the check
-                    # after it sees that delivery's committed row (a refusal rolls the insert back).
-                    if by_row: inserted = insert_missing()
-                    changed = count_changed()
-                    if not by_row: inserted = insert_missing()
+                    changed = conn.scalar(select(func.count()).select_from(stage.join(target, match)).where(differs(source)))
+                    if changed and spec["load_mode"] == "append":
+                        raise Blocked(f"silver.{spec['table']} is append only: delivered rows change rows already landed under the same key")
+                    inserted = conn.execute(insert(target).from_select(staged + specs.added_time(spec), incoming)).rowcount
                     updates = {"mdm_ids_updated": 0}
                     for name, columns in groups.items():
                         if columns:
@@ -139,10 +113,7 @@ class DatabaseSink:
                     if spec["load_mode"] == "snapshot":
                         deleted = conn.execute(delete(target).where(~exists(select(1).select_from(stage).where(match)))).rowcount
                 finally:
-                    if conn.dialect.name == "mysql": conn.execute(delete(stage))
-                # A failed delivery's rollback removes its staging table; dropping it first would raise on the aborted
-                # transaction and hide why the delivery failed.
-                if conn.dialect.name == "postgresql": stage.drop(conn)
+                    conn.execute(delete(stage))
         except (DBAPIError, StatementError) as exc:
             raise Blocked(delivery_refusal(spec["table"], exc)) from None
         return {"table": spec["table"], "rows": count, "inserted": inserted, "changed": changed,

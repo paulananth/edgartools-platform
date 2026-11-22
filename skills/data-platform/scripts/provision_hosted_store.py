@@ -258,7 +258,8 @@ def provision(conn, held: dict[str, tuple[str, set[str]]], admin: str, confirm: 
             done.append(f"{database}: connect for {', '.join(readers)} (never TEMPORARY: run-time code creates no table)")
             if confirm:
                 cur.execute(sql.SQL("REVOKE ALL ON DATABASE {} FROM PUBLIC").format(sql.Identifier(database)))
-                for role in readers:
+                for role in readers:  # a store provisioned earlier granted TEMPORARY: take it back
+                    cur.execute(sql.SQL("REVOKE TEMPORARY ON DATABASE {} FROM {}").format(sql.Identifier(database), sql.Identifier(role)))
                     cur.execute(sql.SQL("GRANT CONNECT ON DATABASE {} TO {}").format(sql.Identifier(database), sql.Identifier(role)))
                 if READER in held:  # the diagnostic login reads catalogs and statistics: CONNECT, never a table
                     done.append(f"{database}: connect for {READER}")
