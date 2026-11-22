@@ -59,13 +59,14 @@ def outside_bigint(column: dict) -> bool:
 
 
 def _silver_type(column: dict) -> str:
-    """Widen every in-range integer to BIGINT; keep larger ranges as exact text."""
+    """Widen proven in-range integers to BIGINT; keep unproven wide kinds as text."""
     kind = column.get("stored_type", column.get("type"))
     if kind not in profile.INTEGERS:
         return column.get("type", kind)
     out_of_range = column.get("outside_bigint")
     if out_of_range is None:
-        out_of_range = outside_bigint(column) or (column.get("min") is None and kind in {"HUGEINT", "UBIGINT"})
+        # Without the full-read range flag, HUGEINT/UBIGINT may exceed BIGINT.
+        out_of_range = kind in {"HUGEINT", "UBIGINT"}
     return "VARCHAR" if out_of_range else SILVER_INTEGER
 
 
