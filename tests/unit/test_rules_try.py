@@ -1,5 +1,6 @@
-"""The try page shows one family's inputs and refuses both save buttons."""
+"""The try page shows one family's inputs. Keep a copy writes a confirmed path."""
 import json
+from pathlib import Path
 
 from edgar_warehouse.cli import main
 from edgar_warehouse.rules.bench_keep import keep_copy
@@ -72,11 +73,74 @@ def test_compare_ignores_key_order_and_keeps_list_order():
     assert not matches({"a": 0}, {"a": False})
 
 
-def test_keep_a_copy_and_store_this_draft_refuse_and_write_nothing(tmp_path):
+def test_a_confirmed_path_reloads_as_the_same_json(tmp_path):
+    case = {"b": 1, "a": {"name": "Example Works", "quantity": 12}}
+    path = tmp_path / "case.json"
+    assert keep_copy(case, path) == {"kept": str(path)}
+    assert json.loads(path.read_text()) == case
+
+
+def test_an_unconfirmed_path_is_not_written(tmp_path):
+    case = {"family": "example", "rule": "{}"}
+    path = tmp_path / "case.json"
+    assert keep_copy(case, None) == {"refused": "The path is not confirmed."}
+    assert not path.exists()
+
+
+def test_keep_a_copy_without_a_path_does_not_write(capsys, tmp_path):
+    _family(tmp_path)
+    assert main(["rules", "try", "--family", "example", "--families", str(tmp_path),
+                 "--button", "Keep a copy"]) == 1
+    assert json.loads(capsys.readouterr().out) == {"refused": "The path is not confirmed."}
+    assert list(tmp_path.glob("*.json")) == []
+
+
+def test_a_copy_is_not_written_under_rules():
+    from edgar_warehouse.rules.files import ROOT
+
+    target = Path(ROOT) / "not-a-kept-copy.json"
+    case = {"family": "example", "rule": "{}"}
+    try:
+        assert keep_copy(case, target) == {"refused": "A copy is not written under rules/."}
+        assert not target.exists()
+    finally:
+        if target.exists():
+            target.unlink()
+
+
+def test_a_differently_cased_rules_folder_is_not_written():
+    import os
+    from edgar_warehouse.rules.files import ROOT
+
+    root = Path(ROOT)
+    alias = root.with_name(root.name.swapcase())
+    if not (alias.exists() and os.path.samefile(alias, root)):
+        return
+    target = alias / "not-a-kept-copy.json"
+    try:
+        assert keep_copy({"family": "example"}, target) == {"refused": "A copy is not written under rules/."}
+        assert not target.exists()
+    finally:
+        if target.exists():
+            target.unlink()
+
+
+def test_a_missing_folder_is_not_written(tmp_path):
+    target = tmp_path / "missing" / "case.json"
+    assert keep_copy({"family": "example"}, target) == {"refused": "The folder is not there."}
+    assert not target.exists()
+
+
+def test_a_folder_path_is_not_written(tmp_path):
+    folder = tmp_path / "case"
+    folder.mkdir()
+    assert keep_copy({"family": "example"}, folder) == {"refused": "The path is a folder."}
+    assert not any(folder.iterdir())
+
+
+def test_store_this_draft_still_refuses(tmp_path):
     case = build_case("example", "{}", {"document": "12"}, {"a": 1}, {"a": 1})
     path = tmp_path / "case.json"
-    assert keep_copy(case, path) == {"refused": "Keep a copy is not available yet"}
-    assert not path.exists()
     assert store_draft(case) == {"refused": "Store this draft is not available yet"}
     assert not path.exists()
 
@@ -130,13 +194,24 @@ def test_a_missing_family_is_refused(capsys, tmp_path):
     assert json.loads(capsys.readouterr().out) == {"refused": "No family named missing."}
 
 
-def test_the_save_buttons_on_the_command_refuse(capsys, tmp_path):
+def test_keep_a_copy_on_the_command_reloads_as_the_same_json(capsys, tmp_path):
     _family(tmp_path)
     path = tmp_path / "saved.json"
     assert main(["rules", "try", "--family", "example", "--families", str(tmp_path),
-                 "--button", "Keep a copy", "--path", str(path)]) == 1
-    assert json.loads(capsys.readouterr().out) == {"refused": "Keep a copy is not available yet"}
-    assert not path.exists()
+                 "--button", "Keep a copy", "--path", str(path)]) == 0
+    assert json.loads(capsys.readouterr().out) == {"kept": str(path)}
+    assert json.loads(path.read_text()) == {
+        "actual": None,
+        "expected": None,
+        "family": "example",
+        "inputs": {},
+        "passed": True,
+        "rule": "",
+    }
+
+
+def test_store_this_draft_on_the_command_refuses(capsys, tmp_path):
+    _family(tmp_path)
     assert main(["rules", "try", "--family", "example", "--families", str(tmp_path),
                  "--button", "Store this draft"]) == 1
     assert json.loads(capsys.readouterr().out) == {"refused": "Store this draft is not available yet"}
