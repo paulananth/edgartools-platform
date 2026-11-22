@@ -161,6 +161,34 @@ def _snapshots(folder) -> set:
     return {spec["table"] for spec in found if isinstance(spec, dict) and spec.get("load_mode") == "snapshot"}
 
 
+def _silver_keys(folder) -> dict:
+    """Each silver table's key, from the source's silver specs and the shared ones (`rules/silver`)."""
+    from .files import ROOT, load
+
+    paths = [*sorted(Path(folder).glob("silver-*.yaml")), *sorted((ROOT / "silver").glob("silver-*.yaml"))]
+    return {spec["table"]: spec.get("key") for spec in map(load, paths) if isinstance(spec, dict) and "table" in spec}
+
+
+def _declared_keys(target: dict, folder) -> None:
+    """A landed table declares its silver table's key in the contract it is read by, so source processing refuses a
+    key repeated in one source extract and silver applies the rows by that key without checking them again."""
+    lands = [entry["land"] for entry in target.get("silver", []) if isinstance(entry, dict) and isinstance(entry.get("land"), dict)]
+    if not lands or folder is None or not isinstance(target.get("extract"), str):
+        return
+    from .files import load
+
+    tables = ((load(Path(folder) / target["extract"]) or {}).get("read") or {}).get("tables") or {}
+    keys = _silver_keys(folder)
+    for land in lands:
+        want, declared = keys.get(land.get("silver")), (tables.get(land.get("table")) or {}).get("key")
+        if want is None:  # no spec of that table in these rules: nothing to compare with (its registration refuses it)
+            continue
+        if declared is None:
+            raise ShapeError(f"{land.get('table')} lands in silver.{land.get('silver')} but declares no key in {target['extract']}")
+        if declared != want:
+            raise ShapeError(f"{land.get('table')} declares key {declared}, silver.{land.get('silver')}'s key is {want}")
+
+
 def _silver(entry: dict, default: list, folder=None) -> dict:
     kinds = [kind for kind in ("land", "derive") if kind in entry]
     if not isinstance(entry, dict) or len(kinds) != 1 or not isinstance(entry.get("name"), str) \
@@ -215,6 +243,7 @@ def expand(target: dict, folder=None) -> dict:
                                    "readings": master.get("readings", {last[0]: {"all": last[0]}})}))
         steps.append(_step("merge", merge, [prepare]))
         last = [merge]
+    _declared_keys(target, folder)
     base = last  # a landing waits for what it lands from; a derived table for the step before it
     for entry in target.get("silver", []):
         steps.append(_silver(entry, base if "land" in entry else last, folder))

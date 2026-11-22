@@ -37,6 +37,7 @@ read:
     accession_number: {type: text}
   tables:
     sec_thirteenf_holding:
+      key: [accession_number, holding_index]
       each: infoTable
       columns:
         accession_number: {context: {name: accession_number}}

@@ -22,6 +22,7 @@ read:
     reason: A submissions document must be a JSON object
   tables:
     filing:
+      key: [accession_number, cik]
       # Only the 13F reports and their notices and amendments (13F-HR, 13F-HR/A, 13F-NT, 13F-E, 13FCONP ...).
       select:
         choose:

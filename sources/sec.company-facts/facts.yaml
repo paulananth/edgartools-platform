@@ -183,6 +183,7 @@ read:
     # its exact filed digits (a big decimal). `period` keys a fact's period without
     # an empty part: start/end for a duration (ISO 8601), the date for an instant.
     company_fact:
+      key: [company_key, taxonomy, concept, unit, period, accession_number, filed]
       each:
         nest:
           each: {entries: {path: facts, key_field: taxonomy, value_field: concepts, on_invalid: empty}}

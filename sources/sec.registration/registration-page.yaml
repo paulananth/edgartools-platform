@@ -37,6 +37,7 @@ read:
     max_records: 5000000
   tables:
     offering:
+      key: [accession_number]
       each: .
       columns:
         accession_number:
@@ -133,6 +134,7 @@ read:
                 pattern: (?i)(nasdaq global select market|nasdaq global market|nasdaq capital market|nyse american|new york stock exchange|nyse|nasdaq)
                 group: 1
     statement_line:
+      key: [accession_number, table_number, row_number]
       each: row
       select:
         found:

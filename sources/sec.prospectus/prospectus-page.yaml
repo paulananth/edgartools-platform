@@ -39,6 +39,7 @@ read:
     max_records: 5000000
   tables:
     offering:
+      key: [accession_number]
       each: .
       columns:
         accession_number:
@@ -118,6 +119,7 @@ read:
                   york stock exchange|nyse|nasdaq)
                 group: 1
     cover_line:
+      key: [accession_number, table_number, row_number, line]
       each: row
       select:
         choose:
@@ -236,6 +238,7 @@ read:
                 pattern: ','
                 with: ''
     turned_price:
+      key: [accession_number, table_number, row_number, line]
       each: row
       select:
         choose:
@@ -347,6 +350,7 @@ read:
               const:
                 value: null
     turned_discount:
+      key: [accession_number, table_number, row_number, line]
       each: row
       select:
         choose:
@@ -458,6 +462,7 @@ read:
               const:
                 value: null
     turned_proceeds:
+      key: [accession_number, table_number, row_number, line]
       each: row
       select:
         choose:
@@ -569,6 +574,7 @@ read:
               const:
                 value: null
     underwriter:
+      key: [accession_number, table_number, row_number]
       each: row
       select:
         choose:

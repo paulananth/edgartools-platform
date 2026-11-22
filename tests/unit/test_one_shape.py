@@ -225,3 +225,22 @@ def test_a_step_that_computes_from_another_steps_rows_is_kept(tmp_path):
                                         "else": {"const": {"value": None}}}}}
     folder = rules_folder(tmp_path, record=_copy_step(computed), join={"pass": {"readings": {}}, "combine": {}})
     assert [s["name"] for s in shape.expand({"extract": "record.yaml"}, folder)["steps"]][:2] == ["join", "record"]
+
+
+def _keyed_landing(tmp_path, declared):
+    folder = rules_folder(tmp_path, contract={"pass": {"name": "rows", "files": "*.json", "units": {"each": "file"}}, "read": {"format": "json", "tables": {"rows": {
+        "each": ".", **({"key": declared} if declared is not None else {}),
+        "columns": {"a": {"text": {"path": "a"}}, "b": {"text": {"path": "b"}}}}}}})
+    (folder / "silver-t.yaml").write_text("table: t\nload_mode: append\nkey:\n- a\n- b\n")
+    return shape.expand({"extract": "contract.yaml", "silver": [{"name": "land", "land": {"table": "rows", "silver": "t"}}]}, folder)
+
+
+def test_a_landed_table_declares_its_silver_tables_key(tmp_path):
+    # Source processing owns that each key appears once; silver applies by the same key (CONTEXT.md, Silver Landing).
+    assert _keyed_landing(tmp_path, ["a", "b"])["steps"][-2]["name"] == "land"
+
+
+@pytest.mark.parametrize("declared, refusal", [(None, "declares no key"), (["a"], r"declares key \['a'\], silver.t's key is \['a', 'b'\]")])
+def test_a_landed_table_without_its_silver_key_is_refused(tmp_path, declared, refusal):
+    with pytest.raises(shape.ShapeError, match=refusal):
+        _keyed_landing(tmp_path, declared)

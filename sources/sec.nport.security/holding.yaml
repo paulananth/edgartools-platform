@@ -44,6 +44,7 @@ read:
     period: {type: text}
   tables:
     holding:
+      key: [accession_number, holding_id]
       each: .
       select: {test: {path: HOLDING_ID, kind: present}}
       columns:
