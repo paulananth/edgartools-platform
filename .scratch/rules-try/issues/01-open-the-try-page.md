@@ -1,7 +1,7 @@
 # Open the try page
 
 Type: task
-Status: open
+Status: resolved
 Label: ready-for-agent
 Blocked by: none
 
@@ -17,14 +17,18 @@ Owns: the page module, empty `bench_families/`, `bench_keep.py`, `bench_store.py
 
 ## Checklist
 
-- [ ] The page, the empty family folder, and the two refuse files exist
-- [ ] `rules try` shows inputs, the rule, and the expected output
-- [ ] A family appears only because its file exists
-- [ ] A temp-folder fake family shows its title and input labels
-- [ ] Compare ignores key order
-- [ ] Keep a copy and Store this draft refuse
-- [ ] No engine call, no `rules/` read, and no database
-- [ ] Learning → skill
+- [x] The page, the empty family folder, and the two refuse files exist. `tests/unit/test_rules_try.py`. 2026-11-21 22:03 ET
+- [x] `rules try` shows inputs, the rule, and the expected output. `tests/unit/test_rules_try.py`. 2026-11-21 22:03 ET
+- [x] A family appears only because its file exists. `tests/unit/test_rules_try.py`. 2026-11-21 22:03 ET
+- [x] A temp-folder fake family shows its title and input labels. `tests/unit/test_rules_try.py`. 2026-11-21 22:03 ET
+- [x] Compare ignores key order. `tests/unit/test_rules_try.py`. 2026-11-21 22:03 ET
+- [x] Keep a copy and Store this draft refuse. `tests/unit/test_rules_try.py`. 2026-11-21 22:03 ET
+- [x] No engine call, no `rules/` read, and no database. `tests/unit/test_rules_try.py` patches the database connection and the rules-file loader. 2026-11-21 22:03 ET
+- [x] Learning → skill: none. The page is filename discovery and four buttons. No new procedure for a skill. 2026-11-21 22:03 ET
+
+## Answer
+
+`edgar-warehouse rules try --family <name>` prints the page for that family file. The page shows the title and input labels the file declares, a rule box, an expected-output box, and the four buttons. A family is present because `bench_families/<name>.py` exists. `<name>_full.py` is loaded only when that family file is there too. Compare is JSON equality, so key order does not matter and list order does. Keep a copy and Store this draft return a refusal and write nothing. The command does not call an engine, read `rules/`, or open a database.
 
 ## Comments
 
