@@ -51,6 +51,17 @@ def keep(column: dict, role: str, key_columns: list[str]) -> bool:
     return True
 
 
+def _silver_type(column: dict) -> str:
+    """Use BIGINT only when the profiled integer range fits its signed bounds."""
+    kind = column["type"]
+    if kind not in profile.INTEGERS:
+        return kind
+    low, high = column.get("min"), column.get("max")
+    if low is not None and (int(low) < -(2**63) or int(high) >= 2**63):
+        return kind
+    return SILVER_INTEGER
+
+
 def spec(f: dict, relationships: list[dict], parts: dict) -> dict:
     """The silver table spec (findings spec section 6): numbers, identifiers, and
     material commentary. Links point to masters only: a link to another transaction or reference
@@ -81,7 +92,7 @@ def spec(f: dict, relationships: list[dict], parts: dict) -> dict:
     return {
         "table": f["part"].replace(".", "_").lower(),
         "grain": f"one row per {' + '.join(f['record_key']['columns'])}",
-        "columns": [{"name": c["name"], "type": SILVER_INTEGER if c["type"] in profile.INTEGERS else c["type"],
+        "columns": [{"name": c["name"], "type": _silver_type(c),
                      "nullable": c["fill"] < 1.0, "definition": None,
                      "source": f"{f['part']}.{c['name']}", "sensitivity": c["sensitivity"]} for c in columns],
         "key": f["record_key"]["columns"],
