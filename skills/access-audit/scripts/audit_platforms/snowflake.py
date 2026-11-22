@@ -26,8 +26,18 @@ def connection_of(env) -> str:
     return env.get("AUDIT_SNOWFLAKE_CONNECTION") or DEFAULT_CONNECTION
 
 
+def connections() -> set[str]:
+    """The SnowCLI connection names on this machine (names only)."""
+    done = subprocess.run(["snow", "connection", "list", "--format", "json"], capture_output=True, text=True, check=False)
+    try:
+        return {row["connection_name"] for row in json.loads(done.stdout or "[]")}
+    except (ValueError, KeyError, TypeError):
+        return set()
+
+
 def configured(env) -> bool:
-    return True
+    """Audited whenever its connection exists: the default auditor connection needs no variable, and a machine without it skips Snowflake instead of ending the whole audit."""
+    return connection_of(env) in connections()
 
 
 def snow(connection: str, sql: str, soft: bool = False):
@@ -106,7 +116,7 @@ def collect(env, as_admin: bool = False) -> dict:
         "warehouses": lower(snow(connection, "show warehouses")),
         "statement_timeout": int(next(r["value"] for r in lower(snow(connection, "show parameters like 'STATEMENT_TIMEOUT_IN_SECONDS' in account")))),
         "policy_drift": policy_drift(expected, policies),
-        "password_policies": len(policies["password"]) if policies else 0,  # read from the live reader: the usage views lag by hours
+        "password_policies": len(policies["password"]) if policies else None,  # read from the live reader: the usage views lag by hours
         "authentication_policies": len(policies["authentication"]) if policies else None,
         "risky_grants": lower(snow(connection, f"select grantee_name, privilege from {USAGE}.grants_to_roles where deleted_on is null and granted_on in "
                                    f"('ACCOUNT', 'ROLE', 'WAREHOUSE', 'DATABASE') and privilege in ({risky}) and grantee_name not in "
@@ -147,7 +157,7 @@ def controls(ev: dict) -> list[dict]:
           "Set an account network policy; add one per service user"),
         c("CST", not ungoverned, {"warehouses_without_monitor": len(ungoverned), "monitors": ev["monitors"]}, "Create a resource monitor with a credit quota"),
         c("TMO", ev["statement_timeout"] <= MAX_TIMEOUT, {"statement_timeout_s": ev["statement_timeout"]}, "Set a timeout on the account or on each service user"),
-        c("POL", ev["password_policies"] > 0 and (ev["authentication_policies"] or 0) > 0 and not ev.get("policy_drift"),
+        c("POL", (ev["password_policies"] or 0) > 0 and (ev["authentication_policies"] or 0) > 0 and not ev.get("policy_drift"),
           {"password_policies": ev["password_policies"], "authentication_policies": ev["authentication_policies"], "drift_from_snowflake_policy_yaml": ev.get("policy_drift")},
           "Apply the access Terraform root from rules/snowflake_policy.yaml (policies live in the Gold database's POLICIES schema, no other database)",
           tested=ev["authentication_policies"] is not None),
