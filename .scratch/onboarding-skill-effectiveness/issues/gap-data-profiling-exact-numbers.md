@@ -1,7 +1,7 @@
 # Capability gap: the profiler reads some numbers through floating point
 
 Type: task
-Status: open
+Status: resolved
 Priority: P0
 Blocked by: none
 Labels: wayfinder:task
@@ -31,12 +31,16 @@ The approved scenario's exact-number outcome is therefore not expressible by the
 
 ## Acceptance checklist
 
-- [ ] Reproduce the evidenced CSV-decimal and long-JSON-integer failures on invented inputs.
-- [ ] Fix number reading generically and add tests proving exact types, decimal places/distinct counts, and silver types.
-- [ ] Publish this ticket's change in its own PR and pass the affected checks and current-head CI.
-- [ ] Learning → skill: record the verified exact-number rule in Data Profiling, or record none.
+- [x] The pre-fix invented-input probes recorded above reproduced the CSV decimal `DOUBLE`/scale-20 and JSON long-integer collapse; the regression case in `tests/unit/test_data_profiling_exact_numbers.py` asserts exact results.
+- [x] The generic numeric path and regression tests are in PR [fix(data-profiling): preserve exact numeric values](https://github.com/paulananth/edgartools-platform/pull/2015); tests cover exact stored/silver types, decimal scale, distinct counts and refusal of lossy mixed JSON values.
+- [x] Published in [fix(data-profiling): preserve exact numeric values](https://github.com/paulananth/edgartools-platform/pull/2015), merged 2026-11-22 11:42 ET; the focused exact-number and input tests passed 59 tests on 2026-11-23.
+- [x] Learning → skill: Data Profiling specifies `BIGINT`/exact `BIGDECIMAL` and forbids floating-point numeric types.
 
 
+
+## Answer
+
+The generic reader preserves numeric text through profiling: the invented CSV decimal is `DECIMAL(19,2)` with scale 2, and the 60 distinct 22-digit JSON identifiers remain distinct and are not published as a rounded numeric silver field. Mixed JSON rows that cannot be represented exactly are refused before a table is published. Implementation is in [fix(data-profiling): preserve exact numeric values](https://github.com/paulananth/edgartools-platform/pull/2015), merged 2026-11-22 11:42 ET. `TESTMON_DATAFILE="$HOME/.cache/edgartools/testmondata" uv run pytest --testmon tests/unit/test_data_profiling_exact_numbers.py tests/unit/test_profiling_inputs.py` passed 59 tests. Invented files only; no provider request or real source profile.
 ## Ticket 11 linkage
 
-[Ticket 11](./11-data-profiling-generic-verification.md) remains incomplete until this capability is fixed and verified.
+[data-profiling: Specify generic verification](./11-data-profiling-generic-verification.md) remains open for the combined four-scenario evidence; this exact-number capability is resolved.

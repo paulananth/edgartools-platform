@@ -87,6 +87,7 @@ No scenario or test code is approved by creating these tickets. Proposed Givenâ€
 - [data-platform: Specify generic verification](issues/05-data-platform-generic-verification.md): the three approved scenarios revealed no executable generic route; the capability gap is tracked separately and no behavior is claimed. PR #1983, merged 2026-11-21 07:33 ET.
 
 - [data-profiling: Make the entrypoint executable](issues/09-data-profiling-entrypoint.md): the repository skill now has a supported profiling entrypoint; its implementation and evidence are captured in [Ticket 09: add the data-profiling entrypoint](https://github.com/paulananth/edgartools-platform/pull/1980).
+- [Capability gap: the profiler reads some numbers through floating point](issues/gap-data-profiling-exact-numbers.md): exact decimal scale and long integer identifiers now survive through the generic reader; invented regression tests and the affected checks pass, in [fix(data-profiling): preserve exact numeric values](https://github.com/paulananth/edgartools-platform/pull/2015).
 
 ## Not yet specified
 
