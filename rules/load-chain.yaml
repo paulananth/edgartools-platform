@@ -1,7 +1,10 @@
 # The order a fresh store is loaded in: every captured source and target, each one's capture and the facts and
 # revision no capture states, read by `skills/data-operations/scripts/load_chain.py` (Edgar Intelligence initialize
 # runbook, "Load a fresh store"). `capture` is a folder under the captures root (or the proving root where `capture_root: proving`);
-# `{run}` in a fact is the chain's run label. `minutes` bounds one attempt, which carries on where the last stopped.
+# `capture_label` names each step's capture run (`<label>-<step>`), and a fact is written as its value: both are inputs of a
+# record, so they stay as the store was loaded (a new value processes every file again, and the Stage refuses the changed
+# records under the same revision). The chain's RUN names its state and logs only. `minutes` bounds one attempt, which
+# carries on where the last stopped.
 # Steps that may run at the same time are in different `lane`s, and `waits_for` names a step of another lane that must
 # be done first. Each lane runs its steps in file order (`load_chain.py --lane <name>`), so every lane can start at once.
 # Every `waits_for` comes from `infer_dependencies.py` (what the rules declare; tests hold each wait to an inferred edge
@@ -26,6 +29,7 @@ capacity:
 # waiting on them, by the first full load's measured times), 2 the steps with 30 to under 100 minutes, 3 every other step. A step
 # that says nothing is 3. The init runbook's "Load priority" lists each tier, and a test holds that list to this file.
 defaults: {workers: 2, bundles: 1, priority: 3}
+capture_label: fresh-v1
 steps:
   - name: company
     lane: A
@@ -34,8 +38,8 @@ steps:
     target: mastering
     capture: sec.submissions.company/all-76230
     facts:
-      capture_run: "{run}-company"
-      catalog_run: "{run}-catalog"
+      capture_run: fresh-v1-company
+      catalog_run: fresh-v1-catalog
       observed_at: "2026-09-30T02:20:28+00:00"
       load_mode: "default"
     workers: 2
