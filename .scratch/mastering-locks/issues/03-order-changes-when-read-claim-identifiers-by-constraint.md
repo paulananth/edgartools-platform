@@ -1,4 +1,4 @@
-# Order changes when they are read, and claim identifiers with a constraint, not with locks
+# Write each golden record once with its number, and claim identifiers with a constraint, not with locks
 
 Status: open
 Type: task
@@ -60,32 +60,33 @@ waits. The disk reads are their own question: the next proof reports reads per g
 
 ## The design
 
-### 1. Changes are numbered when they are read, not when they are written
+### 1. Each golden record is written once, with its number
 
-- A merge writes a changed golden record with `changed_file = 0`, which means pending. `master_upsert` already resets the number
-  on a real change and leaves an unchanged record alone. `number_changes()` and `lock_file()` leave the merge path, so a merge
-  commits with no store-wide wait and no second write.
-- **Numbering is a reader's step:** `Store.number_pending()` takes the numbering lock, then runs one set-based statement:
-  `update mastering_master set changed_file = <last + 1> where changed_file = 0`, then commits. Two writers call it:
-  - `lookups.build`, before it reads, since it resumes from a number;
-  - `load_chain.py --finish`, so a finished load leaves nothing pending.
+Operator, 2026-11-23: "Why do I need a second write it is not one of the 7 wastes". Numbering when read still wrote each row
+twice (the pending insert, then the numbering update), so it is over-processing and is dropped.
 
-  The context search reads with a read-only login, so it never numbers. Its `trust` reports the last number and whether
-  changes are still pending. After `--finish` nothing is pending.
-- **Why the order still holds:** the numbering statement sees only committed rows (each statement in PostgreSQL's read-committed
-  mode reads what was committed when it started; MySQL InnoDB reads the latest committed version for an `UPDATE`). It gives them
-  all number N, under one lock that only numbering takes. A merge that commits later stays pending and gets N+1 or above at the
-  next numbering. So a reader that has seen N has seen every change committed before N was given, which is the property
-  `number_changes` promised.
-- **Cost:** one set-based statement per reading on the server, with no round trip per row and no worker waiting. At `--finish`
-  it numbers the whole load once. **It is still a second write of each pending row**, done once in bulk on the server instead of
-  once per transaction under a lock, so the claim "no second write" holds only for the merge path. Measure the bulk statement on
-  the proof load; if it is too slow, number by kind or in key ranges, still under the one numbering lock.
-- **`_wake`** compares golden records changed after `seen` (the last number when its merge started). During a load nothing is
-  numbered, so it must also read pending rows: `changed_file > seen or changed_file = 0`. That is a superset of what it reads
-  today. **Open, decide by test, not by reading:** whether the superset releases exactly the same records, or wakes more than
-  it should. If it differs, `_wake` keeps a start marker of its own (the pending rows it could already see at its start),
-  never the store-wide lock.
+- **The number is written with the row.** A merge transaction takes its number when it starts, from a counter that needs no
+  lock: a PostgreSQL sequence (`nextval`), on MySQL one row of a counter table with `auto_increment`. That is one statement a
+  transaction, not one a golden record. The insert or upsert of each golden record writes `changed_file = <its number>`.
+  `number_changes()`, `lock_file()`, the pending value 0 and the update all go.
+- **What the counter does not give:** commit order. Transaction 7 can commit after transaction 8. A reader that read up to 8
+  while 7 was still open would never see 7.
+- **So a reader that resumes from a number reads a quiet store.** There are two such readers, and both already run after the
+  loads:
+  - `lookups.build`, on `--finish --lookups`;
+  - the context's `trust`, a report of the last number.
+
+  `lookups.build` refuses while a merge can run: an open mastering run in Bookkeeping, or a loader session connected (the same
+  check as `clear` below). `--finish` runs after every lane is done, so it passes. On a quiet store every number up to the
+  highest is committed, so the order holds without a lock.
+- **`_wake`** today reads golden records changed after `seen`, the highest number when its merge started. With numbers taken
+  at start, a merge that started before it and commits after it has a lower number, so `changed_file > seen` would miss it.
+  `_wake` reads the holders of the identifiers it waits for whatever their number, minus the ones it wrote. That is a superset of
+  today's reading. **Decide by test:** it releases exactly the same records on the concurrent-merge case. If it releases more,
+  bound it by the numbers of merges that were still open at its start (one read of the counter and the open runs), never by a
+  lock or a second write.
+- **Cost:** one counter statement per transaction, and no update. The proof counts updates of `mastering_master` during the
+  merge: zero.
 
 ### 2. One golden record of a kind per identifier value is a constraint
 
@@ -124,12 +125,12 @@ one golden record twice.
   each lock key. Go on with part 1 if `lock_file` waits are a material share, or regardless for the second write
   (measured: 17.6k updates against 17.1k inserts a minute)
 - [ ] `/gof-refactor-reviewer` consult on `edgar_warehouse/mastering/store.py` and `merge.py` before code
-- [ ] Part 1, numbering when read. Tests first, each failing on today's code:
-  - a merge's commit takes no numbering lock and writes each changed golden record once;
-  - a merge committing after a numbering is numbered at the next numbering, never below the reader's checkpoint
-    (two connections, PostgreSQL adapter);
-  - `lookups.build` numbers first and reads every change; the context's `trust` names pending changes and writes nothing;
-  - `--finish` leaves no pending row;
+- [ ] Part 1, each golden record written once with its number. Tests first, each failing on today's code:
+  - a merge writes each changed golden record once, with its number, and takes no numbering lock (today: an insert, then an
+    update under `lock_file`);
+  - two merges (two connections) take different numbers without waiting on each other;
+  - `lookups.build` refuses while a mastering run is open or a loader session is connected, and reads every change on a
+    quiet store;
   - `_wake` releases the same records as today on the concurrent-merge case (decides the open point above)
 - [ ] Part 2, the claim table. Tests first:
   - two merges claiming one value leave one golden record;
@@ -142,7 +143,8 @@ one golden record twice.
   - `clear` refuses while a mastering run is open, and while a loader session is connected;
   - `clear` still clears an idle store
 - [ ] Proof: rerun the mastering step that limited the measured load (`gleif`) on a disposable store. Report golden records a
-  minute and the inserts and updates of `mastering_master`, against 17k a minute and two writes a record
+  minute, disk reads per golden record, and the updates of `mastering_master` during the merge: zero, against 17.6k a minute
+  today
 - [ ] Skills: mdm-engineering's lock paragraph (merges no longer number changes; claims are a constraint; the cap is gone);
-  data-operations' `--finish` (numbers pending changes)
+  data-operations (the lookups build only on a quiet store, after the loads)
 - [ ] Learning → skill: name the skill lines changed, or "none"
