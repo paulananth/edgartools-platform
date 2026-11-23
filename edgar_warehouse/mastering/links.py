@@ -101,7 +101,9 @@ def bind(silver) -> dict:
             lock(conn, spec)
             if not conn.scalar(text("select exists (select 1 from mdm.mastering_record r join mdm.mastering_master m "
                                     "on m.entity_id = r.entity_id)")):
-                raise Blocked("silver.master_binding is a snapshot: an empty delivery would empty it; refused")
+                if conn.scalar(text("select exists (select 1 from silver.master_binding)")):
+                    raise Blocked("silver.master_binding is a snapshot: an empty delivery would empty it; refused")
+                return {"inserted": 0, "changed": 0, "deleted": 0, "bindings": 0}  # a store with no master yet binds nothing
             inserted = conn.scalar(text(
                 f"with wanted as ({WANTED}), written as (insert into silver.master_binding "
                 "(source_code, source_key, kind, master_id, loaded_at) select source_code, source_key, kind, master_id, now() "

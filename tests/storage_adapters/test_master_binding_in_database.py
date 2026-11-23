@@ -107,6 +107,12 @@ def test_a_login_that_cannot_read_mdm_is_refused_naming_the_grants(database_fact
             links.bind(runtime)
 
 
+def test_a_store_with_no_master_binds_nothing_and_leaves_an_empty_table_empty(database_factory):
+    with opened(database_factory) as (owner, runtime, role, db):
+        assert links.bind(runtime) == {"inserted": 0, "changed": 0, "deleted": 0, "bindings": 0}
+        assert held(owner) == []
+
+
 def test_an_empty_store_refuses_to_empty_the_snapshot(database_factory):
     with opened(database_factory) as (owner, runtime, role, db):
         merged(db, ("K1", "0000000017"))

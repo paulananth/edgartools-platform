@@ -165,6 +165,7 @@ def test_links_land_as_one_row_a_period_and_a_second_build_keeps_them(postgres, 
         silver.migrate(owner, runtime_role=RUNTIME)
         for name in ("relationship", "relationship-evidence", "relationship-path", "master-binding"):
             silver.register(owner, spec_file(files.ROOT / "silver" / f"silver-{name}.yaml", None), runtime_role=RUNTIME)
+        stores.install(owner, runtime_role=RUNTIME)  # the binding is built by a statement over the mdm tables (none hold a record here)
         monkeypatch.setattr(links, "calculate", calculate)
         monkeypatch.setattr(stores, "open_store", lambda engine: Master2())
         monkeypatch.setattr("edgar_warehouse.rules.registry.engine", lambda: Rules())
