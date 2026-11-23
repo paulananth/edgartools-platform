@@ -1398,3 +1398,11 @@ def test_a_step_the_scheduler_gave_up_on_is_failed_until_it_starts_again(tmp_pat
                      "11-23 07:03:00 ET b1 attempt 1 start\n11-23 07:04:00 ET b1 stopped: the same failure came back\n"
                      "11-23 07:05:00 ET b1 attempt 1 start\n")
     assert chain.failed_steps(state) == {"a1"}  # an attempt's own stop is not the scheduler giving up; b1 started again
+
+
+def test_finish_records_how_long_it_took_against_its_bound(monkeypatch):
+    notes = []
+    monkeypatch.setattr(chain, "run", lambda args, env, log=None: 0)
+    monkeypatch.setattr(chain, "note", lambda message, state: notes.append(message))
+    chain.finish({}, Path("/dev/null"))
+    assert any(m.startswith("finish took ") and "min" in m for m in notes) and notes[-1] == "chain done"

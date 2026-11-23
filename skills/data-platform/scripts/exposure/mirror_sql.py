@@ -11,7 +11,8 @@ the operator's approval:
     python mirror_sql.py create --instance <instance> > create.sql      # the record, the exposure list and the names file
     snow sql -c <connection> -f create.sql
     python mirror_sql.py alter --mirrored <JSON list of the mirrored schema.table names, read back>   # adds and removes the difference
-    python mirror_sql.py verify                  # until every table is REPLICATING with equal counts
+    python mirror_sql.py verify                  # the listing call
+    python mirror_sql.py readback --listing <JSON list of {"table": "schema.table", "state": "..."} from the listing>   # fails until the mirror is exactly the record, every table REPLICATING, in schemas MDM, RDM and SILVER
     python mirror_sql.py check --reads <sources file>   # fails when Gold reads a table the record does not list
     python mirror_sql.py retire                  # TRUE: the target database goes with the mirror
     python mirror_sql.py release                 # FALSE, then the owner role takes the target
@@ -97,6 +98,23 @@ def verify(managed: dict) -> str:
     return f"CALL SNOWFLAKE.POSTGRES.LIST_MIRRORED_TABLES('{managed['mirror']}');\n"
 
 
+def readback(managed: dict, exposure: dict, listing: list[dict]) -> str:
+    """Whether the mirror is the record: nothing missing or unexpected, every table REPLICATING, and each target schema the
+    source schema in upper case (`mdm` gives `MDM`). Raises with every difference; never reads Snowflake itself."""
+    wanted, held = set(tables(managed, exposure)), {row["table"] for row in listing}
+    problems = []
+    if missing := sorted(wanted - held):
+        problems.append(f"missing: {', '.join(missing)}")
+    if extra := sorted(held - wanted):
+        problems.append(f"unexpected: {', '.join(extra)}")
+    if waiting := sorted(f"{row['table']} ({row['state']})" for row in listing if str(row["state"]).upper() != "REPLICATING"):
+        problems.append(f"not replicating: {', '.join(waiting)}")
+    if problems:
+        raise SystemExit("; ".join(problems))
+    schemas = sorted({table.split(".")[0].upper() for table in wanted})
+    return f"the mirror is exactly the record: {len(wanted)} tables, all REPLICATING, schemas {', '.join(schemas)}\n"
+
+
 def exists(names: dict) -> str:
     """The read-back of the one mirror target: absent before a create and after a retire, present while it replicates. Any role that can list databases runs it."""
     return f"SHOW DATABASES LIKE '{names['mirror']['database']}';\n"
@@ -123,7 +141,7 @@ def release(managed: dict, names: dict) -> str:
 
 def main(argv: list[str] | None = None) -> str:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("action", choices=["plan", "create", "alter", "verify", "check", "retire", "release", "exists"])
+    parser.add_argument("action", choices=["plan", "create", "alter", "verify", "check", "retire", "release", "exists", "readback"])
     parser.add_argument("--managed", type=Path, default=SOURCES / "managed-mirror.yaml", help="the managed mirror record")
     parser.add_argument("--exposure", type=Path, default=SOURCES.parent / "destination" / "authorised_data_sharing.yaml", help="the exposure list that bounds the record")
     parser.add_argument("--names", type=Path, default=RULES / "snowflake.yaml", help="the file naming the mirror database")
@@ -131,6 +149,7 @@ def main(argv: list[str] | None = None) -> str:
     parser.add_argument("--publications-held", type=int, help="the publications the instance already holds (plan)")
     parser.add_argument("--instance", help="the Postgres instance (create)")
     parser.add_argument("--reads", type=Path, help="the dbt sources file Gold reads (check)")
+    parser.add_argument("--listing", type=Path, help="a JSON list of {table, state} read from the listing (readback)")
     parser.add_argument("--mirrored", type=Path, help="a JSON list of the tables the mirror holds, read back (alter)")
     args = parser.parse_args(argv)
     load = lambda path: yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -141,6 +160,10 @@ def main(argv: list[str] | None = None) -> str:
         return plan(managed, load(args.exposure), args.publication_limit, args.publications_held)
     if args.action == "verify":
         return verify(managed)
+    if args.action == "readback":
+        if not args.listing:
+            parser.error("readback needs --listing")
+        return readback(managed, load(args.exposure), load(args.listing))
     if args.action == "exists":
         return exists(load(args.names))
     if args.action == "retire":

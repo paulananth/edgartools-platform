@@ -1210,10 +1210,12 @@ def attempt_loop(step: dict, env: dict, state: Path) -> bool:
 def finish(env: dict, state: Path, lookups: bool = False) -> None:
     """After the loads: the links tables and master_binding are built once (a silver row finds its master by a join on master_binding, so no id is filled). The name-search lookups are built only when asked
     (`lookups`): a load reads none of them, only the context search does, and building them re-derives every master."""
+    began = time.monotonic()
     if lookups:
         note("lookups start", state)
         note(f"lookups rc={run(['mdm', 'build-lookups'], env, LOGS / f'chain-{RUN}-lookups.log')}", state)
     note(f"links rc={run(['silver', 'links'], env, LOGS / f'chain-{RUN}-links.log')}", state)
+    note(f"finish took {(time.monotonic() - began) / 60:.1f} min (the bound is 5 min without lookups)", state)
     note("chain done", state)
 
 

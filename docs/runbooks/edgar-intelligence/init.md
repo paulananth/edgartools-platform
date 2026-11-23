@@ -285,7 +285,8 @@ After the load (and `--finish`), one Snowflake mirror of the data database carri
 which `destination/authorised_data_sharing.yaml` lets leave the stores. Its schemas are `MDM`, `RDM` and `SILVER` (the source schema's name in upper case), and
 its target database is `mirror.database` in `rules/snowflake.yaml`. The procedure, its read-only checks and its approval (one create plan) are
 [the data-platform skill's hosted mirroring guide](../../../skills/data-platform/HOSTED-MIRRORING.md#after-the-first-load-mirror-only-the-exposed-subset).
-Done when the mirror lists exactly its recorded tables, each replicating, with none missing or unexpected.
+Done when `mirror_sql.py readback --listing <the listing as JSON>` passes: the mirror lists exactly its recorded tables, each replicating, in schemas `MDM`, `RDM` and `SILVER`, with none missing or unexpected.
+`--finish` writes `finish took <n> min` to the chain's state file (the bound is five minutes without lookups): record that figure on the ticket.
 
 The mirror is made, in this order, after `--finish`: (1) `exposure_manifest.py generate`, then `check` (read-only); (2) the guide's read-only pre-flight on the data
 database (instance `STANDARD_*` or `HIGHMEM_*`, a key and a supported type on every column) and `mirror_sql.py exists`, which must show the target absent before a
