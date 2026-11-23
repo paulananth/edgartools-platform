@@ -76,15 +76,22 @@ twice (the pending insert, then the numbering update), so it is over-processing 
   - `lookups.build`, on `--finish --lookups`;
   - the context's `trust`, a report of the last number.
 
-  `lookups.build` refuses while a merge can run: an open mastering run in Bookkeeping, or a loader session connected (the same
-  check as `clear` below). `--finish` runs after every lane is done, so it passes. On a quiet store every number up to the
-  highest is committed, so the order holds without a lock.
+  `lookups.build` refuses while a merge can run: Bookkeeping holds an open run of a mastering target, or another session holds
+  a kind lock (`pg_locks`, the kind lock's class; MySQL `IS_USED_LOCK`). Every merge holds its kind lock until it commits, so
+  that is exactly "a merge is open", and the caller's own session holds none. It never counts the sessions of a login: the
+  build runs under the loader's own login and would refuse itself. `clear` uses the same check (part 3). `--finish` runs after
+  every lane is done, so it passes. On a quiet store every number up to the highest is committed, so the order holds without a
+  lock.
+- **Numbers have gaps, and a record's number can go down.** A merge that rolls back used its number, so a gap is normal and
+  never means a lost change. Two merges that change one golden record (the later one waits on its row lock) leave the number of
+  whichever commits last, which can be the lower. Neither matters to a reader of a quiet store: it reads every record above its
+  checkpoint, and every number taken since its last build is above that checkpoint. A test holds both.
 - **`_wake`** today reads golden records changed after `seen`, the highest number when its merge started. With numbers taken
   at start, a merge that started before it and commits after it has a lower number, so `changed_file > seen` would miss it.
   `_wake` reads the holders of the identifiers it waits for whatever their number, minus the ones it wrote. That is a superset of
   today's reading. **Decide by test:** it releases exactly the same records on the concurrent-merge case. If it releases more,
-  bound it by the numbers of merges that were still open at its start (one read of the counter and the open runs), never by a
-  lock or a second write.
+  part 1 stops there and the case goes to the operator as a new decision: no fallback is designed, and none may add a lock or a
+  second write.
 - **Cost:** one counter statement per transaction, and no update. The proof counts updates of `mastering_master` during the
   merge: zero.
 
@@ -104,8 +111,8 @@ twice (the pending insert, then the numbering update), so it is over-processing 
 
 `lock_store` exists only so that `clear` (the whole store) can wait out every merge: each merge takes it shared, which costs one
 round trip a transaction, and `clear` takes it exclusive. `clear` never runs during a load, so the exclusion moves to `clear`:
-it refuses while Bookkeeping holds an open mastering run, or while any session of the loader login is connected to the data
-database (the reader login sees both). Merges stop taking `lock_store`; `clear` keeps its exclusive store lock for itself.
+it refuses while Bookkeeping holds an open run of a mastering target, or while another session holds a kind lock (part 1's
+check, which never counts the caller's own session). Merges stop taking `lock_store`; `clear` keeps its exclusive store lock for itself.
 Of the locks a merge takes today, only `lock_kind` remains: shared beside other merges of its kind, exclusive for what only a merge
 alone may do (combine golden records, create by exact name, redo after a deadlock). Without it, two merges could create or combine
 one golden record twice.
@@ -113,24 +120,25 @@ one golden record twice.
 ### What does not change
 
 - A merge of one kind still runs beside the others. Merges that combine golden records still run alone.
-- Readers still see changes in order. `last_file()` keeps its meaning once numbering has run.
+- Readers of a quiet store still see every change. `last_file()` is the highest number written, which on a quiet store is the
+  highest committed.
 - `clear` still clears the whole store, alone.
 - MySQL: `GET_LOCK` holds one lock per session, so MySQL merges one kind at a time as now. Part 1 removes its file lock too.
 
 ## Parts
 
 - [x] Measure first: lock waits are 1% of merge session time, disk reads 43% (above); the lock root cause is overturned and
-  parts 1 to 3 go on for the second write and the round trips 2026-11-23 13:02 ET. The measurement as planned: sample `pg_locks` (advisory, `granted = false`) and `pg_stat_activity` wait events every 10 s for
-  10 minutes during a mastering step, through the diagnostic login. Report the share of merge-transaction time spent waiting on
-  each lock key. Go on with part 1 if `lock_file` waits are a material share, or regardless for the second write
-  (measured: 17.6k updates against 17.1k inserts a minute)
+  parts 1 to 3 go on for the second write and the round trips (`pg_locks` and `pg_stat_activity` every 10 s for 10
+  minutes, reader login) 2026-11-23 13:02 ET
 - [ ] `/gof-refactor-reviewer` consult on `edgar_warehouse/mastering/store.py` and `merge.py` before code
 - [ ] Part 1, each golden record written once with its number. Tests first, each failing on today's code:
   - a merge writes each changed golden record once, with its number, and takes no numbering lock (today: an insert, then an
     update under `lock_file`);
   - two merges (two connections) take different numbers without waiting on each other;
-  - `lookups.build` refuses while a mastering run is open or a loader session is connected, and reads every change on a
-    quiet store;
+  - `lookups.build` refuses while another session holds a kind lock or a mastering run is open, runs under the loader's own
+    login on a quiet store, and reads every change there;
+  - a rolled-back merge leaves a gap and the next build reads every change; two merges of one golden record that commit out of
+    order leave the later commit's number, and the next build reads that record;
   - `_wake` releases the same records as today on the concurrent-merge case (decides the open point above)
 - [ ] Part 2, the claim table. Tests first:
   - two merges claiming one value leave one golden record;
@@ -140,7 +148,8 @@ one golden record twice.
   - no merge is cut for the lock table's cap
 - [ ] Part 3, no store lock in a merge. Tests first:
   - a merge takes no store lock (fails today: every merge takes it shared);
-  - `clear` refuses while a mastering run is open, and while a loader session is connected;
+  - `clear` refuses while a mastering run is open, and while another session holds a kind lock; it runs on a quiet store under
+    its own login;
   - `clear` still clears an idle store
 - [ ] Proof: rerun the mastering step that limited the measured load (`gleif`) on a disposable store. Report golden records a
   minute, disk reads per golden record, and the updates of `mastering_master` during the merge: zero, against 17.6k a minute
