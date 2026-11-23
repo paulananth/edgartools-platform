@@ -30,6 +30,14 @@ MDM is the first scope. It masters identities and the relationships between them
 
 There is one MDM. It is not called "Clean MDM" (operator, 2026-10-13); the old MDM it replaced is deleted.
 
+**Consumable Data Product**:
+A governed output made available to an approved operational or analytical consumer. It may present authoritative Golden Records, linked analytical views, published reference values, or governed hierarchies and relationships.
+_Avoid_: raw source exposure, schema-wide publication, internal workflow state
+
+**Internal MDM State**:
+Ingestion, match resolution, stewardship, reference-data administration, and audit structures used to govern or operate MDM; these are not consumer-facing products.
+_Avoid_: Golden Record, analytical product, published reference values
+
 The master data domains are Company, Person, Security, Fund Structure, Branch, Government Entity and International Organization. A profile hangs on one of those domains and is not itself a domain.
 
 **Company Identity**:

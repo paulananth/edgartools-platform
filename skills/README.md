@@ -21,6 +21,7 @@ The source order is capture, profile, model, approved configuration, then MDM/Si
 - [data-profiling](data-profiling/SKILL.md) measures captured structure and can add portable NER mention evidence from local text; it does not resolve identities.
 - [data-modeling](data-modeling/SKILL.md) decides approved domains, classes, master kinds, reference code sets and hierarchies, entity resolution and identity, relationships and time.
 - [data-governance](data-governance/SKILL.md) and [data-catalog](data-catalog/SKILL.md) govern definitions, lineage and catalog meaning.
+- [mdm-data-publication](mdm-data-publication/SKILL.md) selects and verifies exact governed MDM outputs for operational and analytical consumers, while keeping hub and reference-data administration internals private.
 
 **Data Engineer — engineering and production**
 - New source configuration and checks: [data-onboarding](data-onboarding/SKILL.md), [data-quality](data-quality/SKILL.md). Existing-rule refinement sits inside [MDM Engineering](mdm-engineering/SKILL.md#refining-rules); [refining-rules](refining-rules/SKILL.md) forwards to its procedure.
@@ -32,7 +33,7 @@ The source order is capture, profile, model, approved configuration, then MDM/Si
 - [auto-ontology-product-query](auto-ontology-product-query/SKILL.md) answers questions over configured products. No general analyst workflow skill is maintained here.
 
 **BI Developer — production reporting**
-- [semantic-views](semantic-views/SKILL.md), [auto-ontology](auto-ontology/SKILL.md) and [aws-snowflake-operations](aws-snowflake-operations/SKILL.md) cover scoped semantic/query and Snowflake/dbt work; [data-catalog](data-catalog/SKILL.md) and [openmetadata](openmetadata/SKILL.md) cover governed publication. No generic dashboard-builder skill is maintained in this repository.
+- [mdm-data-publication](mdm-data-publication/SKILL.md), [semantic-views](semantic-views/SKILL.md), [auto-ontology](auto-ontology/SKILL.md) and [aws-snowflake-operations](aws-snowflake-operations/SKILL.md) cover governed product exposure, scoped semantic/query and Snowflake/dbt work; [data-catalog](data-catalog/SKILL.md) and [openmetadata](openmetadata/SKILL.md) cover catalog publication and readback. No generic dashboard-builder skill is maintained in this repository.
 
 ### Stage 4: advanced analytics and AI
 

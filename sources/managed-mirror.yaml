@@ -12,7 +12,8 @@ approval:
   date: "2026-11-20"
   words:
   - first i need a system of record for tables included in the mirror
-  # The list is the 19 tables the first mirror carried (the masters, the published RDM codes, every registered silver table).
+  # The entries below select the two final MDM consumer tables, published RDM codes, and every registered Silver output.
+  # MDM/RDM workflow tables and Silver table_spec metadata stay internal; silver.master_binding is a required final link.
 verified: false                   # becomes true when a read-back (mirror_sql.py verify) shows every table REPLICATING with equal counts
 tables:
 - layer: mdm
