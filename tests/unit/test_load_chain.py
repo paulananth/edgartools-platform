@@ -1354,3 +1354,47 @@ def test_only_a_log_naming_more_than_one_bundle_can_be_moved():
     assert chain.movable(LOG)
     assert not chain.movable("gleif mastering: 1 documents in 1 bundles\nBundle 1/1: 1 of 1 documents to load\n")
     assert not chain.movable("")
+
+
+def test_a_verdict_has_one_kind_the_words_follow():
+    busy = dict(log_age=2.0, cpu=40.0, writes_per_min=500.0, lock_waiters=0)
+    assert chain.verdict_kind(**busy) == "progressing"
+    assert chain.verdict_kind(**{**busy, "log_age": 30.0, "cpu": 0.0, "writes_per_min": 0.0}) == "stalled"
+    assert chain.verdict_kind(**{**busy, "log_age": 30.0, "cpu": 0.0}, shares_store=["gleif"]) == "unclear"
+    assert chain.verdict_kind(**{**busy, "lock_waiters": 3}) == "locked"
+    assert chain.verdict_kind(**{**busy, "lock_waiters": 2}) == "progressing"  # one or two waiters are normal
+
+
+def test_a_snapshot_names_the_state_of_every_step_and_what_a_waiting_step_waits_for(tmp_path, monkeypatch):
+    steps = [{"name": "a1", "lane": "A", "source": "s1", "target": "mastering", "minutes": 60, "attempts": 2, "workers": 1},
+             {"name": "b1", "lane": "B", "source": "s2", "target": "mastering", "minutes": 60, "attempts": 2, "workers": 1,
+              "waits_for": ["a1"]},
+             {"name": "c1", "lane": "C", "source": "s3", "target": "mastering", "minutes": 60, "attempts": 2, "workers": 1}]
+    state = tmp_path / "state.log"
+    state.write_text("11-23 07:00:00 ET a1 attempt 1 start\n11-23 07:10:00 ET a1 done: 5 min\n"
+                     "11-23 07:11:00 ET c1 attempt 2 start\n")
+    monkeypatch.setattr(chain, "external_loads", lambda: {("s3", "mastering")})
+    monkeypatch.setattr(chain, "process_use", lambda source, target: ({1: 1.0}, 120.0))
+    monkeypatch.setattr(chain, "machine_reading", lambda: {"load": 1.0, "cores": 8, "memory_free": 0.2})
+    monkeypatch.setattr(chain, "database_load", lambda url: {"lock_waiters": 0})
+    monkeypatch.setattr(chain, "database_sessions", lambda url: {})
+    monkeypatch.setattr(chain, "database_writes", lambda url: {"mdm": 0})
+    monkeypatch.setattr(chain, "writes_per_minute", lambda before, after, sample: {"mdm": 900.0})
+    monkeypatch.setattr(chain, "LOGS", tmp_path)
+    monkeypatch.setattr(chain.time, "sleep", lambda s: None)
+    snap = chain.status_snapshot(steps, state, "postgresql://x/y", sample=1)
+    assert {s["name"]: s["state"] for s in snap["steps"]} == {"a1": "done", "b1": "waiting", "c1": "progressing"}
+    assert next(s for s in snap["steps"] if s["name"] == "b1")["waits_for"] == ["a1"]
+    (row,) = snap["running"]
+    assert (row["name"], row["attempt"], row["store"], row["rows_per_min"]) == ("c1", 2, "mdm", 900.0)
+    assert (snap["done"], snap["total"], snap["machine"]["memory_free"]) == (1, 3, 0.2)
+    assert "c1 (lane C, attempt 2" in "\n".join(chain.status_lines(snap))  # the text is the snapshot written out
+
+
+def test_a_step_the_scheduler_gave_up_on_is_failed_until_it_starts_again(tmp_path):
+    state = tmp_path / "state.log"
+    state.write_text("11-23 07:00:00 ET a1 attempt 1 start\n11-23 07:01:00 ET a1 attempt 1 stopped rc=1: boom\n"
+                     "11-23 07:02:00 ET a1 stopped: the same failure came back\n"
+                     "11-23 07:03:00 ET b1 attempt 1 start\n11-23 07:04:00 ET b1 stopped: the same failure came back\n"
+                     "11-23 07:05:00 ET b1 attempt 1 start\n")
+    assert chain.failed_steps(state) == {"a1"}  # an attempt's own stop is not the scheduler giving up; b1 started again

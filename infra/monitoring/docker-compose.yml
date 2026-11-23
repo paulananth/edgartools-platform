@@ -1,0 +1,66 @@
+# The load monitor: Prometheus scrapes the exporter on the host, Grafana shows it. Only Grafana's port reaches the host,
+# on 127.0.0.1. Nothing is mounted from a checkout (a bind of a repository path ties a container to that worktree);
+# Prometheus's scrape file is inline `configs` content. The dashboard and its data source are pushed by
+# `skills/load-monitoring/scripts/monitoring.py`, not mounted.
+#
+#   uv run --no-sync python skills/load-monitoring/scripts/monitoring.py up
+name: edgartools-monitoring
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    restart: unless-stopped
+    mem_limit: 256m
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+    configs:
+      - source: prometheus-scrape
+        target: /etc/prometheus/prometheus.yml
+    volumes:
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    restart: unless-stopped
+    mem_limit: 384m
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${MONITORING_ADMIN_PASSWORD:?set by monitoring.py from the private file}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_USERS_DEFAULT_THEME: dark
+      GF_DATE_FORMATS_DEFAULT_TIMEZONE: America/New_York
+    volumes:
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:${MONITORING_PORT:-3001}:3000"
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+configs:
+  prometheus-scrape:
+    content: |
+      global:
+        scrape_interval: 15s
+      scrape_configs:
+        - job_name: load-exporter
+          static_configs:
+            - targets: ["host.docker.internal:9108"]
+
+volumes:
+  prometheus-data:
+  grafana-data:

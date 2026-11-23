@@ -34,7 +34,7 @@ are initialized, before the load (the init runbook's catalog step, `docs/runbook
 
 ## Report a running load from its evidence
 
-Never report a load as "running". Run `load_chain.py --status` and report, for each running step, what it prints:
+Never report a load as "running". Run `load_chain.py --status` (`--json` feeds [load-monitoring](../load-monitoring/SKILL.md)) and report, for each running step, what it prints:
 how long against its bound, how far (bundles done and the minutes left at the rate so far), what it wrote (rows a minute
 in its store, and which other running steps share that store), its processes' CPU and memory, the age of its log, and its
 verdict. The database sessions are shown by store (working, or waiting on the client), read as the reader login.
