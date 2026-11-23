@@ -15,7 +15,7 @@ from .checks import QUALITY
 from .checks import check as check_quality
 
 KEYS = {"table", "grain", "columns", "key", "links", "time", "partition", "load_mode", "why"}
-OPTIONAL = {"definition", "checks"}
+OPTIONAL = {"definition", "checks", "may_be_empty"}
 COLUMN_KEYS = {"name", "type", "nullable", "definition", "source", "sensitivity"}
 LINK_KEYS = {"columns", "kind", "source_code", "identifier", "to_part", "source_key", "mdm_id_column", "inclusion"}
 LOAD_MODES = ("append", "upsert", "snapshot")
@@ -86,6 +86,9 @@ def check(spec: dict) -> dict:
         raise Blocked("A key column is never empty: mark it nullable false")
     if spec["load_mode"] not in LOAD_MODES:
         raise Blocked(f"load_mode is one of {LOAD_MODES}")
+    if "may_be_empty" in spec and (spec["may_be_empty"] is not True or spec["load_mode"] != "snapshot"):
+        raise Blocked("may_be_empty is true, and only on a snapshot: a snapshot of a list its parent owns "
+                      "is empty when the parent has none")
     added = []
     for link in spec["links"] or []:
         if not isinstance(link, dict) or not {"columns", "kind", "source_key", "mdm_id_column"} <= set(link) \

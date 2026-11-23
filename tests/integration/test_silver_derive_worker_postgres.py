@@ -25,7 +25,8 @@ from tests.integration.test_silver_writer_postgres import RUNTIME, silver_databa
 from tests.support.patching import checked
 
 FOLDER = files.sources_root() / "sec.company-facts"
-TABLES = ("silver-company-fact.yaml", "silver-company-line-item.yaml", "silver-company-measure.yaml")
+TABLES = ("silver-company-fact.yaml", "silver-company-line-item.yaml", "silver-company-line-item-input.yaml",
+          "silver-company-measure.yaml", "silver-company-measure-input.yaml")
 
 
 def envelope(build, checks=("silver.derived",)):
@@ -99,6 +100,18 @@ def test_measures_are_rebuilt_from_the_line_items(silver_store):
         "silver.derived": True}
 
 
+def test_each_input_table_is_its_own_build_over_the_same_query(silver_store):
+    land(PostgresSink(silver_store), "company_fact", copy.deepcopy(line_tests.FACTS), line_tests.no_masters)
+    land(PostgresSink(silver_store), "company_line_item", copy.deepcopy(measure_tests.LINES), line_tests.no_masters)
+    for build, table in (("line_item_inputs", "company_line_item_input"), ("measure_inputs", "company_measure_input")):
+        store = Artifacts()
+        out = silver_derive.execute(envelope(build), store)
+        receipt = json.loads(store.written[out["uri"]])
+        with silver_store.connect() as conn:
+            held = conn.execute(text(f"SELECT count(*) FROM silver.{table}")).scalar()
+        assert receipt["table"] == table and receipt["rows"] == held > 0
+
+
 def test_an_unknown_build_or_check_is_refused(silver_store):
     with pytest.raises(ValueError, match="builds one of"):
         silver_derive.execute(envelope("other"), Artifacts())
@@ -153,7 +166,8 @@ def test_links_land_as_one_row_a_period_and_a_second_build_keeps_them(postgres, 
 
     with silver_database(admin) as (owner, runtime):
         silver.migrate(owner, runtime_role=RUNTIME)
-        silver.register(owner, spec_file(files.ROOT / "silver" / "silver-relationship.yaml", None), runtime_role=RUNTIME)
+        for name in ("relationship", "relationship-evidence", "relationship-path"):
+            silver.register(owner, spec_file(files.ROOT / "silver" / f"silver-{name}.yaml", None), runtime_role=RUNTIME)
         monkeypatch.setattr(links, "calculate", calculate)
         monkeypatch.setattr(stores, "open_store", lambda engine: Master2())
         monkeypatch.setattr("edgar_warehouse.rules.registry.engine", lambda: Rules())
@@ -162,6 +176,9 @@ def test_links_land_as_one_row_a_period_and_a_second_build_keeps_them(postgres, 
         links.build(runtime, MasterPolicy(), "invented", "2026-11-06T00:00:00+00:00")
         assert first == {"table": "relationship", "links": 1, "rows": 1, "waiting": {"no_master": 2}}
         assert seen[0] == {} and seen[1]["invented"]["periods"][0]["valid_from_basis"] == "observed"
+        with runtime.connect() as conn:
+            evidence = [tuple(r) for r in conn.execute(text("SELECT relationship_id, assertion_id FROM silver.relationship_evidence"))]
+        assert evidence == [("invented", "c")]
 
 
 def test_the_worker_no_longer_builds_links():

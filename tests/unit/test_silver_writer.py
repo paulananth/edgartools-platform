@@ -72,6 +72,8 @@ def test_a_spec_is_checked_and_the_writer_adds_its_mdm_ids_and_loaded_at():
     ({"load_mode": "merge"}, "load_mode"),
     ({"time": {"as_of": None, "as_at": "recorded", "event_time": None}}, "as_at names a column"),
     ({"extra": 1}, "A silver table spec holds"),
+    ({"may_be_empty": True}, "only on a snapshot"),
+    ({"load_mode": "snapshot", "may_be_empty": "yes"}, "may_be_empty is true"),
     ({"grain": None}, "grain is plain words"),
     ({"links": [{"columns": ["member_id"], "kind": "person", "source_code": "x", "source_key": "member_id",
                  "mdm_id_column": "m", "inclusion": 1.5}]}, "inclusion is a share"),

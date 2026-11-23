@@ -82,23 +82,47 @@ columns:
   definition: "The succession that ended this period."
   source: "the source record"
   sensitivity: none
-- name: path
-  type: JSON
+- name: source_event_type
+  type: VARCHAR
   nullable: true
-  definition: "The chain of links a calculated link walked."
-  source: "links.py"
+  definition: "The event type the source states for a succession (GLEIF's legal entity event). Empty when the source rule declares none."
+  source: "the source rule's properties"
   sensitivity: none
-- name: properties
-  type: JSON
-  nullable: false
-  definition: "The dated details the source rule keeps with the period."
-  source: "the source record"
+- name: source_event_status
+  type: VARCHAR
+  nullable: true
+  definition: "The status the source states for that event. Empty when the source rule declares none."
+  source: "the source rule's properties"
   sensitivity: none
-- name: evidence
-  type: JSON
-  nullable: false
-  definition: "The assertion id of each stored record that states the link."
-  source: "mastering_record"
+- name: source_entity_status
+  type: VARCHAR
+  nullable: true
+  definition: "The status the source states for the entity the event concerns. Empty when the source rule declares none."
+  source: "the source rule's properties"
+  sensitivity: none
+- name: source_relationship_status
+  type: VARCHAR
+  nullable: true
+  definition: "The status the source states for the relationship record. Empty when the source rule declares none."
+  source: "the source rule's properties"
+  sensitivity: none
+- name: source_registration_status
+  type: VARCHAR
+  nullable: true
+  definition: "The registration status the source states for the relationship record. Empty when the source rule declares none."
+  source: "the source rule's properties"
+  sensitivity: none
+- name: source_start_date_basis
+  type: VARCHAR
+  nullable: true
+  definition: "How the source's start date was found (stated or observed), for a fund series. Empty when the source rule declares none."
+  source: "the source rule's properties"
+  sensitivity: none
+- name: source_start_date_is_provisional
+  type: BOOLEAN
+  nullable: true
+  definition: "true when the source's start date may still move, for a fund series. Empty when the source rule declares none."
+  source: "the source rule's properties"
   sensitivity: none
 key:
 - relationship_id

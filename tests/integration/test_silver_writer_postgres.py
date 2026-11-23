@@ -212,6 +212,26 @@ def test_a_login_without_temporary_lands_every_load_mode(stores, load_mode):
     assert table(runtime)[2]["amount"] == 4
 
 
+def test_a_snapshot_that_may_be_empty_is_emptied_by_an_empty_delivery_and_any_other_refuses_it(stores):
+    """A list a parent owns (a chain of links) is empty when the parent has none: its snapshot says so."""
+    owner, runtime, ids, _ = stores
+    silver.register(owner, visit_spec(load_mode="snapshot", may_be_empty=True), runtime_role=RUNTIME)
+    sink = PostgresSink(runtime)
+    assert land(sink, "visit", visits(), ids)["inserted"] == 3
+    assert land(sink, "visit", [], ids)["deleted"] == 3
+    assert table(runtime) == {}
+
+
+def test_a_snapshot_not_marked_empty_refuses_an_empty_delivery(stores):
+    owner, runtime, ids, _ = stores
+    silver.register(owner, visit_spec(load_mode="snapshot"), runtime_role=RUNTIME)
+    sink = PostgresSink(runtime)
+    land(sink, "visit", visits(), ids)
+    with pytest.raises(Blocked, match="empty delivery"):
+        land(sink, "visit", [], ids)
+    assert sorted(table(runtime)) == [1, 2, 3]
+
+
 def test_a_flagged_row_lands_with_its_failed_checks_and_a_refused_row_does_not(stores, database):
     owner, runtime, ids, _ = stores
     checks = [{"id": "known_member", "check": "in_set", "column": "member_id", "values": ["a", "b"],

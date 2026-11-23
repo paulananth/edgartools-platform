@@ -48,12 +48,6 @@ columns:
   definition: "Why the value is empty: no concept filed, missing year, fiscal year changed, mixed currencies, denominator zero or negative, not meaningful (a growth rate from or to zero or less), not meaningful for financial services, statement format unknown, no country of incorporation, no statutory rate for the country and year."
   source: "measures.yaml"
   sensitivity: none
-- name: inputs
-  type: JSON
-  nullable: false
-  definition: "Each line item the measure read: its fiscal year, value, concept and accession number, and what a computed input was computed from (ROIC's tax rate and its source)."
-  source: "company_line_item"
-  sensitivity: none
 - name: definition_version
   type: VARCHAR
   nullable: false
@@ -84,8 +78,8 @@ load_mode: snapshot
 why: >-
   Stored, built from silver (ticket 39), from the latest-filed line items, and
   rebuilt whole each run; its as-at is the run, the writer's loaded_at.
-  Each row names its inputs and definition version, so a value traces to its
-  facts and filings. The statement format and country are read from the
+  Each row names its definition version, and its inputs are company_measure_input's rows, so a
+  value traces to its facts and filings. The statement format and country are read from the
   Company master, never copied here.
 # First quality check (ticket 175; from DataKitchen TestGen's LOV_Match,
 # docs/research/datakitchen-testgen-test-types-2026-11-02.md): the windows are

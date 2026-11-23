@@ -107,13 +107,21 @@ def built(postgres):
     with silver_database(admin) as (owner, runtime):
         silver.migrate(owner, runtime_role=RUNTIME)
         sink = PostgresSink(runtime)
-        for name in ("silver-company-fact.yaml", "silver-company-line-item.yaml"):
+        for name in ("silver-company-fact.yaml", "silver-company-line-item.yaml", "silver-company-line-item-input.yaml"):
             silver.register(owner, spec_file(FOLDER / name, None), runtime_role=RUNTIME)
         land(sink, "company_fact", copy.deepcopy(FACTS), no_masters)
         result = line_items.build(runtime, sink, no_masters)
+        line_items.build(runtime, sink, no_masters, table="company_line_item_input")
         with runtime.connect() as conn:
             rows = [dict(r._mapping) for r in conn.execute(text("SELECT * FROM silver.company_line_item"))]
-        yield result, {(r["company_key"], r["fiscal_year"], r["line_item"]): r for r in rows}
+            inputs = [dict(r._mapping) for r in conn.execute(text("SELECT * FROM silver.company_line_item_input"))]
+        by_figure = {}
+        for r in inputs:
+            by_figure.setdefault((r["company_key"], r["fiscal_year"], r["line_item"]), []).append(r)
+        for key, figure in by_figure.items():
+            figure.sort(key=lambda r: r["position"])
+        yield result, {(r["company_key"], r["fiscal_year"], r["line_item"]): r | {"input_rows": by_figure.get(
+            (r["company_key"], r["fiscal_year"], r["line_item"]), [])} for r in rows}
 
 
 def test_one_row_per_company_line_item_and_fiscal_year(built):
@@ -128,27 +136,31 @@ def test_one_row_per_company_line_item_and_fiscal_year(built):
 def test_the_first_present_concept_s_latest_copy_wins(built):
     _, rows = built
     revenue, income = rows[(US, 2025, "revenue")], rows[(US, 2025, "net_income")]
-    assert (revenue["value"], revenue["concept"], revenue["flags"]) == (
-        Decimal(500), "RevenueFromContractWithCustomerExcludingAssessedTax", ["revenue quality check"])
+    assert (revenue["value"], revenue["concept"], revenue["revenue_quality_check"], revenue["computed"],
+            revenue["basis"], revenue["industry_kind"]) == (
+        Decimal(500), "RevenueFromContractWithCustomerExcludingAssessedTax", True, False, None, None)
     assert revenue["period_start"].isoformat() == "2025-01-01"
     assert (income["value"], income["accession_number"], income["filed"].isoformat()) == (
         Decimal(12), "0000000001-27-000001", "2027-02-01")
     cash, shares = rows[(US, 2025, "cash")], rows[(US, 2025, "shares_outstanding")]
     assert (cash["value"], cash["unit"], cash["currency"], cash["period_start"]) == (Decimal(70), "USD", "USD", None)
-    assert (shares["value"], shares["concept"], shares["flags"]) == (
-        Decimal(7), "dei:EntityCommonStockSharesOutstanding", ["cover-page date"])
-    assert shares["inputs"][0]["date"] == "2026-01-20" and shares["period_end"].isoformat() == "2025-12-31"
+    assert (shares["value"], shares["concept"], shares["basis"]) == (
+        Decimal(7), "dei:EntityCommonStockSharesOutstanding", "cover-page date")
+    assert shares["input_rows"][0]["as_of"].isoformat() == "2026-01-20"
+    assert shares["period_end"].isoformat() == "2025-12-31"
 
 
 def test_computed_values_are_exact_and_name_their_inputs(built):
     _, rows = built
     book, gross, debt = (rows[(US, 2025, n)] for n in ("book_value", "gross_profit", "total_debt"))
-    assert (book["value"], book["concept"], book["flags"]) == (Decimal(90), "computed", ["computed"])
-    assert [i["concept"] for i in book["inputs"]] == [
+    assert (book["value"], book["concept"], book["computed"]) == (Decimal(90), "computed", True)
+    assert [i["concept"] for i in book["input_rows"]] == [
         "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest", "MinorityInterest"]
-    assert (gross["value"], gross["inputs"][0]) == (Decimal(200), {"line_item": "revenue", "value": "500.0000000000"})
+    first = gross["input_rows"][0]
+    assert (gross["value"], first["line_item_ref"], first["value"], first["concept"], first["accession_number"],
+            first["position"]) == (Decimal(200), "revenue", Decimal(500), None, None, 1)
     assert gross["accession_number"] == "0000000001-26-000001" and gross["period_start"].isoformat() == "2025-01-01"
-    assert (debt["value"], [i["concept"] for i in debt["inputs"]]) == (Decimal("55.5"), ["LongTermDebt", "CommercialPaper"])
+    assert (debt["value"], [i["concept"] for i in debt["input_rows"]]) == (Decimal("55.5"), ["LongTermDebt", "CommercialPaper"])
     liabilities = rows[(US, 2025, "liabilities")]
     assert (liabilities["value"], liabilities["null_reason"]) == (None, "no concept filed")  # two units
 
@@ -160,14 +172,14 @@ def test_the_fiscal_year_and_its_taxonomy(built):
     assert rows[(MARCH, 2024, "assets")]["value"] == Decimal(90)
     eu, profit = rows[(EU, 2025, "revenue")], rows[(EU, 2025, "net_income")]
     assert (eu["taxonomy"], eu["concept"], eu["value"], eu["currency"]) == ("ifrs-full", "Revenue", Decimal(200), "EUR")
-    assert (profit["concept"], profit["flags"]) == ("ProfitLoss", ["includes NCI"])
+    assert (profit["concept"], profit["basis"], profit["computed"]) == ("ProfitLoss", "includes NCI", False)
 
 
 def test_a_cover_page_count_is_its_own_annual_report_s(built):
     _, rows = built
     amended, next_year = rows[(NEXT, 2025, "shares_outstanding")], rows[(NEXT, 2026, "shares_outstanding")]
-    assert (amended["value"], amended["accession_number"], amended["inputs"][0]["date"]) == (
+    assert (amended["value"], amended["accession_number"], amended["input_rows"][0]["as_of"].isoformat()) == (
         Decimal(9), "0000000004-26-000002", "2026-02-20")
-    assert (next_year["value"], next_year["inputs"][0]) == (Decimal(51), {
-        "concept": "dei:EntityCommonStockSharesOutstanding", "accession_number": "0000000004-27-000001",
-        "value": "51.0000000000", "date": "2027-01-15"})
+    (read,) = next_year["input_rows"]
+    assert (next_year["value"], read["concept"], read["accession_number"], read["value"], read["as_of"].isoformat()) == (
+        Decimal(51), "dei:EntityCommonStockSharesOutstanding", "0000000004-27-000001", Decimal(51), "2027-01-15")

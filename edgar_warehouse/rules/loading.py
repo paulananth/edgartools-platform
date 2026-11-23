@@ -275,7 +275,8 @@ class Loader:
         if not configured("silver", self.env["worker"]):
             self.say("Links are not built: the stores folder has no silver login")
             return None
-        self.created([files.ROOT / "silver" / "silver-relationship.yaml"])
+        self.created([files.ROOT / "silver" / f"silver-{table}.yaml"
+                      for table in ("relationship", "relationship-evidence", "relationship-path")])
         built = json.loads(self.commands("worker", "silver", "links"))
         self.say(f"Links built: {built['links']} links in {built['rows']} rows")
         return built

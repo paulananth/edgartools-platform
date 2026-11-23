@@ -41,13 +41,14 @@ def test_the_silver_target_reads_lands_derives_and_records_each_file(tmp_path):
     steps = Artifacts().json(report["manifest"])["steps"]
 
     assert {name: len(units) for name, units in steps.items()} == {
-        "facts": 1, "land": 1, "line_items": 1, "measures": 1, "processed": 1}
+        "facts": 1, "land": 1, "line_items": 1, "line_item_inputs": 1, "measures": 1, "measure_inputs": 1,
+        "processed": 1}
     (read,) = steps["facts"]
     (land,) = steps["land"]
     assert land["keys"]["table"] == "company_fact" and land["keys"]["silver"] == "company_fact"
     assert land["input"] == {"from": {"step": "facts", "key": read["keys"]["unit"]}}
     assert land["output"].endswith(f"/land/{read['keys']['unit']}.json")
-    for name in ("line_items", "measures"):  # each derived table is one unit, named by its build
+    for name in ("line_items", "line_item_inputs", "measures", "measure_inputs"):  # each derived table is one unit, named by its build
         (derive,) = steps[name]
         assert derive["keys"]["build"] == name
         assert Artifacts().json(derive["input"]) == {"version": 1, "build": name, "silver": derive["keys"]["silver"],

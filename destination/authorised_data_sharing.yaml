@@ -55,6 +55,16 @@ tables:
   grain: one row per relationship and period start
   requirement: rules/silver/silver-relationship.yaml
 - layer: silver
+  table: relationship_evidence
+  scope: current
+  grain: one row per relationship and assertion
+  requirement: rules/silver/silver-relationship-evidence.yaml
+- layer: silver
+  table: relationship_path
+  scope: current
+  grain: one row per relationship, period start and step
+  requirement: rules/silver/silver-relationship-path.yaml
+- layer: silver
   table: adv_custody
   scope: history
   grain: one row per filing and custody row (a custodian listed twice is two rows)
@@ -73,10 +83,22 @@ tables:
   requirement: sources/sec.company-facts/silver-company-line-item.yaml
   lineage: [mdm.mastering_master]
 - layer: silver
+  table: company_line_item_input
+  scope: current
+  grain: one row per company, line item, fiscal year and input position
+  requirement: sources/sec.company-facts/silver-company-line-item-input.yaml
+  lineage: [mdm.mastering_master]
+- layer: silver
   table: company_measure
   scope: current
   grain: one row per company, measure, fiscal year and window
   requirement: sources/sec.company-facts/silver-company-measure.yaml
+  lineage: [mdm.mastering_master]
+- layer: silver
+  table: company_measure_input
+  scope: current
+  grain: one row per company, measure, fiscal year, window, input role and part
+  requirement: sources/sec.company-facts/silver-company-measure-input.yaml
   lineage: [mdm.mastering_master]
 - layer: silver
   table: ipo_filing

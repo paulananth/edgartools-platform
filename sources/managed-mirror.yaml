@@ -28,7 +28,11 @@ tables:
 - layer: silver
   table: company_line_item
 - layer: silver
+  table: company_line_item_input
+- layer: silver
   table: company_measure
+- layer: silver
+  table: company_measure_input
 - layer: silver
   table: insider_position
 - layer: silver
@@ -49,6 +53,10 @@ tables:
   table: registration_statement_line
 - layer: silver
   table: relationship
+- layer: silver
+  table: relationship_evidence
+- layer: silver
+  table: relationship_path
 - layer: silver
   table: thirteenf_filing
 - layer: silver

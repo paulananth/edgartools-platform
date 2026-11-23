@@ -84,6 +84,8 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    sourced, `edgar-warehouse rules register`. Done when it prints a digest for the merge rules and every Dataset Contract.
    Then the silver tables (data-platform's step; a load creates none and stops when one is missing):
    `bash infra/scripts/deploy-silver.sh ~/.config/edgartools/hosted/owner.env`.
+   A table whose spec was redesigned stops it with "holds another spec": as the owner, `DROP TABLE silver.<table>` and
+   `DELETE FROM silver.table_spec WHERE table_name = '<table>'`, then run it again (the loads rebuild the rows).
 7. **Worker grants**, with `owner.env` sourced, one per worker profile:
    ```bash
    for p in $(python -c "from edgar_warehouse.workers import PROFILES; print(*PROFILES)"); do

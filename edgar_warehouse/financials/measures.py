@@ -147,14 +147,15 @@ def statements(measures: Measures, formats: dict, lines: str = "silver.company_l
 
 
 def _part(alias: str) -> str:
-    """One figure's trace: its value, concept and filing."""
-    return (f"jsonb_strip_nulls(jsonb_build_object('value', {alias}.value::text, 'concept', {alias}.concept, "
+    """One figure's trace: its value, concept and filing. A computed value is traced to the 10 places the
+    silver column holds; the measure itself is computed from the unrounded one."""
+    return (f"jsonb_strip_nulls(jsonb_build_object('value', round({alias}.value, 10)::text, 'concept', {alias}.concept, "
             f"'accession_number', {alias}.accession_number))")
 
 
 def _input(alias: str) -> str:
     """One input's trace: its fiscal year and its figure, or the parts it was computed from."""
-    return (f"jsonb_strip_nulls(jsonb_build_object('fiscal_year', {alias}.fiscal_year, 'value', {alias}.value::text, "
+    return (f"jsonb_strip_nulls(jsonb_build_object('fiscal_year', {alias}.fiscal_year, 'value', round({alias}.value, 10)::text, "
             f"'concept', {alias}.concept, 'accession_number', {alias}.accession_number)) || COALESCE({alias}.detail, '{{}}'::jsonb)")
 
 
@@ -236,7 +237,7 @@ def _steps(measures: Measures, formats: dict, lines: str, facts: str) -> tuple[l
                 WHEN t.own_rate IS NULL AND r.rate IS NULL THEN 'no statutory rate for the country and year'
            END AS reason,
            jsonb_strip_nulls(jsonb_build_object('operating_income', t.oi_part, 'pretax_income', t.pre_part,
-               'income_tax', t.tax_part, 'tax_rate', COALESCE(t.own_rate, r.rate)::text,
+               'income_tax', t.tax_part, 'tax_rate', round(COALESCE(t.own_rate, r.rate), 10)::text,
                'rate_source', CASE WHEN t.own_rate IS NOT NULL THEN 'filed'
                                    WHEN r.rate IS NOT NULL THEN 'statutory: ' || t.country END)) AS detail
     FROM taxed t
@@ -349,13 +350,43 @@ FROM (SELECT * FROM ratio UNION ALL SELECT * FROM returned UNION ALL SELECT * FR
 ORDER BY company_key, measure, fiscal_year, window_years"""
 
 
-def build(silver_engine, sink, ids, companies, measures: Measures | None = None) -> dict:
-    """Run the query on silver and land its rows in `company_measure` through the writer.
+TABLES = ("company_measure", "company_measure_input")
+
+
+def straight(rows: list[dict]) -> dict[str, list[dict]]:
+    """The query's rows as the silver tables hold them: the measures, and each one's inputs (a JSON trace the
+    query builds, never stored) as one row per figure read: a role's own figure, then each part it was made from."""
+    measures, inputs = [], []
+    for row in rows:
+        measures.append({k: v for k, v in row.items() if k != "inputs"})
+        key = {k: row[k] for k in ("company_key", "measure", "fiscal_year", "window_years")}
+        for role, trace in (row["inputs"] or {}).items():
+            year = trace.get("fiscal_year", row["fiscal_year"])
+            if "value" in trace:
+                inputs.append(key | {"role": role, "part": "figure", "input_fiscal_year": year, "value": trace["value"],
+                                     "concept": trace.get("concept"), "accession_number": trace.get("accession_number"),
+                                     "basis": None})
+            for part, found in trace.items():
+                if isinstance(found, dict) and "value" in found:
+                    inputs.append(key | {"role": role, "part": part, "input_fiscal_year": year, "value": found["value"],
+                                         "concept": found.get("concept"),
+                                         "accession_number": found.get("accession_number"), "basis": None})
+            if "tax_rate" in trace:
+                inputs.append(key | {"role": role, "part": "tax_rate", "input_fiscal_year": year,
+                                     "value": trace["tax_rate"], "concept": None, "accession_number": None,
+                                     "basis": trace.get("rate_source")})
+    return {"company_measure": measures, "company_measure_input": inputs}
+
+
+def build(silver_engine, sink, ids, companies, measures: Measures | None = None, table: str = "company_measure") -> dict:
+    """Run the query on silver and land one of its tables through the writer: the measures, or their inputs.
     `companies` gives each company key's SIC and place of incorporation (`from_company`)."""
     from sqlalchemy import text
 
     from edgar_warehouse.silver_writer.writer import land
 
+    if table not in TABLES:
+        raise Blocked(f"the measures build {TABLES}: {table!r}")
     measures = measures or load()
     with silver_engine.connect() as conn:
         keys = set(conn.scalars(text("SELECT DISTINCT company_key FROM silver.company_line_item")))
@@ -365,4 +396,4 @@ def build(silver_engine, sink, ids, companies, measures: Measures | None = None)
         for step in steps:
             conn.execute(text(step))
         rows = [dict(r._mapping) for r in conn.execute(text(final))]
-    return land(sink, "company_measure", rows, ids)
+    return land(sink, table, straight(rows)[table], ids)
