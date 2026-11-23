@@ -40,7 +40,7 @@ class Store:
     def __init__(self, connection):
         self.connection = connection
         self.cursor = connection.cursor()
-        self.staged: list[tuple] = []  # the file being merged: (assertion_id, subject, source_code, lei, body)
+        self.staged: list[tuple] = []  # the file being merged: (assertion_id, subject, source_code, source_key, lei, body)
         self.changed: set[str] = set()  # the golden records this transaction wrote, not yet numbered
         self.shared: str | None = None  # the kind this transaction merges beside others of it, if it does
         self.minted: set[str] = set()  # the golden records this transaction created: no other merge can touch them
@@ -290,7 +290,7 @@ class Store:
         found = set()
         asked = set(holders)
         held_here = defaultdict(list)  # holders of this file, by subject
-        for _, subject, held_source, _, body in self.staged:
+        for _, subject, held_source, _, _, body in self.staged:
             if held_source == holder_source:
                 held_here[subject].append(body)
         if holders:
@@ -305,7 +305,7 @@ class Store:
                     waiting[lei].append(body)
             found.update((candidate, body) for subject, value in keys for candidate in waiting[value]
                          for body in held_here[subject])
-        here = [(lei, body) for _, _, candidate_source, lei, body in self.staged if candidate_source == source and lei is not None]
+        here = [(lei, body) for _, _, candidate_source, _, lei, body in self.staged if candidate_source == source and lei is not None]
         keys = []
         for block in blocks(sorted({lei for lei, _ in here})):
             keys += self.rows(f"select value,subject from mastering_name_key where role=%s and value in ({marks(block)})",
@@ -332,9 +332,9 @@ class Store:
 
     def save_records(self, bound: dict) -> None:
         """The file's records with their masters, in one write. Older rows of the same subjects follow."""
-        self.insert("mastering_record", ("assertion_id", "subject", "entity_id", "bound_id", "source_code", "lei", "body"),
-                    [(assertion, subject, bound.get(subject), bound.get(subject), source, lei, body)
-                     for assertion, subject, source, lei, body in self.staged])
+        self.insert("mastering_record", ("assertion_id", "subject", "entity_id", "bound_id", "source_code", "source_key", "lei", "body"),
+                    [(assertion, subject, bound.get(subject), bound.get(subject), source, key, lei, body)
+                     for assertion, subject, source, key, lei, body in self.staged])
         older = []
         for block in blocks(sorted(bound)):
             older += [(bound[subject], assertion) for assertion, subject, entity in self.rows(
@@ -689,6 +689,22 @@ def open_store(engine) -> Store:
     return opened
 
 
+def kind_views() -> list[str]:
+    """Per master kind, the two views a silver row joins by (never a written id): `<kind>_record` gives each source key
+    its master, `<kind>_identifier_holder` each identifier value the one master of the kind holding it."""
+    from edgar_warehouse.mdm.evidence import KINDS
+    views = []
+    for kind in sorted(KINDS):
+        views.append(
+            f"create or replace view {kind}_record as select distinct r.source_code, r.source_key, r.entity_id as master_id "
+            f"from mastering_record r join mastering_master m on m.entity_id = r.entity_id where m.kind = '{kind}'")
+        views.append(
+            f"create or replace view {kind}_identifier_holder as select i.namespace, i.value, min(i.entity_id) as master_id "
+            f"from mastering_identifier i join mastering_master m on m.entity_id = i.entity_id where m.kind = '{kind}' "
+            "group by i.namespace, i.value having count(distinct i.entity_id) = 1")
+    return views
+
+
 def install(engine, *, runtime_role: str) -> None:
     """Create the tables, drop any mastering table the code no longer uses, then let the runtime merge
     without changing structure or decisions."""
@@ -701,7 +717,7 @@ def install(engine, *, runtime_role: str) -> None:
             conn.exec_driver_sql(f"create schema if not exists {SCHEMA}")
             conn.exec_driver_sql(f"set local search_path to {SCHEMA}")
             conn.exec_driver_sql(f'grant usage on schema {SCHEMA} to {grantee}')
-        for statement in source.split(";"):
+        for statement in [*source.split(";"), *kind_views()]:
             if statement.strip():
                 conn.exec_driver_sql(statement)
         present = conn.exec_driver_sql(f"select table_name from information_schema.tables where table_schema={schema}")
@@ -710,4 +726,6 @@ def install(engine, *, runtime_role: str) -> None:
                 conn.exec_driver_sql(f"drop table {name}")
         for name in WRITTEN:
             conn.exec_driver_sql(f"grant select,insert,update,delete on mastering_{name} to {grantee}")
+        for view in kind_views():
+            conn.exec_driver_sql(f"grant select on {view.split()[4]} to {grantee}")
         conn.exec_driver_sql(f"grant select,insert on mastering_decision to {grantee}")

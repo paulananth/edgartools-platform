@@ -316,7 +316,8 @@ def split_merge(store, settings: Settings, keep: str, gone: str, verdict: dict) 
 def _merge(store, settings: Settings, records: list[dict], key: str, again: bool, arrived: set | None = None) -> dict:
     """One file of records into golden records. `arrived` collects the identifiers its golden records now hold."""
     check_source_priorities(settings.policy, records)
-    store.load_stage([(r["assertion_id"], r["subject"], r["source_code"], first(r["identifiers"].get("lei")),
+    store.load_stage([(r["assertion_id"], r["subject"], r["source_code"], r["record_key"],
+                       first(r["identifiers"].get("lei")),
                        json.dumps(r, separators=(",", ":"))) for r in records],
                      list({k for r in records for k in name_keys(r, exact_namespaces(settings))}))
     subjects = sorted({r["subject"] for r in records})
