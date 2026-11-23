@@ -1,12 +1,14 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --no-project python
 """Bring the local OpenMetadata server up, take it down, read it back and recover it.
 
-    python openmetadata.py status                 what runs, its health, its port, its mounts, its memory, the API
-    python openmetadata.py up [--server-heap 768m] [--search-heap 512m]
-                                                  start the stack (waits for health), refusing a compose file that
-                                                  maps another port or mounts a path of a checkout
-    python openmetadata.py stop                   stop the containers; the data volumes stay
-    python openmetadata.py recover                remove the server container (never a volume) and start it again
+    uv run --no-project python openmetadata.py status
+        what runs, its health, its port, its mounts, its memory and the API; exit 0 only when all are right
+    uv run --no-project python openmetadata.py up [--server-heap 768m] [--search-heap 512m]
+        start the stack and wait for health, refusing a compose file that maps another port or mounts a path of a checkout
+    uv run --no-project python openmetadata.py stop
+        stop the containers; the data volumes stay
+    uv run --no-project python openmetadata.py recover
+        remove the server container (never a volume) and start it again
 
 It touches only the Compose project `edgartools-openmetadata`. The data is in its two named volumes; no command here
 removes a volume. Credentials, the AI Governance clearout and catalog resets are `infra/openmetadata/init.sh` and the
