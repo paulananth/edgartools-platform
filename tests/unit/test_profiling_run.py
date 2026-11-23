@@ -65,13 +65,13 @@ def test_personal_values_never_reach_the_outputs(result):
 def test_every_part_gets_a_silver_table_and_new_kind_questions(result):
     visit = part(result, "visit")
     assert visit["silver"]["key"] == ["visit_id"] and visit["silver"]["load_mode"] == "append"
-    assert visit["silver"]["links"][0]["mdm_id_column"] == "member_id_mdm_id"
+    assert visit["silver"]["links"][0]["source_key"] == "member_id"
     for f in result["findings"]["parts"]:  # every column of every part is a silver field
         assert [c["name"] for c in f["silver"]["columns"]] == [c["name"] for c in f["columns"]]
     member = part(result, "member")["silver"]  # a master's rows carry their own MDM id
     assert member["load_mode"] == "upsert"
     assert member["links"][0] == {"columns": ["member_id"], "kind": None, "source_code": None, "to_part": "member",
-                                  "source_key": "member_id", "mdm_id_column": "mdm_id", "inclusion": 1.0}
+                                  "source_key": "member_id", "inclusion": 1.0}
     asked = [q["about"] for q in result["findings"]["questions"]]
     assert "member" in asked and result["findings"]["approval"]["status"] == "draft"
 

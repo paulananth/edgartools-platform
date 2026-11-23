@@ -50,6 +50,8 @@ tables:
 - layer: silver
   table: registration_offering
 - layer: silver
+  table: master_binding
+- layer: silver
   table: registration_statement_line
 - layer: silver
   table: relationship

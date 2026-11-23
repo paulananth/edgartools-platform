@@ -86,17 +86,6 @@ def spec(f: dict, relationships: list[dict], parts: dict) -> dict:
 
     columns = [c for c in f["columns"] if c.get("silver_field", True)]
 
-    def id_column(r):
-        column = r["from"]["columns"][0]
-        if r.get("self"):  # the row's own MDM id, under a name no source column takes
-            name = "mdm_id" if "mdm_id" not in {c["name"] for c in f["columns"]} else f"{f['part']}_mdm_id"
-        else:
-            name = f"{column}_mdm_id" if taken.count(column) == 1 else f"{column}_{r['to']['part']}_mdm_id"
-        if len(name.encode()) <= 63:  # PostgreSQL's longest name
-            return name
-        short = hashlib.sha256(name.encode()).hexdigest()[:8]
-        return f"{column.encode()[:40].decode(errors='ignore')}_{short}_mdm_id"
-
     return {
         "table": f["part"].replace(".", "_").lower(),
         "grain": f"one row per {' + '.join(f['record_key']['columns'])}",
@@ -105,7 +94,7 @@ def spec(f: dict, relationships: list[dict], parts: dict) -> dict:
                      "source": f"{f['part']}.{c['name']}", "sensitivity": c["sensitivity"]} for c in columns],
         "key": f["record_key"]["columns"],
         "links": [{"columns": r["from"]["columns"], "kind": None, "source_code": None, "to_part": r["to"]["part"],
-                   "source_key": r["from"]["columns"][0], "mdm_id_column": id_column(r),
+                   "source_key": r["from"]["columns"][0],
                    "inclusion": r["inclusion"]} for r in links],
         "time": {"as_of": f["time"]["as_of"]["from"], "as_at": f["time"]["as_at"] or "loaded_at",
                  "event_time": f["time"]["event_time"]},

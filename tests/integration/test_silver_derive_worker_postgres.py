@@ -52,15 +52,13 @@ def silver_store(postgres, monkeypatch):
             silver.register(owner, spec_file(FOLDER / name, None), runtime_role=RUNTIME)
         monkeypatch.setattr(silver_derive, "engines", lambda: (runtime, Master()))
         monkeypatch.setattr(runtime, "dispose", lambda: None)
-        # the Company masters: none are registered, so no row finds a master id
-        monkeypatch.setattr("edgar_warehouse.silver_writer.writer.MdmIds", lambda mdm: line_tests.no_masters)
         monkeypatch.setattr(measures, "from_company", lambda mdm, keys: {k: measure_tests.COMPANIES[k] for k in keys
                                                                          if k in measure_tests.COMPANIES})
         yield runtime
 
 
 def test_line_items_are_rebuilt_from_the_facts_and_the_verifier_reads_them_back(silver_store):
-    land(PostgresSink(silver_store), "company_fact", copy.deepcopy(line_tests.FACTS), line_tests.no_masters)
+    land(PostgresSink(silver_store), "company_fact", copy.deepcopy(line_tests.FACTS))
     store = Artifacts()
     out = silver_derive.execute(envelope("line_items"), store)
     receipt = json.loads(store.written[out["uri"]])
@@ -75,7 +73,7 @@ def test_line_items_are_rebuilt_from_the_facts_and_the_verifier_reads_them_back(
 
 
 def test_the_verifier_refuses_a_table_that_no_longer_matches_its_receipt(silver_store):
-    land(PostgresSink(silver_store), "company_fact", copy.deepcopy(line_tests.FACTS), line_tests.no_masters)
+    land(PostgresSink(silver_store), "company_fact", copy.deepcopy(line_tests.FACTS))
     store = Artifacts()
     out = silver_derive.execute(envelope("line_items"), store)
     with silver_store.begin() as conn:
@@ -92,7 +90,7 @@ def test_a_build_without_the_master_database_is_refused(silver_store, monkeypatc
 
 
 def test_measures_are_rebuilt_from_the_line_items(silver_store):
-    land(PostgresSink(silver_store), "company_line_item", copy.deepcopy(measure_tests.LINES), line_tests.no_masters)
+    land(PostgresSink(silver_store), "company_line_item", copy.deepcopy(measure_tests.LINES))
     store = Artifacts()
     out = silver_derive.execute(envelope("measures"), store)
     assert json.loads(store.written[out["uri"]])["rows"] > 0
@@ -101,8 +99,8 @@ def test_measures_are_rebuilt_from_the_line_items(silver_store):
 
 
 def test_each_input_table_is_its_own_build_over_the_same_query(silver_store):
-    land(PostgresSink(silver_store), "company_fact", copy.deepcopy(line_tests.FACTS), line_tests.no_masters)
-    land(PostgresSink(silver_store), "company_line_item", copy.deepcopy(measure_tests.LINES), line_tests.no_masters)
+    land(PostgresSink(silver_store), "company_fact", copy.deepcopy(line_tests.FACTS))
+    land(PostgresSink(silver_store), "company_line_item", copy.deepcopy(measure_tests.LINES))
     for build, table in (("line_item_inputs", "company_line_item_input"), ("measure_inputs", "company_measure_input")):
         store = Artifacts()
         out = silver_derive.execute(envelope(build), store)
@@ -122,7 +120,7 @@ def test_an_unknown_build_or_check_is_refused(silver_store):
 def test_a_build_that_gives_no_rows_from_a_source_that_holds_rows_is_refused(silver_store, monkeypatch):
     from edgar_warehouse.financials import line_items
 
-    land(PostgresSink(silver_store), "company_fact", copy.deepcopy(line_tests.FACTS), line_tests.no_masters)
+    land(PostgresSink(silver_store), "company_fact", copy.deepcopy(line_tests.FACTS))
     checked(monkeypatch, line_items, "build", lambda *a, **k: {})  # a build that wrote nothing
     with pytest.raises(ValueError, match="is empty although"):
         silver_derive.execute(envelope("line_items"), Artifacts())
@@ -138,12 +136,11 @@ def test_a_unit_that_names_other_tables_than_its_build_is_refused(silver_store):
 def test_a_snapshot_delivery_of_some_companies_removes_the_others(silver_store):
     """Why a derived table is rebuilt whole: the writer deletes every row a snapshot delivery lacks."""
     sink = PostgresSink(silver_store)
-    land(sink, "company_line_item", copy.deepcopy(measure_tests.LINES), line_tests.no_masters)
+    land(sink, "company_line_item", copy.deepcopy(measure_tests.LINES))
     with silver_store.connect() as conn:
         whole = conn.execute(text("SELECT count(DISTINCT company_key) FROM silver.company_line_item")).scalar()
     one = measure_tests.LINES[0]["company_key"]
-    land(sink, "company_line_item", [r for r in copy.deepcopy(measure_tests.LINES) if r["company_key"] == one],
-         line_tests.no_masters)
+    land(sink, "company_line_item", [r for r in copy.deepcopy(measure_tests.LINES) if r["company_key"] == one])
     with silver_store.connect() as conn:
         left = conn.execute(text("SELECT count(DISTINCT company_key) FROM silver.company_line_item")).scalar()
     assert whole > 1 and left == 1
@@ -166,7 +163,7 @@ def test_links_land_as_one_row_a_period_and_a_second_build_keeps_them(postgres, 
 
     with silver_database(admin) as (owner, runtime):
         silver.migrate(owner, runtime_role=RUNTIME)
-        for name in ("relationship", "relationship-evidence", "relationship-path"):
+        for name in ("relationship", "relationship-evidence", "relationship-path", "master-binding"):
             silver.register(owner, spec_file(files.ROOT / "silver" / f"silver-{name}.yaml", None), runtime_role=RUNTIME)
         monkeypatch.setattr(links, "calculate", calculate)
         monkeypatch.setattr(stores, "open_store", lambda engine: Master2())
@@ -174,7 +171,7 @@ def test_links_land_as_one_row_a_period_and_a_second_build_keeps_them(postgres, 
         monkeypatch.setattr("edgar_warehouse.rules.registry.policy", lambda conn, digest: {"relationships": {}})
         first = links.build(runtime, MasterPolicy(), "invented", "2026-11-06T00:00:00+00:00")
         links.build(runtime, MasterPolicy(), "invented", "2026-11-06T00:00:00+00:00")
-        assert first == {"table": "relationship", "links": 1, "rows": 1, "waiting": {"no_master": 2}}
+        assert first == {"table": "relationship", "links": 1, "rows": 1, "bindings": 0, "waiting": {"no_master": 2}}
         assert seen[0] == {} and seen[1]["invented"]["periods"][0]["valid_from_basis"] == "observed"
         with runtime.connect() as conn:
             evidence = [tuple(r) for r in conn.execute(text("SELECT relationship_id, assertion_id FROM silver.relationship_evidence"))]
@@ -238,3 +235,6 @@ class MasterPolicy(Master):
 class Master2:
     def close(self):
         pass
+
+    def bindings(self):
+        return []

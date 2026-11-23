@@ -1,24 +1,20 @@
 """Land one delivery of a part into its registered silver table.
 
-Each row keeps the source's own key for every link, and the master's MDM id
-beside it: read from MDM by the link's Dataset Contract, kind and record key
-(compared as text), or by an identifier the master holds (`identifier: ticker`),
-filled only when exactly one master of the kind holds the value. A record MDM
-has not mastered keeps an empty id; a later landing of the row, or
-`refresh_ids` for rows already landed, fills it.
+Each row keeps the source's own key for every link. A row finds its master by a join on the
+kind's view in the MDM schema (`<kind>_record`, or `<kind>_identifier_holder` for an identifier
+link), so no id is looked up or written here and a master merged later still resolves.
 
 A spec's data quality checks run on the delivery first (`checks.py`): a
 flagged row lands with the ids of the checks it failed in its `quality`
 column, and a row an exception refuses does not land.
 
-A delivery is held in memory while its keys are looked up (the sink copies it
-in bounded chunks); a part too large for that is landed in several deliveries.
+A delivery is held in memory (the sink copies it in bounded chunks); a part too large
+for that is landed in several deliveries.
 """
 
 from __future__ import annotations
 
 import os
-from decimal import Decimal
 from pathlib import Path
 from typing import Iterable
 
@@ -30,33 +26,10 @@ from . import results as quality_results
 from .sink import Sink
 
 
-class MdmIds:
-    """A link's key to MDM id, read from the MDM database."""
-
-    def __init__(self, engine):
-        self.engine = engine
-
-    def __call__(self, link: dict, keys: set[str]) -> dict[str, str | None]:
-        if not keys:
-            return {}
-        from edgar_warehouse.mastering import reads
-        from edgar_warehouse.mastering.store import open_store
-
-        store = open_store(self.engine)
-        try:
-            if link.get("identifier"):
-                return reads.sole_holders(store, link["identifier"], link["kind"], keys)
-            return reads.master_ids(store, link["source_code"], keys)
-        finally:
-            store.rollback()
-            store.close()
-
-
-def land(sink: Sink, table: str, records: Iterable[dict], ids=None, results: Path | None = None, *,
+def land(sink: Sink, table: str, records: Iterable[dict], results: Path | None = None, *,
          record_quality_results: bool = True) -> dict:
-    """Write records into a registered table: fields are the spec's columns (a
-    field the spec does not name is refused), and each link's MDM id is looked up.
-    `mdm_keys_found` counts the distinct source keys MDM knows, over all links."""
+    """Write records into a registered table: fields are the spec's columns (a field the spec
+    does not name is refused). A master is found by a join on a view, so no id is looked up or written."""
     spec = sink.spec(table)
     names = {c["name"] for c in spec["columns"]}
     rows = []
@@ -69,45 +42,5 @@ def land(sink: Sink, table: str, records: Iterable[dict], ids=None, results: Pat
     results = (results or os.environ.get(quality_results.ENVIRONMENT)) if record_quality_results else None
     if quality and results:
         quality_results.record(Path(results), table, quality)
-    links = spec["links"] or []
-    if links and ids is None:
-        raise Blocked(f"silver.{table} links to masters: MDM ids need the MDM schema: source the loader file")
-    known = 0
-    for link in links:
-        column = link["source_key"]
-        keys = {_key(r.get(column)) for r in rows} - {None}
-        found = ids(link, keys) if keys else {}
-        for row in rows:
-            row[link["mdm_id_column"]] = found.get(_key(row.get(column)))
-        known += sum(1 for v in found.values() if v)
     result = sink.write(spec, rows)
-    return {**result, "mdm_keys_found": known, **({"quality": quality} if quality else {})}
-
-
-def refresh_ids(sink: Sink, table: str, ids) -> dict:
-    """Fill every link's empty MDM id on rows already landed, from MDM as it is now: a record
-    mastered after its rows landed gets its id without its rows being delivered again. A row
-    that has an id is never read or written; an id whose entity merged away still resolves
-    to the survivor (`mastering.reads.master`)."""
-    spec = sink.spec(table)
-    links = spec["links"] or []
-    if not links:
-        return {"table": table, "rows_updated": 0}
-    if ids is None:
-        raise Blocked(f"silver.{table} links to masters: MDM ids need the MDM schema: source the loader file")
-    updated = {}
-    for link in links:
-        keys = sink.link_keys(spec, link)
-        found = ids(link, keys) if keys else {}
-        updated[link["mdm_id_column"]] = sink.set_ids(spec, link, {k: found.get(k) for k in keys})
-    return {"table": table, "rows_updated": updated}
-
-
-def _key(value) -> str | None:
-    if value is None:
-        return None
-    if isinstance(value, Decimal) and value.is_finite() and value == value.to_integral_value():
-        value = int(value)
-    if isinstance(value, float) and value.is_integer():
-        value = int(value)
-    return str(value)
+    return {**result, **({"quality": quality} if quality else {})}

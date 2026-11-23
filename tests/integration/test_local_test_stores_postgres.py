@@ -211,7 +211,7 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
         # A real silver row retains its looked-up MDM id and an exact BIGINT.
         from edgar_warehouse.silver_writer import database as silver
         from edgar_warehouse.silver_writer.sink import PostgresSink
-        from edgar_warehouse.silver_writer.writer import MdmIds, land
+        from edgar_warehouse.silver_writer.writer import land
         from tests.unit.test_silver_writer import a_spec
         owner = first.engine(one, "data")
         @event.listens_for(owner, "connect")
@@ -221,19 +221,17 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
             connection.commit()
         runtime = first.engine(one, "data", "silver_runtime")
         table = a_spec(links=[{"columns": ["member_id"], "kind": "company", "source_code": "sec.company.v1",
-                              "source_key": "member_id", "mdm_id_column": "member_id_mdm_id", "inclusion": 1.0}])
-        mdm_reader = first.engine(one, "data", "mdm_runtime")
+                              "source_key": "member_id", "inclusion": 1.0}])
         try:
             silver.register(owner, table, runtime_role="silver_runtime")
-            result = land(PostgresSink(runtime), "visit", [{"visit_id": 2**53 + 1, "member_id": "b", "amount": "1.25", "visited_on": None, "tags": None}], MdmIds(mdm_reader))
-            assert result["mdm_keys_found"] == 1
+            result = land(PostgresSink(runtime), "visit", [{"visit_id": 2**53 + 1, "member_id": "b", "amount": "1.25", "visited_on": None, "tags": None}])
+            assert result["inserted"] == 1
             with runtime.connect() as conn:
-                row = conn.execute(text("SELECT visit_id, member_id_mdm_id FROM silver.visit")).one()
-                assert (row[0], str(row[1])) == (2**53 + 1, ids['b'])
+                row = conn.execute(text("SELECT visit_id FROM silver.visit")).one()
+                assert row[0] == 2**53 + 1
         finally:
             owner.dispose()
             runtime.dispose()
-            mdm_reader.dispose()
         expected = first.contents(one)
         reader = first.engine(one, "data", "mdm_runtime")
         try:
@@ -289,17 +287,15 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
         assert second.contents(restored) == expected
         # Restored contents alone do not prove the runtime can use the tables.
         runtime = second.engine(restored, "data", "silver_runtime")
-        mdm_reader = second.engine(restored, "data", "mdm_runtime")
         try:
             with runtime.connect() as conn:
-                assert [(v, str(m)) for v, m in conn.execute(text("SELECT visit_id,member_id_mdm_id FROM silver.visit"))] == [(2**53 + 1, ids['b'])]
-            result = land(PostgresSink(runtime), "visit", [{"visit_id": 2**53 + 2, "member_id": "b", "amount": "2.50", "visited_on": None, "tags": None}], MdmIds(mdm_reader))
-            assert result["inserted"] == 1 and result["mdm_keys_found"] == 1
+                assert [v for (v,) in conn.execute(text("SELECT visit_id FROM silver.visit"))] == [2**53 + 1]
+            result = land(PostgresSink(runtime), "visit", [{"visit_id": 2**53 + 2, "member_id": "b", "amount": "2.50", "visited_on": None, "tags": None}])
+            assert result["inserted"] == 1
             with runtime.begin() as conn:
                 conn.execute(text("DELETE FROM silver.visit WHERE visit_id=:i"), {"i": 2**53 + 2})
         finally:
             runtime.dispose()
-            mdm_reader.dispose()
         assert second.contents(restored) == expected
         with pytest.raises(ValueError, match="existing data is never overwritten"):
             second.restore(restored, snapshot)

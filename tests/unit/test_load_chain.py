@@ -99,7 +99,7 @@ def test_the_chain_builds_the_links_table_once_after_the_loads_and_no_target_bui
         chain.finish({}, Path("/dev/null"))
     finally:
         chain.run = original
-    assert calls.count(["silver", "links"]) == 1 and calls.index(["silver", "links"]) < calls.index(next(c for c in calls if c[1] == "refresh-ids"))
+    assert calls == [["silver", "links"]]  # a silver row finds its master by a join: no master id is filled afterwards
 
 
 def test_the_chain_has_eleven_lanes_and_company_facts_is_beside_the_other_silver_only_sources():
@@ -1189,7 +1189,7 @@ def test_a_load_does_not_build_the_name_search_lookups_and_they_are_built_only_w
     assert ["mdm", "build-lookups"] not in calls and ["silver", "links"] in calls
     calls.clear()
     chain.finish({}, Path("/dev/null"), lookups=True)
-    assert calls[0] == ["mdm", "build-lookups"]  # asked for: built first, then the links and the master ids
+    assert calls[0] == ["mdm", "build-lookups"]  # asked for: built first, then the links and master_binding
     assert ["silver", "links"] in calls
 
 

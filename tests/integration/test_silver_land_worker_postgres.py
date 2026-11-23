@@ -44,7 +44,7 @@ def landed(database, monkeypatch):
     with silver_database(database.admin) as (owner, runtime):
         silver.migrate(owner, runtime_role=RUNTIME)
         assert silver.register(owner, spec_file(FOLDER / "silver-company-fact.yaml", None), runtime_role=RUNTIME)["created"]
-        monkeypatch.setattr(silver_land, "engines", lambda: (runtime, database.application))
+        monkeypatch.setattr(silver_land, "engines", lambda: runtime)
         monkeypatch.setattr(runtime, "dispose", lambda: None)
         monkeypatch.setattr(database.application, "dispose", lambda: None)
         yield runtime
@@ -84,11 +84,11 @@ def test_other_units_rows_cannot_hide_a_missing_key(landed, database):
     """Another unit's filer lands too, so silver holds more rows than this unit's reading; one of
     this unit's own rows is then gone. A count of the table would pass; the unit's own keys do not."""
     from edgar_warehouse.silver_writer.relational import DatabaseSink
-    from edgar_warehouse.silver_writer.writer import MdmIds, land
+    from edgar_warehouse.silver_writer.writer import land
 
     store = Artifacts()
     out = silver_land.execute(envelope(), store)
-    land(DatabaseSink(landed), "company_fact", rows("0000000099"), MdmIds(database.application))
+    land(DatabaseSink(landed), "company_fact", rows("0000000099"))
     with landed.begin() as conn:
         conn.execute(text("DELETE FROM silver.company_fact WHERE ctid IN "
                           "(SELECT ctid FROM silver.company_fact WHERE company_key = '0000000043' LIMIT 1)"))

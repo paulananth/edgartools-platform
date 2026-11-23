@@ -21,7 +21,7 @@ from edgar_warehouse.silver_writer import database as silver
 from edgar_warehouse.silver_writer import spec as silver_spec
 from edgar_warehouse.silver_writer.cli import spec_file
 from edgar_warehouse.silver_writer.sink import PostgresSink
-from edgar_warehouse.silver_writer.writer import MdmIds, land
+from edgar_warehouse.silver_writer.writer import land
 from tests.support import masters
 from tests.engine.test_ownership_readings import ACCESSION, FILED, filing
 from tests.engine.test_sgml_container import document, submission
@@ -59,30 +59,21 @@ def test_a_joint_filings_lines_land_once_and_each_owner_finds_its_master(databas
     lines = [row for t in LINES for row in tables[t]]
     owners = tables["reporting_owner"]
     assert (len(lines), len(owners)) == (2, 2)
-    person_key = next(o["owner_record_key"] for o in owners if o["rpt_owner_cik"] == HOLDER)
-    entity = masters.seed(database.application, [  # fixture masters stand in for each contract's records
-        core.source(key=person_key, source_code=PERSON, kind="person", fields={}, identifiers={"cik": HOLDER}),
-        core.source(key=ISSUER, source_code=COMPANY, kind="company", fields={}, identifiers={"cik": ISSUER}),
-        core.source(key=FUND, source_code=COMPANY, kind="company", fields={}, identifiers={"cik": FUND})])
     with silver_database(database.admin) as (owner, runtime):
         silver.migrate(owner, runtime_role=RUNTIME)
-        sink, ids = PostgresSink(runtime), MdmIds(database.application)
+        sink = PostgresSink(runtime)
         for name, rows in (("line", lines), ("owner", owners)):
             spec = spec_file(FOLDER / f"silver-{name}.yaml", None)
             assert silver.register(owner, spec, runtime_role=RUNTIME)["created"] is True
-            assert land(sink, spec["table"], copy.deepcopy(rows), ids)["inserted"] == len(rows)
-            again = land(sink, spec["table"], copy.deepcopy(rows), ids)  # the same filing changes nothing
+            assert land(sink, spec["table"], copy.deepcopy(rows))["inserted"] == len(rows)
+            again = land(sink, spec["table"], copy.deepcopy(rows))  # the same filing changes nothing
             assert (again["inserted"], again["changed"]) == (0, 0)
         with runtime.connect() as conn:
             landed = list(conn.execute(text("SELECT * FROM silver.insider_position ORDER BY line_table")).mappings())
             found = {r["rpt_owner_cik"]: r for r in conn.execute(text("SELECT * FROM silver.insider_reporting_owner")).mappings()}
 
-    # Each line once, with its issuer, the date it holds at and the filing's date.
-    assert [(r["line_table"], str(r["as_of"]), str(r["filed"]), str(r["issuer_mdm_id"])) for r in landed] == [
-        ("non_derivative_holding", "2026-01-05", "2026-01-07", entity[ISSUER]),
-        ("non_derivative_transaction", "2026-01-05", "2026-01-07", entity[ISSUER])]
+    # Each line once, with the date it holds at and the filing's date.
+    assert [(r["line_table"], str(r["as_of"]), str(r["filed"])) for r in landed] == [
+        ("non_derivative_holding", "2026-01-05", "2026-01-07"), ("non_derivative_transaction", "2026-01-05", "2026-01-07")]
     assert str(landed[1]["shares_owned_following_transaction"]) == "1100.0000000000"
-    # The person owner is its Person; the fund, mastered as a Company, its Company.
-    assert (str(found[HOLDER]["person_mdm_id"]), found[HOLDER]["company_mdm_id"]) == (entity[person_key], None)
-    assert (found[FUND]["person_mdm_id"], str(found[FUND]["company_mdm_id"])) == (None, entity[FUND])
-    assert {str(r["issuer_mdm_id"]) for r in found.values()} == {entity[ISSUER]}
+    assert sorted(found) == sorted([HOLDER, FUND])

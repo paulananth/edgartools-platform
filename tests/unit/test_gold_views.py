@@ -28,11 +28,11 @@ def db():
         create table mastering_master (entity_id text, canonical_id text, kind text, status text, body text);
         create table mastering_identifier (namespace text, value text, entity_id text);
         create table thirteenf_filing (accession_number text, cik text, form text, filing_date text, report_date text,
-                                       primary_document text, manager_mdm_id text);
+                                       primary_document text);
         create table thirteenf_holding (accession_number text, holding_index integer, cusip text, shares_held real,
                                         share_type text, market_value real, put_call text, discretion_type text,
-                                        voting_auth_sole real, voting_auth_shared real, voting_auth_none real,
-                                        security_mdm_id text);
+                                        voting_auth_sole real, voting_auth_shared real, voting_auth_none real);
+        create table master_binding (source_code text, source_key text, kind text, master_id text);
     """)
     masters = [("c1", body("c1", "company", "Alpha Capital")), ("c2", body("c2", "company", "Beta Partners")),
                ("c3", body("c3", "company", "Alpha Cap Old", canonical="c1", status="alias")),
@@ -43,18 +43,23 @@ def db():
                       ((e, json.loads(text)) for e, text in masters)])
     conn.executemany("insert into mastering_identifier values (?, ?, ?)",
                      [("cik", "0000000001", "c1"), ("cik", "0000000002", "c2"), ("cusip", "AAA111", "s1")])
-    conn.executemany("insert into thirteenf_filing values (?,?,?,?,?,?,?)", [
-        ("f1", "1", "13F-HR", "2026-02-10", "2025-12-31", "a.xml", "c1"),
-        ("f2", "1", "13F-HR", "2026-02-11", "2025-12-31", "b.xml", "c1"),  # a joint filing: two managers
-        ("f2", "2", "13F-HR", "2026-02-11", "2025-12-31", "b.xml", "c2"),
-        ("f3", "9", "13F-NT", "2026-02-12", "2025-12-31", "c.xml", None),   # a manager that was never mastered
-        ("f4", "3", "13F-HR", "2026-02-13", "2025-12-31", "d.xml", "c3")])  # a merged-away manager id
-    conn.executemany("insert into thirteenf_holding values (?,?,?,?,?,?,?,?,?,?,?,?)", [
-        ("f1", 1, "AAA111", 100, "SH", 1000.5, None, "SOLE", 100, 0, 0, "s1"),
-        ("f1", 2, "BBB222", 50, "SH", 250.25, None, "SOLE", 50, 0, 0, "s2"),
-        ("f2", 1, "AAA111", 10, "SH", 99.0, "Call", "SOLE", 10, 0, 0, "s1"),
-        ("f3", 1, "ZZZ999", 5, "PRN", 5.0, None, "SOLE", 5, 0, 0, None),   # no master security
-        ("f4", 1, "AAA111", 7, "SH", 70.0, None, "SOLE", 7, 0, 0, "s1")])
+    conn.executemany("insert into thirteenf_filing values (?,?,?,?,?,?)", [
+        ("f1", "1", "13F-HR", "2026-02-10", "2025-12-31", "a.xml"),
+        ("f2", "1", "13F-HR", "2026-02-11", "2025-12-31", "b.xml"),  # a joint filing: two managers
+        ("f2", "2", "13F-HR", "2026-02-11", "2025-12-31", "b.xml"),
+        ("f3", "9", "13F-NT", "2026-02-12", "2025-12-31", "c.xml"),   # a manager that was never mastered
+        ("f4", "3", "13F-HR", "2026-02-13", "2025-12-31", "d.xml")])  # a merged-away manager id
+    conn.executemany("insert into thirteenf_holding values (?,?,?,?,?,?,?,?,?,?,?)", [
+        ("f1", 1, "AAA111", 100, "SH", 1000.5, None, "SOLE", 100, 0, 0),
+        ("f1", 2, "BBB222", 50, "SH", 250.25, None, "SOLE", 50, 0, 0),
+        ("f2", 1, "AAA111", 10, "SH", 99.0, "Call", "SOLE", 10, 0, 0),
+        ("f3", 1, "ZZZ999", 5, "PRN", 5.0, None, "SOLE", 5, 0, 0),   # no master security
+        ("f4", 1, "AAA111", 7, "SH", 70.0, None, "SOLE", 7, 0, 0)])
+    conn.executemany("insert into master_binding values (?,?,?,?)", [
+        ("sec.company.v1", "1", "company", "c1"), ("sec.company.v1", "2", "company", "c2"),
+        ("sec.company.v1", "3", "company", "c3"),  # bound to a master that merged away: the dimension answers for its survivor
+        ("sec.thirteenf.securities.v2", "AAA111", "security", "s1"),
+        ("sec.thirteenf.securities.v2", "BBB222", "security", "s2")])
     for statement in views.render(dialect="sqlite", qualify=False).values():
         conn.execute(statement)
     return conn
@@ -209,18 +214,85 @@ def test_a_generated_fact_resolves_its_links_and_dates_on_rows():
         create table mastering_master (entity_id text, canonical_id text, kind text, status text, body text);
         create table mastering_identifier (namespace text, value text, entity_id text);
         create table ipo_filing (accession_number text, cik text, form text, stage text, filing_date text,
-                                 file_number text, observed_at text, filer_mdm_id text);
+                                 file_number text, observed_at text);
+        create table master_binding (source_code text, source_key text, kind text, master_id text);
     """)
+    link = item["links"][0]
+    conn.execute("insert into master_binding values (?, '1', 'company', 'c3')", [link["source_code"]])  # a merged-away master
     conn.executemany("insert into mastering_master values (?, ?, ?, ?, ?)", [
         ("c1", "c1", "company", "active", "{}"), ("c3", "c1", "company", "alias", "{}")])
-    conn.executemany("insert into ipo_filing values (?,?,?,?,?,?,?,?)", [
-        ("a1", "1", "S-1", "initial", "2026-01-02", "333-1", "2026-01-03", "c3"),   # a merged-away id
-        ("a2", "2", "S-1", "initial", "2026-01-04", "333-2", "2026-01-05", None)])  # never mastered
+    conn.executemany("insert into ipo_filing values (?,?,?,?,?,?,?)", [
+        ("a1", "1", "S-1", "initial", "2026-01-02", "333-1", "2026-01-03"),   # a merged-away id
+        ("a2", "2", "S-1", "initial", "2026-01-04", "333-2", "2026-01-05")])  # never mastered
     statements = views.render(dialect="sqlite", qualify=False)
     for name in ("master", item["name"]):
         conn.execute(statements[name])
     rows = conn.execute(f"select accession_number, filer_key, event_date, recorded_date from {item['name']} order by 1").fetchall()
     assert rows == [("a1", "c1", "2026-01-02", "2026-01-03"), ("a2", config["members"]["unknown"], "2026-01-04", "2026-01-05")]
+
+
+def failing(conn, sql):
+    return conn.execute(sql).fetchall()
+
+
+def test_a_link_that_resolves_less_than_its_inclusion_fails_its_gold_test(db):
+    """Operator, 2026-11-22: "gold must have best data quality". The fixture's filing of manager 9 has no master:
+    four of five filing rows resolve, under the share of 1.0 a link declares by default."""
+    tests = views.quality_tests(dialect="sqlite", qualify=False)
+    test = tests["thirteenf_filing_cik_resolves"]
+    assert failing(db, test) == [(5, 4)]
+    db.execute("insert into master_binding values ('sec.company.v1', '9', 'company', 'c4')")
+    assert failing(db, test) == []
+
+
+def test_a_generated_fact_link_takes_its_inclusion_from_the_silver_spec():
+    tests = views.quality_tests(dialect="sqlite", qualify=False)
+    assert "WHERE t.found < 1.0 * t.n" in tests["ipo_filing_cik_resolves"]
+    assert set(tests) >= {f"{item['source'].split('.')[1]}_{link['column']}_resolves"
+                          for item in views.load()["objects"] for link in item.get("links", [])}
+
+
+def identifier_config():
+    config = views.load()
+    item = {"name": "fact_offering", "kind": "fact", "source": "silver.offering", "key": ["offering_id"],
+            "links": [{"column": "ticker", "kind": "security", "identifier": "ticker", "dimension": "dim_security",
+                       "role": "security", "inclusion": 0.5}], "requirement": "silver_spec", "grain": "one row per offering"}
+    return {**config, "objects": [o for o in config["objects"] if o["kind"] in ("base", "dimension")] + [item]}
+
+
+def test_an_identifier_two_masters_hold_fails_its_gold_test_and_finds_no_master(db):
+    config = identifier_config()
+    db.execute("create table offering (offering_id text, ticker text)")
+    db.executemany("insert into offering values (?, ?)", [("o1", "AAA"), ("o2", "BBB")])
+    db.executemany("insert into mastering_identifier values (?, ?, ?)", [("ticker", "AAA", "s1"), ("ticker", "BBB", "s2")])
+    db.execute(views.render(config, dialect="sqlite", qualify=False)["fact_offering"])
+    tests = views.quality_tests(config, dialect="sqlite", qualify=False)
+    assert failing(db, tests["offering_ticker_one_master"]) == []
+    assert failing(db, tests["offering_ticker_resolves"]) == []
+    db.execute("insert into mastering_identifier values ('ticker', 'BBB', 's1')")   # a second master holds BBB
+    assert failing(db, tests["offering_ticker_one_master"]) == [("BBB",)]
+    assert rows(db, "select offering_id, security_key from fact_offering order by 1") == [("o1", "s1"), ("o2", "unknown")]
+    db.execute("insert into mastering_identifier values ('ticker', 'AAA', 's2')")   # now neither resolves: 0 of 2 < 0.5
+    assert failing(db, tests["offering_ticker_resolves"]) == [(2, 0)]
+
+
+def test_two_tables_reading_one_identifier_each_get_their_test():
+    names = set(views.quality_tests(dialect="sqlite", qualify=False))
+    assert {"registration_offering_ticker_one_master", "prospectus_offering_ticker_one_master"} <= names
+
+
+def test_a_source_key_bound_to_two_masters_fails_its_gold_test(db):
+    test = views.quality_tests(dialect="sqlite", qualify=False)["master_binding_one_master_per_key"]
+    assert failing(db, test) == []
+    db.execute("insert into master_binding values ('sec.company.v1', '1', 'company', 'c2')")
+    assert failing(db, test) == [("sec.company.v1", "1")]
+
+
+def test_the_project_writes_one_dbt_test_per_rule(tmp_path):
+    views.write_project(tmp_path)
+    written = sorted(p.name for p in (tmp_path / "tests").glob("*.sql"))
+    assert written == sorted(f"{name}.sql" for name in views.quality_tests())
+    assert "{{ source('silver', 'master_binding') }}" in (tmp_path / "tests" / "thirteenf_filing_cik_resolves.sql").read_text()
 
 
 def test_rdm_publishes_one_view_per_published_code_set():

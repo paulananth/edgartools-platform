@@ -135,14 +135,11 @@ def recovery_run(databases, tmp_path, monkeypatch):
 
     with silver_database(databases.admin) as (owner, runtime):
         silver.migrate(owner, runtime_role=SILVER_RUNTIME)
-        # The disposable silver table: the source's own company_fact spec without
-        # its Company link, because this proof is about the receipt and the
-        # resume, not about MDM ids.
+        # The disposable silver table: the source's own company_fact spec (its Company link looks nothing up at landing).
         spec = deepcopy(spec_file(FOLDER / "silver-company-fact.yaml", None))
         spec["table"] = "recovery_fact"
-        spec["links"] = []
         assert silver.register(owner, spec, runtime_role=SILVER_RUNTIME)["created"]
-        monkeypatch.setattr(silver_land, "engines", lambda: (runtime, None))
+        monkeypatch.setattr(silver_land, "engines", lambda: runtime)
         monkeypatch.setattr(runtime, "dispose", lambda: None)
         read_units(book, rid)
         land_keys = [unit["keys"]["unit"] for unit in book.artifacts.json(report["manifest"])["steps"]["land"]]

@@ -39,6 +39,7 @@ key:
 - valid_from
 - position
 links: []
+master_through: relationship
 time:
   as_of: valid_from
   as_at: loaded_at

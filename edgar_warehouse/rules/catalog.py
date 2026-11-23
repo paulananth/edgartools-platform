@@ -197,7 +197,7 @@ def _profile(source: str, profile: dict) -> tuple[list[dict], dict[str, set]]:
                  f"profiled.", f"Key: {', '.join(silver['key']) or 'none found'}; load mode {silver['load_mode']}."]
         if part.get("kind"):
             about.append(f"MDM kind `{part['kind']}`.")
-        about += [f"`{link['mdm_id_column']}` holds the MDM id of `{link['to_part']}` by `{link['source_key']}`."
+        about += [f"`{link['source_key']}` finds the master of `{link['to_part']}` through `master_binding`."
                   for link in silver.get("links") or []]
         about += [f"Data quality: {r}." for r in rules.get(None, [])]
         tables.append({"name": silver["table"], "databaseSchema": fqn(SERVICE, SILVER, source),
@@ -207,7 +207,7 @@ def _profile(source: str, profile: dict) -> tuple[list[dict], dict[str, set]]:
 
 def _registered(source: str, spec: dict) -> dict:
     """A silver table as `silver register` makes it from the source's spec
-    (`silver-*.yaml`): its columns, the MDM id each link fills, the quality
+    (`silver-*.yaml`): its columns, the quality
     column its checks write and the load time it adds (`silver_spec.columns`)."""
     spec = silver_spec.check(spec)
     checks = defaultdict(list)
@@ -220,9 +220,6 @@ def _registered(source: str, spec: dict) -> dict:
         about += [f"Data quality: {c}." for c in checks.get(column["name"], [])]
         columns.append({"name": column["name"], "dataType": TYPES.get(str(column["type"]).upper(), TEXT),
                         "description": " ".join(a for a in about if a)})
-    columns += [{"name": link["mdm_id_column"], "dataType": TEXT,
-                 "description": f"The MDM id of {silver_spec.describe_link(link)}; empty until it is mastered."}
-                for link in spec.get("links") or []]
     columns += [{"name": name, "dataType": TEXT, "description": "The data quality checks this row failed, by id "
                  "(each flagged, the row still landed); empty when it passed every one."}
                 for name in silver_spec.quality_columns(spec)]

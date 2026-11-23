@@ -62,11 +62,18 @@ def build(silver, mdm, policy_digest: str, as_of: str) -> dict:
     finally:
         db.close()
     tables = rows_of(edges)
+    db = open_store(mdm)
+    try:
+        bindings = [{"source_code": code, "source_key": key, "kind": kind, "master_id": entity}
+                    for code, key, kind, entity in db.bindings()]
+    finally:
+        db.close()
     sink = DatabaseSink(silver)
     for table in ("relationship", "relationship_evidence", "relationship_path"):
         land(sink, table, tables[table])
+    land(sink, "master_binding", bindings)
     return {"table": "relationship", "links": len(edges), "rows": len(tables["relationship"]),
-            "waiting": dict(sorted(waiting.items()))}
+            "bindings": len(bindings), "waiting": dict(sorted(waiting.items()))}
 
 
 PROPERTIES = ("source_event_type", "source_event_status", "source_entity_status", "source_relationship_status",

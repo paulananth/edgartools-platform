@@ -103,7 +103,6 @@ def register(engine, spec: dict, *, runtime_role: str) -> dict:
             raise Blocked(f"silver.{name} exists without a registered spec; refusing to adopt it")
         lines = [f"{q(c['name'])} {specs.postgres_type(c['type'])}{'' if c['nullable'] else ' NOT NULL'}"
                  for c in spec["columns"]]
-        lines += [f"{q(c)} text" for c in specs.mdm_id_columns(spec)]
         lines += [f"{q(c)} jsonb" for c in specs.quality_columns(spec)]
         lines += [f"{q(c)} timestamp with time zone NOT NULL" for c in specs.added_time(spec)]
         lines.append(f"PRIMARY KEY ({', '.join(q(k) for k in spec['key'])})")
@@ -118,11 +117,6 @@ def register(engine, spec: dict, *, runtime_role: str) -> dict:
             if c.get("sensitivity") not in (None, "none"):
                 words += f" Sensitivity: {c['sensitivity']}."
             _comment(conn, f"COLUMN {table}.{q(c['name'])}", words)
-        for link in spec["links"] or []:
-            share = link.get("inclusion")
-            _comment(conn, f"COLUMN {table}.{q(link['mdm_id_column'])}",
-                     f"The MDM id of {specs.describe_link(link)}; empty while none is mastered."
-                     + (f" Profiling found {share:.1%} of the source keys among the master's keys." if share is not None else ""))
         for c in specs.quality_columns(spec):
             flags = [k for k in spec["checks"] if k["on_fail"] == "flag"]
             _comment(conn, f"COLUMN {table}.{q(c)}", "The data quality checks this row failed, by id (each "

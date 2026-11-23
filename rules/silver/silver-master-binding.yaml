@@ -1,0 +1,48 @@
+# The master of each source record, for a join: a silver row finds its master by its own source key, so no
+# silver table stores a master id. Built whole at `--finish` with the links, from the records MDM holds now (a master
+# merged away already answers with its survivor); the mirror carries it to Gold.
+table: master_binding
+definition: "The golden record of one source record, by the source's own key."
+grain: "one row per source code and source key"
+columns:
+- name: source_code
+  type: VARCHAR
+  nullable: false
+  definition: "The Dataset Contract whose record key the source key is."
+  source: "mastering_record.source_code"
+  sensitivity: none
+- name: source_key
+  type: VARCHAR
+  nullable: false
+  definition: "The source's own key for the record, as filed."
+  source: "mastering_record.source_key"
+  sensitivity: none
+- name: kind
+  type: VARCHAR
+  nullable: false
+  definition: "The master's kind (company, security, person, fund_structure, ...)."
+  source: "mastering_master.kind"
+  sensitivity: none
+- name: master_id
+  type: VARCHAR
+  nullable: false
+  definition: "The MDM id of the golden record the source record belongs to now."
+  source: "mastering_record.entity_id"
+  sensitivity: none
+key:
+- source_code
+- source_key
+links: []
+master_columns:
+- master_id
+time:
+  as_of: null
+  as_at: loaded_at
+  event_time: null
+partition:
+- kind
+load_mode: snapshot
+may_be_empty: true
+why: >-
+  Rebuilt whole with the links table, so a merge or a new golden record shows in every join at once and nothing is
+  written onto a silver row. A table of the stored records' bindings, never a second copy a merge must keep current.

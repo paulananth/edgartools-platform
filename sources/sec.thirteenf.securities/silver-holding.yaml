@@ -4,7 +4,7 @@
 # Rows are the `sec_thirteenf_holding` table of source.yaml, with the filing's accession number
 # from the capture's folder (`accession=`). Silver keeps no master field: the
 # issuer name, the class title and the FIGI are the Security's, in MDM, read through
-# `security_mdm_id`; the CUSIP stays as the link key. The numbers are read as floating point
+# `master_binding`; the CUSIP stays as the link key. The numbers are read as floating point
 # (exact to 15 digits) and land as exact decimals. Append only: a filed holding never changes;
 # an amended filing is a new accession number.
 # The manager, the report period and the filing date are not here: the information table names
@@ -83,8 +83,8 @@ columns:
 key:
 - accession_number
 - holding_index
-# The Security by its record key, the CUSIP. A row whose Security is not mastered yet keeps an
-# empty MDM id; `silver refresh-ids` fills it later.
+# The Security by its record key, the CUSIP. Its master is found by
+# a join on `master_binding`.
 links:
 - columns:
   - cusip
@@ -92,7 +92,6 @@ links:
   source_code: sec.thirteenf.securities.v2
   to_part: security
   source_key: cusip
-  mdm_id_column: security_mdm_id
 time:
   as_of: null
   as_at: loaded_at
@@ -101,7 +100,7 @@ partition: []
 load_mode: append
 why: >-
   A holding is transaction data: one row per filed holding, keyed by the filing and its place
-  in the information table. It links to its Security by lookup, so no record of its own goes
+  in the information table. It links to its Security by a join on master_binding, so no record of its own goes
   through the Merge Stage. Append, since a filed holding never changes.
 # No checks yet: the CUSIP is the Security's, checked by its Dataset Contract; a
 # holding's own numbers wait for the manager filings to say what a sensible value is.

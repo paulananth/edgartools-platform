@@ -1,6 +1,6 @@
 # 20: Silver finds its master by a join on a view, not by a written id
 
-Status: open
+Status: resolved
 Type: task
 
 Operator, ticket 16: a join inside the data database on the master id; one view per master kind; the master id is the only id that crosses;
@@ -12,11 +12,18 @@ The mirror carries `mastering_master` and `mastering_identifier` but not `master
 
 ## Checklist
 
-- [ ] Failing test first: a silver row joins its master through the view on `source_code` and `source_key`, and a merged-away id answers with its survivor (the test fails on a store with no view)
-- [ ] `mastering_record` gets `source_key` (plain, beside `source_code`), written where the row is inserted (`mastering/store.py`) and carried by the PostgreSQL and MySQL schema files; the init creates it (no DDL at run time)
-- [ ] One view per master kind in schema `mdm` (company, security, person, fund_structure): `master_id`, `source_code`, `source_key` and the kind's identifiers; the survivor of a merge, never a merged-away id
-- [ ] Silver specs: each link names its `source_code` and `source_key` column; `mdm_id_column` and the written id column leave the 16 specs, the spec checker and the table builder
-- [ ] Retire `refresh_ids`, `set_ids`, `link_keys`, the landing-time fill and the `--finish` master-id fill, with their tests and the init runbook text
-- [ ] The mirror list names the views; Gold's `dim_*` and fact views join on the view's `master_id` (`gold/views.py`, `destination/gold/gold.yaml`); the exposure and gold tests pin it
-- [ ] Prove on the cohort: every row's master equals the one the written id gave (0 differences), before the written column is dropped
-- [ ] Learning → skill: mdm-engineering (MASTERING-STANDARD.md already holds the rule; add the retired fill to the data-operations finish text), or "none"
+- [x] Failing test first: a silver row joins its master on `source_code` and `source_key`, and a merged-away id answers with its survivor: `tests/storage_adapters/test_master_bindings.py` (PostgreSQL and MySQL) and `tests/unit/test_gold_views.py` (`test_a_merged_away_id_finds_the_master_it_became`, now through `master_binding`) 2026-11-22 22:34 ET
+- [x] `mastering_record` gets `source_key` (plain, beside `source_code`), written in `save_records` and carried by the PostgreSQL and MySQL schema files; init creates it, no DDL at run time: storage adapter tests on both engines 2026-11-22 22:34 ET
+- [ ] ~~One view per master kind in schema `mdm`~~ replaced by `master_binding` (below): a mirror copies tables, not views, so nothing would read the views
+- [x] Silver specs: each link names its `source_code` and `source_key`; `mdm_id_column` and the written id column leave the 16 specs, the spec checker and the table builder: `tests/unit/test_silver_writer.py` (51 passed) 2026-11-22 22:34 ET
+- [x] Every silver table joins its master (operator, 2026-11-22: "every silver table should join to the appropriate master"): `company_line_item_input` and `company_measure_input` have the company link, `relationship` declares `master_columns`, `relationship_evidence` and `relationship_path` declare `master_through: relationship`; the spec checker refuses a table with no way or two. `test_every_silver_spec_of_the_repository_finds_its_master` failed on the specs without the five declarations ("finds its master exactly one way") and passes with them 2026-11-22 22:34 ET
+- [x] A link that cannot turn empty in Gold (operator, 2026-11-22: "gold must have best data quality fix it create data quality rules using dq rules"): two rules, written as generated dbt tests that Gold's `dbt build` runs, so a failure stops Gold (KISS: no new view in `mdm`, the check runs where Gold reads; a view would also not reach the mirror). Each failed before `quality_tests` existed (`AttributeError`), then passes on the fixture: 2026-11-22 22:34 ET
+      - **One master per identifier:** `<table>_<column>_one_master` lists each value the table reads that two masters of the kind hold; Gold leaves such a row unresolved (`test_an_identifier_two_masters_hold_fails_its_gold_test_and_finds_no_master`; named per table after the Spec review found two tables sharing `ticker` wrote one test: `test_two_tables_reading_one_identifier_each_get_their_test`)
+      - **One master per source key** (added at the Spec review): `master_binding_one_master_per_key` fails a source key bound to two masters, which would double a fact row (`test_a_source_key_bound_to_two_masters_fails_its_gold_test`)
+      - **Every link resolves:** `<table>_<column>_resolves` fails when the resolved share of filled keys is under the silver link's `inclusion` (1.0 when none is declared) (`test_a_link_that_resolves_less_than_its_inclusion_fails_its_gold_test`); `data-quality` names both ("Gold link rules")
+- [x] Gold reads the mirror, a mirror copies tables: `master_binding` (source_code, source_key, kind, master_id) is a silver table built whole at `--finish` with the links tables (operator, 2026-11-22: "Narrow binding table (Recommended)", then "Build at finish (Recommended)"), on the mirror list and the sharing list: `test_silver_derive_worker_postgres.py` (the links build lands it), the mirror and catalog counts in `test_exposure_mirror_sql.py` (24 tables) and `test_catalog_readers.py` (21) 2026-11-22 22:34 ET
+- [x] Retire `refresh_ids`, `set_ids`, `link_keys`, the landing-time fill and the `--finish` master-id fill, with their tests and the skill and source-comment text: no mention left outside tickets (grep) 2026-11-22 22:34 ET
+- [x] Gold's facts join `master_binding` on the row's source key, then the master view (`gold/views.py`, `destination/gold/gold.yaml`); the dbt sources name `silver.master_binding`: `tests/unit/test_gold_views.py` 2026-11-22 22:34 ET
+- [ ] ~~Prove on the cohort: every row's master equals the one the written id gave~~ dropped by the seven-wastes check (operator, 2026-11-22: "use kiss and 7 waste analysis"): over-processing. Every one of the 24 silver link keys is `VARCHAR`, so the old fill's number spelling (`_key`) never changed a key, and the old fill and `master_binding` both read `mastering_record` by source code and record key: the same answer by construction, proven per source by the integration tests
+- [ ] ~~`skills/data-profiling/SKILL.md` still says a master part's rows link to themselves "(`mdm_id`)"~~ deferred: another runtime's open branch (`codex/ticket-data-profiling-exact-numbers`) edits that file (overlap guard); drop the two words once it merges
+- [x] Learning → skill: `mdm-engineering/MASTERING-STANDARD.md` ("The master id, the source key and the join": `master_binding`, one way per table, the Gold tests), `data-operations/HOSTED-LOADS.md` (the finish fills no ids), `data-quality` ("Gold link rules"), `data-modeling/GOLD.md` (`dbt build`, never `dbt run` alone) 2026-11-22 22:34 ET

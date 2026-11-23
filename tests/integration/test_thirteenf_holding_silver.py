@@ -1,6 +1,6 @@
 """The 13F `silver` target lands each information table's holdings in silver (ticket 183), through real
-workers on PG16: read (one unit a file), then one landing a file, with no merge and an empty MDM; a holding
-whose Security is not mastered yet keeps an empty id for `silver refresh-ids`.
+workers on PG16: read (one unit a file), then one landing a file, with no merge and an empty MDM; no master
+id is written on a holding.
 Every name and number is invented."""
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.rules import frozen
@@ -76,7 +76,7 @@ def test_each_holding_lands_in_silver_with_no_merge_with_its_filing_and_facts(da
     with silver_database(databases.admin) as (owner, runtime):
         silver.migrate(owner, runtime_role=RUNTIME)
         assert silver.register(owner, spec_file(FOLDER / "silver-holding.yaml", None), runtime_role=RUNTIME)["created"]
-        monkeypatch.setattr(silver_land, "engines", lambda: (runtime, mdm.application))  # an empty MDM: no Security mastered
+        monkeypatch.setattr(silver_land, "engines", lambda: runtime)  # an empty MDM: no Security mastered
         monkeypatch.setattr(runtime, "dispose", lambda: None)
         monkeypatch.setattr(mdm.application, "dispose", lambda: None)
         state = drive(book, rid, databases.ledger, workers=workers)
@@ -92,6 +92,5 @@ def test_each_holding_lands_in_silver_with_no_merge_with_its_filing_and_facts(da
             first["put_call"]) == (GOOD, 100, "SH", 5000, "SOLE", None)
     assert (second["cusip"], second["discretion_type"], second["put_call"]) == (ALSO, "DFND", "Put")
     assert rows[("0000000042-26-000002", 1)]["cusip"] == BAD and rows[("0000000042-26-000002", 1)]["voting_auth_sole"] == 7
-    assert all(r["security_mdm_id"] is None for r in rows.values())  # nothing is mastered in this empty MDM
     # Silver keeps no field of the Security: no name, title or FIGI column.
     assert not {"issuer_name", "security_title", "figi"} & set(first)

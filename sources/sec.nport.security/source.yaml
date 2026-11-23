@@ -1113,8 +1113,8 @@ bookkeeping:
     # need to merge it it's just a lookup"), and its own path, apart from MDM's (operator, 2026-11-14: "make it
     # two split one to mdm and one to silver"). The filing's series (holding-series.yaml), its registrant
     # (sec.nport.registrant's) and its date name each row's holder; holding.yaml gives the rows. The silver
-    # writer finds each row's Security, Fund and registrant Company by lookup, and a row whose master is not
-    # mastered yet keeps an empty id for `silver refresh-ids`, so this target needs no MDM run before it.
+    # writer lands each row's Security, Fund and registrant keys; their masters are found by a join on
+    # `master_binding`, so this target needs no MDM run before it.
     silver:
       grain: run
       run: {facts: [period]}

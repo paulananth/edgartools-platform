@@ -26,6 +26,7 @@ key:
 - relationship_id
 - assertion_id
 links: []
+master_through: relationship
 time:
   as_of: null
   as_at: loaded_at

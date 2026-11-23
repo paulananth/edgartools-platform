@@ -91,7 +91,7 @@ objects:
   source: silver.thirteenf_filing
   key: [accession_number, cik]
   links:
-  - {column: manager_mdm_id, dimension: dim_company, role: manager}
+  - {column: cik, kind: company, source_code: sec.company.v1, dimension: dim_company, role: manager}
   times: {business: report_date, recorded: filing_date}
   carry: [form, primary_document]
   requirement: holdings
@@ -102,7 +102,7 @@ objects:
   source: silver.thirteenf_holding
   key: [accession_number, holding_index]
   links:
-  - {column: security_mdm_id, dimension: dim_security, role: held}
+  - {column: cusip, kind: security, source_code: sec.thirteenf.securities.v2, dimension: dim_security, role: held}
   # The holding states neither manager nor date. They come from its filing, reduced first to one row per accession
   # (a filing listed by two managers has two rows). With one manager the holding has that manager; with several the
   # manager is not applicable and the filing fact answers by manager.
@@ -110,7 +110,7 @@ objects:
     source: silver.thirteenf_filing
     by: [accession_number]
     times: {business: report_date, recorded: filing_date}
-    single_link: {column: manager_mdm_id, dimension: dim_company, role: manager}
+    single_link: {column: cik, kind: company, source_code: sec.company.v1, dimension: dim_company, role: manager}
   measures: [shares_held, market_value, voting_auth_sole, voting_auth_shared, voting_auth_none]
   carry: [cusip, share_type, put_call, discretion_type]
   requirement: holdings

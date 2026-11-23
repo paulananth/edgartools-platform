@@ -3,7 +3,7 @@
 Invented SGML submissions run through Bookkeeping's claim, lease and verify path:
 read (one unit a file), then the five silver landings, with no merge and an empty
 MDM. What is proven is that the silver path needs no MDM run: every landing lands
-its rows, and an owner not mastered yet keeps an empty id for `silver refresh-ids`.
+its rows, and no master id is written on a row.
 Every name and number is invented."""
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.rules import frozen
@@ -100,13 +100,12 @@ def test_the_silver_path_lands_every_row_with_no_merge_and_no_owner_mastered(dat
         silver.migrate(owner, runtime_role=RUNTIME)
         for name in ("silver-owner.yaml", "silver-line.yaml"):
             assert silver.register(owner, spec_file(FOLDER / name, None), runtime_role=RUNTIME)["created"]
-        monkeypatch.setattr(silver_land, "engines", lambda: (runtime, mdm.application))  # an empty MDM: no owner mastered
+        monkeypatch.setattr(silver_land, "engines", lambda: runtime)  # an empty MDM: no owner mastered
         monkeypatch.setattr(runtime, "dispose", lambda: None)
         monkeypatch.setattr(mdm.application, "dispose", lambda: None)
         state = drive(book, rid, databases.ledger, workers=workers)
         with runtime.connect() as conn:
             owners = conn.execute(text("SELECT count(*) FROM silver.insider_reporting_owner")).scalar()
-            unlinked = conn.execute(text("SELECT count(*) FROM silver.insider_reporting_owner WHERE person_mdm_id IS NULL")).scalar()
             lines = conn.execute(text("SELECT line_table, count(*) FROM silver.insider_position GROUP BY 1")).all()
 
     assert state["run"]["state"] == "complete"
@@ -114,5 +113,4 @@ def test_the_silver_path_lands_every_row_with_no_merge_and_no_owner_mastered(dat
     assert order == ["land"] * 10
     # Two filings, each: one owner, one transaction and one holding (invented).
     assert owners == 2
-    assert unlinked == 2  # no owner mastered yet: `silver refresh-ids` fills the id after the MDM path
     assert dict(lines) == {"non_derivative_transaction": 2, "non_derivative_holding": 2}

@@ -18,7 +18,7 @@ from edgar_warehouse.silver_writer import database as silver
 from edgar_warehouse.silver_writer import spec as silver_spec
 from edgar_warehouse.silver_writer.cli import spec_file
 from edgar_warehouse.silver_writer.sink import PostgresSink
-from edgar_warehouse.silver_writer.writer import MdmIds, land
+from edgar_warehouse.silver_writer.writer import land
 from tests.support import masters
 from tests.integration import test_mdm_postgres as core
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
@@ -38,23 +38,14 @@ def test_the_reading_columns_are_the_specs():
     assert columns == reading  # the writer refuses a field the spec does not name
 
 
-def test_a_custody_row_lands_once_with_both_companies_and_its_amount(database):
-    masters.seed(database.application, [
-        core.source(key="F1", source_code=FILINGS, kind="company", fields={}, identifiers={"crd": "999001"}),
-        core.source(key="bd:8-00001", source_code=CUSTODIANS, kind="company", fields={}, identifiers={"bd_number": "8-00001"}),
-        core.source(key="name:EXAMPLE TRUST CO", source_code=CUSTODIANS, kind="company", fields={}, identifiers={})])  # no identifier: it binds to nothing
+def test_a_custody_row_lands_once_with_its_amount(database):
     with silver_database(database.admin) as (owner, runtime):
         silver.migrate(owner, runtime_role=RUNTIME)
         spec = spec_file(FOLDER / "silver-custody.yaml", None)
         assert silver.register(owner, spec, runtime_role=RUNTIME)["created"] is True
-        sink, ids = PostgresSink(runtime), MdmIds(database.application)
-        assert land(sink, spec["table"], copy.deepcopy(ROWS), ids)["inserted"] == 2
-        assert land(sink, spec["table"], copy.deepcopy(ROWS), ids)["inserted"] == 0  # the same rows change nothing
+        sink = PostgresSink(runtime)
+        assert land(sink, spec["table"], copy.deepcopy(ROWS))["inserted"] == 2
+        assert land(sink, spec["table"], copy.deepcopy(ROWS))["inserted"] == 0  # the same rows change nothing
         with runtime.connect() as conn:
-            rows = conn.execute(text(
-                "SELECT row, amount, adviser_mdm_id IS NOT NULL, custodian_mdm_id IS NOT NULL, "
-                "adviser_mdm_id = (SELECT adviser_mdm_id FROM silver.adv_custody WHERE row = 1) "
-                "FROM silver.adv_custody ORDER BY row")).all()
-    # The broker-dealer custodian finds its Company; one named only by its name has no identifier to
-    # match by, so its id stays empty (`silver refresh-ids` fills it when it is mastered): ticket 01's name_id part.
-    assert [(r[0], r[1], r[2], r[3], r[4]) for r in rows] == [(1, 1500000000, True, True, True), (2, 250000, True, False, True)]
+            rows = conn.execute(text("SELECT row, amount FROM silver.adv_custody ORDER BY row")).all()
+    assert [(r[0], r[1]) for r in rows] == [(1, 1500000000), (2, 250000)]

@@ -41,8 +41,8 @@ bookkeeping:
       extract: custody-csv.yaml
       master: {keys: {dataset: iapd.adv.custodians.v1, distinct_on: [custodian_id], table: custody}}
     # The amount each custodian holds (Schedule D 5.K(3)(g)), its own path apart from MDM's: the silver writer
-    # finds each row's adviser and custodian Company by lookup (silver-custody.yaml), and a row whose master is not
-    # mastered yet keeps an empty id for `silver refresh-ids`, so this target needs no MDM run before it.
+    # lands each row's adviser and custodian keys (silver-custody.yaml); their masters are found by a join on
+    # `master_binding`, so this target needs no MDM run before it.
     silver:
       grain: run
       run: {facts: [published]}

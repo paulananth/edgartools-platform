@@ -299,8 +299,8 @@ For every part, the silver fields are the numbers, the identifiers, and
 commentary text only when it is material (data-profiling, "Silver fields",
 operator 2026-10-17). Load mode by class: transaction and silver `append`,
 reference `snapshot`, master, relationship and metadata `upsert`. A master part with a
-one-column key also links to itself (`to_part` its own name, `mdm_id_column`
-`mdm_id`), so each row carries its own MDM id. The writer (plan row 6) reads
+one-column key also links to itself (`to_part` its own name), so each row
+finds its own master through `master_binding`. The writer (plan row 6) reads
 this spec; the spec does not depend on the store.
 
 Its public summary, with the part's quality rules and the code sets, is what
@@ -317,7 +317,7 @@ columns:
 key: [<col>, ...]
 links:                          # pointers to masters
   - {columns: [<col>], kind: <MDM kind>, source_code: <the master's Dataset Contract>, to_part: <part>,
-     source_key: <col>, mdm_id_column: <col>, inclusion: <0..1>}
+     source_key: <col>, inclusion: <0..1>}
 time: {as_of: <col|null>, as_at: <col>, event_time: <col|null>}
 partition: [<col>]              # e.g. a date
 load_mode: append|upsert|snapshot
@@ -337,8 +337,8 @@ the group's most common one is flagged (on a tie, the whole group). An empty
 value passes every check; `nullable` governs emptiness. The landing report
 counts each check's flagged or refused rows.
 
-Each link keeps the source's own key and an MDM id column filled after
-mastering; a row whose entity is not mastered yet keeps an empty MDM id.
+Each link keeps the source's own key; the row finds its master by a join
+on `master_binding`, so no MDM id is stored on it.
 
 Links point to master parts only; a pointer to another transaction or reference
 part stays a relationship finding (§3). Profiling leaves `kind` and
@@ -354,10 +354,10 @@ The writer (`edgar-warehouse silver`) adds a `loaded_at` column when `as_at` is
 `loaded_at`, and lands each delivery as its load mode says: `append` refuses a
 changed row under a landed key, `upsert` updates changed rows, `snapshot` also
 removes rows the delivery no longer holds. A rerun of the same delivery changes
-nothing; a changed spec is registered as a new table. `silver refresh-ids` fills
-the MDM ids of rows already landed when their masters are mastered (or merged)
-later, without the rows being delivered again; `loaded_at` moves only when a
-delivered value changes.
+nothing; a changed spec is registered as a new table. A row's master is found
+by a join on `master_binding`, so a master mastered (or merged) later needs no
+rewrite of rows already landed; `loaded_at` moves only when a delivered value
+changes.
 
 ## 7. Drift (`compare`)
 

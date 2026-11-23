@@ -10,7 +10,7 @@
 # the links table is built once, after the last load (`load_chain.py --finish`).
 # Eleven lanes: A the Companies the others follow; P the Persons; S the Securities; C the other Companies; L funds and
 # share classes; Q N-PORT Securities (they wait for no fund); G GLEIF and what follows it (it joins only the SEC Company masters, so it starts when
-# those are done); N N-PORT silver (no master first: a row lands with its link key and `--finish` fills the ids);
+# those are done); N N-PORT silver (no master first: a row lands with its link key and finds its master through `master_binding`, built by `--finish`);
 # O ownership; D the other silver-only sources; F company-facts.
 version: 1
 # The compute a load runs on, as vCPUs and gigabytes, and so how many workers a step can carry (load_chain.py

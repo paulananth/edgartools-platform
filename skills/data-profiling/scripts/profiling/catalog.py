@@ -54,8 +54,7 @@ def _part(part: dict, findings: dict) -> dict:
             "fields": [{"name": c["name"], "type": c["type"], "nullable": c["nullable"],
                         "sensitivity": c["sensitivity"], **({"code_set": code_of[c["name"]]} if c["name"] in code_of else {})}
                        for c in table.get("columns") or []],
-            "links": [{"source_key": link["source_key"], "to_part": link["to_part"],
-                       "mdm_id_column": link["mdm_id_column"]} for link in table.get("links") or []],
+            "links": [{"source_key": link["source_key"], "to_part": link["to_part"]} for link in table.get("links") or []],
         },
         "quality": [{"check": q["check"], "column": q["column"], "failed_rows": q["rows"],
                      "proposal": q["proposal"], "why": q["why"]} for q in part.get("quality") or []],

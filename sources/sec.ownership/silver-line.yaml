@@ -196,7 +196,6 @@ links:
   source_code: sec.company.v1
   to_part: issuer
   source_key: issuer_cik
-  mdm_id_column: issuer_mdm_id
 time:
   as_of: as_of
   as_at: filed

@@ -183,16 +183,14 @@ def _recomputed_quality(identity: dict, artifacts, envelope: dict, keys: dict, s
 
 
 def engines():
-    from edgar_warehouse.database_connections import configured, store_engine
+    from edgar_warehouse.database_connections import store_engine
 
-    silver = store_engine("silver")
-    mdm = store_engine("mdm") if configured("mdm") else None
-    return silver, mdm
+    return store_engine("silver")
 
 
 def execute(envelope: dict, artifacts) -> dict:
     from edgar_warehouse.silver_writer.relational import DatabaseSink
-    from edgar_warehouse.silver_writer.writer import MdmIds, land
+    from edgar_warehouse.silver_writer.writer import land
 
     requested = set(envelope["checks"])
     if requested not in ({CHECK}, {CHECK, QUALITY_CHECK}):
@@ -203,9 +201,9 @@ def execute(envelope: dict, artifacts) -> dict:
                          f"set {QUALITY_V2_GATE}=enabled only after qualification")
     keys = _keys(envelope)
     with KeySet() as seen:
-        silver, mdm = engines()
+        silver = engines()
         try:
-            sink, ids = DatabaseSink(silver), MdmIds(mdm) if mdm is not None else None
+            sink = DatabaseSink(silver)
             spec = sink.spec(keys["silver"])
             count = 0
             quality_reports = []
@@ -221,7 +219,7 @@ def execute(envelope: dict, artifacts) -> dict:
             for rows in _deliveries(spec, each_artifact()):
                 # The mutable legacy results file is for direct silver runs only;
                 # Bookkeeping has its own immutable, attempt-bound receipt.
-                landed = land(sink, keys["silver"], rows, ids, record_quality_results=False)
+                landed = land(sink, keys["silver"], rows, record_quality_results=False)
                 if landed.get("quality") is not None:
                     quality_reports.append(landed["quality"])
             quality = None
@@ -233,8 +231,6 @@ def execute(envelope: dict, artifacts) -> dict:
             return artifacts.put_bytes(envelope["output"], _receipt(count, seen, quality))
         finally:
             silver.dispose()
-            if mdm is not None:
-                mdm.dispose()
 
 
 def _missing(engine, spec: dict, wanted: KeySet) -> int:
@@ -265,7 +261,7 @@ def check(envelope: dict, artifacts) -> tuple[dict, list]:
         raise ValueError(f"silver.land verifies {CHECK} only, with optional {QUALITY_CHECK}")
     keys = _keys(envelope)
     with KeySet() as seen:
-        silver, _ = engines()
+        silver = engines()
         try:
             spec = DatabaseSink(silver).spec(keys["silver"])
             count = 0

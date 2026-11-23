@@ -28,7 +28,8 @@ import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.rules import files
-from edgar_warehouse.silver_writer.writer import MdmIds
+from edgar_warehouse.mastering import reads
+from edgar_warehouse.mastering.store import open_store
 from tests.support import masters
 from tests.integration import test_mdm_postgres as core
 from tests.mdm import policy_layers
@@ -291,7 +292,12 @@ def test_an_isin_answer_carries_its_isin_and_every_listing_figi(tmp_path):
 
 def bound(database, source_code: str, key: str) -> str | None:
     """The Security a staged record is bound to, through its survivor."""
-    return MdmIds(database.application)({"source_code": source_code, "kind": "security"}, {key}).get(key)
+    store = open_store(database.application)
+    try:
+        return reads.master_ids(store, source_code, {key}).get(key)
+    finally:
+        store.rollback()
+        store.close()
 
 
 def securities(database) -> dict:

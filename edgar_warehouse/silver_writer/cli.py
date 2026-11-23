@@ -20,7 +20,7 @@ def _handle(args):
     from . import database
     from .rows import records
     from .relational import DatabaseSink
-    from .writer import MdmIds, land, refresh_ids
+    from .writer import land
 
     engines = []
 
@@ -47,9 +47,8 @@ def _handle(args):
         elif args.silver_command == "line-items":
             from edgar_warehouse.financials import line_items
 
-            ids = MdmIds(engine("mdm")) if configured("mdm") else None
             silver_engine = engine("silver")
-            result = line_items.build(silver_engine, DatabaseSink(silver_engine), ids)
+            result = line_items.build(silver_engine, DatabaseSink(silver_engine))
         elif args.silver_command == "links":
             from datetime import datetime, timezone
 
@@ -64,13 +63,10 @@ def _handle(args):
 
             mdm_engine = engine("mdm")  # each filer's statement format, from its Company master
             silver_engine = engine("silver")
-            result = measures.build(silver_engine, DatabaseSink(silver_engine), MdmIds(mdm_engine),
+            result = measures.build(silver_engine, DatabaseSink(silver_engine),
                                     lambda keys: measures.from_company(mdm_engine, keys))
-        elif args.silver_command in {"land", "refresh-ids"}:
-            ids = MdmIds(engine("mdm")) if configured("mdm") else None
-            sink = DatabaseSink(engine("silver"))
-            result = (land(sink, args.table, records(args.rows), ids) if args.silver_command == "land"
-                      else refresh_ids(sink, args.table, ids))
+        elif args.silver_command == "land":
+            result = land(DatabaseSink(engine("silver")), args.table, records(args.rows))
         else:
             from .context import TableContext
 
@@ -116,7 +112,7 @@ def _commands(parser):
     created.add_argument("spec", type=Path, help="A spec file (JSON or YAML), or a findings.yaml with --part")
     created.add_argument("--part", help="The part whose silver spec to use, when the file is a findings.yaml")
     created.set_defaults(handler=_handle)
-    landed = commands.add_parser("land", help="Write a part's rows into its silver table, with MDM ids for its links")
+    landed = commands.add_parser("land", help="Write a part's rows into its silver table")
     landed.add_argument("table")
     landed.add_argument("rows", type=Path, help="Flat rows: a .jsonl, .csv or .parquet file")
     landed.set_defaults(handler=_handle)
@@ -126,9 +122,6 @@ def _commands(parser):
     linked.set_defaults(handler=_handle)
     measured = commands.add_parser("measures", help="Build company_measure from company_line_item by measures.yaml")
     measured.set_defaults(handler=_handle)
-    refreshed = commands.add_parser("refresh-ids", help="Fill the MDM ids of rows already landed, from MDM as it is now")
-    refreshed.add_argument("table")
-    refreshed.set_defaults(handler=_handle)
     described = commands.add_parser("describe", help="A silver table for an agent: grain, key, links, time, load mode")
     described.add_argument("table", nargs="?")
     described.set_defaults(handler=_handle)

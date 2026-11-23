@@ -40,7 +40,7 @@ class Store:
     def __init__(self, connection):
         self.connection = connection
         self.cursor = connection.cursor()
-        self.staged: list[tuple] = []  # the file being merged: (assertion_id, subject, source_code, lei, body)
+        self.staged: list[tuple] = []  # the file being merged: (assertion_id, subject, source_code, source_key, lei, body)
         self.changed: set[str] = set()  # the golden records this transaction wrote, not yet numbered
         self.shared: str | None = None  # the kind this transaction merges beside others of it, if it does
         self.minted: set[str] = set()  # the golden records this transaction created: no other merge can touch them
@@ -248,6 +248,12 @@ class Store:
                                    f"where entity_id is not null and subject in ({marks(block)})", block))
         return found
 
+    def bindings(self) -> list[tuple]:
+        """(source code, source key, kind, master) of every source record that has its golden record now: what a
+        silver row joins to find its master. A merged-away master's records already point to its survivor."""
+        return self.rows("select distinct r.source_code,r.source_key,m.kind,r.entity_id from mastering_record r "
+                         "join mastering_master m on m.entity_id=r.entity_id")
+
     def members_bound(self, entities) -> dict:
         found = {}
         for block in blocks(entities):
@@ -290,7 +296,7 @@ class Store:
         found = set()
         asked = set(holders)
         held_here = defaultdict(list)  # holders of this file, by subject
-        for _, subject, held_source, _, body in self.staged:
+        for _, subject, held_source, _, _, body in self.staged:
             if held_source == holder_source:
                 held_here[subject].append(body)
         if holders:
@@ -305,7 +311,7 @@ class Store:
                     waiting[lei].append(body)
             found.update((candidate, body) for subject, value in keys for candidate in waiting[value]
                          for body in held_here[subject])
-        here = [(lei, body) for _, _, candidate_source, lei, body in self.staged if candidate_source == source and lei is not None]
+        here = [(lei, body) for _, _, candidate_source, _, lei, body in self.staged if candidate_source == source and lei is not None]
         keys = []
         for block in blocks(sorted({lei for lei, _ in here})):
             keys += self.rows(f"select value,subject from mastering_name_key where role=%s and value in ({marks(block)})",
@@ -332,9 +338,9 @@ class Store:
 
     def save_records(self, bound: dict) -> None:
         """The file's records with their masters, in one write. Older rows of the same subjects follow."""
-        self.insert("mastering_record", ("assertion_id", "subject", "entity_id", "bound_id", "source_code", "lei", "body"),
-                    [(assertion, subject, bound.get(subject), bound.get(subject), source, lei, body)
-                     for assertion, subject, source, lei, body in self.staged])
+        self.insert("mastering_record", ("assertion_id", "subject", "entity_id", "bound_id", "source_code", "source_key", "lei", "body"),
+                    [(assertion, subject, bound.get(subject), bound.get(subject), source, key, lei, body)
+                     for assertion, subject, source, key, lei, body in self.staged])
         older = []
         for block in blocks(sorted(bound)):
             older += [(bound[subject], assertion) for assertion, subject, entity in self.rows(

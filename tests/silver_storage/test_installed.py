@@ -12,7 +12,7 @@ from tests.unit.test_silver_writer import a_spec
 def test_installed_normal_silver_caller(installed, database_factory, mode):
     python, root = installed
     with database_factory(store="silver") as (owner, runtime, role):
-        config = a_spec(table="invented_installed_rows", links=[], load_mode=mode)
+        config = a_spec(table="invented_installed_rows", links=[], master_through="member", load_mode=mode)
         config["columns"][2]["type"] = "DECIMAL(30,8)"
         config["columns"].append({"name": "duration", "type": "INTERVAL", "nullable": True})
         spec = root / "silver-spec.json"

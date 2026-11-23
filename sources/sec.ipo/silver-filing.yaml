@@ -59,12 +59,11 @@ links:
   source_code: sec.company.v1
   to_part: filer
   source_key: cik
-  mdm_id_column: filer_mdm_id
 time:
   as_of: null
   as_at: observed_at
   event_time: filing_date
 partition: []
 load_mode: append
-why: 'A filing is transaction data: one row per filed document and filer, keyed by its accession number and CIK (a filing listed under co-registrants is one row each), linked to the Company by lookup. Append, since a filed document never changes.'
+why: 'A filing is transaction data: one row per filed document and filer, keyed by its accession number and CIK (a filing listed under co-registrants is one row each), linked to the Company by a join on master_binding. Append, since a filed document never changes.'
 checks: []
