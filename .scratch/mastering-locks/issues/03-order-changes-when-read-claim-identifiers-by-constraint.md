@@ -135,8 +135,14 @@ one golden record twice.
   a quiet reader still reads it; a reader during merges misses a late commit (why readers need a quiet store); the quiet check
   sees another session's kind lock of the same login and never its own; a claim is won once, the loser waits on the row and
   reads back that it lost, and another kind may hold the value. MySQL is not tested 2026-11-23 13:21 ET
-- [ ] `/gof-refactor-reviewer` consult on `edgar_warehouse/mastering/store.py` and `merge.py` before code
-- [ ] Part 1, each golden record written once with its number. Tests first, each failing on today's code:
+- [x] `/gof-refactor-reviewer` consult: leave the dialect split. `Store` is already a Template Method with `Postgres` and `MySQL`
+  hooks, and `store.py` has 3 commits since October. The smallest seam replaces two hooks with two (`lock_file` and `lock_values`
+  go; `take_number` with `next_number`, and `quiet`, come in). One open point: the claim table duplicates `mastering_identifier`
+  and must follow every identifier writer (`add_identifiers`, `keep_identifiers`, `repoint`, `split`, `clear`); a unique index on
+  `(kind, namespace, value)` in `mastering_identifier` itself is simpler if no committed golden records of a kind share a value
+  2026-11-23 13:50 ET
+- [ ] `/gof-refactor-reviewer` consult (original text) on `edgar_warehouse/mastering/store.py` and `merge.py` before code
+- [x] Part 1, each golden record written once with its number: `tests/storage_adapters/test_mastering_write_once.py` (5 tests, each failed first: "a golden record was written a second time", and the missing `take_number`, `quiet`, `NotQuiet`; 5 pass on PostgreSQL and on MySQL); the old test that a reader misses neither merge was rewritten to the quiet-store contract; mastering and context adapter tests 68 pass on each engine. Not built: the Bookkeeping open-run half of the quiet check, and the `lookups.build` guard on a run open between two transactions 2026-11-23 13:50 ET. Tests first, each failing on today's code:
   - a merge writes each changed golden record once, with its number, and takes no numbering lock (today: an insert, then an
     update under `lock_file`);
   - two merges (two connections) take different numbers without waiting on each other;
