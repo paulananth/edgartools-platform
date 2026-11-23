@@ -14,7 +14,6 @@
     "step_functions": "/aws/states/edgartools-dev-warehouse"
   },
   "bronze_bucket_name": "edgartools-dev-bronze",
-  "warehouse_bucket_name": "edgartools-dev-warehouse",
   "snowflake_export_bucket_name": "edgartools-dev-snowflake-export",
   "execution_role_arn": "arn:aws:iam::690839588395:role/sec_platform_runner_execution",
   "task_role_arn": "arn:aws:iam::690839588395:role/sec_platform_runner_task",

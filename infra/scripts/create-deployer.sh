@@ -181,7 +181,7 @@ create_and_attach_policy() {
 }
 
 policy_rollout() {
-  local repo_arn task_definition_arn state_machine_arn execution_arn ecs_log_group_arn ecs_log_group_wildcard_arn states_log_group_arn states_log_group_wildcard_arn warehouse_bucket_arn warehouse_legacy_bucket_arn
+  local repo_arn task_definition_arn state_machine_arn execution_arn ecs_log_group_arn ecs_log_group_wildcard_arn states_log_group_arn states_log_group_wildcard_arn
 
   repo_arn="arn:aws:ecr:${REGION}:${ACCOUNT_ID}:repository/${NAME_PREFIX}-images"
   task_definition_arn="arn:aws:ecs:${REGION}:${ACCOUNT_ID}:task-definition/${NAME_PREFIX}-*:*"
@@ -191,8 +191,6 @@ policy_rollout() {
   ecs_log_group_wildcard_arn="${ecs_log_group_arn}:*"
   states_log_group_arn="arn:aws:logs:${REGION}:${ACCOUNT_ID}:log-group:/aws/states/${NAME_PREFIX}-warehouse"
   states_log_group_wildcard_arn="${states_log_group_arn}:*"
-  warehouse_bucket_arn="arn:aws:s3:::${NAME_PREFIX}-warehouse-${ACCOUNT_ID}"
-  warehouse_legacy_bucket_arn="arn:aws:s3:::${NAME_PREFIX}-warehouse"
 
   jq -n \
     --arg repo_arn "$repo_arn" \
@@ -203,8 +201,6 @@ policy_rollout() {
     --arg ecs_log_group_wildcard_arn "$ecs_log_group_wildcard_arn" \
     --arg states_log_group_arn "$states_log_group_arn" \
     --arg states_log_group_wildcard_arn "$states_log_group_wildcard_arn" \
-    --arg warehouse_bucket_arn "$warehouse_bucket_arn" \
-    --arg warehouse_legacy_bucket_arn "$warehouse_legacy_bucket_arn" \
     '{
       Version: "2012-10-17",
       Statement: [
@@ -264,21 +260,6 @@ policy_rollout() {
             "ecs:TagResource"
           ],
           Resource: "*"
-        },
-        {
-          Sid: "ManageRollbackRegistryAndLock",
-          Effect: "Allow",
-          Action: [
-            "s3:GetObject",
-            "s3:PutObject",
-            "s3:DeleteObject"
-          ],
-          Resource: [
-            ($warehouse_bucket_arn + "/warehouse/release/*"),
-            ($warehouse_bucket_arn + "/silverstage/*/warehouse/release/*"),
-            ($warehouse_legacy_bucket_arn + "/warehouse/release/*"),
-            ($warehouse_legacy_bucket_arn + "/silverstage/*/warehouse/release/*")
-          ]
         },
         {
           Sid: "ManageWarehouseTaskDefinitions",

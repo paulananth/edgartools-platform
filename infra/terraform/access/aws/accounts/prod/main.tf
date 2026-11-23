@@ -58,7 +58,6 @@ module "runtime_access" {
   runner_role_name_prefix           = "sec_platform_prod"
   bronze_bucket_name                = local.provisioning.bronze_bucket_name
   bronze_bucket_arn                 = local.provisioning.bronze_bucket_arn
-  warehouse_bucket_arn              = local.provisioning.warehouse_bucket_arn
   snowflake_export_bucket_arn       = local.provisioning.snowflake_export_bucket_arn
   snowflake_export_kms_key_arn      = local.provisioning.snowflake_export_kms_key_arn
   snowflake_export_prefix           = local.provisioning.snowflake_export_prefix

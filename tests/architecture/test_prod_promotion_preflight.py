@@ -19,7 +19,10 @@ def _fake_tools(tmp_path: Path) -> Path:
 set -euo pipefail
 case "$*" in
   *get-caller-identity*) printf '%s\\n' "${FAKE_ACCOUNT:-690839588395}" ;;
-  *head-bucket*) [[ "${FAKE_MISSING_BUCKETS:-0}" != 1 ]] ;;
+  *head-bucket*)
+    [[ "${FAKE_MISSING_BUCKETS:-0}" != 1 ]] || exit 254
+    if [[ "${FAKE_MISSING_WAREHOUSE:-0}" == 1 && "$*" == *warehouse* ]]; then exit 254; fi
+    ;;
   *describe-secret*)
     [[ "${FAKE_MISSING_SECRETS:-0}" != 1 ]] || exit 254
     printf '{"Name":"fake","VersionIdsToStages":{"AWSCURRENT":["v1"]}}\\n'
@@ -78,6 +81,11 @@ def test_preflight_passes_read_only_ready_inventory(tmp_path: Path) -> None:
     result = _run(tmp_path)
     assert result.returncode == 0, result.stderr
     assert "Preflight passed. No changes were made." in result.stdout
+
+
+def test_preflight_does_not_require_retired_warehouse_bucket(tmp_path: Path) -> None:
+    result = _run(tmp_path, FAKE_MISSING_WAREHOUSE="1")
+    assert result.returncode == 0, result.stderr
 
 
 def test_preflight_rejects_wrong_account(tmp_path: Path) -> None:

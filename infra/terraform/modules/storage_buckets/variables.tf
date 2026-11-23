@@ -8,11 +8,6 @@ variable "bronze_bucket_name" {
   type        = string
 }
 
-variable "warehouse_bucket_name" {
-  description = "Mutable warehouse bucket name."
-  type        = string
-}
-
 variable "snowflake_export_bucket_name" {
   description = "Dedicated Snowflake export bucket name."
   type        = string

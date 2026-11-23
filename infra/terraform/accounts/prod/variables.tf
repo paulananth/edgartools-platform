@@ -21,12 +21,6 @@ variable "bronze_bucket_name" {
   default     = null
 }
 
-variable "warehouse_bucket_name" {
-  description = "Optional override for the warehouse bucket name."
-  type        = string
-  default     = null
-}
-
 variable "snowflake_export_bucket_name" {
   description = "Optional override for the Snowflake export bucket name."
   type        = string

@@ -234,7 +234,7 @@ resource "aws_iam_role_policy" "ecs_task_warehouse_storage" {
       {
         Effect   = "Allow"
         Action   = ["s3:ListBucket"]
-        Resource = [var.bronze_bucket_arn, var.warehouse_bucket_arn]
+        Resource = [var.bronze_bucket_arn]
       },
       {
         Effect   = "Allow"
@@ -255,20 +255,6 @@ resource "aws_iam_role_policy" "ecs_task_warehouse_storage" {
           "s3:PutObject"
         ]
         Resource = "${var.bronze_bucket_arn}/*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:DeleteObject"
-        ]
-        Resource = "${var.warehouse_bucket_arn}/*"
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["s3:DeleteObjectVersion"]
-        Resource = "${var.warehouse_bucket_arn}/warehouse/release/filing-text-retention/mutation.lock"
       },
       {
         Effect = "Allow"

@@ -1,7 +1,6 @@
 locals {
-  environment           = "prod"
-  bronze_bucket_name    = coalesce(var.bronze_bucket_name, "edgartools-prod-bronze-690839588395")
-  warehouse_bucket_name = coalesce(var.warehouse_bucket_name, "edgartools-prod-warehouse-690839588395")
+  environment        = "prod"
+  bronze_bucket_name = coalesce(var.bronze_bucket_name, "edgartools-prod-bronze-690839588395")
   snowflake_export_bucket_name = coalesce(
     var.snowflake_export_bucket_name,
     "edgartools-prod-snowflake-export-690839588395",
@@ -33,9 +32,58 @@ module "storage" {
 
   environment                  = local.environment
   bronze_bucket_name           = local.bronze_bucket_name
-  warehouse_bucket_name        = local.warehouse_bucket_name
   snowflake_export_bucket_name = local.snowflake_export_bucket_name
   tags                         = var.tags
+}
+
+# The warehouse bucket is absent in production. Forget its stale state without
+# destroying resources when the production root is applied.
+removed {
+  from = module.storage.aws_s3_bucket.warehouse
+
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = module.storage.aws_s3_bucket_public_access_block.warehouse
+
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = module.storage.aws_s3_bucket_server_side_encryption_configuration.warehouse
+
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = module.storage.aws_s3_bucket_versioning.warehouse
+
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = module.storage.aws_s3_bucket_ownership_controls.warehouse
+
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = module.storage.aws_s3_bucket_lifecycle_configuration.warehouse
+
+  lifecycle {
+    destroy = false
+  }
 }
 
 module "runtime" {

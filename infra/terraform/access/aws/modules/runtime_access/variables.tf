@@ -34,11 +34,6 @@ variable "bronze_bucket_arn" {
   type        = string
 }
 
-variable "warehouse_bucket_arn" {
-  description = "Warehouse bucket ARN."
-  type        = string
-}
-
 variable "snowflake_export_bucket_arn" {
   description = "Snowflake export bucket ARN."
   type        = string

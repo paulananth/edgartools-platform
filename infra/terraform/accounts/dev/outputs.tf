@@ -8,16 +8,6 @@ output "bronze_bucket_arn" {
   value       = module.storage.bronze_bucket_arn
 }
 
-output "warehouse_bucket_name" {
-  description = "Dev warehouse bucket name."
-  value       = module.storage.warehouse_bucket_name
-}
-
-output "warehouse_bucket_arn" {
-  description = "Dev warehouse bucket ARN."
-  value       = module.storage.warehouse_bucket_arn
-}
-
 output "snowflake_export_bucket_name" {
   description = "Dev Snowflake export bucket name."
   value       = module.storage.snowflake_export_bucket_name

@@ -205,7 +205,6 @@ discover_s3_buckets() {
   names="$(aws_cli s3api list-buckets --query "Buckets[?starts_with(Name, '${prefix}')].Name" --output text 2>/dev/null || true)"
   {
     printf '%s\n' "$(tf_output_raw "$env" bronze_bucket_name)"
-    printf '%s\n' "$(tf_output_raw "$env" warehouse_bucket_name)"
     printf '%s\n' "$(tf_output_raw "$env" snowflake_export_bucket_name)"
     printf '%s\n' "$names" | normalize_lines
   } | normalize_lines
