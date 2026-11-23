@@ -16,7 +16,7 @@ from edgar_warehouse.silver_writer import database as silver
 from edgar_warehouse.silver_writer.cli import spec_file
 from edgar_warehouse.silver_writer.sink import PostgresSink
 from edgar_warehouse.silver_writer.writer import land
-from tests.integration.test_company_line_item_silver import fact, no_masters
+from tests.integration.test_company_line_item_silver import fact
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
 
 FOLDER = files.sources_root() / "sec.company-facts"
@@ -94,14 +94,14 @@ def built(postgres):
         for name in ("silver-company-fact.yaml", "silver-company-line-item.yaml", "silver-company-measure.yaml",
                      "silver-company-measure-input.yaml"):
             silver.register(owner, spec_file(FOLDER / name, None), runtime_role=RUNTIME)
-        land(sink, "company_fact", copy.deepcopy(FACTS), no_masters)
-        land(sink, "company_line_item", copy.deepcopy(LINES), no_masters)
+        land(sink, "company_fact", copy.deepcopy(FACTS))
+        land(sink, "company_line_item", copy.deepcopy(LINES))
         asked = []
-        result = measures.build(runtime, sink, no_masters,
+        result = measures.build(runtime, sink,
                                 lambda keys: asked.append(keys) or {k: COMPANIES[k] for k in keys if k in COMPANIES})
         with runtime.connect() as conn:
             rows = [dict(r._mapping) for r in conn.execute(text("SELECT * FROM silver.company_measure"))]
-        measures.build(runtime, sink, no_masters, lambda keys: {k: COMPANIES[k] for k in keys if k in COMPANIES},
+        measures.build(runtime, sink, lambda keys: {k: COMPANIES[k] for k in keys if k in COMPANIES},
                        table="company_measure_input")
         with runtime.connect() as conn:
             inputs = [dict(r._mapping) for r in conn.execute(text("SELECT * FROM silver.company_measure_input"))]

@@ -22,10 +22,6 @@ FOLDER = files.sources_root() / "sec.company-facts"
 US, EU, MARCH, NEXT = "0000000001", "0000000003", "0000000002", "0000000004"
 
 
-def no_masters(link, keys):
-    return {}
-
-
 def fact(company, concept, value, end, start=None, *, taxonomy="us-gaap", unit="USD", accession_number="0000000001-26-000001",
          filed="2026-02-01", form="10-K"):
     return {"company_key": company, "taxonomy": taxonomy, "concept": concept, "unit": unit,
@@ -109,9 +105,9 @@ def built(postgres):
         sink = PostgresSink(runtime)
         for name in ("silver-company-fact.yaml", "silver-company-line-item.yaml", "silver-company-line-item-input.yaml"):
             silver.register(owner, spec_file(FOLDER / name, None), runtime_role=RUNTIME)
-        land(sink, "company_fact", copy.deepcopy(FACTS), no_masters)
-        result = line_items.build(runtime, sink, no_masters)
-        line_items.build(runtime, sink, no_masters, table="company_line_item_input")
+        land(sink, "company_fact", copy.deepcopy(FACTS))
+        result = line_items.build(runtime, sink)
+        line_items.build(runtime, sink, table="company_line_item_input")
         with runtime.connect() as conn:
             rows = [dict(r._mapping) for r in conn.execute(text("SELECT * FROM silver.company_line_item"))]
             inputs = [dict(r._mapping) for r in conn.execute(text("SELECT * FROM silver.company_line_item_input"))]
