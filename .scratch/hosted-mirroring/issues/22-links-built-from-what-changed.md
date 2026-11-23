@@ -1,6 +1,6 @@
 # 22: `silver links` is built from the records that changed, not from every record
 
-Status: open
+Status: resolved
 Type: task
 
 Carried from ticket 21 (and ticket 14's finish bound): after the binding moved into the database and the landing made one round trip a batch,
@@ -43,11 +43,21 @@ Two ways to stop reading everything; the first is the smaller:
 The first changes what a finish costs from "every record" to "what changed"; the second only the constant. **Decide with the operator**, with this
 ticket's numbers: the first is a new kind of build (an incremental one) and is not the "same output, faster" of ticket 21.
 
+## Outcome (2026-11-23)
+
+The operator chose the incremental build (option 1). Measuring first showed it would not shorten a **first** finish: after a full load every
+record is new, so an incremental build computes everything. It helps only a daily finish. So the constant went first, each change measured on the
+hosted store (`silver links`, seconds): the two lookups stream the table once (`bound` 137 to 19, `master_states` 100 to 28), a partial index
+serves the records that state links (72 to 19), landing batches carry 5,000 rows (90-121 to 67), and the binding is one join pass (100 to 23).
+**`silver links` is now 238.5 s (4.0 min) against the bound of five.** The incremental build is not needed for the bound; it stays an option
+for a daily load that changes few records, to be decided when a daily finish is measured.
+
 ## Parts
 
-- [ ] Decide between the two (the operator's word); the incremental build's equality test against the whole build is its proof
-- [ ] Tests first (adapter, invented records): the incremental build equals the whole build after a new record, a changed record, a merged-away
-  master and a removed record
-- [ ] Build it; time the hosted finish: under five minutes without lookups
-- [ ] Skills: `data-operations/HOSTED-LOADS.md` ("The finish takes at most five minutes") and `mdm-engineering` for the incremental rule
-- [ ] Learning → skill: name the skill lines changed, or "none"
+- [x] Streamed lookups, the partial index, 5,000-row batches and the binding join pass, each with its failing-first test and its hosted figure (PRs #2074, #2076, #2075, #2077) 2026-11-23 17:04 ET
+- [x] Time the hosted finish: 238.5 s clean (above) 2026-11-23 17:04 ET
+- [ ] ~~Decide between the two options~~ the incremental build is deferred: the bound is met without it; measure a daily finish before building it
+- [ ] ~~Tests first: the incremental build equals the whole build~~ deferred with the build
+- [ ] ~~Build the incremental build~~ deferred: see the outcome
+- [x] Skills: `data-operations/HOSTED-LOADS.md` ("The finish takes at most five minutes": the phase table, stream a large lookup, an index for a rare predicate, a landing batch is a round trip) 2026-11-23 17:04 ET
+- [x] Learning → skill: `data-operations/HOSTED-LOADS.md`, `mdm-engineering` ("Choose the cheapest proof": measure what a design changes before building it: the incremental build would not have helped the finish it was chosen for) 2026-11-23 17:04 ET

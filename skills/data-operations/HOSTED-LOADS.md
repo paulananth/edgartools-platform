@@ -77,7 +77,11 @@ below), never a reason to skip it: Gold and the links read what it writes. It is
 one is a defect, not a wait. Time each part of a slow finish by phase
 before changing it, and run the cheap check that can fail first. For a step that is one native call, sample the running process
 (`sample <pid> 30`) before reading its code: the links build spent 265 s in a pairwise comparison of every link with every later link,
-which no phase timing could name. A phase that moves a table between two schemas of one database through the client is the same defect: the binding
+which no phase timing could name. **Measured phases of the finish on the hosted store** (`silver links`, 1,776 s to 238 s): a lookup of tens of thousands of keys is read by streaming the
+table once (a 2,000-key probe costs 300 to 630 ms of random reads, a streamed table 150,000 rows a second), a predicate that matches almost nothing in a
+large table (links in 13 GB of one source's bodies) is served by a partial index, a landing batch is one round trip so it carries 5,000 rows, and a
+table rebuilt from rows already in the database is one join pass that writes only what changed. Time the phases before choosing a build: an incremental
+build would not have shortened the first finish after a full load. A phase that moves a table between two schemas of one database through the client is the same defect: the binding
 rebuild read 4.4 million rows into Python and wrote them back (18 of the finish's 30 minutes) until it became one statement. Count a landing's round trips
 a batch before changing its size: the writer made three a batch (70 ms each) and now makes one.
 
