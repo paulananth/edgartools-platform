@@ -64,8 +64,9 @@ these locks? Use 5-whys and 7 wastes analysis"). They agreed with it and asked f
   next numbering. So a reader that has seen N has seen every change committed before N was given, which is the property
   `number_changes` promised.
 - **Cost:** one set-based statement per reading on the server, with no round trip per row and no worker waiting. At `--finish`
-  it numbers the whole load once. It is still a second write of each pending row, but done once in bulk instead of once per
-  transaction under a lock. Measure it on the next load.
+  it numbers the whole load once. **It is still a second write of each pending row**, done once in bulk on the server instead of
+  once per transaction under a lock, so the claim "no second write" holds only for the merge path. Measure the bulk statement on
+  the proof load; if it is too slow, number by kind or in key ranges, still under the one numbering lock.
 - **`_wake`** compares golden records changed after `seen` (the last number when its merge started). During a load nothing is
   numbered, so it must also read pending rows: `changed_file > seen or changed_file = 0`. That is a superset of what it reads
   today. **Open, decide by test, not by reading:** whether the superset releases exactly the same records, or wakes more than
@@ -84,16 +85,21 @@ these locks? Use 5-whys and 7 wastes analysis"). They agreed with it and asked f
 - A fresh store gets the table at init. A store that already holds golden records gets its claims filled by `init` from
   `mastering_identifier` joined to each record's kind, before any load. Init only, no migration (operator rule).
 
-### 3. One statement for the locks a merge still takes
+### 3. A merge takes no store lock; `clear` refuses while a merge can run
 
-`lock_store` (shared) and `lock_kind` stay, with the same meaning. A merge takes both in one statement, `select
-pg_advisory_xact_lock_shared(…), pg_advisory_xact_lock_shared(…)`, which saves one round trip per transaction. The exclusive kind
-lock stays for what only a merge alone may do: combine golden records, create by exact name, or redo after a deadlock.
+`lock_store` exists only so that `clear` (the whole store) can wait out every merge: each merge takes it shared, which costs one
+round trip a transaction, and `clear` takes it exclusive. `clear` never runs during a load, so the exclusion moves to `clear`:
+it refuses while Bookkeeping holds an open mastering run, or while any session of the loader login is connected to the data
+database (the reader login sees both). Merges stop taking `lock_store`; `clear` keeps its exclusive store lock for itself.
+Of the locks a merge takes today, only `lock_kind` remains: shared beside other merges of its kind, exclusive for what only a merge
+alone may do (combine golden records, create by exact name, redo after a deadlock). Without it, two merges could create or combine
+one golden record twice.
 
 ### What does not change
 
 - A merge of one kind still runs beside the others. Merges that combine golden records still run alone.
 - Readers still see changes in order. `last_file()` keeps its meaning once numbering has run.
+- `clear` still clears the whole store, alone.
 - MySQL: `GET_LOCK` holds one lock per session, so MySQL merges one kind at a time as now. Part 1 removes its file lock too.
 
 ## Parts
@@ -116,7 +122,10 @@ lock stays for what only a merge alone may do: combine golden records, create by
   - combine and split move the claims;
   - `init` fills claims for a store that already holds golden records;
   - no merge is cut for the lock table's cap
-- [ ] Part 3, one statement for the store and kind locks: test the shared locks are held as before
+- [ ] Part 3, no store lock in a merge. Tests first:
+  - a merge takes no store lock (fails today: every merge takes it shared);
+  - `clear` refuses while a mastering run is open, and while a loader session is connected;
+  - `clear` still clears an idle store
 - [ ] Proof: rerun the mastering step that limited the measured load (`gleif`) on a disposable store. Report golden records a
   minute and the inserts and updates of `mastering_master`, against 17k a minute and two writes a record
 - [ ] Skills: mdm-engineering's lock paragraph (merges no longer number changes; claims are a constraint; the cap is gone);
