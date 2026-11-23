@@ -2,7 +2,7 @@
 """Drop and create again the platform's databases on a hosted instance, with the owner and the grants each had.
 
     set -a; . <stores folder>/owner.env; set +a
-    python infra/scripts/reset-hosted-databases.py            # lists what it would drop: sizes, no values
+    python infra/scripts/reset-hosted-databases.py            # lists sizes and session classes; drops nothing
     python infra/scripts/reset-hosted-databases.py --words "<the operator's exact words>"  # drops and creates them again
 
 Uses the owner login's connection (owner.env, the instance's administrator), which must be able to

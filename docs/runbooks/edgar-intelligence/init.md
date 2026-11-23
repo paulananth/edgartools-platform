@@ -54,8 +54,8 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    operator's word, list them, then drop and create them with the owner and the grants each had:
    ```bash
    set -a; . ~/.config/edgartools/hosted/owner.env; set +a
-   python infra/scripts/reset-hosted-databases.py             # lists sizes; refuses while any session is connected
-   python infra/scripts/reset-hosted-databases.py --words "<the operator's exact words>"   # a drop needs the operator's sign-off, kept in reinit-approvals.log
+   python infra/scripts/reset-hosted-databases.py             # lists sizes and session classes; drops nothing
+   python infra/scripts/reset-hosted-databases.py --words "<the operator's exact words>"   # refuses client sessions/transactions; records any forced idle-worker disconnects
    ```
    The drop also deletes the dropped stores' run files (`<manifest root>/load`, the root `worker.env` names): no store refers
    to them once Bookkeeping is dropped. Extracts (`<manifest root>/extracts`) stay, since a load reuses one by its content. A
