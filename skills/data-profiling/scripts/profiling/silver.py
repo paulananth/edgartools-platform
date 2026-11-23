@@ -74,7 +74,7 @@ def spec(f: dict, relationships: list[dict], parts: dict) -> dict:
     """The silver table spec (findings spec section 6): numbers, identifiers, and
     material commentary. Links point to masters only: a link to another transaction or reference
     part stays a relationship finding. A master part with a one-column key also links to
-    itself, so each row carries its own MDM id. Each link's kind and Dataset Contract are
+    itself, so each row finds its own master by its key. Each link's kind and Dataset Contract are
     filled by data-onboarding."""
     links = [r for r in relationships if r["from"]["part"] == f["part"]
              and parts.get(r["to"]["part"], {}).get("class") == "master"]

@@ -9,7 +9,7 @@
 # A branch is another runtime's when its prefix (before the first "/") differs
 # from this branch's prefix. A file counts as changed on a branch only if it
 # differs from origin/main now. A worktree whose branch still sits on the
-# commit its PR merged holds only its uncommitted files: after a squash merge
+# commit its PR merged, or behind it, holds only its uncommitted files: after a squash merge
 # its commits look unmerged, and main may have changed their files since.
 #
 # It also fails on an ET stamp later than the clock in what this branch adds
@@ -93,7 +93,15 @@ gh pr list --state merged --limit 300 --json headRefName,headRefOid \
 git worktree list --porcelain | awk '/^worktree /{w=substr($0,10)} /^branch /{print w "\t" substr($0,19)}' \
   | while IFS=$'\t' read -r path ref; do
       [[ "$ref" == */* && "${ref%%/*}" != "$mine" ]] || continue
-      if grep -qxF "$ref"$'\t'"$(git rev-parse "refs/heads/$ref")" "$tmp/merged"; then
+      head="$(git rev-parse "refs/heads/$ref")"
+      merged_heads="$(awk -F'\t' -v r="$ref" '$1==r{print $2}' "$tmp/merged")"
+      in_merged=no
+      for m in $merged_heads; do
+        # Merged when the branch sits on the merged head or behind it (a later
+        # commit pushed to the PR from elsewhere was never pulled here).
+        if git merge-base --is-ancestor "$head" "$m" 2>/dev/null; then in_merged=yes; break; fi
+      done
+      if [[ "$in_merged" == yes ]]; then
         dirty_files "$path"
       else
         { branch_files "$ref"; dirty_files "$path"; }
