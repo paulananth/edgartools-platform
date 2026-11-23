@@ -143,6 +143,17 @@ def measured(text: str) -> dict[str, float]:
     return took
 
 
+def minutes_running(text: str, names: set[str], now: datetime) -> dict[str, float]:
+    """Minutes since each named step's first `attempt 1 start` in the state file. The file outlives a scheduler, so a restart
+    does not reset what a running step has used (a restarted scheduler once counted a 94-minute step as new and projected
+    its end 3 hours too early)."""
+    first = {}
+    for found in re.finditer(r"^(\d\d-\d\d \d\d:\d\d:\d\d) ET (\S+) attempt 1 start", text, re.M):
+        first.setdefault(found.group(2), datetime.strptime(found.group(1), "%m-%d %H:%M:%S").replace(year=now.year))
+    clock_now = now.replace(tzinfo=None)
+    return {n: (clock_now - first[n]).total_seconds() / 60 for n in names if n in first}
+
+
 def estimates(steps: list[dict], took: dict[str, float]) -> dict[str, float]:
     """Each step's minutes: what it took when done, else its bound times the median share of its bound the done steps
     used (the bound itself while nothing has run). An estimate, labelled so wherever it is shown."""
@@ -405,7 +416,8 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
         length = chain_length(steps, estimate)
         cycle += 1
         if cycle % 10 == 1:
-            minutes_in = {n: (clock() - began.get(n, clock())).total_seconds() / 60 for n in children}
+            running_now = {n for n in by_name if n not in done and (n in children or (by_name[n]["source"], by_name[n]["target"]) in external_loads())}
+            minutes_in = minutes_running(state.read_text() if state.exists() else "", running_now, clock())
             left = remaining(steps, done, minutes_in, estimate)
             ends = clock() + timedelta(minutes=left)
             note(f"projected end {ends:%H:%M} ET (an estimate from the {len(measured(state.read_text()) if state.exists() else {})} "
@@ -1061,7 +1073,8 @@ def step_run_id(step_name: str) -> str | None:
     """The Bookkeeping run to publish for a step: its last completed run, from its log or, when its last attempt found
     everything already loaded and ran none, from its newest earlier attempt's."""
     log = LOGS / f"chain-{RUN}-{step_name}.log"
-    attempts = sorted(log.parent.glob(log.name + ".attempt-*"), key=lambda p: int(p.name.rsplit("-", 1)[1]), reverse=True)
+    numbered = [(int(found.group(1)), p) for p in log.parent.glob(log.name + ".attempt-*") if (found := re.search(r"\.attempt-(\d+)$", p.name))]
+    attempts = [p for _, p in sorted(numbered, key=lambda pair: pair[0], reverse=True)]  # `.attempt-1.errors` is no attempt's log
     for path in [log, *attempts]:
         if path.exists() and (run := last_run_id(path.read_text())):
             return run

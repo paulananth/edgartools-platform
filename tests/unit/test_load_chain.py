@@ -1077,6 +1077,8 @@ def test_a_step_that_loaded_nothing_new_in_its_last_attempt_publishes_the_run_of
     (tmp_path / "chain-fresh-v1-a1.log.attempt-2").write_text(STEP_LOG)
     assert chain.step_run_id("a1") == "22222222-2222-4222-8222-222222222222"  # its newest attempt that ran one
     assert chain.step_run_id("none") is None
+    (tmp_path / "chain-fresh-v1-a1.log.attempt-1.errors").write_text("a failed attempt's captured errors")  # not an attempt's log
+    assert chain.step_run_id("a1") == "22222222-2222-4222-8222-222222222222"
 
 
 def test_a_bad_line_in_the_env_file_never_hides_the_catalog_pair(tmp_path):
@@ -1406,3 +1408,11 @@ def test_finish_records_how_long_it_took_against_its_bound(monkeypatch):
     monkeypatch.setattr(chain, "note", lambda message, state: notes.append(message))
     chain.finish({}, Path("/dev/null"))
     assert any(m.startswith("finish took ") and "min" in m for m in notes) and notes[-1] == "chain done"
+
+
+def test_a_running_steps_minutes_are_read_from_the_state_file_so_a_scheduler_restart_does_not_reset_them():
+    text = ("11-23 10:00:00 ET company attempt 1 start\n11-23 11:00:00 ET gleif attempt 1 start\n"
+            "11-23 11:30:00 ET gleif attempt 2 start\n11-23 11:45:00 ET person attempt 1 start\n")
+    now = chain.datetime(2026, 11, 23, 12, 0, tzinfo=chain.ZoneInfo("America/New_York"))
+    used = chain.minutes_running(text, {"gleif", "person", "never-started"}, now)
+    assert used == {"gleif": 60.0, "person": 15.0}  # from the first attempt's start, none for a step with no start line

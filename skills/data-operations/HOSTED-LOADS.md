@@ -58,6 +58,10 @@ disposable store is the next check to add.
   bundle in flight.
 - **Read a running load without printing where it connects.** `lsof`, `ps` and `sample` print the instance's hostname and addresses; mask them
   (`<ip>`, the hostname) in the same command, as the database-monitoring commands already do, and count sockets instead of listing them.
+- **Run `readiness.py` beside a load only to read it**: it fails QUIET (a load runs) and nothing else, and then leaves the passing record of this
+  store and this code in place, so the running scheduler keeps starting steps. Any other failure closes the gate, as it should.
+- **The projected end counts a running step from its first attempt's start in the state file**, so a restarted scheduler does not reset it; a step with
+  no per-bundle progress (one document) is still an upper bound until it ends.
 - **A scheduler that "stopped" has usually finished everything it could**: it names the failed steps and what waits on them.
   Fix the cause (engine, memory, a login), then start it again; done steps cost one call each.
 - **Read how often a mastering merge went alone after a load**: `grep mastering_merge_alone <the step logs>`. A line names each reason and its
