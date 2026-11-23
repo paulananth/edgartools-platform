@@ -24,7 +24,7 @@ from edgar_warehouse.silver_writer import database as silver
 from edgar_warehouse.silver_writer import spec as silver_spec
 from edgar_warehouse.silver_writer.cli import spec_file
 from edgar_warehouse.silver_writer.sink import PostgresSink
-from edgar_warehouse.silver_writer.writer import MdmIds, land
+from edgar_warehouse.silver_writer.writer import land
 from tests.support import masters
 from tests.integration import test_mdm_postgres as core
 from tests.integration import test_nport_isin_link as isin
@@ -117,11 +117,24 @@ SECURITY, FUND, REGISTRANT = "sec.nport.security.v2", "sec.nport.fund.v1", "sec.
 
 
 def bound(database, source_code: str, key: str) -> str | None:
-    return MdmIds(database.application)({"source_code": source_code, "kind": None}, {key}).get(key)
+    """The master a source key finds in the binding silver joins: `master_binding` is built from these stored records."""
+    from edgar_warehouse.mastering.store import open_store
+    store = open_store(database.application)
+    try:
+        return {(code, k): entity for code, k, _, entity in store.bindings()}.get((source_code, key))
+    finally:
+        store.rollback()
+        store.close()
 
 
-def test_each_row_lands_with_its_holder_and_security_found_by_lookup(database, tmp_path):
-    """The silver writer finds each MDM id by the row's keys, among the records each
+def master_of(database, row: dict, to_part: str) -> str | None:
+    """The master a landed row finds through its link: the binding row of its source code and its own key."""
+    link = next(l for l in files.load(FOLDER / "silver-holding.yaml")["links"] if l["to_part"] == to_part)
+    return bound(database, link["source_code"], None if row[link["source_key"]] is None else str(row[link["source_key"]]))
+
+
+def test_each_row_finds_its_holder_and_security_through_the_binding(database, tmp_path):
+    """A row finds each master by its own keys in the binding built from the records each
     link's Dataset Contract staged; no holding record goes through the Merge Stage."""
     rows = holding_rows(tmp_path / "rows")
     masters.seed(database.application, [  # fixture masters stand in for each contract's records
@@ -139,9 +152,9 @@ def test_each_row_lands_with_its_holder_and_security_found_by_lookup(database, t
         silver.migrate(owner, runtime_role=RUNTIME)
         spec = spec_file(FOLDER / "silver-holding.yaml", None)
         assert silver.register(owner, spec, runtime_role=RUNTIME)["created"] is True
-        sink, ids = PostgresSink(runtime), MdmIds(database.application)
-        assert land(sink, spec["table"], copy.deepcopy(rows), ids)["inserted"] == len(rows)
-        again = land(sink, spec["table"], copy.deepcopy(rows), ids)  # the same delivery changes nothing
+        sink = PostgresSink(runtime)
+        assert land(sink, spec["table"], copy.deepcopy(rows))["inserted"] == len(rows)
+        again = land(sink, spec["table"], copy.deepcopy(rows))  # the same delivery changes nothing
         assert (again["inserted"], again["changed"]) == (0, 0)
         with runtime.connect() as conn:
             landed = {r["holding_id"]: r for r in conn.execute(text("SELECT * FROM silver.nport_holding")).mappings()}
@@ -150,33 +163,24 @@ def test_each_row_lands_with_its_holder_and_security_found_by_lookup(database, t
     assert None not in (security, fund, registrant)
     # 4 and 5 (by ONE) and 9 (by the CUSIP) are one Security, found by each key; A-1's are the fund's.
     assert bound(database, SECURITY, isin.ONE) == security
-    assert {h: str(landed[h]["security_mdm_id"]) for h in ("4", "5", "9")} == {"4": security, "5": security, "9": security}
-    assert {str(r["fund_mdm_id"]) for h, r in landed.items() if r["accession_number"] == "A-1"} == {fund}
-    assert {str(r["registrant_mdm_id"]) for r in landed.values() if r["accession_number"] == "A-1"} == {registrant}
-    # A-2 names no series and its registrant is not mastered: empty ids, the row still lands.
+    assert {h: master_of(database, landed[h], "security") for h in ("4", "5", "9")} == {"4": security, "5": security, "9": security}
+    assert {master_of(database, r, "fund") for r in landed.values() if r["accession_number"] == "A-1"} == {fund}
+    assert {master_of(database, r, "registrant") for r in landed.values() if r["accession_number"] == "A-1"} == {registrant}
+    # A-2 names no series and its registrant is not mastered: no master, the row still lands.
     a2 = [r for r in landed.values() if r["accession_number"] == "A-2"]
-    assert a2 and all(r["fund_mdm_id"] is None and r["registrant_mdm_id"] is None for r in a2)
+    assert a2 and all(master_of(database, r, "fund") is None and master_of(database, r, "registrant") is None for r in a2)
     # The as-of date lands as a date: A-1 reports at 31 March, A-2 states none.
     assert {str(r["as_of"]) for r in landed.values() if r["accession_number"] == "A-1"} == {"2026-03-31"}
     assert all(r["as_of"] is None for r in a2)
     # TWO and NONE have no Security mastered here: empty, never another Security's id.
-    assert landed["6"]["security_mdm_id"] is None and landed["8"]["security_mdm_id"] is None
+    assert master_of(database, landed["6"], "security") is None and master_of(database, landed["8"], "security") is None
 
 
-def test_a_link_pointed_at_another_dataset_contract_finds_nothing(database, tmp_path):
-    rows = [r for r in holding_rows(tmp_path / "rows") if r["holding_id"] == "9"]
+def test_a_key_in_another_dataset_contract_finds_no_master(database, tmp_path):
     masters.seed(database.application, [core.source(key=isin.CUSIP, source_code=SECURITY, kind="security", fields={},
                                                     identifiers={"cusip": isin.CUSIP})])
-    spec = files.load(FOLDER / "silver-holding.yaml")
-    for link in spec["links"]:
-        if link["kind"] == "security":
-            link["source_code"] = "sec.thirteenf.securities.v2"
-    with silver_database(database.admin) as (owner, runtime):
-        silver.migrate(owner, runtime_role=RUNTIME)
-        assert silver.register(owner, silver_spec.check(spec), runtime_role=RUNTIME)["created"] is True
-        land(PostgresSink(runtime), spec["table"], rows, MdmIds(database.application))
-        with runtime.connect() as conn:
-            assert conn.scalar(text("SELECT security_mdm_id FROM silver.nport_holding")) is None
+    assert bound(database, SECURITY, isin.CUSIP) is not None
+    assert bound(database, "sec.thirteenf.securities.v2", isin.CUSIP) is None
 
 
 def test_the_holdings_land_through_their_own_silver_target_with_no_merge_before_them():

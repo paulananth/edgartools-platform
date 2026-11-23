@@ -92,6 +92,5 @@ def test_each_holding_lands_in_silver_with_no_merge_with_its_filing_and_facts(da
             first["put_call"]) == (GOOD, 100, "SH", 5000, "SOLE", None)
     assert (second["cusip"], second["discretion_type"], second["put_call"]) == (ALSO, "DFND", "Put")
     assert rows[("0000000042-26-000002", 1)]["cusip"] == BAD and rows[("0000000042-26-000002", 1)]["voting_auth_sole"] == 7
-    assert all(r["security_mdm_id"] is None for r in rows.values())  # nothing is mastered in this empty MDM
     # Silver keeps no field of the Security: no name, title or FIGI column.
     assert not {"issuer_name", "security_title", "figi"} & set(first)

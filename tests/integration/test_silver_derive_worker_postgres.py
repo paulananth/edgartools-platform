@@ -52,8 +52,6 @@ def silver_store(postgres, monkeypatch):
             silver.register(owner, spec_file(FOLDER / name, None), runtime_role=RUNTIME)
         monkeypatch.setattr(silver_derive, "engines", lambda: (runtime, Master()))
         monkeypatch.setattr(runtime, "dispose", lambda: None)
-        # the Company masters: none are registered, so no row finds a master id
-        monkeypatch.setattr("edgar_warehouse.silver_writer.writer.MdmIds", lambda mdm: line_tests.no_masters)
         monkeypatch.setattr(measures, "from_company", lambda mdm, keys: {k: measure_tests.COMPANIES[k] for k in keys
                                                                          if k in measure_tests.COMPANIES})
         yield runtime

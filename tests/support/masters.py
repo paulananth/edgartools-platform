@@ -6,11 +6,10 @@ import json
 from collections import defaultdict
 from contextlib import contextmanager
 
-from edgar_warehouse.mastering import links as link_builder, lookups, merge
+from edgar_warehouse.mastering import links as link_builder, lookups, merge, reads
 from edgar_warehouse.mastering.store import open_store
 from edgar_warehouse.mdm.identifier_types import TYPES
 from edgar_warehouse.rules import files
-from edgar_warehouse.silver_writer.writer import MdmIds
 
 AS_OF = "2026-11-06T12:00:00+00:00"
 
@@ -42,9 +41,10 @@ def seed(engine, records: list[dict], policy: dict | None = None) -> dict[str, s
     with opened(engine) as store:
         for kind, batch in kinds.items():
             merge.merge_file(store, merge.Settings(policy or files.policy(), "invented-digest", kind, AS_OF), batch)
-    ids, found = MdmIds(engine), {}
-    for (code, kind), wanted in keys.items():
-        found.update(ids({"source_code": code, "kind": kind}, wanted))
+    found = {}
+    with opened(engine) as store:
+        for (code, _), wanted in keys.items():
+            found.update(reads.master_ids(store, code, wanted))
     return found
 
 

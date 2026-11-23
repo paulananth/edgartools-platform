@@ -106,7 +106,6 @@ def test_the_silver_path_lands_every_row_with_no_merge_and_no_owner_mastered(dat
         state = drive(book, rid, databases.ledger, workers=workers)
         with runtime.connect() as conn:
             owners = conn.execute(text("SELECT count(*) FROM silver.insider_reporting_owner")).scalar()
-            unlinked = conn.execute(text("SELECT count(*) FROM silver.insider_reporting_owner WHERE person_mdm_id IS NULL")).scalar()
             lines = conn.execute(text("SELECT line_table, count(*) FROM silver.insider_position GROUP BY 1")).all()
 
     assert state["run"]["state"] == "complete"
@@ -114,5 +113,4 @@ def test_the_silver_path_lands_every_row_with_no_merge_and_no_owner_mastered(dat
     assert order == ["land"] * 10
     # Two filings, each: one owner, one transaction and one holding (invented).
     assert owners == 2
-    assert unlinked == 2  # no owner mastered yet: `silver refresh-ids` fills the id after the MDM path
     assert dict(lines) == {"non_derivative_transaction": 2, "non_derivative_holding": 2}

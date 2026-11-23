@@ -74,7 +74,7 @@ def worker(monkeypatch):
     monkeypatch.setattr(DatabaseSink, "spec", Sink.spec)
     checked(monkeypatch, silver_land, "_missing", lambda *_args: 0)
 
-    def fake_land(_sink, _table, rows, _ids, *, record_quality_results=True):
+    def fake_land(_sink, _table, rows, *, record_quality_results=True):
         assert record_quality_results is False
         _, report = checks.run(SPEC, copy.deepcopy(rows))
         return {"rows_written": len(rows), "quality": report}

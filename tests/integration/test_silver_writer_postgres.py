@@ -3,8 +3,8 @@
 The silver schema migrates from zero with the owner and a restricted runtime
 apart; a spec becomes a table with a comment on every column; the same spec
 again changes nothing and a changed spec is refused; each load mode reruns
-without change; a link's MDM id is read from a real MDM database, and a record
-MDM has not mastered keeps an empty id until a later landing fills it.
+without change; a link names how a row finds its master by a join, and no id is
+written onto the row.
 
 CI starts PG16 in Docker, like every PG16 test here. PG16_ADMIN_URL points the
 module at an existing PG16 server instead (a superuser URL).
@@ -24,7 +24,7 @@ from sqlalchemy.exc import DBAPIError
 from edgar_warehouse.control_contract import Blocked
 from edgar_warehouse.silver_writer import database as silver
 from edgar_warehouse.silver_writer.sink import PostgresSink
-from edgar_warehouse.silver_writer.writer import MdmIds, land, refresh_ids
+from edgar_warehouse.silver_writer.writer import land
 from tests.support import masters
 from tests.integration import test_entity_context_postgres as entity_context
 from tests.integration import test_mdm_postgres as core
@@ -90,16 +90,15 @@ def silver_database(admin):
 
 
 @pytest.fixture
-def stores(postgres, database):
-    """A migrated silver database beside a real MDM database holding mastered records a, b and c."""
+def stores(postgres):
+    """A migrated silver database."""
     admin, _ = postgres
-    mastered = masters.seed(database.application, [member("a"), member("b"), member("c")])
     with silver_database(admin) as (owner, runtime):
         with pytest.raises(Blocked, match="not initialized"):
             silver.migrate(owner, runtime_role=RUNTIME, existing_only=True)
         first = silver.migrate(owner, runtime_role=RUNTIME)
         assert silver.migrate(owner, runtime_role=RUNTIME, existing_only=True) == first  # installs nothing
-        yield owner, runtime, MdmIds(database.application), mastered
+        yield owner, runtime
 
 
 MEMBERS = "openfigi.security.v4"
@@ -113,7 +112,7 @@ def member(key: str, *figis: str) -> dict:
 
 def visit_spec(**more):
     link = {"columns": ["member_id"], "kind": "security", "source_code": MEMBERS, "to_part": "member",
-            "source_key": "member_id", "mdm_id_column": "member_id_mdm_id", "inclusion": 1.0}
+            "source_key": "member_id", "inclusion": 1.0}
     return a_spec(links=[link], **more)
 
 
@@ -133,7 +132,7 @@ def table(runtime, name="visit"):
 
 
 def test_the_runtime_reads_specs_and_writes_rows_but_cannot_register_or_create(stores):
-    owner, runtime, _, _ = stores
+    owner, runtime = stores
     with runtime.connect() as conn:
         assert not conn.scalar(text("SELECT has_schema_privilege('silver','CREATE')"))
         assert not conn.scalar(text("SELECT has_table_privilege('silver.table_spec','INSERT')"))
@@ -142,7 +141,7 @@ def test_the_runtime_reads_specs_and_writes_rows_but_cannot_register_or_create(s
 
 
 def test_a_spec_becomes_a_table_with_comments_and_a_changed_spec_is_refused(stores):
-    owner, runtime, _, _ = stores
+    owner, runtime = stores
     assert silver.created(runtime, visit_spec()) == {"table": visit_spec()["table"], "created": False, "same": False}
     assert silver.register(owner, visit_spec(), runtime_role=RUNTIME)["created"] is True
     assert silver.register(owner, visit_spec(), runtime_role=RUNTIME)["created"] is False
@@ -160,42 +159,36 @@ def test_a_spec_becomes_a_table_with_comments_and_a_changed_spec_is_refused(stor
             "AND col_description('silver.visit'::regclass, c.ordinal_position) IS NULL")).scalar()
         context = conn.execute(text("SELECT * FROM silver.table_context WHERE table_name='visit'")).mappings().one()
     assert types == {"visit_id": "bigint", "member_id": "text", "amount": "numeric", "visited_on": "date",
-                     "tags": "jsonb", "member_id_mdm_id": "text", "loaded_at": "timestamp with time zone"}
+                     "tags": "jsonb", "loaded_at": "timestamp with time zone"}
     assert comments == 0  # every column says what it holds
     assert context["links"] == [{"columns": ["member_id"], "kind": "security", "source_code": MEMBERS,
-                                 "source_key": "member_id", "mdm_id_column": "member_id_mdm_id", "inclusion": 1.0}]
+                                 "source_key": "member_id", "inclusion": 1.0}]
     assert context["key"] == ["visit_id"] and context["load_mode"] == "append"
 
 
-def test_append_lands_typed_rows_with_mdm_ids_reruns_unchanged_and_refuses_a_changed_row(stores, database):
-    owner, runtime, ids, mastered = stores
+def test_append_lands_typed_rows_reruns_unchanged_and_refuses_a_changed_row(stores):
+    owner, runtime = stores
     silver.register(owner, visit_spec(), runtime_role=RUNTIME)
     sink = PostgresSink(runtime)
-    first = land(sink, "visit", visits(), ids)
-    assert (first["inserted"], first["changed"], first["mdm_keys_found"]) == (3, 0, 2)
+    first = land(sink, "visit", visits())
+    assert (first["inserted"], first["changed"]) == (3, 0)
     rows = table(runtime)
-    assert rows[1]["member_id_mdm_id"] == mastered["a"] and rows[2]["member_id_mdm_id"] == mastered["b"]
-    assert rows[3]["member_id"] == "z" and rows[3]["member_id_mdm_id"] is None  # not mastered: empty id
+    assert rows[3]["member_id"] == "z" and "member_id_mdm_id" not in rows[3]  # a master is found by a join
     assert str(rows[1]["amount"]) == "10.50" and rows[1]["tags"] == ["x"] and rows[3]["tags"] == []
-    again = land(sink, "visit", visits(), ids)
-    assert (again["inserted"], again["changed"], again["deleted"], again["mdm_ids_updated"]) == (0, 0, 0, 0)
+    again = land(sink, "visit", visits())
+    assert (again["inserted"], again["changed"], again["deleted"]) == (0, 0, 0)
     assert table(runtime) == rows
     with pytest.raises(Blocked, match="append only"):
-        land(sink, "visit", visits((2, "amount", "4")), ids)
+        land(sink, "visit", visits((2, "amount", "4")))
     assert table(runtime) == rows  # nothing written
-    # Mastering z later: the next landing fills its id and changes nothing else.
-    z = masters.seed(database.application, [member("z")])["z"]
-    filled = land(sink, "visit", visits(), ids)
-    assert (filled["inserted"], filled["changed"], filled["mdm_ids_updated"]) == (0, 0, 1)
-    assert str(table(runtime)[3]["member_id_mdm_id"]) == z
     # Migrating again over the populated schema installs nothing and keeps the runtime's rights.
     assert silver.migrate(owner, runtime_role=RUNTIME, existing_only=True)
-    assert land(sink, "visit", visits(), ids)["inserted"] == 0
+    assert land(sink, "visit", visits())["inserted"] == 0
 
 
 @pytest.mark.parametrize("load_mode", ["append", "upsert", "snapshot"])
 def test_a_login_without_temporary_lands_every_load_mode(stores, load_mode):
-    owner, runtime, ids, _ = stores
+    owner, runtime = stores
     with owner.execution_options(isolation_level="AUTOCOMMIT").connect() as conn:
         conn.exec_driver_sql(f'REVOKE TEMPORARY ON DATABASE "{conn.scalar(text("SELECT current_database()"))}" '
                              "FROM PUBLIC")
@@ -203,10 +196,10 @@ def test_a_login_without_temporary_lands_every_load_mode(stores, load_mode):
         assert not conn.scalar(text("SELECT has_database_privilege(current_database(), 'TEMPORARY')"))
     silver.register(owner, visit_spec(load_mode=load_mode), runtime_role=RUNTIME)
     sink = PostgresSink(runtime)
-    assert land(sink, "visit", visits(), ids)["inserted"] == 3
+    assert land(sink, "visit", visits())["inserted"] == 3
     if load_mode == "append":
         return
-    changed = land(sink, "visit", visits((2, "amount", "4"))[:2], ids)
+    changed = land(sink, "visit", visits((2, "amount", "4"))[:2])
     assert changed["changed"] == 1
     assert sorted(table(runtime)) == ([1, 2] if load_mode == "snapshot" else [1, 2, 3])
     assert table(runtime)[2]["amount"] == 4
@@ -214,26 +207,26 @@ def test_a_login_without_temporary_lands_every_load_mode(stores, load_mode):
 
 def test_a_snapshot_that_may_be_empty_is_emptied_by_an_empty_delivery_and_any_other_refuses_it(stores):
     """A list a parent owns (a chain of links) is empty when the parent has none: its snapshot says so."""
-    owner, runtime, ids, _ = stores
+    owner, runtime = stores
     silver.register(owner, visit_spec(load_mode="snapshot", may_be_empty=True), runtime_role=RUNTIME)
     sink = PostgresSink(runtime)
-    assert land(sink, "visit", visits(), ids)["inserted"] == 3
-    assert land(sink, "visit", [], ids)["deleted"] == 3
+    assert land(sink, "visit", visits())["inserted"] == 3
+    assert land(sink, "visit", [])["deleted"] == 3
     assert table(runtime) == {}
 
 
 def test_a_snapshot_not_marked_empty_refuses_an_empty_delivery(stores):
-    owner, runtime, ids, _ = stores
+    owner, runtime = stores
     silver.register(owner, visit_spec(load_mode="snapshot"), runtime_role=RUNTIME)
     sink = PostgresSink(runtime)
-    land(sink, "visit", visits(), ids)
+    land(sink, "visit", visits())
     with pytest.raises(Blocked, match="empty delivery"):
-        land(sink, "visit", [], ids)
+        land(sink, "visit", [])
     assert sorted(table(runtime)) == [1, 2, 3]
 
 
 def test_a_flagged_row_lands_with_its_failed_checks_and_a_refused_row_does_not(stores, database):
-    owner, runtime, ids, _ = stores
+    owner, runtime = stores
     checks = [{"id": "known_member", "check": "in_set", "column": "member_id", "values": ["a", "b"],
                "on_fail": "flag", "why": "members are a or b"},
               {"id": "has_day", "check": "one_value", "column": "member_id", "per": "visited_on",
@@ -246,11 +239,11 @@ def test_a_flagged_row_lands_with_its_failed_checks_and_a_refused_row_does_not(s
     sink = PostgresSink(runtime)
     delivered = visits() + [{"visit_id": 4, "member_id": "a", "amount": None, "visited_on": "2026-10-09", "tags": None},
                             {"visit_id": 5, "member_id": "b", "amount": None, "visited_on": "2026-10-09", "tags": None}]
-    first = land(sink, "checked_visit", delivered, ids)
+    first = land(sink, "checked_visit", delivered)
     assert first["inserted"] == 3 and (first["quality"]["rows_flagged"], first["quality"]["rows_refused"]) == (1, 2)
     rows = table(runtime, "checked_visit")
     assert {k: r["quality"] for k, r in rows.items()} == {1: None, 2: None, 3: ["known_member"]}  # jsonb, read back
-    again = land(sink, "checked_visit", delivered, ids)
+    again = land(sink, "checked_visit", delivered)
     assert (again["inserted"], again["changed"], again["quality_updated"]) == (0, 0, 0)
     assert table(runtime, "checked_visit") == rows
     # One member a day, flagged: delivered together, rows 1 and 2 tie on their day and are both flagged;
@@ -259,50 +252,34 @@ def test_a_flagged_row_lands_with_its_failed_checks_and_a_refused_row_does_not(s
             "on_fail": "flag", "why": "one member a day"}]
     silver.register(owner, visit_spec(table="daily_visit", checks=day), runtime_role=RUNTIME)
     same_day = [{**v, "visited_on": "2026-10-01"} for v in visits()[:2]]
-    land(sink, "daily_visit", same_day, ids)
+    land(sink, "daily_visit", same_day)
     assert {k: r["quality"] for k, r in table(runtime, "daily_visit").items()} == {
         1: ["one_member_a_day"], 2: ["one_member_a_day"]}
-    alone = land(sink, "daily_visit", same_day[:1], ids)
+    alone = land(sink, "daily_visit", same_day[:1])
     assert (alone["changed"], alone["quality_updated"]) == (0, 1)
     assert table(runtime, "daily_visit")[1]["quality"] is None
 
 
-def test_refresh_fills_ids_of_rows_already_landed_and_leaves_a_merged_ids_row_to_resolve(stores, database):
-    owner, runtime, ids, mastered = stores
-    silver.register(owner, visit_spec(), runtime_role=RUNTIME)
-    sink = PostgresSink(runtime)
-    land(sink, "visit", visits(), ids)
-    # z is mastered after its row landed; the row is never delivered again.
-    z = masters.seed(database.application, [member("z")])["z"]
-    assert refresh_ids(sink, "visit", ids)["rows_updated"] == {"member_id_mdm_id": 1}
-    assert str(table(runtime)[3]["member_id_mdm_id"]) == z
-    assert refresh_ids(sink, "visit", ids)["rows_updated"] == {"member_id_mdm_id": 0}
-    # p and q land apart, then a record holding both FIGIs merges them: both rows then point at the survivor.
-    p_, q_ = member("p"), member("q")
-    found = masters.seed(database.application, [p_])
-    found |= masters.seed(database.application, [q_])
-    left, right = found["p"], found["q"]
-    more = [{"visit_id": 4, "member_id": "p"}, {"visit_id": 5, "member_id": "q"}]
-    land(sink, "visit", more, ids)
-    assert str(table(runtime)[4]["member_id_mdm_id"]) == left and str(table(runtime)[5]["member_id_mdm_id"]) == right
-    loaded = {k: r["loaded_at"] for k, r in table(runtime).items()}
-    survivor = masters.seed(database.application, [member("r", *p_["identifiers"]["figi"], *q_["identifiers"]["figi"])])["r"]
-    assert refresh_ids(sink, "visit", ids)["rows_updated"] == {"member_id_mdm_id": 0}  # a row with an id is not rewritten
-    rows = table(runtime)
-    assert (str(rows[4]["member_id_mdm_id"]), str(rows[5]["member_id_mdm_id"])) == (left, right)
+def test_a_merged_masters_records_bind_to_the_survivor(database):
+    """p and q land apart, then a record holding both FIGIs merges them: both source keys then bind to one master."""
     from edgar_warehouse.mastering import reads
     from edgar_warehouse.mastering.store import open_store
+    p_, q_ = member("p"), member("q")
+    found = masters.seed(database.application, [p_]) | masters.seed(database.application, [q_])
+    left, right = found["p"], found["q"]
+    assert left != right
+    survivor = masters.seed(database.application, [member("r", *p_["identifiers"]["figi"], *q_["identifiers"]["figi"])])["r"]
     store = open_store(database.application)
     try:
-        assert {reads.master(store, left)["canonical_id"], reads.master(store, right)["canonical_id"]} == {survivor}
+        bound = {key: entity for code, key, _, entity in store.bindings() if code == MEMBERS}
+        assert {reads.master(store, bound["p"])["canonical_id"], reads.master(store, bound["q"])["canonical_id"]} == {survivor}
+        assert bound["p"] == bound["q"]
     finally:
         store.rollback(); store.close()
-    assert rows[1]["member_id_mdm_id"] == mastered["a"]  # unmerged rows keep their id
-    assert {k: r["loaded_at"] for k, r in rows.items()} == loaded  # an id is not a delivered value
 
 
 def test_a_name_with_symbols_is_quoted_everywhere(stores):
-    owner, runtime, ids, _ = stores
+    owner, runtime = stores
     odd = a_spec(table="Odd % : Table", columns=[
         {"name": "Line No.", "type": "BIGINT", "nullable": False},
         {"name": "Price ($) 100%", "type": "DOUBLE", "nullable": True}],
@@ -322,13 +299,13 @@ def test_an_agent_reads_a_table_spec_through_context(stores):
     from edgar_warehouse.context import LIMIT_BYTES, ContextError, store_for
     from edgar_warehouse.silver_writer.context import TableContext
 
-    owner, runtime, _, _ = stores
+    owner, runtime = stores
     silver.register(owner, visit_spec(), runtime_role=RUNTIME)
     assert store_for("silver").variable == "silver"
     answer = TableContext(runtime).answer(entity_context.args("silver", "visit"))
     assert len(json.dumps(answer).encode()) <= LIMIT_BYTES
     assert answer["kind"] == "silver table" and answer["key"] == ["visit_id"] and answer["load_mode"] == "append"
-    assert answer["links"][0]["mdm_id_column"] == "member_id_mdm_id"
+    assert answer["links"][0]["source_key"] == "member_id"
     assert answer["trust"]["spec_ref"].startswith("silver.table_spec/visit@")
     with runtime.connect() as conn:  # the next step an agent is offered runs as written
         assert conn.exec_driver_sql(answer["next_step"]).all() == []
@@ -340,7 +317,7 @@ def test_an_agent_reads_a_table_spec_through_context(stores):
 
 def test_interval_text_transport_is_preserved(stores):
     from datetime import timedelta
-    owner, runtime, _, _ = stores
+    owner, runtime = stores
     config = a_spec(links=[], columns=[{"name": "visit_id", "type": "BIGINT", "nullable": False},
         {"name": "duration", "type": "INTERVAL", "nullable": True}], partition=[],
         time={"as_of": None, "as_at": "loaded_at", "event_time": None})
@@ -354,7 +331,7 @@ def test_two_deliveries_stage_side_by_side_and_only_the_merge_waits(stores):
     locked for the merge of staged rows, not while they are staged."""
     import threading
 
-    owner, runtime, _, _ = stores
+    owner, runtime = stores
     silver.register(owner, visit_spec(), runtime_role=RUNTIME)
     sink = PostgresSink(runtime)
     spec = sink.spec("visit")
@@ -416,7 +393,7 @@ def test_deliveries_of_different_keys_merge_while_another_merge_is_open(stores):
     """A merge in progress on one table does not hold up a delivery of other keys: no table lock."""
     import threading
 
-    owner, runtime, _, _ = stores
+    owner, runtime = stores
     silver.register(owner, visit_spec(load_mode="upsert"), runtime_role=RUNTIME)
     sink = PostgresSink(runtime)
     spec = sink.spec("visit")
@@ -440,7 +417,7 @@ def test_a_snapshot_still_takes_the_whole_table(stores):
     """A snapshot deletes the rows it does not hold, so it merges alone."""
     import threading
 
-    owner, runtime, _, _ = stores
+    owner, runtime = stores
     silver.register(owner, visit_spec(load_mode="snapshot"), runtime_role=RUNTIME)
     sink = PostgresSink(runtime)
     spec = sink.spec("visit")
@@ -461,7 +438,7 @@ def test_a_snapshot_still_takes_the_whole_table(stores):
 def test_the_same_key_delivered_at_once_leaves_one_row_and_an_append_refuses_a_different_value(stores):
     import threading
 
-    owner, runtime, _, _ = stores
+    owner, runtime = stores
     silver.register(owner, visit_spec(), runtime_role=RUNTIME)  # append
     sink = PostgresSink(runtime)
     spec = sink.spec("visit")
@@ -481,7 +458,7 @@ def test_the_same_key_delivered_at_once_leaves_one_row_and_an_append_refuses_a_d
 def test_the_same_rows_delivered_by_two_deliveries_at_once_land_once(stores):
     import threading
 
-    owner, runtime, _, _ = stores
+    owner, runtime = stores
     silver.register(owner, visit_spec(load_mode="upsert"), runtime_role=RUNTIME)
     sink = PostgresSink(runtime)
     spec = sink.spec("visit")

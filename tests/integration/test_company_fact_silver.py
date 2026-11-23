@@ -19,7 +19,7 @@ from edgar_warehouse.silver_writer import database as silver
 from edgar_warehouse.silver_writer import spec as silver_spec
 from edgar_warehouse.silver_writer.cli import spec_file
 from edgar_warehouse.silver_writer.sink import PostgresSink
-from edgar_warehouse.silver_writer.writer import MdmIds, land
+from edgar_warehouse.silver_writer.writer import land
 from tests.integration import test_mdm_postgres as core
 from tests.support import masters
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
@@ -67,23 +67,19 @@ def test_the_rows_fit_the_silver_spec():
         c["name"] for c in spec["columns"]}
 
 
-def test_facts_land_exact_once_and_find_their_company(database):
-    company = masters.seed(database.application, [
-        core.source(key="0000000042", source_code=COMPANY, kind="company", fields={},
-                    identifiers={"cik": "0000000042"})])["0000000042"]
+def test_facts_land_exact_once(database):
     landed_rows = rows()
     with silver_database(database.admin) as (owner, runtime):
         silver.migrate(owner, runtime_role=RUNTIME)
         spec = spec_file(FOLDER / "silver-company-fact.yaml", None)
         assert silver.register(owner, spec, runtime_role=RUNTIME)["created"] is True
-        sink, ids = PostgresSink(runtime), MdmIds(database.application)
-        assert land(sink, spec["table"], copy.deepcopy(landed_rows), ids)["inserted"] == 4
-        again = land(sink, spec["table"], copy.deepcopy(landed_rows), ids)  # the same file changes nothing
+        sink = PostgresSink(runtime)
+        assert land(sink, spec["table"], copy.deepcopy(landed_rows))["inserted"] == 4
+        again = land(sink, spec["table"], copy.deepcopy(landed_rows))  # the same file changes nothing
         assert (again["inserted"], again["changed"]) == (0, 0)
         with runtime.connect() as conn:
-            landed = conn.execute(text("SELECT value, company_mdm_id FROM silver.company_fact")).all()
-    assert sorted(v for v, _ in landed) == sorted(Decimal(x) for x in ("123456789012345678901", "30", "1.25", "7"))
-    assert {str(m) for _, m in landed} == {company}
+            landed = conn.execute(text("SELECT value FROM silver.company_fact")).all()
+    assert sorted(v for (v,) in landed) == sorted(Decimal(x) for x in ("123456789012345678901", "30", "1.25", "7"))
 
 
 def test_a_figure_silver_cannot_hold_exactly_is_refused_never_rounded(database):
@@ -93,6 +89,6 @@ def test_a_figure_silver_cannot_hold_exactly_is_refused_never_rounded(database):
         spec = spec_file(FOLDER / "silver-company-fact.yaml", None)
         silver.register(owner, spec, runtime_role=RUNTIME)
         with pytest.raises(Blocked, match="not its column's type"):
-            land(PostgresSink(runtime), spec["table"], too_fine, MdmIds(database.application))
+            land(PostgresSink(runtime), spec["table"], too_fine)
         with runtime.connect() as conn:
             assert conn.scalar(text("SELECT count(*) FROM silver.company_fact")) == 0

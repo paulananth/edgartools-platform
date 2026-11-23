@@ -106,5 +106,4 @@ def test_each_managers_13f_reports_land_in_silver_and_other_forms_do_not(databas
     # The CIK is 10 digits as filed: the form a Company's record key takes, so the link finds the manager
     # (the folder's `cik=111` has no padding and matched no Company: 20,088 filings landed unlinked).
     assert rows[0]["accession_number"] == "0000000111-26-000001" and str(rows[0]["filing_date"]) == "2026-02-10"
-    assert all(r["manager_mdm_id"] is None for r in rows)  # nothing is mastered in this empty MDM
     assert not {"name", "entity_name"} & set(rows[0])  # the manager's name is the Company's
