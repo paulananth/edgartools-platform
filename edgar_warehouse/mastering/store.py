@@ -11,6 +11,8 @@ from . import master_row
 
 BLOCK = 2000
 LOCK_CLASS = 74821  # the advisory-lock class of the store; a merge's kind lock is LOCK_CLASS + 1
+SCAN_FROM = 50_000  # a lookup of this many keys or more reads the table in one streamed pass; fewer probe it by key (a probe is a
+# random read a key: 2,000 keys cost 300 to 630 ms on the hosted store, and a whole table streams at 150,000 rows a second)
 CLAIMS = 2000  # the most identifier values one batch claims beside other merges of its kind; more merge alone
 WRITTEN = ("master", "file", "delivery", "identifier", "record", "name_key", "review", "withheld", "deferred",
            "lookup", "lookup_progress", "profile")
@@ -245,7 +247,18 @@ class Store:
             self.claim_identifiers(rows)
             self.insert("mastering_identifier", ("namespace", "value", "entity_id"), rows)
 
+    scans = False  # whether this engine streams a table (`stream`); one that does not probes by key
+
+    def stream(self, sql: str, values=()):
+        """The rows of one query as they arrive, never all held at once."""
+        raise NotImplementedError
+
     def bound(self, subjects) -> dict:
+        subjects = list(subjects)
+        if self.scans and len(subjects) >= SCAN_FROM:
+            wanted = set(subjects)
+            return {subject: entity for subject, entity in self.stream(
+                "select subject,entity_id from mastering_record where entity_id is not null") if subject in wanted}
         found = {}
         for block in blocks(subjects):
             found.update(self.rows("select subject,entity_id from mastering_record "
@@ -518,6 +531,16 @@ class Store:
     def master_states(self, entities) -> dict:
         """What a link reads of each golden record: its kind and status columns and its profile rows, never its text."""
         found = {}
+        entities = list(entities)
+        if self.scans and len(entities) >= SCAN_FROM:
+            wanted = set(entities)
+            for entity, kind, status in self.stream("select entity_id,kind,status from mastering_master"):
+                if entity in wanted:
+                    found[entity] = {"kind": kind, "status": status, "profiles": []}
+            for entity, body in self.stream("select entity_id,body from mastering_profile order by entity_id,position"):
+                if entity in found:
+                    found[entity]["profiles"].append(json.loads(body))
+            return {entity: {k: v for k, v in state.items() if v is not None} for entity, state in found.items()}
         for block in blocks(entities):
             for entity, kind, status in self.rows(
                     f"select entity_id,kind,status from mastering_master where entity_id in ({marks(block)})", block):
@@ -609,6 +632,14 @@ class Postgres(Store):
                      "mastering_master.canonical_id,mastering_master.policy_digest,mastering_master.kind_version) is distinct from "
                      "(excluded.body,excluded.kind,excluded.status,excluded.canonical_id,excluded.policy_digest,excluded.kind_version)")
     review_upsert = " on conflict(subject,reason) do update set assertion_id=excluded.assertion_id,open_review=1"
+
+    scans = True
+
+    def stream(self, sql: str, values=()):
+        with self.connection.cursor(name="mastering_scan") as cursor:  # a server-side cursor: the rows arrive 50,000 at a time
+            cursor.itersize = 50_000
+            cursor.execute(sql, list(values))
+            yield from cursor
 
     def bulk(self, table: str, columns: tuple, rows: list) -> None:
         def clean(value):
