@@ -160,19 +160,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "warehouse" {
     }
   }
 
-  # Backstop for the canonical silver.duckdb + shard-N.duckdb keys under
-  # warehouse/silver/. Every merge_candidate_into_canonical publish
-  # (the since-deleted silver_protection.py) promoted a brand-new full-file
-  # copy onto these keys; with bucket versioning enabled and no lifecycle
-  # rule, every prior version stays billed forever. Confirmed live in prod
-  # (ecs-cost-sizing ticket 22): 458+ noncurrent versions on silver.duckdb
-  # alone, 1.34TB of pure noncurrent-version waste across the 5 canonical
-  # keys (~$1.05/day of the platform's measured ~$2/day steady-state S3
-  # cost). No `expiration` block here, deliberately -- unlike
-  # silverstage/'s ephemeral staging candidates, these ARE the live
-  # canonical data; expiring the *current* version on a quiet day would
-  # delete the only copy. Only noncurrent (already-superseded) versions
-  # are ever eligible.
+  # Keep this rule noncurrent-only across warehouse/silver/.
+  # Only superseded versions expire; current objects remain untouched.
   rule {
     id     = "expire-noncurrent-silver-canonical-versions"
     status = "Enabled"
@@ -186,42 +175,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "warehouse" {
     }
   }
 
-  # DuckDB Retirement Cutover Ticket 21 (operator go-ahead 2026-09-14): the
-  # canonical silver.duckdb and the four shard files are retired. No command
-  # has published to these keys since cutover Ticket 10 (2026-09-12; last
-  # writes 2026-09-06 and 2026-08-20), every reader is on Snowflake silver,
-  # and the last tool that hydrated them (table-reconcile) goes with the
-  # DuckDB engine. These two rules expire the final *current* version after
-  # a bounded window; the noncurrent rule above then removes the bytes 7
-  # days later. Scoped to the exact keys, not warehouse/silver/, so the
-  # bootstrap-batch run manifests under warehouse/silver/sec/runs/ are not
-  # touched, and the noncurrent-only rule above keeps its no-expiration
-  # contract. Delete both rules with the engine once the objects are gone.
-  rule {
-    id     = "expire-retired-silver-canonical"
-    status = "Enabled"
-
-    filter {
-      prefix = "warehouse/silver/sec/silver.duckdb"
-    }
-
-    expiration {
-      days = 7
-    }
-  }
-
-  rule {
-    id     = "expire-retired-silver-shards"
-    status = "Enabled"
-
-    filter {
-      prefix = "warehouse/silver/sec/shards/"
-    }
-
-    expiration {
-      days = 7
-    }
-  }
 }
 
 resource "aws_kms_key" "snowflake_export" {
