@@ -126,7 +126,7 @@ class DatabaseSink:
         and once every row is in, the rows whose key it did not deliver are removed: both key sets are written as text
         by PostgreSQL and compared on disk in sorted runs, so neither is held whole in memory. A key repeated in one
         delivery is source processing's to refuse (a declared key, CONTEXT.md Silver Landing)."""
-        from sqlalchemy import Text, bindparam, cast, column, literal, values
+        from sqlalchemy import BigInteger, Integer, String, Text, bindparam, cast, column, literal, true, values
         from sqlalchemy.dialects.postgresql import ARRAY, insert as pg_insert
         from .keyset import KeySet
 
@@ -152,6 +152,18 @@ class DatabaseSink:
             .where(~exists(select(1).select_from(target).where(match))).order_by(*(incoming.c[k] for k in keys))
         insert_missing = pg_insert(target).from_select(written + added, missing) \
             .on_conflict_do_nothing(index_elements=[target.c[k] for k in keys])
+        differing = select(differs(incoming, source).label("source")).select_from(
+            incoming.join(target, match)).where(differs(incoming, written)).subquery("differing")
+        # One round trip a batch: the missing rows are inserted and the rows that differ found in one statement. The finding reads
+        # the table as it was before the insert, which is right: a row just inserted equals its incoming row and never differs.
+        inserted_rows = insert_missing.returning(literal(1)).cte("inserted_rows")
+        absent = select(func.count()).select_from(incoming).where(~exists(select(1).select_from(target).where(match)))
+        insert_and_find = select(select(func.count()).select_from(inserted_rows).scalar_subquery().label("inserted"),
+                                 absent.scalar_subquery().label("absent"), differing.c.source).select_from(
+            select(literal(1).label("one")).subquery("one").outerjoin(differing, true()))
+        # Another delivery that inserted one of these keys first and committed while this statement waited on it is not in the
+        # snapshot the finding read: fewer rows inserted than were absent says so, and the finding is read again (an append must
+        # still refuse a different value under that key).
         find_differing = select(differs(incoming, source).label("source")).select_from(
             incoming.join(target, match)).where(differs(incoming, written))
         update_groups = {name: update(target).where(match, differs(incoming, columns)).values(
@@ -159,11 +171,19 @@ class DatabaseSink:
         update_changed = update(target).where(match, differs(incoming, source)).values(
             {**{c: incoming.c[c] for c in written}, **{c: now for c in added}})
         delivered_keys = select(*(cast(incoming.c[k], Text) for k in keys))
+        # A key whose text is the same in Python and in PostgreSQL (text and whole numbers) is read from the batch; any other
+        # (a timestamp, a decimal, bytes) is read back from the server as PostgreSQL writes it.
+        key_at = [written.index(k) for k in keys]
+        local_keys = all(isinstance(target.c[k].type, (String, Text, Integer, BigInteger)) for k in keys)
 
         def merge(conn, batch, delivered):
+            rows_in = batch
             batch = {f"c{i}": [row[i] for row in batch] for i in range(len(written))}
-            counts["inserted"] += conn.execute(insert_missing, batch).rowcount
-            found = conn.execute(find_differing, batch).scalars().all()
+            result = conn.execute(insert_and_find, batch).all()
+            counts["inserted"] += result[0].inserted
+            found = [r.source for r in result if r.source is not None]
+            if result[0].inserted < result[0].absent:
+                found = conn.execute(find_differing, batch).scalars().all()
             changed = sum(1 for flag in found if flag)
             if changed and append:
                 raise Blocked(f"silver.{spec['table']} is append only: delivered rows change rows already landed under the same key")
@@ -174,7 +194,8 @@ class DatabaseSink:
                     conn.execute(update_changed, batch)
                 counts["changed"] += changed
             if delivered is not None:
-                delivered.add(tuple(r) for r in conn.execute(delivered_keys, batch))
+                delivered.add((tuple(str(row[i]) for i in key_at) for row in rows_in) if local_keys
+                              else (tuple(r) for r in conn.execute(delivered_keys, batch)))
 
         def remove_absent(conn, delivered):
             removed = 0

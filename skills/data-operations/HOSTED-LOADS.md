@@ -78,7 +78,8 @@ one is a defect, not a wait. Time each part of a slow finish by phase
 before changing it, and run the cheap check that can fail first. For a step that is one native call, sample the running process
 (`sample <pid> 30`) before reading its code: the links build spent 265 s in a pairwise comparison of every link with every later link,
 which no phase timing could name. A phase that moves a table between two schemas of one database through the client is the same defect: the binding
-rebuild read 4.4 million rows into Python and wrote them back (18 of the finish's 30 minutes) until it became one statement.
+rebuild read 4.4 million rows into Python and wrote them back (18 of the finish's 30 minutes) until it became one statement. Count a landing's round trips
+a batch before changing its size: the writer made three a batch (70 ms each) and now makes one.
 
 ## Stopping loads
 - Stop the scheduler first (it would start the next step), then its step processes. The state file keeps every done step.
