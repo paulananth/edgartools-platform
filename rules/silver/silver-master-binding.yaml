@@ -1,5 +1,5 @@
 # The master of each source record, for a join: a silver row finds its master by its own source key, so no
-# silver table stores a master id. Built whole at `--finish` with the links, from the records MDM holds now (a master
+# silver table stores a master id. Built at `--finish` with the links by statements inside the database (only a changed row is written), from the records MDM holds now (a master
 # merged away already answers with its survivor); the mirror carries it to Gold.
 table: master_binding
 definition: "The golden record of one source record, by the source's own key."

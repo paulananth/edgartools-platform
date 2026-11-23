@@ -11,8 +11,10 @@ from types import SimpleNamespace
 
 from sqlalchemy import text
 
+from edgar_warehouse.control_contract import Blocked
 from edgar_warehouse.mdm import relationships
 from edgar_warehouse.mdm.survivorship import current_claims
+from edgar_warehouse.silver_writer.writer import land
 
 
 def _ends(claims: dict) -> list[str]:
@@ -44,7 +46,6 @@ def build(silver, mdm, policy_digest: str, as_of: str) -> dict:
     from edgar_warehouse.mastering.store import open_store
     from edgar_warehouse.rules import registry
     from edgar_warehouse.silver_writer.relational import DatabaseSink
-    from edgar_warehouse.silver_writer.writer import land
 
     rules = registry.engine()
     try:
@@ -62,18 +63,66 @@ def build(silver, mdm, policy_digest: str, as_of: str) -> dict:
     finally:
         db.close()
     tables = rows_of(edges)
-    db = open_store(mdm)
-    try:
-        bindings = [{"source_code": code, "source_key": key, "kind": kind, "master_id": entity}
-                    for code, key, kind, entity in db.bindings()]
-    finally:
-        db.close()
     sink = DatabaseSink(silver)
     for table in ("relationship", "relationship_evidence", "relationship_path"):
         land(sink, table, tables[table])
-    land(sink, "master_binding", bindings)
+    if silver.dialect.name == "postgresql":
+        bound = bind(silver)  # MDM and silver are schemas of one database: the join runs there, no row reaches the client
+    else:
+        db = open_store(mdm)  # MySQL's two schemas are two databases: the rows go through the writer
+        try:
+            bindings = [{"source_code": code, "source_key": key, "kind": kind, "master_id": entity}
+                        for code, key, kind, entity in db.bindings()]
+        finally:
+            db.close()
+        land(sink, "master_binding", bindings)
+        bound = {"bindings": len(bindings)}
     return {"table": "relationship", "links": len(edges), "rows": len(tables["relationship"]),
-            "bindings": len(bindings), "waiting": dict(sorted(waiting.items()))}
+            "bindings": bound["bindings"], "waiting": dict(sorted(waiting.items()))}
+
+
+WANTED = ("select distinct on (r.source_code, r.source_key) r.source_code, r.source_key, m.kind, r.entity_id as master_id "
+          "from mdm.mastering_record r join mdm.mastering_master m on m.entity_id = r.entity_id "
+          "order by r.source_code, r.source_key, r.entity_id")
+
+
+def bind(silver) -> dict:
+    """`silver.master_binding` (the golden record of each source record, by the source's own key) built by two statements inside
+    the data database, as a snapshot: a record's row is added, a changed one is rewritten, and one whose record is gone is
+    removed. A row that is unchanged is compared on the server and not written. `distinct on` keeps one row for a key two
+    records share (the lowest master id). An empty result refuses, as an empty snapshot delivery does."""
+    from sqlalchemy.exc import ProgrammingError
+
+    from edgar_warehouse.silver_writer.relational import DatabaseSink, lock
+
+    spec = DatabaseSink(silver).spec("master_binding")
+    try:
+        with silver.begin() as conn:
+            lock(conn, spec)
+            if not conn.scalar(text("select exists (select 1 from mdm.mastering_record r join mdm.mastering_master m "
+                                    "on m.entity_id = r.entity_id)")):
+                if conn.scalar(text("select exists (select 1 from silver.master_binding)")):
+                    raise Blocked("silver.master_binding is a snapshot: an empty delivery would empty it; refused")
+                return {"inserted": 0, "changed": 0, "deleted": 0, "bindings": 0}  # a store with no master yet binds nothing
+            inserted = conn.scalar(text(
+                f"with wanted as ({WANTED}), written as (insert into silver.master_binding "
+                "(source_code, source_key, kind, master_id, loaded_at) select source_code, source_key, kind, master_id, now() "
+                "from wanted on conflict (source_code, source_key) do update set kind = excluded.kind, "
+                "master_id = excluded.master_id, loaded_at = excluded.loaded_at where "
+                "(silver.master_binding.kind, silver.master_binding.master_id) is distinct from (excluded.kind, excluded.master_id) "
+                "returning (xmax = 0) as is_new) select count(*) filter (where is_new) || ',' || count(*) filter (where not is_new) "
+                "from written"))
+            added, changed = (int(n) for n in inserted.split(","))
+            deleted = conn.execute(text(
+                "delete from silver.master_binding b where not exists (select 1 from mdm.mastering_record r join mdm.mastering_master m "
+                "on m.entity_id = r.entity_id where r.source_code = b.source_code and r.source_key = b.source_key)")).rowcount
+            total = conn.scalar(text("select count(*) from silver.master_binding"))
+    except ProgrammingError as error:
+        if getattr(error.orig, "pgcode", None) != "42501":
+            raise
+        raise Blocked("the finish login needs select on mdm.mastering_record and mdm.mastering_master, and insert, update and "
+                      "delete on silver.master_binding") from None
+    return {"inserted": added, "changed": changed, "deleted": deleted, "bindings": total}
 
 
 PROPERTIES = ("source_event_type", "source_event_status", "source_entity_status", "source_relationship_status",
