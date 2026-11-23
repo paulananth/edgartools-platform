@@ -10,15 +10,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))  # the sibling exposure
 import json
 import os
 import re
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 from urllib.request import Request, urlopen
 
 from exposure_manifest import validate_manifest
 
-
 _REQUEST_TIMEOUT_S = 30
+
+_QUERY_TIMEOUT_S = 900
 
 
 def _request_json(method: str, url: str, *, headers: dict[str, str], body: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -87,6 +88,8 @@ def build_snowflake_connection(manifest: dict[str, Any], connection_string: str)
     }
     if password:
         connection["password"] = password
+
+
     else:
         connection["private_key"] = private_key
     return connection
@@ -164,19 +167,46 @@ def configure_from_environment(manifest: dict[str, Any]) -> dict[str, Any]:
     return configure_connection(api_url, api_key, manifest, connection_string)
 
 
-def _answer_from_events(lines: list[str]) -> dict[str, Any]:
+def _answer_from_events(lines: Iterable[str]) -> dict[str, Any]:
+    answer: dict[str, Any] | None = None
+    done = False
     for line in lines:
         if not line.startswith("data:"):
             continue
         payload = line.removeprefix("data:").strip()
         if payload == "[DONE]":
+            done = True
             break
         event = json.loads(payload)
         if event.get("type") == "error":
             raise RuntimeError(event.get("message") or "AutoOntology query failed")
         if event.get("type") == "result":
-            return event["answer"]
-    raise RuntimeError("AutoOntology query returned no result")
+            answer = event["answer"]
+    if not done:
+        raise RuntimeError("AutoOntology query stream ended before [DONE]")
+    if answer is None:
+        raise RuntimeError("AutoOntology query returned no result")
+    return answer
+
+
+def _stream_query_answer(api_url: str, api_key: str, question: str) -> dict[str, Any]:
+    endpoint = f"{api_url.rstrip('/')}/api/chat/completions"
+    request = Request(
+        endpoint,
+        data=json.dumps({"question": question}, separators=(",", ":")).encode(),
+        headers={"x-api-key": api_key, "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=_QUERY_TIMEOUT_S) as response:
+            lines = (line.decode("utf-8").rstrip("\r\n") for line in response)
+            return _answer_from_events(lines)
+    except HTTPError as error:
+        raise RuntimeError(f"AutoOntology query request failed with HTTP {error.code}") from error
+    except URLError as error:
+        raise RuntimeError("AutoOntology query request failed due to a network error") from error
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RuntimeError("AutoOntology query returned an invalid stream") from error
 
 
 def validate_query(
@@ -192,9 +222,7 @@ def validate_query(
 
     Tests pass ``events`` so the seam does not need a live AutoOntology server.
     """
-    if events is None:
-        raise RuntimeError("live AutoOntology query validation requires a streaming client")
-    answer = _answer_from_events(events)
+    answer = _answer_from_events(events) if events is not None else _stream_query_answer(api_url, api_key, question)
     if answer.get("sql_code") != expected_sql:
         raise RuntimeError("generated SQL did not match the approved query")
     if answer.get("sql_response_from_db") != expected_rows:

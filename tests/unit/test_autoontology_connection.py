@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import json
 import pytest
 
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[2] / "skills/data-platform/scripts/exposure"))
+
+import autoontology
 
 from tests.support.exposure import invented_manifest
 from autoontology import (
@@ -86,6 +89,76 @@ def test_validate_query_checks_generated_sql_and_rows():
         ],
     )
     assert answer["sql_response_from_db"] == [{"n": 1}]
+
+
+def test_validate_query_streams_the_documented_chat_endpoint(monkeypatch):
+    lines = [
+        b'data: {"type":"step","node":"query","phase":"start"}\r\n',
+        b'data: {"type":"result","answer":{"sql_code":"SELECT COUNT(*) AS n FROM MDM.COMPANY","sql_response_from_db":[{"n":1}]}}\r\n',
+        b"data: [DONE]\r\n",
+    ]
+    consumed = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def __iter__(self):
+            for line in lines:
+                consumed.append(line)
+                yield line
+
+    calls = []
+
+    def fake_urlopen(request, *, timeout):
+        calls.append((request, timeout))
+        return Response()
+
+    monkeypatch.setattr(autoontology, "urlopen", fake_urlopen)
+    answer = validate_query(
+        "http://auto-ontology:3000",
+        "api-key",
+        "How many companies?",
+        "SELECT COUNT(*) AS n FROM MDM.COMPANY",
+        [{"n": 1}],
+    )
+
+    request, timeout = calls[0]
+    headers = {key.lower(): value for key, value in request.header_items()}
+    assert request.full_url == "http://auto-ontology:3000/api/chat/completions"
+    assert request.get_method() == "POST"
+    assert headers["x-api-key"] == "api-key"
+    assert headers["content-type"] == "application/json"
+    assert json.loads(request.data) == {"question": "How many companies?"}
+    assert timeout == 900
+    assert answer["sql_response_from_db"] == [{"n": 1}]
+    assert consumed[-1] == b"data: [DONE]\r\n"
+
+
+
+def test_validate_query_rejects_a_stream_that_ends_before_done(monkeypatch):
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def __iter__(self):
+            yield b'data: {"type":"result","answer":{"sql_code":"SELECT COUNT(*) AS n FROM MDM.COMPANY","sql_response_from_db":[{"n":1}]}}\r\n'
+
+    monkeypatch.setattr(autoontology, "urlopen", lambda request, *, timeout: Response())
+    with pytest.raises(RuntimeError, match=r"ended before \[DONE\]"):
+        validate_query(
+            "http://auto-ontology:3000",
+            "api-key",
+            "How many companies?",
+            "SELECT COUNT(*) AS n FROM MDM.COMPANY",
+            [{"n": 1}],
+        )
 
 
 CONNECTION = "snowflake://svc:secret@account?warehouse=wh&database=INVENTED_MIRROR&role=INVENTED_MIRROR_READER"
