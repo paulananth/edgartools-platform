@@ -27,18 +27,19 @@ SNAPSHOT = {
               {"name": 'b"1', "lane": "B", "state": "progressing", "waits_for": ["a1"]},
               {"name": "c1", "lane": "C", "state": "failed", "waits_for": []}],
     "running": [{"name": 'b"1', "lane": "B", "attempt": 2, "workers": 2, "elapsed": 14.0, "bound": 300, "log_age": 3.0,
-                 "cpu": 40.0, "memory_mb": 210.0, "store": "mdm", "rows_per_min": 900.0}]}
+                 "cpu": 40.0, "memory_mb": 210.0, "store": "mdm", "rows_per_min": 900.0,
+                 "why": ["a", "b", "c", "d", 'the store reads the table from disk ("cache misses")']}]}
 
 
 def test_every_state_has_one_code_and_one_colour():
     names, codes, colours = zip(*[(n, c, k) for n, c, k, _ in design.STATES])
-    assert len(set(names)) == len(set(codes)) == len(set(colours)) == 7
-    assert sorted(codes) == list(range(7))
+    assert len(set(names)) == len(set(codes)) == len(set(colours)) == 6
+    assert sorted(codes) == list(range(6)) and "unclear" not in names  # a step is working or it is not
 
 
 def test_the_exporter_writes_a_code_per_step_and_a_count_per_state_zeros_included():
     text = exporter.render(SNAPSHOT)
-    assert 'load_step_state{lane="A",step="a1"} 5' in text and 'load_step_state{lane="C",step="c1"} 6' in text
+    assert 'load_step_state{lane="A",step="a1"} 4' in text and 'load_step_state{lane="C",step="c1"} 5' in text
     for state in design.CODE:
         assert f'load_steps{{state="{state}"}}' in text
     assert 'load_steps{state="stalled"} 0' in text and "load_machine_load_per_core 0.5" in text
@@ -92,3 +93,11 @@ def test_a_stale_or_checkout_bound_compose_file_is_refused():
 def test_the_compose_file_mounts_nothing_from_the_checkout():
     text = (ROOT / "infra/monitoring/docker-compose.yml").read_text()
     assert "./" not in text.replace("# ", "") and "content: |" in text
+
+
+def test_a_running_step_publishes_the_cause_its_five_whys_end_on_and_the_table_shows_it():
+    text = exporter.render(SNAPSHOT)
+    assert 'load_step_cause{lane="B",step="b\\"1",cause="the store reads the table from disk (\\"cache misses\\")"} 1' in text
+    running = dashboard.running_table()
+    assert any("load_step_cause" in t["expr"] for t in running["targets"])
+    assert "Why" in str(running["transformations"])

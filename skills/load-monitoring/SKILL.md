@@ -29,9 +29,9 @@ and needs no login; the admin login is generated into a private file and never p
 
 ## The design
 
-A step has one of seven states, each with one colour that means the same on every
+A step has one of six states, each with one colour that means the same on every
 panel (`scripts/design.py` is the only place that names them):
-waiting (grey), progressing (green), unclear (yellow), stalled (orange), locked (red),
+waiting (grey), progressing (green), stalled (orange), locked (red),
 done (blue) and failed (dark red). A change of colour is the event: nothing is
 decorated, and a number is never rounded to look calm.
 

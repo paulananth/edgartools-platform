@@ -31,8 +31,8 @@ def header() -> list[dict]:
     return [
         stat("Done", "Steps finished. The number ticks up when a step's block turns blue on the lanes below.",
              'load_steps{state="done"}', 0, steps((None, d.NEUTRAL), (1, d.BLUE))),
-        stat("Running", "Steps with a process now: progressing, unclear, stalled or locked.",
-             'sum(load_steps{state=~"progressing|unclear|stalled|locked"})', 4, steps((None, d.NEUTRAL), (1, d.GREEN))),
+        stat("Running", "Steps with a process now: progressing, stalled or locked.",
+             'sum(load_steps{state=~"progressing|stalled|locked"})', 4, steps((None, d.NEUTRAL), (1, d.GREEN))),
         stat("Failed", "Steps the scheduler gave up on. Any is red: a retry cannot change a repeated failure.",
              'load_steps{state="failed"}', 8, zero_green(d.RED), graph="none"),
         stat("Stalled or locked", "Running steps with no sign of work, or waiting on database locks. Orange from one.",
@@ -49,7 +49,7 @@ def lanes() -> dict:
     mappings = {str(code): {"text": name, "color": colour, "index": code} for name, code, colour, _ in design.STATES}
     return {"type": "state-timeline", "title": "Lanes", "datasource": SOURCE,
             "description": "One row a step, grouped by lane. A step is grey while it waits, green while it works, "
-                           "yellow, orange or red when its evidence is weak, stalled or locked, blue when done and dark red "
+                           "orange or red when it is stalled or locked, blue when done and dark red "
                            "when it failed. A change of colour is the event; hover a bar for the step and its state. "
                            + " ".join(f"{name}: {meaning}." for name, _, _, meaning in design.STATES),
             "gridPos": {"h": 16, "w": 24, "x": 0, "y": 4},
@@ -82,12 +82,13 @@ def running_table() -> dict:
     d = design
     exprs = [("load_step_attempt", "Attempt"), ("load_step_workers", "Workers"), ("load_step_elapsed_minutes", "Elapsed min"),
              ("load_step_bound_minutes", "Bound min"), ("load_step_log_age_minutes", "Log age min"),
-             ("load_step_cpu_percent", "CPU %"), ("load_step_memory_mb", "Memory MB"), ("load_step_rows_per_minute", "Rows/min")]
+             ("load_step_cpu_percent", "CPU %"), ("load_step_memory_mb", "Memory MB"), ("load_step_rows_per_minute", "Rows/min"),
+             ("load_step_cause", "Why")]
     targets = [target(e, chr(65 + i), fmt="table", instant=True) for i, (e, _) in enumerate(exprs)]
     rename = {f"Value #{chr(65 + i)}": name for i, (_, name) in enumerate(exprs)}
     rename.update({"lane": "Lane", "step": "Step"})
     return table("Running now", "Each running step. Attempt 2 or more means a restart. Log age turns amber at ten minutes and "
-                 "red at twenty: the first sign of a stall. A step with no CPU, no rows and a silent log is stalled.",
+                 "red at twenty: the first sign of a stall. A step with no CPU, no session of its own working and a silent log is stalled. Why is the last of the step's five whys.",
                  targets, rename, 20, 0, 14,
                  [colored("Log age min", steps((None, d.GREEN), (d.LOG_AGE_MINUTES[0], d.AMBER), (d.LOG_AGE_MINUTES[1], d.RED))),
                   colored("Attempt", steps((None, d.GREEN), (2, d.AMBER)))])
@@ -114,7 +115,7 @@ def annotations() -> list[dict]:
         return {"datasource": SOURCE, "enable": True, "name": name, "iconColor": colour, "expr": expr, "step": "30s",
                 "titleFormat": title, "textFormat": "{{step}} (lane {{lane}})"}
     return [note("Restarts", design.AMBER, "changes(load_step_attempt[1m]) > 0", "Attempt restarted"),
-            note("Failures", design.RED, "(changes(load_step_state[1m]) > 0) and (load_step_state == 6)", "Step failed")]
+            note("Failures", design.RED, f"(changes(load_step_state[1m]) > 0) and (load_step_state == {design.CODE['failed']})", "Step failed")]
 
 
 def build() -> dict:

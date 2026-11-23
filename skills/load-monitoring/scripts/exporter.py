@@ -57,7 +57,8 @@ def render(snapshot: dict, age: float = 0.0) -> str:
                   sample("load_step_elapsed_minutes", row["elapsed"], **who), sample("load_step_bound_minutes", row["bound"], **who),
                   sample("load_step_log_age_minutes", row["log_age"], **who), sample("load_step_cpu_percent", row["cpu"], **who),
                   sample("load_step_memory_mb", row["memory_mb"], **who),
-                  sample("load_step_rows_per_minute", row["rows_per_min"], store=row["store"], **who)]
+                  sample("load_step_rows_per_minute", row["rows_per_min"], store=row["store"], **who),
+                  sample("load_step_cause", 1, **who, cause=row["why"][-1])]  # the last of the five whys, a sentence of counts and names
     lines += [sample("load_store_rows_per_minute", rate, store=store) for store, rate in snapshot["writes"].items()]
     lines.append(sample("load_lock_waiters", snapshot["lock_waiters"]))
     for database, counts_ in snapshot["sessions"].items():
