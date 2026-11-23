@@ -21,7 +21,7 @@ def test_migrate_keeps_a_populated_current_store_and_refuses_an_earlier_schema()
             owner = create_engine(server.url("bookkeeping", driver="postgresql"))
             runtime = create_engine(server.url("bookkeeping", "read_proof_runtime", driver="postgresql"))
             saved = migrate(owner, runtime_role="read_proof_runtime")
-            assert list(saved) == ["schema.sql"]
+            assert list(saved) == ["schema.sql", "01-abandoned-run.sql"]
             rid = str(uuid4())
             frozen = {"kind": "source", "name": "invented.source", "target": "reading",
                       "capture": "invented-capture", "integer": 10**50}
@@ -36,6 +36,45 @@ def test_migrate_keeps_a_populated_current_store_and_refuses_an_earlier_schema()
                 conn.exec_driver_sql("COMMENT ON SCHEMA bookkeeping IS '{\"001_control.sql\":\"" + "0" * 64 + "\"}'")
             with pytest.raises(Blocked, match="does not hold this build's schema; rebuild the store"):
                 migrate(owner, runtime_role="read_proof_runtime", existing_only=True)
+        finally:
+            for engine in (runtime, owner, admin):
+                if engine is not None:
+                    engine.dispose()
+
+
+def test_init_adds_the_abandoned_state_to_a_populated_store_that_holds_the_schema_alone():
+    """A live store installed before the abandoned state: init applies the numbered file, its runs stay, and a run can
+    then be abandoned (no other step, no store rebuilt)."""
+    from pathlib import Path
+
+    import hashlib
+    from edgar_warehouse.bookkeeping.clean import database
+    from edgar_warehouse.bookkeeping.clean.run_storage import execute_ddl
+
+    with pg16.server() as server:
+        admin = create_engine(server.url("postgres", driver="postgresql"))
+        owner = runtime = None
+        try:
+            with admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+                conn.exec_driver_sql("CREATE DATABASE bookkeeping")
+                conn.exec_driver_sql("CREATE ROLE abandon_runtime LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE")
+            owner = create_engine(server.url("bookkeeping", driver="postgresql"))
+            runtime = create_engine(server.url("bookkeeping", "abandon_runtime", driver="postgresql"))
+            schema = (Path(database.__file__).parent / "migrations" / "schema.sql").read_text()
+            with owner.begin() as conn:
+                execute_ddl(conn, schema)
+                sha = hashlib.sha256(schema.encode()).hexdigest()
+                conn.exec_driver_sql("COMMENT ON SCHEMA bookkeeping IS '{\"schema.sql\":\"" + sha + "\"}'")
+                rid = str(uuid4())
+                conn.execute(text("INSERT INTO bookkeeping.pipeline_run(run_id,submission,submission_hash,expected_count) "
+                                  "VALUES(CAST(:r AS uuid),CAST(:s AS jsonb),:h,0)"),
+                             {"r": rid, "s": canonical({"kind": "source", "name": "invented.source", "target": "t"}),
+                              "h": "a" * 64})
+            before = Bookkeeping(owner)._run(rid)
+            assert list(migrate(owner, runtime_role="abandon_runtime")) == ["schema.sql", "01-abandoned-run.sql"]
+            assert Bookkeeping(runtime)._run(rid) == before
+            Bookkeeping(runtime).abandon(rid, "invented refusal")
+            assert Bookkeeping(runtime)._run(rid)["state"] == "abandoned"
         finally:
             for engine in (runtime, owner, admin):
                 if engine is not None:

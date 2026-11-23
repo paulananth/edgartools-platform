@@ -24,6 +24,8 @@ def work_run(book, run_id: str, modules: dict | None = None, *, workers: int = 1
     run = book.status(run_id, limit=1)["run"]
     if run["state"] == "complete":
         return book.status(run_id)
+    if run["state"] == "abandoned":
+        raise Blocked(f"Run {run_id} was abandoned: {run['checks'].get('abandoned')}")
     submission = run["submission"]
     export = book.artifacts.json(submission["rules"])
     config = validate(export["body"], submission["target"])
@@ -42,9 +44,18 @@ def work_run(book, run_id: str, modules: dict | None = None, *, workers: int = 1
                 "rules": submission["rules"], "ordinal": item["ordinal"],
                 "effect_key": digest({"rules": submission["rules"], "step": step["name"], "key": item["key"],
                                       "unit": item["unit"]})}
-    run_local(config["steps"], items, modules, book.artifacts, every=True, extra=claim, workers=workers,
-              extracts=Extracts.of_the_stores(book.artifacts, modules))
+    try:
+        run_local(config["steps"], items, modules, book.artifacts, every=True, extra=claim, workers=workers,
+                  extracts=Extracts.of_the_stores(book.artifacts, modules))
+    except Exception as error:
+        if NEVER_FINISHES in str(error):  # the same frozen inputs give the same refusal: the run can never finish
+            book.abandon(run_id, str(error))
+        raise
     return book.finalize(run_id)
+
+
+# A refusal a run's frozen inputs always give. Its documents load again in a new run, under inputs the store accepts.
+NEVER_FINISHES = "contradictory publications"
 
 
 class Extracts:

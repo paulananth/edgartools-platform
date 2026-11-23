@@ -6,6 +6,7 @@ from .config import Blocked
 POSTGRES = {
     "start_run": "SELECT bookkeeping.start_run(CAST(:r AS uuid),CAST(:s AS jsonb),:h,CAST(:i AS jsonb))",
     "block_run": "SELECT bookkeeping.block_run(CAST(:r AS uuid),:m)",
+    "abandon_run": "SELECT bookkeeping.abandon_run(CAST(:r AS uuid),:m)",
     "claim": "SELECT bookkeeping.claim(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),:d,CAST(:p AS jsonb))",
     "heartbeat": "SELECT bookkeeping.heartbeat(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),:d)",
     "wait_work": "SELECT bookkeeping.wait_work(CAST(:r AS uuid),:s,:k,:m,CAST(:a AS uuid),CAST(:p AS jsonb))",

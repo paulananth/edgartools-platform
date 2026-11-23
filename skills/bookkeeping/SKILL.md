@@ -222,6 +222,9 @@ id, state, source and target, so it shows the run with no change. What differs f
   written again as the same file, and the Change Journal skips each batch it recorded as merged. A read or combine
   whose output is written is not done again, by this run or by another target's run over the same content with the same
   rules and worker code.
+- A run whose work ends in a refusal its frozen inputs always give (`contradictory publications`) is `abandoned`: closed
+  for good, never worked or resumed again, kept as evidence and shown as failed in the catalog. It is not open, so no load
+  drives it and no guard waits on it; its documents load again in a new run, under inputs the store accepts.
 - The loader does the run's steps; `--workers` still splits each step (data-operations Resource sizing (Edgar Intelligence daily-run runbook)), and bundles still load at once (`--bundles`).
 - A run reads only its own steps. A target that needs what another target read names the same last rules file and reads
   the files itself, with its own `context` (`extract: [{file: ..., context: ...}]`). Per-unit quality results are not published.

@@ -87,7 +87,7 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False, database_
             "start_run(uuid,jsonb,text,jsonb)", "claim(uuid,text,text,uuid,integer,jsonb)",
             "heartbeat(uuid,text,text,uuid,jsonb,integer)", "finish(uuid,text,text,uuid,jsonb,jsonb,jsonb,uuid)",
             "wait_work(uuid,text,text,text,uuid,jsonb)", "record_run_checks(text)",
-            "resume_run_prepared(text)", "block_run(uuid,text)", "delivery(uuid,text)",
+            "resume_run_prepared(text)", "block_run(uuid,text)", "abandon_run(uuid,text)", "delivery(uuid,text)",
             "finish_resource(uuid,text,text,uuid,jsonb,jsonb,jsonb,uuid,text,bigint,bigint)",
             "finish_expand(uuid,text,text,uuid,jsonb,jsonb,jsonb,uuid,jsonb,text)",
             "pin_runtime(uuid,text,text)",

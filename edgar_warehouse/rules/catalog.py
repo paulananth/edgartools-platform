@@ -1567,7 +1567,7 @@ def pipeline_status_from_bookkeeping(plan: dict, root: Path, snapshot: dict) -> 
         run_id = ""
     if (not run_id or not isinstance(owner, str) or not owner or not isinstance(target, str)
             or not target or kind not in ("source", "pipeline")
-            or state not in ("running", "waiting", "blocked", "complete")):
+            or state not in ("running", "waiting", "blocked", "complete", "abandoned")):
         raise CatalogError("Bookkeeping returned an invalid run status")
     root = Path(root)
     matches = []
@@ -1602,7 +1602,7 @@ def pipeline_status_from_bookkeeping(plan: dict, root: Path, snapshot: dict) -> 
     if state == "complete" and failed_steps:
         raise CatalogError("A complete Bookkeeping run cannot have retryable failed steps")
     status = {"timestamp": int(time.time() * 1000),
-              "executionStatus": "Successful" if state == "complete" else "Pending",
+              "executionStatus": {"complete": "Successful", "abandoned": "Failed"}.get(state, "Pending"),
               "executionId": run_id}
     if state != "complete" and failed_steps:
         status["taskStatus"] = [{"name": task, "executionStatus": "Failed"}

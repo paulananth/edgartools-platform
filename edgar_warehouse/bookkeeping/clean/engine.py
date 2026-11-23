@@ -455,6 +455,10 @@ class Bookkeeping:
         self._transition("wait_work",
                    r=claim.run_id, s=claim.step, k=claim.key, m=message, a=claim.attempt, p=canonical(claim.proof))
 
+    def abandon(self, run_id: str, message: str) -> None:
+        """Close a run its frozen inputs can never finish. A complete run stays complete."""
+        self._transition("abandon_run", r=run_id, m=message[:500])
+
     def resume(self, run_id: str) -> dict:
         import edgar_control
         from .run_storage import record_run_resume
@@ -473,7 +477,7 @@ class Bookkeeping:
 
     def runs(self, *, limit: int = 100, state: str | None = None) -> list[dict]:
         """Bounded discovery after a lost submission acknowledgement."""
-        if not 1 <= limit <= 1000 or state not in (None, "running", "waiting", "blocked", "complete"):
+        if not 1 <= limit <= 1000 or state not in (None, "running", "waiting", "blocked", "complete", "abandoned"):
             raise ValueError("Run listing requires a valid state and limit in 1..1000")
         return storage.runs(self.engine, limit, state=state)
 

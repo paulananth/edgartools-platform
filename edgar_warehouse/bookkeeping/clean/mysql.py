@@ -10,7 +10,7 @@ from .config import Blocked, canonical
 from .storage import tables
 
 PAYLOAD = Path(__file__).parent / "migrations/mysql-v1.sql"
-CAPABILITIES = ("start_run", "claim", "heartbeat", "wait_work", "finish", "finish_resource", "finish_expand", "delivery", "block_run")
+CAPABILITIES = ("start_run", "claim", "heartbeat", "wait_work", "finish", "finish_resource", "finish_expand", "delivery", "block_run", "abandon_run")
 NATIVE_CAPABILITIES = ("record_run_checks", "resume_run_prepared")
 OWNED_TABLES = {table.name for table in tables("mysql").values()}
 
