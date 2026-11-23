@@ -26,7 +26,7 @@ CREATE VIEW silver.table_context AS
     t.spec -> 'key' AS key,
     coalesce((SELECT jsonb_agg(jsonb_build_object(
                 'columns', l -> 'columns', 'kind', l ->> 'kind', 'source_code', l ->> 'source_code',
-                'source_key', l ->> 'source_key', 'mdm_id_column', l ->> 'mdm_id_column',
+                'source_key', l ->> 'source_key',
                 'inclusion', l -> 'inclusion'))
                 FROM jsonb_array_elements(coalesce(t.spec -> 'links', '[]'::jsonb)) l), '[]'::jsonb) AS links,
     t.spec -> 'time' AS time_columns,

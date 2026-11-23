@@ -67,7 +67,7 @@ def test_the_repository_record_lists_the_masters_the_published_codes_and_every_s
     managed = yaml.safe_load((ROOT / "sources/managed-mirror.yaml").read_text())
     names = mirror_sql.tables(managed, exposure)
     silver = sorted(f"silver.{t['table']}" for t in exposure["tables"] if t["layer"] == "silver")
-    assert names == ["mdm.mastering_identifier", "mdm.mastering_master", "rdm.published_code"] + silver and len(names) == 23
+    assert names == ["mdm.mastering_identifier", "mdm.mastering_master", "rdm.published_code"] + silver and len(names) == 24
     assert mirror_sql.unmirrored_reads(views.sources(), managed) == []
     assert managed["verified"] is False  # no mirror exists until a read-back says every table replicates
 

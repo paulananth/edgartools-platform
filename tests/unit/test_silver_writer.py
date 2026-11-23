@@ -32,7 +32,7 @@ def a_spec(**more):
         ],
         "key": ["visit_id"],
         "links": [{"columns": ["member_id"], "kind": "person", "source_code": "fixture.members",
-                   "to_part": "member", "source_key": "member_id", "mdm_id_column": "member_id_mdm_id",
+                   "to_part": "member", "source_key": "member_id",
                    "inclusion": 1.0}],
         "time": {"as_of": None, "as_at": "loaded_at", "event_time": "visited_on"},
         "partition": ["visited_on"],
@@ -52,20 +52,17 @@ def test_types_land_as_their_postgres_type_and_an_unknown_type_is_refused():
         specs.postgres_type("GEOMETRY")
 
 
-def test_a_spec_is_checked_and_the_writer_adds_its_mdm_ids_and_loaded_at():
+def test_a_spec_is_checked_and_the_writer_adds_loaded_at_and_no_master_id():
     spec = specs.check(a_spec())
-    assert specs.columns(spec) == ["visit_id", "member_id", "amount", "visited_on", "tags",
-                                   "member_id_mdm_id", "loaded_at"]
+    assert specs.columns(spec) == ["visit_id", "member_id", "amount", "visited_on", "tags", "loaded_at"]
     stamped_by_source = a_spec(time={"as_of": None, "as_at": "visited_on", "event_time": None})
     assert "loaded_at" not in specs.columns(specs.check(stamped_by_source))
 
 
 @pytest.mark.parametrize("change, refused", [
     ({"links": [{"columns": ["member_id"], "kind": None, "source_code": None, "to_part": "member",
-                 "source_key": "member_id", "mdm_id_column": "member_id_mdm_id", "inclusion": 1.0}]},
+                 "source_key": "member_id", "inclusion": 1.0}]},
      "name the master's kind and either"),
-    ({"links": [{"columns": ["member_id"], "kind": "person", "source_code": "x", "source_key": "member_id",
-                 "mdm_id_column": "amount"}]}, "share a name"),
     ({"table": "t" * 64}, "1 to 63 bytes"),
     ({"key": ["member_id"]}, "never empty"),
     ({"key": ["nope"]}, "The key names"),
@@ -75,10 +72,9 @@ def test_a_spec_is_checked_and_the_writer_adds_its_mdm_ids_and_loaded_at():
     ({"may_be_empty": True}, "only on a snapshot"),
     ({"load_mode": "snapshot", "may_be_empty": "yes"}, "may_be_empty is true"),
     ({"grain": None}, "grain is plain words"),
-    ({"links": [{"columns": ["member_id"], "kind": "person", "source_code": "x", "source_key": "member_id",
-                 "mdm_id_column": "m", "inclusion": 1.5}]}, "inclusion is a share"),
+    ({"links": [{"columns": ["member_id"], "kind": "person", "source_code": "x", "source_key": "member_id", "inclusion": 1.5}]}, "inclusion is a share"),
     ({"links": [{"columns": ["member_id", "amount"], "kind": "person", "source_code": "x",
-                 "source_key": "member_id", "mdm_id_column": "m"}]}, "one column of the spec"),
+                 "source_key": "member_id"}]}, "one column of the spec"),
 ])
 def test_a_spec_that_could_not_land_is_refused_before_any_table(change, refused):
     with pytest.raises(Blocked, match=refused):
@@ -138,58 +134,40 @@ class FakeSink:
         self.written = list(delivered)
         return {"table": spec["table"], "rows": len(self.written)}
 
-    def link_keys(self, spec, link):
-        raise AssertionError("this test does not read link keys")
 
-    def set_ids(self, spec, link, found):
-        raise AssertionError("this test does not set ids")
-
-
-def test_each_link_gets_its_master_mdm_id_and_an_unmastered_record_keeps_it_empty():
-    sink, asked = FakeSink(a_spec()), []
-
-    def ids(link, keys):
-        asked.append((link["source_code"], link["kind"], sorted(keys)))
-        return {"m1": "entity-1", "m2": None}
-
-    result = writer.land(sink, "visit", [{"visit_id": 1, "member_id": "m1"}, {"visit_id": 2, "member_id": "m2"},
-                                         {"visit_id": 3, "member_id": None}], ids)
-    assert asked == [("fixture.members", "person", ["m1", "m2"])]
-    assert [r["member_id_mdm_id"] for r in sink.written] == ["entity-1", None, None]
-    assert result["mdm_keys_found"] == 1
-
-
-def test_a_link_by_identifier_asks_for_the_holder_of_each_value():
-    by_ticker = {"columns": ["member_id"], "kind": "security", "identifier": "ticker", "to_part": "listed",
-                 "source_key": "member_id", "mdm_id_column": "member_id_mdm_id"}
-    sink, asked = FakeSink(a_spec(links=[by_ticker])), []
-
-    def ids(link, keys):
-        asked.append((link["identifier"], link["kind"], sorted(keys)))
-        return {"ZZA": "security-1"}  # ZZB is held by none, or by several
-
-    writer.land(sink, "visit", [{"visit_id": 1, "member_id": "ZZA"}, {"visit_id": 2, "member_id": "ZZB"}], ids)
-    assert asked == [("ticker", "security", ["ZZA", "ZZB"])]
-    assert [r["member_id_mdm_id"] for r in sink.written] == ["security-1", None]
+def test_a_row_lands_as_delivered_and_a_master_is_found_by_a_join_never_a_written_id():
+    sink = FakeSink(a_spec())
+    result = writer.land(sink, "visit", [{"visit_id": 1, "member_id": "m1"}, {"visit_id": 2, "member_id": None}])
+    assert sink.written == [{"visit_id": 1, "member_id": "m1"}, {"visit_id": 2, "member_id": None}]
+    assert result == {"table": "visit", "rows": 2}
 
 
 @pytest.mark.parametrize("finds", [{}, {"source_code": "fixture.members", "identifier": "ticker"},
                                    {"identifier": ""}])
 def test_a_link_names_either_a_dataset_contract_or_an_identifier(finds):
-    link = {"columns": ["member_id"], "kind": "person", "source_key": "member_id", "mdm_id_column": "m", **finds}
+    link = {"columns": ["member_id"], "kind": "person", "source_key": "member_id", **finds}
     with pytest.raises(Blocked, match="source_code\\) or the identifier"):
         specs.check(a_spec(links=[link]))
 
 
-def test_a_field_the_spec_does_not_name_or_a_missing_mdm_database_is_refused():
+def test_a_field_the_spec_does_not_name_is_refused():
     with pytest.raises(Blocked, match="does not name"):
-        writer.land(FakeSink(a_spec()), "visit", [{"visit_id": 1, "member_id_mdm_id": "forged"}], lambda *a: {})
-    with pytest.raises(Blocked, match="MDM ids need the MDM schema"):
-        writer.land(FakeSink(a_spec()), "visit", [{"visit_id": 1}], None)
+        writer.land(FakeSink(a_spec()), "visit", [{"visit_id": 1, "member_id_mdm_id": "forged"}])
 
 
-def test_a_number_read_as_a_float_matches_its_record_key():
-    assert writer._key(320193.0) == "320193" and writer._key(7) == "7" and writer._key("007") == "007"
+@pytest.mark.parametrize("more", [
+    {"links": [], "master_columns": ["member_id"], "master_through": "member"},
+    {"links": [], "master_columns": ["nope"]},
+    {"links": [], "master_through": ""},
+])
+def test_a_table_finds_its_master_one_way_and_names_real_columns(more):
+    with pytest.raises(Blocked, match="one way|names a column|names the table"):
+        specs.check(a_spec(**more))
+
+
+@pytest.mark.parametrize("more", [{"links": [], "master_columns": ["member_id"]}, {"links": [], "master_through": "member"}])
+def test_a_table_may_declare_master_columns_or_the_table_it_carries_the_key_of(more):
+    assert specs.check(a_spec(**more))["table"] == "visit"
 
 
 CHECKS = [
@@ -205,7 +183,7 @@ CHECKS = [
 
 def test_a_check_flags_its_rows_an_exception_refuses_them_and_an_empty_value_passes():
     sink = FakeSink(a_spec(checks=CHECKS))
-    assert specs.columns(sink._spec)[-3:] == ["member_id_mdm_id", "quality", "loaded_at"]
+    assert specs.columns(sink._spec)[-2:] == ["quality", "loaded_at"]
     valid, other = "ZZ0000013", "ZZ0000021"  # invented, check digits valid
     delivered = [
         {"visit_id": 1, "member_id": valid, "amount": "1", "visited_on": "2026-10-01"},
@@ -216,7 +194,7 @@ def test_a_check_flags_its_rows_an_exception_refuses_them_and_an_empty_value_pas
         {"visit_id": 6, "member_id": valid, "amount": "1", "visited_on": "2026-10-03"},  # a tie: both flagged
         {"visit_id": 7, "member_id": other, "amount": "1", "visited_on": "2026-10-03"},
     ]
-    result = writer.land(sink, "visit", delivered, lambda *a: {})
+    result = writer.land(sink, "visit", delivered)
     assert {r["visit_id"]: r["quality"] for r in sink.written} == {
         1: None, 2: None, 3: ["one_member_per_day"], 4: ["member_shape"],
         6: ["one_member_per_day"], 7: ["one_member_per_day"]}
@@ -225,7 +203,7 @@ def test_a_check_flags_its_rows_an_exception_refuses_them_and_an_empty_value_pas
                                             "known_member": {"on_fail": "exception", "rows_failed": 1}},
                                  "rows_checked": 7, "rows_flagged": 4, "rows_refused": 1}
     with pytest.raises(Blocked, match="does not name"):  # a delivery cannot write its own flags
-        writer.land(sink, "visit", [{"visit_id": 1, "quality": None}], lambda *a: {})
+        writer.land(sink, "visit", [{"visit_id": 1, "quality": None}])
 
 
 @pytest.mark.parametrize("change, refused", [
@@ -258,14 +236,6 @@ def test_json_lines_preserves_unquoted_decimal_digits(tmp_path):
                                  "tiny": Decimal("1e-600")}
 
 
-def test_exact_json_numbers_keep_existing_integral_master_key_spelling():
-    from decimal import Decimal
-    from edgar_warehouse.silver_writer.writer import _key
-    assert _key(Decimal("1.0")) == _key(1.0) == "1"
-    assert _key(Decimal("1e60")) == str(10**60)
-    assert _key(Decimal("1.25")) == "1.25"
-
-
 def test_a_load_given_a_results_file_keeps_each_check_s_report(tmp_path, monkeypatch):
     from edgar_warehouse.silver_writer import results
 
@@ -274,13 +244,13 @@ def test_a_load_given_a_results_file_keeps_each_check_s_report(tmp_path, monkeyp
                  {"visit_id": 4, "member_id": "ZZ0000014", "amount": None, "visited_on": None}]
     path = tmp_path / "results.json"
     monkeypatch.delenv(results.ENVIRONMENT, raising=False)
-    writer.land(sink, "visit", delivered, lambda *a: {}, results=path)
+    writer.land(sink, "visit", delivered, results=path)
     kept = results.load(path)
     assert set(kept) == {"visit." + check["id"] for check in CHECKS}
     assert {entry["rows_checked"] for entry in kept.values()} == {2}
     other = tmp_path / "from-environment.json"
     monkeypatch.setenv(results.ENVIRONMENT, str(other))
-    writer.land(sink, "visit", delivered, lambda *a: {})
+    writer.land(sink, "visit", delivered)
     assert set(results.load(other)) == set(kept)
 
 
@@ -298,7 +268,7 @@ def test_bookkeeping_land_can_keep_quality_evidence_out_of_the_mutable_results_f
     path = tmp_path / "latest-results.json"
     monkeypatch.setenv(results.ENVIRONMENT, str(path))
 
-    writer.land(sink, "visit", delivered, lambda *a: {}, record_quality_results=False)
+    writer.land(sink, "visit", delivered, record_quality_results=False)
 
     assert not path.exists()
 

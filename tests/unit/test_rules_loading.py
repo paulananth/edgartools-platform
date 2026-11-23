@@ -587,8 +587,8 @@ def test_a_load_that_mastered_records_builds_the_links_table_once_after_its_last
     assert result["links"] == {"table": "relationship", "links": 3, "rows": 4, "waiting": {}}
     assert commands.calls.count(("silver", "links")) == 1 and commands.calls[-1] == ("silver", "links")
     assert commands.calls[-2] == ("silver", "created")  # the links table is checked before it is built, never created
-    assert [str(spec).rsplit("/", 1)[-1] for _, spec in commands.checked[-3:]] == [
-        "silver-relationship.yaml", "silver-relationship-evidence.yaml", "silver-relationship-path.yaml"]
+    assert [str(spec).rsplit("/", 1)[-1] for _, spec in commands.checked[-4:]] == [
+        "silver-relationship.yaml", "silver-relationship-evidence.yaml", "silver-relationship-path.yaml", "silver-master-binding.yaml"]
 
 
 def test_one_load_of_several_leaves_the_links_table_to_the_last_step(tmp_path, monkeypatch):

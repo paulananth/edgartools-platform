@@ -248,6 +248,12 @@ class Store:
                                    f"where entity_id is not null and subject in ({marks(block)})", block))
         return found
 
+    def bindings(self) -> list[tuple]:
+        """(source code, source key, kind, master) of every source record that has its golden record now: what a
+        silver row joins to find its master. A merged-away master's records already point to its survivor."""
+        return self.rows("select distinct r.source_code,r.source_key,m.kind,r.entity_id from mastering_record r "
+                         "join mastering_master m on m.entity_id=r.entity_id")
+
     def members_bound(self, entities) -> dict:
         found = {}
         for block in blocks(entities):
@@ -689,22 +695,6 @@ def open_store(engine) -> Store:
     return opened
 
 
-def kind_views() -> list[str]:
-    """Per master kind, the two views a silver row joins by (never a written id): `<kind>_record` gives each source key
-    its master, `<kind>_identifier_holder` each identifier value the one master of the kind holding it."""
-    from edgar_warehouse.mdm.evidence import KINDS
-    views = []
-    for kind in sorted(KINDS):
-        views.append(
-            f"create or replace view {kind}_record as select distinct r.source_code, r.source_key, r.entity_id as master_id "
-            f"from mastering_record r join mastering_master m on m.entity_id = r.entity_id where m.kind = '{kind}'")
-        views.append(
-            f"create or replace view {kind}_identifier_holder as select i.namespace, i.value, min(i.entity_id) as master_id "
-            f"from mastering_identifier i join mastering_master m on m.entity_id = i.entity_id where m.kind = '{kind}' "
-            "group by i.namespace, i.value having count(distinct i.entity_id) = 1")
-    return views
-
-
 def install(engine, *, runtime_role: str) -> None:
     """Create the tables, drop any mastering table the code no longer uses, then let the runtime merge
     without changing structure or decisions."""
@@ -717,7 +707,7 @@ def install(engine, *, runtime_role: str) -> None:
             conn.exec_driver_sql(f"create schema if not exists {SCHEMA}")
             conn.exec_driver_sql(f"set local search_path to {SCHEMA}")
             conn.exec_driver_sql(f'grant usage on schema {SCHEMA} to {grantee}')
-        for statement in [*source.split(";"), *kind_views()]:
+        for statement in source.split(";"):
             if statement.strip():
                 conn.exec_driver_sql(statement)
         present = conn.exec_driver_sql(f"select table_name from information_schema.tables where table_schema={schema}")
@@ -726,6 +716,4 @@ def install(engine, *, runtime_role: str) -> None:
                 conn.exec_driver_sql(f"drop table {name}")
         for name in WRITTEN:
             conn.exec_driver_sql(f"grant select,insert,update,delete on mastering_{name} to {grantee}")
-        for view in kind_views():
-            conn.exec_driver_sql(f"grant select on {view.split()[4]} to {grantee}")
         conn.exec_driver_sql(f"grant select,insert on mastering_decision to {grantee}")

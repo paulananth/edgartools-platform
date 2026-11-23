@@ -73,7 +73,8 @@ def silver_facts(config: dict) -> list[dict]:
         if entry["layer"] != "silver" or source in taken:
             continue
         spec = files.load(files.ROOT.parent / entry["requirement"])
-        links = [{"column": link["mdm_id_column"], "dimension": dimensions[link["kind"]],
+        links = [{"column": link["source_key"], "kind": link["kind"], **({"identifier": link["identifier"]} if link.get("identifier")
+                  else {"source_code": link["source_code"]}), "dimension": dimensions[link["kind"]],
                   "role": link.get("to_part") or link["kind"]} for link in spec.get("links") or []]
         time = spec.get("time") or {}
         times = {"business": time.get("as_of"), "event": time.get("event_time"), "recorded": time.get("as_at")}
@@ -159,23 +160,39 @@ def link_key(link: dict, ctx: Context, alias: str, column: str | None = None) ->
     return f"COALESCE({alias}.canonical_id, {literal(ctx.unknown)})"
 
 
+def master_join(link: dict, ctx: Context, row: str, alias: str) -> tuple[str, str]:
+    """How a silver row finds its master: (the join, the column holding the master id). A source-code link joins
+    `master_binding` on the row's own source key; an identifier link joins the one master of the kind that holds the value."""
+    key = f"CAST({row}.{link['column']} AS VARCHAR)"
+    if link.get("identifier"):
+        holders = (f"(SELECT i.value AS value, MIN(i.entity_id) AS master_id FROM {ctx.mirror('mdm.mastering_identifier')} i "
+                   f"JOIN {ctx.mirror(ctx.config['master']['source'])} k ON k.entity_id = i.entity_id AND k.kind = {literal(link['kind'])} "
+                   f"WHERE i.namespace = {literal(link['identifier'])} GROUP BY i.value HAVING COUNT(DISTINCT i.entity_id) = 1)")
+        return f"LEFT JOIN {holders} {alias} ON {alias}.value = {key}", f"{alias}.master_id"
+    return (f"LEFT JOIN {ctx.mirror('silver.master_binding')} {alias} ON {alias}.source_code = {literal(link['source_code'])} "
+            f"AND {alias}.source_key = {key}"), f"{alias}.master_id"
+
+
 def render_fact(item: dict, ctx: Context) -> str:
-    """One row per silver row. Each link resolves through the master view, so a merged-away id finds its survivor."""
+    """One row per silver row. Each link finds its master by a join on the row's source key, then resolves through
+    the master view, so a merged-away id finds its survivor."""
     select, joins = [f"s.{c}" for c in item["key"]], []
     for n, link in enumerate(item.get("links", [])):
         alias = f"m{n}"
-        joins.append(f"LEFT JOIN {ctx.view('master')} {alias} ON {alias}.entity_id = s.{link['column']}")
+        found, master_id = master_join(link, ctx, "s", f"b{n}")
+        joins += [found, f"LEFT JOIN {ctx.view('master')} {alias} ON {alias}.entity_id = {master_id}"]
         select.append(f"{link_key(link, ctx, alias)} AS {link['role']}_key")
     parent = item.get("parent")
     if parent:
         by = parent["by"]
         link = parent["single_link"]
         on = " AND ".join(f"p.{c} = s.{c}" for c in by)
-        group = ", ".join(by)
+        found, master_id = master_join(link, ctx, "q", "pb")
         joins.append(
-            f"LEFT JOIN (SELECT {group}, MIN({parent['times']['business']}) AS business_date, "
-            f"MAX({parent['times']['recorded']}) AS recorded_date, COUNT(DISTINCT {link['column']}) AS managers, "
-            f"MIN({link['column']}) AS single_id FROM {ctx.mirror(parent['source'])} GROUP BY {group}) p ON {on}")
+            f"LEFT JOIN (SELECT {', '.join('q.' + c for c in by)}, MIN(q.{parent['times']['business']}) AS business_date, "
+            f"MAX(q.{parent['times']['recorded']}) AS recorded_date, COUNT(DISTINCT {master_id}) AS managers, "
+            f"MIN({master_id}) AS single_id FROM {ctx.mirror(parent['source'])} q {found} "
+            f"GROUP BY {', '.join('q.' + c for c in by)}) p ON {on}")
         joins.append(f"LEFT JOIN {ctx.view('master')} pm ON pm.entity_id = p.single_id")
         select += ["p.business_date", "p.recorded_date",
                    f"CASE WHEN p.managers = 1 THEN COALESCE(pm.canonical_id, {literal(ctx.unknown)}) "
@@ -219,7 +236,8 @@ def sources(config: dict | None = None) -> dict:
     config = config or load()
     mirror, read = config["mirror"], {}
     for item in config["objects"]:
-        for source in [item.get("source"), item.get("parent", {}).get("source")] + (
+        linked = ["silver.master_binding"] if item.get("links") or item.get("parent") else []
+        for source in [item.get("source"), item.get("parent", {}).get("source"), *linked] + (
                 [config["master"]["source"], "mdm.mastering_identifier"] if item["kind"] in ("base", "dimension") else []):
             if source:
                 layer, table = source.split(".")

@@ -28,11 +28,11 @@ def db():
         create table mastering_master (entity_id text, canonical_id text, kind text, status text, body text);
         create table mastering_identifier (namespace text, value text, entity_id text);
         create table thirteenf_filing (accession_number text, cik text, form text, filing_date text, report_date text,
-                                       primary_document text, manager_mdm_id text);
+                                       primary_document text);
         create table thirteenf_holding (accession_number text, holding_index integer, cusip text, shares_held real,
                                         share_type text, market_value real, put_call text, discretion_type text,
-                                        voting_auth_sole real, voting_auth_shared real, voting_auth_none real,
-                                        security_mdm_id text);
+                                        voting_auth_sole real, voting_auth_shared real, voting_auth_none real);
+        create table master_binding (source_code text, source_key text, kind text, master_id text);
     """)
     masters = [("c1", body("c1", "company", "Alpha Capital")), ("c2", body("c2", "company", "Beta Partners")),
                ("c3", body("c3", "company", "Alpha Cap Old", canonical="c1", status="alias")),
@@ -43,18 +43,23 @@ def db():
                       ((e, json.loads(text)) for e, text in masters)])
     conn.executemany("insert into mastering_identifier values (?, ?, ?)",
                      [("cik", "0000000001", "c1"), ("cik", "0000000002", "c2"), ("cusip", "AAA111", "s1")])
-    conn.executemany("insert into thirteenf_filing values (?,?,?,?,?,?,?)", [
-        ("f1", "1", "13F-HR", "2026-02-10", "2025-12-31", "a.xml", "c1"),
-        ("f2", "1", "13F-HR", "2026-02-11", "2025-12-31", "b.xml", "c1"),  # a joint filing: two managers
-        ("f2", "2", "13F-HR", "2026-02-11", "2025-12-31", "b.xml", "c2"),
-        ("f3", "9", "13F-NT", "2026-02-12", "2025-12-31", "c.xml", None),   # a manager that was never mastered
-        ("f4", "3", "13F-HR", "2026-02-13", "2025-12-31", "d.xml", "c3")])  # a merged-away manager id
-    conn.executemany("insert into thirteenf_holding values (?,?,?,?,?,?,?,?,?,?,?,?)", [
-        ("f1", 1, "AAA111", 100, "SH", 1000.5, None, "SOLE", 100, 0, 0, "s1"),
-        ("f1", 2, "BBB222", 50, "SH", 250.25, None, "SOLE", 50, 0, 0, "s2"),
-        ("f2", 1, "AAA111", 10, "SH", 99.0, "Call", "SOLE", 10, 0, 0, "s1"),
-        ("f3", 1, "ZZZ999", 5, "PRN", 5.0, None, "SOLE", 5, 0, 0, None),   # no master security
-        ("f4", 1, "AAA111", 7, "SH", 70.0, None, "SOLE", 7, 0, 0, "s1")])
+    conn.executemany("insert into thirteenf_filing values (?,?,?,?,?,?)", [
+        ("f1", "1", "13F-HR", "2026-02-10", "2025-12-31", "a.xml"),
+        ("f2", "1", "13F-HR", "2026-02-11", "2025-12-31", "b.xml"),  # a joint filing: two managers
+        ("f2", "2", "13F-HR", "2026-02-11", "2025-12-31", "b.xml"),
+        ("f3", "9", "13F-NT", "2026-02-12", "2025-12-31", "c.xml"),   # a manager that was never mastered
+        ("f4", "3", "13F-HR", "2026-02-13", "2025-12-31", "d.xml")])  # a merged-away manager id
+    conn.executemany("insert into thirteenf_holding values (?,?,?,?,?,?,?,?,?,?,?)", [
+        ("f1", 1, "AAA111", 100, "SH", 1000.5, None, "SOLE", 100, 0, 0),
+        ("f1", 2, "BBB222", 50, "SH", 250.25, None, "SOLE", 50, 0, 0),
+        ("f2", 1, "AAA111", 10, "SH", 99.0, "Call", "SOLE", 10, 0, 0),
+        ("f3", 1, "ZZZ999", 5, "PRN", 5.0, None, "SOLE", 5, 0, 0),   # no master security
+        ("f4", 1, "AAA111", 7, "SH", 70.0, None, "SOLE", 7, 0, 0)])
+    conn.executemany("insert into master_binding values (?,?,?,?)", [
+        ("sec.company.v1", "1", "company", "c1"), ("sec.company.v1", "2", "company", "c2"),
+        ("sec.company.v1", "3", "company", "c3"),  # bound to a master that merged away: the dimension answers for its survivor
+        ("sec.thirteenf.securities.v2", "AAA111", "security", "s1"),
+        ("sec.thirteenf.securities.v2", "BBB222", "security", "s2")])
     for statement in views.render(dialect="sqlite", qualify=False).values():
         conn.execute(statement)
     return conn
@@ -209,13 +214,16 @@ def test_a_generated_fact_resolves_its_links_and_dates_on_rows():
         create table mastering_master (entity_id text, canonical_id text, kind text, status text, body text);
         create table mastering_identifier (namespace text, value text, entity_id text);
         create table ipo_filing (accession_number text, cik text, form text, stage text, filing_date text,
-                                 file_number text, observed_at text, filer_mdm_id text);
+                                 file_number text, observed_at text);
+        create table master_binding (source_code text, source_key text, kind text, master_id text);
     """)
+    link = item["links"][0]
+    conn.execute("insert into master_binding values (?, '1', 'company', 'c3')", [link["source_code"]])  # a merged-away master
     conn.executemany("insert into mastering_master values (?, ?, ?, ?, ?)", [
         ("c1", "c1", "company", "active", "{}"), ("c3", "c1", "company", "alias", "{}")])
-    conn.executemany("insert into ipo_filing values (?,?,?,?,?,?,?,?)", [
-        ("a1", "1", "S-1", "initial", "2026-01-02", "333-1", "2026-01-03", "c3"),   # a merged-away id
-        ("a2", "2", "S-1", "initial", "2026-01-04", "333-2", "2026-01-05", None)])  # never mastered
+    conn.executemany("insert into ipo_filing values (?,?,?,?,?,?,?)", [
+        ("a1", "1", "S-1", "initial", "2026-01-02", "333-1", "2026-01-03"),   # a merged-away id
+        ("a2", "2", "S-1", "initial", "2026-01-04", "333-2", "2026-01-05")])  # never mastered
     statements = views.render(dialect="sqlite", qualify=False)
     for name in ("master", item["name"]):
         conn.execute(statements[name])

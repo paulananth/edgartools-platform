@@ -65,6 +65,11 @@ tables:
   grain: one row per relationship, period start and step
   requirement: rules/silver/silver-relationship-path.yaml
 - layer: silver
+  table: master_binding
+  scope: current
+  grain: one row per source code and source key
+  requirement: rules/silver/silver-master-binding.yaml
+- layer: silver
   table: adv_custody
   scope: history
   grain: one row per filing and custody row (a custodian listed twice is two rows)
