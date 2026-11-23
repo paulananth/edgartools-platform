@@ -1,7 +1,7 @@
 # data-profiling: Make the entrypoint executable
 
 Type: task
-Status: open
+Status: resolved
 Priority: P0
 Blocked by: 03, 08
 Labels: wayfinder:task
@@ -36,8 +36,13 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] Produce an entrypoint that consumes captured input inventory and hashes, existing kinds, known identifier formats and profiling settings and yields REPORT.md, findings.yaml, fingerprints and invalid-row evidence kept private where required; verified against the profiler's argument parser, input fingerprinting and report writer (2026-11-20 19:17 ET).
 - [x] Verify referenced paths and supported commands; retain mandatory stops and discoverability of optional detail; checked compare's `--help`, report output paths, and the required-path hard stops (2026-11-20 19:17 ET).
 - [x] Walk the documented legal-entity register and relationship-file example through profiling and the approved-findings handoff to Data Onboarding and Data Quality; no input data was loaded (2026-11-20 19:17 ET).
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md.
+- [x] Published the scoped entrypoint through [Ticket 09: add the data-profiling entrypoint](https://github.com/paulananth/edgartools-platform/pull/1980), merged 2026-11-20 19:38 ET; 147 genericity and guide-path tests pass (2026-11-24).
 - [x] Learning → skill: the `Run this phase` section separates required input context and the single-run outputs from conditional compare handling, then names the next owner (2026-11-20 19:17 ET).
+
+
+## Answer
+
+The repository-owned `skills/data-profiling/SKILL.md` now provides the `Run this phase` entrypoint: required input context, supported run/compare commands, expected private artifacts, hard stops and the next owner. Its implementation is published in [Ticket 09: add the data-profiling entrypoint](https://github.com/paulananth/edgartools-platform/pull/1980). `tests/unit/test_profiling_genericity.py` and `tests/unit/test_guides_name_existing_paths.py` passed 147 tests. The installed `skill://data-profiling` copy remains older and lacks `Run this phase`; this resolution covers the repository-owned skill and does not claim the installed bundle was refreshed. No data was profiled and no provider was queried.
 
 ## Completion evidence
 
