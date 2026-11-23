@@ -64,6 +64,8 @@ disposable store is the next check to add.
   no per-bundle progress (one document) is still an upper bound until it ends.
 - **A scheduler that "stopped" has usually finished everything it could**: it names the failed steps and what waits on them.
   Fix the cause (engine, memory, a login), then start it again; done steps cost one call each.
+- **`mdm build-lookups` and `mdm clear` refuse while Bookkeeping holds a running run of a mastering target** (a worker between two merge transactions holds no
+  lock, so the store's own check cannot see it). A run left open by a stopped attempt blocks them until it is finished: resume it, never skip the check.
 - **Read how often a mastering merge went alone after a load**: `grep mastering_merge_alone <the step logs>`. A line names each reason and its
   count; no line in any step log means no part merged alone, and the kind lock was shared throughout. Lock waits are read the same
   way as every wait: sample `pg_stat_activity` and `pg_locks` (wait event and lock type) as the diagnostic login, and say each wait's share.
