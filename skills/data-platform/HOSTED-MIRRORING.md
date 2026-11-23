@@ -188,12 +188,15 @@ exist before a mirror can take it, so the order is the load, then:
    those tables: explicit `postgres_tables`, `postgres_schemas => NULL`, `target_table_type => 'ICEBERG'`
    ([the single-database qualification](SINGLE-DATABASE-ICEBERG.md) pins the rest).
 
-**One mirror per source database.** One mirror reads one source
-database and creates one target database, and the stores are separate databases, so the listed tables get one mirror for each store that
-has any: the MDM store (`mdm` layer), the Silver store (`silver` layer) and the RDM store (`rdm` layer, `rdm.published_code`), each with
-its own target database. Never one mirror reading several stores, and nothing consolidated as a side effect of a load. Each create plan
-names its single source database, its tables, its target and its refresh interval, and is approved before it runs. RDM lists the
-published-only table, never the tables that hold drafts: a mirror carries tables, not views.
+**One mirror, of the data database.** Every exposed store is a schema of the one data database, so the listed tables get one mirror with one
+target database (`mirror.database`) and the schemas `MDM`, `RDM` and `SILVER`. Never one mirror per store, never one reading the control database.
+The create plan names the one source database, its tables per schema, its target and its refresh interval, and is approved before it runs
+(`mirror_sql.py plan`). RDM lists the published-only table, never the tables that hold drafts: a mirror carries tables, not views.
+
+**Done is read back, not assumed:** list the mirror (`mirror_sql.py verify`), save the rows as a JSON list of `{table, state}`, and run
+`mirror_sql.py readback --listing <file>`. It fails naming what is missing, unexpected or still snapshotting, and passes only when the mirror is exactly
+the record with every table REPLICATING; then set `verified: true` in `sources/managed-mirror.yaml`. Read the snapshot cost from metering history
+(`SERVERLESS_TASK` lines lag by hours) against the 5-credit bound.
 
 A reset of the stores drops and recreates the databases a mirror reads, which breaks that mirror: plan its drop or restart, with its
 own approval, before the reset, and create it again from the list after the next load.

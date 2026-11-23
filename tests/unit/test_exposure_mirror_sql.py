@@ -103,3 +103,16 @@ def test_no_free_publication_refuses_the_plan():
 def test_exists_reads_back_the_configured_target_database_and_nothing_else():
     sql = mirror_sql.exists({"mirror": {"database": "INVENTED_MIRROR"}})
     assert sql == "SHOW DATABASES LIKE 'INVENTED_MIRROR';\n"
+
+
+def test_readback_passes_only_when_the_mirror_is_exactly_the_record_all_replicating():
+    ok = [{"table": "pub.thing", "state": "REPLICATING"}, {"table": "ref.codes", "state": "replicating"}]
+    assert "schemas PUB, REF" in mirror_sql.readback(MANAGED, EXPOSURE, ok)
+
+
+def test_readback_names_what_is_missing_unexpected_or_still_snapshotting():
+    listing = [{"table": "pub.thing", "state": "SNAPSHOTTING"}, {"table": "pub.unread", "state": "REPLICATING"}]
+    with pytest.raises(SystemExit) as refused:
+        mirror_sql.readback(MANAGED, EXPOSURE, listing)
+    text = str(refused.value)
+    assert "missing: ref.codes" in text and "unexpected: pub.unread" in text and "pub.thing (SNAPSHOTTING)" in text
