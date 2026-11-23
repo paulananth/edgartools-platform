@@ -16,7 +16,7 @@ Acceptance criteria:
 - Semantic compilation reports no unresolved source or scope blockers.
 - At least one synthetic or approved test query is validated against generated SQL and rows.
 
-Blocked by: 01
+Blocked by: 01, 07
 
 ## Checklist
 
@@ -24,7 +24,7 @@ Blocked by: 01
 - [x] Read AutoOntology's contracts from the release in use (`~/projects/auto-ontology` at commit 8ff3060): the table filter matches the unqualified relation name, case-sensitive; `GET /api/schemas/{db}` and `GET /api/tables/{schema_id}` list what was ingested; `/api/semantic-compilation/status` returns calculated, running, last_success_at and last_failure_at (there is no `blockers` field). Nothing committed there. 2026-11-19 12:30 ET
 - [x] The PostgreSQL readers are proved on the exposure list: SELECT on exactly the listed tables by name, no schema-wide or default grant, zero write privileges, TLS; created live as `discovery_reader_mdm`, `_rdm` and `_silver` (readable: 2 + 1 + 16 listed tables, plus each database's extension views). 2026-11-19 12:40 ET
 - [ ] A `_READER` suffix proves no grants on Snowflake: prove the Snowflake reader's effective SELECT-only, table-level grants against the manifest (needs the mirror)
-- [ ] AutoOntology's structured Snowflake factory drops `role`; the operator selected upstream role passthrough as required, not a default-role workaround. This remains blocked until upstream carries the role and the read-only grant boundary is qualified.
+- [ ] Role passthrough: the operator selected upstream support, not a default-role workaround; see [Add Snowflake role passthrough to AutoOntology](07-upstream-snowflake-role-passthrough.md).
 - [x] Table selection by exact identity: the catalog is read back after the connection is made and must equal the manifest's (schema, table) pairs, extras and missing refused (counts only); `tests/unit/test_autoontology_connection.py`, the first test failed when the comparison was removed. 2026-11-19 12:30 ET
 - [x] The ingested identities are read back from the catalog whichever path filled it, so a scheduled ingestion that ignored the filter is refused. 2026-11-19 12:30 ET
 - [x] The outcome is the contract's: not running, a success time, and no newer failure; the old `blockers` field does not exist upstream. Three of four new cases failed when the failure check was removed. 2026-11-19 12:30 ET
