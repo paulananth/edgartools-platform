@@ -336,17 +336,9 @@ _Avoid_: Granting write/ownership privileges, treating "dashboard" and "report" 
 
 ### Data plane (ingest and engagement)
 
-**Staged Warehouse Object**:
-An immutable, random-token-scoped warehouse object written before ETag-guarded promotion to a canonical silver key; it is operational scratch data, not bronze evidence or a release input after successful promotion.
-_Avoid_: Canonical silver, bronze archive, release evidence
-
 **Canonical Silver**:
-Snowflake `EDGARTOOLS_SILVER`, the dbt collapse of the landing zone — the live typed Runtime System of Engagement. The retired S3 keys (`warehouse/silver/sec/silver.duckdb` and the shards) have no readers or writers.
-_Avoid_: Staged Warehouse Object, identity-refresh run snapshots, historical gold `run_id=` copies
-
-**Joined Live Key**:
-The S3 object key after `StorageLocation.join()` prefixes `WAREHOUSE_STORAGE_ROOT` (already ending in `/warehouse`) onto a relative write path. Lifecycle filters match this key string, not the relative path.
-_Avoid_: Using `silverstage/` as an S3 lifecycle prefix, treating the Python relative path as the object key
+Snowflake `EDGARTOOLS_SILVER`, the dbt collapse of the landing zone — the live typed Runtime System of Engagement. The former warehouse bucket is absent from production, and the retired `silver.duckdb` keys have no readers or writers.
+_Avoid_: identity-refresh run snapshots, historical gold `run_id=` copies
 
 **VersionId Reclaim**:
 Permanent removal of billed bytes on a versioned bucket by deleting specific `Key` + `VersionId` pairs. Key-only delete and `aws s3 rm` leave payloads billed behind delete markers.

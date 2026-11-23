@@ -72,4 +72,4 @@ Run workload actions explicitly after infra has been applied:
 - AWS provider is pinned to `6.39.0`.
 - State bootstrap derives the bucket suffix from the authenticated AWS account and refuses retired accounts or stale account-ID overrides.
 - S3 backend state locking uses `use_lockfile = true`.
-- Bronze and warehouse data use separate buckets.
+- Bronze and Snowflake export data use separate buckets.

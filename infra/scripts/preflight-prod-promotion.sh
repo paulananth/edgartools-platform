@@ -56,7 +56,6 @@ actual_account="$(aws_read sts get-caller-identity --query Account --output text
 
 targets=(
   "edgartools-prod-bronze-${ACCOUNT_ID}"
-  "edgartools-prod-warehouse-${ACCOUNT_ID}"
   "edgartools-prod-snowflake-export-${ACCOUNT_ID}"
 )
 for bucket in "${targets[@]}"; do

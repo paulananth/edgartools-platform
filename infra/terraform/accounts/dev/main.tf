@@ -1,7 +1,6 @@
 locals {
-  environment           = "dev"
-  bronze_bucket_name    = coalesce(var.bronze_bucket_name, "edgartools-dev-bronze")
-  warehouse_bucket_name = coalesce(var.warehouse_bucket_name, "edgartools-dev-warehouse")
+  environment        = "dev"
+  bronze_bucket_name = coalesce(var.bronze_bucket_name, "edgartools-dev-bronze")
   snowflake_export_bucket_name = coalesce(
     var.snowflake_export_bucket_name,
     "edgartools-dev-snowflake-export",
@@ -24,9 +23,51 @@ module "storage" {
 
   environment                  = local.environment
   bronze_bucket_name           = local.bronze_bucket_name
-  warehouse_bucket_name        = local.warehouse_bucket_name
   snowflake_export_bucket_name = local.snowflake_export_bucket_name
   tags                         = var.tags
+}
+
+
+# The dev warehouse bucket is retired with the decommissioned dev environment.
+# Forget any stale state without destroying bucket data.
+removed {
+  from = module.storage.aws_s3_bucket.warehouse
+
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = module.storage.aws_s3_bucket_public_access_block.warehouse
+
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = module.storage.aws_s3_bucket_server_side_encryption_configuration.warehouse
+
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = module.storage.aws_s3_bucket_versioning.warehouse
+
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = module.storage.aws_s3_bucket_ownership_controls.warehouse
+
+  lifecycle {
+    destroy = false
+  }
 }
 
 module "runtime" {

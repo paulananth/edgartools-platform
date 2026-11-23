@@ -25,7 +25,7 @@ Passive AWS Terraform creates infrastructure shells only:
 
 - VPC, public subnets, route table, internet gateway, and S3 VPC endpoint.
 - Outbound-only ECS task security group.
-- S3 bronze bucket, warehouse bucket, and Snowflake export bucket.
+- S3 bronze bucket and Snowflake export bucket.
 - KMS key for Snowflake export artifacts.
 - ECR warehouse repository.
 - ECS cluster and CloudWatch log group.
@@ -37,12 +37,12 @@ AWS Terraform must not create runnable ECS task definitions, Step Functions stat
 
 Default S3 bucket names:
 
-S3 bucket names are globally unique, so data buckets include the 12-digit AWS account ID suffix. The non-S3 resource prefix remains `edgartools-<env>` unless a Terraform variable overrides it.
+S3 bucket names are globally unique, so the Bronze and Snowflake export buckets include the 12-digit AWS account ID suffix. The non-S3 resource prefix remains `edgartools-<env>` unless a Terraform variable overrides it.
 
-| Env | Bronze bucket | Warehouse bucket | Snowflake export bucket | Prefix |
-| --- | --- | --- | --- | --- |
-| dev | `edgartools-dev-bronze-<aws_account_id>` | `edgartools-dev-warehouse-<aws_account_id>` | `edgartools-dev-snowflake-export-<aws_account_id>` | `edgartools-dev` |
-| prod | `edgartools-prod-bronze-<aws_account_id>` | `edgartools-prod-warehouse-<aws_account_id>` | `edgartools-prod-snowflake-export-<aws_account_id>` | `edgartools-prod` |
+| Env | Bronze bucket | Snowflake export bucket | Prefix |
+| --- | --- | --- | --- |
+| dev | `edgartools-dev-bronze-<aws_account_id>` | `edgartools-dev-snowflake-export-<aws_account_id>` | `edgartools-dev` |
+| prod | `edgartools-prod-bronze-<aws_account_id>` | `edgartools-prod-snowflake-export-<aws_account_id>` | `edgartools-prod` |
 
 Important differences:
 
@@ -170,7 +170,6 @@ export EDGAR_IDENTITY="EdgarTools Platform thepaulananth@gmail.com"
 export WAREHOUSE_ENVIRONMENT="dev"
 export WAREHOUSE_RUNTIME_MODE="bronze_capture"
 export WAREHOUSE_BRONZE_ROOT="s3://edgartools-dev-bronze/warehouse/bronze"
-export WAREHOUSE_STORAGE_ROOT="s3://edgartools-dev-warehouse/warehouse"
 export SERVING_EXPORT_ROOT="s3://edgartools-dev-snowflake-export/warehouse/artifacts/snowflake_exports/"
 export AWS_DEFAULT_REGION=us-east-1
 ```
