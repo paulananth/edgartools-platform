@@ -27,6 +27,27 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    Run every command below from a checkout of today's `main` with its environment built
    (`uv sync --extra mdm --extra s3`) or a bundle installed from it: an older `edgar-warehouse`
    creates older schemas.
+1a. **Quiesce and drain (before step 2).** Before resetting an existing instance, stop scheduled
+   loads and applications that can reconnect to its databases. Check
+   `load_chain.py --status` and Bookkeeping's open runs and leases; all must be
+   clear. Inventory managed mirrors with the Snowflake Postgres mirror skill.
+   Resolve any mirror that reads a database being reset through that skill's
+   approved drop or restart procedure first; approval to reset the hosted
+   stores does not authorize a mirror operation.
+
+   Once clients are stopped, use the Snowflake Postgres management skill and
+   the configured production instance to restart PostgreSQL:
+   `snow sql --connection edgartools-prod -q "ALTER POSTGRES INSTANCE <instance> RESTART POSTGRES"`.
+   This disconnects existing sessions; wait for the instance to return to
+   `READY`, reading only its name and state from the instance description. Then
+   run the read-only reset preflight below. Continue only when it reports no
+   other sessions. Snowflake-managed `pg_lake` sessions can return after
+   restart; if any session remains or returns, stop and resolve it through the
+   Snowflake Postgres operations path. Never terminate internal sessions or
+   bypass the reset script's session guard. The service restart is disruptive
+   and needs the operator's approval; approval to reset the databases alone is
+   not approval to disconnect every client.
+
 2. **Databases.** An instance that holds an old store keeps its logins and gets its databases made again: with the
    operator's word, list them, then drop and create them with the owner and the grants each had:
    ```bash
