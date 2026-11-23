@@ -249,8 +249,8 @@ identifier up with JSON containment. MySQL has no `plan_cache_mode`; keep the
 key list in the statement that is planned for that list, not in a reused
 prepared statement whose plan was chosen for a different list size.
 
-**SQL Server Express.** Join the key list as a table-valued parameter (never a
-temporary table: run-time code issues no DDL) and require an index seek in the plan. A scan fails the test.
+**SQL Server Express.** Join the key list as a table-valued parameter, never a temporary table
+(no run-time DDL), and require an index seek in the plan. A scan fails the test.
 A statement whose key-list size changes enough to pick a bad cached plan uses
 `OPTION (RECOMPILE)` on that statement only. Do not put it on every procedure.
 
@@ -319,8 +319,7 @@ location: `Path(__file__).parents[N]` and `.parent`. Before the move, grep `pare
   retries.
 - A storage operation that looks up or writes many keys takes a bound key
   collection, not one call per key. Each adapter uses its engine's supported
-  bulk parameter (an array, JSON or a table-valued parameter), never a
-  temporary table: run-time code issues no DDL.
+  bulk parameter (an array, JSON or a table-valued parameter), never a temporary table.
 - A run reads what it started with. Anything the store registers anew while
   the run is part way through (a source's mapping today) is chosen once when
   the run first starts, kept in its frozen scope, and read
