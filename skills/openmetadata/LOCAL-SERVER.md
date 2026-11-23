@@ -64,7 +64,7 @@ including a stale token that may still pass a public version-endpoint read.
 
 Operator policy excludes vendor demonstration lineage from this platform's
 OpenMetadata catalog. The local compose file enforces it with an empty seed
-resource mounted before the release jars.
+resource (inline Compose `configs` content, never a path of the checkout) mounted before the release jars.
 Keep that override on rebuilds and upgrades; recheck its resource path and
 classpath precedence against the running version. Delete only edges proven
 to match the bundled examples, through native APIs, and read them back after
