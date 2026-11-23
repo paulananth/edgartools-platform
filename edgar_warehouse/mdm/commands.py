@@ -82,19 +82,43 @@ def steward_resolve(args) -> int:
     return 0
 
 
+def open_mastering_runs() -> list[str]:
+    """The Bookkeeping runs of a mastering target that are running. A worker between two merge transactions holds no kind lock,
+    so the store's own quiet check cannot see that a load goes on: this is the other half of it."""
+    from edgar_warehouse.bookkeeping.clean import cli as bookkeeping
+
+    book = bookkeeping.configured_bookkeeping()
+    try:
+        return [row["run_id"] for row in book.runs(limit=1000, state="running") if row.get("target") == "mastering"]
+    finally:
+        book.close()
+
+
+def _refuse_while_loading(action: str) -> bool:
+    if open := open_mastering_runs():
+        print(f"{action} stopped: a mastering load is running ({len(open)} open run{'s' if len(open) != 1 else ''}: "
+              f"{', '.join(open[:3])}); wait for the loads to end", file=sys.stderr)
+        return True
+    return False
+
+
 def clear_source(args) -> int:
     """Restart one source from empty (the `data-operations` skill): previews unless `--confirm`."""
+    if _refuse_while_loading("Clearing"):
+        return 1
     from edgar_warehouse.mastering import clear
     from edgar_warehouse.mastering.store import open_store
 
     # The owner login: the runtime role may not delete decisions, which are the record of what was decided.
     from edgar_warehouse.database_connections import owner_engine
 
+    from edgar_warehouse.mastering.store import NotQuiet
+
     engine = owner_engine("mdm")
     db = open_store(engine)
     try:
         report = clear.clear(db, args.source, confirm=args.confirm)
-    except ValueError as refused:
+    except (ValueError, NotQuiet) as refused:
         print(f"Clearing stopped: {refused}", file=sys.stderr)
         return 1
     finally:
@@ -126,12 +150,17 @@ def check_connectivity(args) -> int:
 
 def build_lookups(args) -> int:
     from edgar_warehouse.mastering import lookups
-    from edgar_warehouse.mastering.store import open_store
+    from edgar_warehouse.mastering.store import NotQuiet, open_store
 
+    if _refuse_while_loading("Building the lookups"):
+        return 1
     engine = mdm_engine(restricted=True)
     db = open_store(engine)
     try:
         report = lookups.build(db, lambda built: print(json.dumps({"masters": built}), file=sys.stderr, flush=True))
+    except NotQuiet as refused:
+        print(f"Building the lookups stopped: {refused}", file=sys.stderr)
+        return 1
     finally:
         db.close()
         engine.dispose()

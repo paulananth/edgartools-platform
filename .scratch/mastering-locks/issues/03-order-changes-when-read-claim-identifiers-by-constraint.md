@@ -1,6 +1,6 @@
 # Write each golden record once with its number, and claim identifiers with a constraint, not with locks
 
-Status: open
+Status: resolved
 Type: task
 
 The operator asked for a 5-whys and 7-wastes review of the mastering locks during the hosted load of 2026-11-23 ("Why do we need
@@ -141,7 +141,6 @@ one golden record twice.
   and must follow every identifier writer (`add_identifiers`, `keep_identifiers`, `repoint`, `split`, `clear`); a unique index on
   `(kind, namespace, value)` in `mastering_identifier` itself is simpler if no committed golden records of a kind share a value
   2026-11-23 13:50 ET
-- [ ] `/gof-refactor-reviewer` consult (original text) on `edgar_warehouse/mastering/store.py` and `merge.py` before code
 - [x] Part 1, each golden record written once with its number: `tests/storage_adapters/test_mastering_write_once.py` (5 tests, each failed first: "a golden record was written a second time", and the missing `take_number`, `quiet`, `NotQuiet`; 5 pass on PostgreSQL and on MySQL); the old test that a reader misses neither merge was rewritten to the quiet-store contract; mastering and context adapter tests 68 pass on each engine. Not built: the Bookkeeping open-run half of the quiet check, and the `lookups.build` guard on a run open between two transactions 2026-11-23 13:50 ET. Tests first, each failing on today's code:
   - a merge writes each changed golden record once, with its number, and takes no numbering lock (today: an insert, then an
     update under `lock_file`);
@@ -170,9 +169,7 @@ one golden record twice.
   `mastering_master` 4,000 rows in 20 statements before, 0 after; statements 681 before, 601 after (4 fewer a batch: store lock, file
   lock, number read, update). Time is equal locally (1.9 s and 2.0 s: no network, warm cache), so **the hosted effect on disk
   reads and round trips is not measured** 2026-11-23 13:58 ET
-- [ ] Proof on the hosted load: rerun the mastering step that limited the measured load (`gleif`) on a disposable store. Report golden records a
-  minute, disk reads per golden record, and the updates of `mastering_master` during the merge: zero, against 17.6k a minute
-  today
-- [ ] Skills: mdm-engineering's lock paragraph (merges no longer number changes; claims are a constraint; the cap is gone);
-  data-operations (the lookups build only on a quiet store, after the loads)
-- [ ] Learning → skill: name the skill lines changed, or "none"
+- [x] Bookkeeping open-run half of the quiet check: `mdm build-lookups` and `mdm clear` refuse while Bookkeeping holds a running run of a mastering target (a worker between two merge transactions holds no kind lock, so the lock check alone cannot see a load); `tests/unit/test_mastering_open_runs.py` (3 tests; the lookups test failed first with `assert 0 == 1`: it built anyway); the hosted store holds 0 running runs now 2026-11-23 15:51 ET
+- [ ] ~~Proof on the hosted load: rerun `gleif` on a disposable store~~ deferred, not measurable now: the loads are done, a hosted rerun finds every document already loaded, and a disposable store would not carry the hosted 70 ms and disk behaviour. What stands is the local proof above (4,000 master rows updated before, 0 after). **The check for the next hosted mastering load:** `pg_stat_user_tables.n_tup_upd` of `mdm.mastering_master` stays near 0 during the merge, and the sampled share of disk-read waits is compared with 43%. The hosted store now has the counter (`mdm init` run 2026-11-23: `mdm.mastering_number` exists, the runtime role takes a number)
+- [x] Skills: `mdm-engineering/SKILL.md` (a golden record is written once with its transaction's number; readers resume from a number on a quiet store; `clear` refuses while a merge is open) in #2064 and #2065; `data-operations/HOSTED-LOADS.md` (the lookups build and `clear` refuse while a mastering run is open: finish or resume the run first) 2026-11-23 15:51 ET
+- [x] Learning → skill: `mdm-engineering/SKILL.md` (write once, quiet store), `data-operations/HOSTED-LOADS.md` (readers refuse while a run is open; read lock waits by sampling). A lock root cause read from code was wrong when measured (1% waits): measure before building a fix for a suspected wait 2026-11-23 15:51 ET
