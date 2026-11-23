@@ -80,6 +80,17 @@ def gate(stores: Path, generation: str, sha: str, at: datetime | None = None) ->
     return None
 
 
+def next_record(previous: dict | None, results: list[dict], generation: str, sha: str, at: datetime) -> dict | None:
+    """The record a readiness run writes, or None to leave the record on disk. A run beside a load fails QUIET and nothing else;
+    it must not close the gate under the scheduler running that load, so a passing record of this store and this code stands."""
+    failed = {r["id"] for r in results if not r["ok"]}
+    if (failed == {"QUIET"} and previous and previous.get("passed") is True and generation
+            and previous.get("generation") == generation and previous.get("sha") == sha):
+        return None
+    return {"passed": not failed and bool(generation), "at": at.isoformat(), "generation": generation, "sha": sha,
+            "checks": {r["id"]: r["ok"] for r in results}}
+
+
 def evaluate(facts: dict) -> list[dict]:
     """Grade the facts into checks. A fact that could not be read is a failure, never a pass."""
     def check(cid, ok, evidence):
@@ -345,8 +356,15 @@ def main(argv: list[str] | None = None) -> int:
     env = load_chain.load_env(stores / "worker.env")
     generation = load_chain.database_generation(load_chain.data_url(env)) if load_chain.data_url(env) else ""
     passed = all(r["ok"] for r in results) and bool(generation)
-    (stores / READY).write_text(json.dumps({"passed": passed, "at": now().isoformat(), "generation": generation, "sha": current_sha(),
-                                            "checks": {r["id"]: r["ok"] for r in results}}))
+    try:
+        previous = json.loads((stores / READY).read_text())
+    except (OSError, ValueError):
+        previous = None
+    written = next_record(previous, results, generation, current_sha(), now())
+    if written is None:
+        print("NOT READY: a load is running (QUIET); the passing record for this code and store stands, so the running load goes on")
+        return 1
+    (stores / READY).write_text(json.dumps(written))
     os.chmod(stores / READY, 0o600)
     print("READY: a load may start" if passed else "NOT READY: nothing starts until every check passes")
     return 0 if passed else 1

@@ -160,3 +160,19 @@ def test_a_login_that_fails_a_state_file_unread_or_a_catalog_that_drifted_closes
 
 def test_no_catalog_configured_is_not_a_failure_and_a_state_file_that_will_be_set_aside_is_shown():
     assert failed(facts(catalog="not configured", state={"verdict": "set aside", "done_steps": 59})) == set()
+
+
+def results(**failing):
+    return [{"id": cid, "title": cid, "ok": cid not in failing, "evidence": None} for cid in readiness.CHECKS]
+
+
+def test_a_run_that_fails_only_because_a_load_runs_leaves_the_passing_record_for_that_code_and_store(tmp_path):
+    """Running the gate beside a load fails QUIET; it must not close the gate under the scheduler that is running that load."""
+    record(tmp_path)
+    previous = json.loads((tmp_path / readiness.READY).read_text())
+    assert readiness.next_record(previous, results(QUIET=1), "g1", "abc", NOW) is None
+    for failing, generation, sha in (({"QUIET": 1, "CODE": 1}, "g1", "abc"), ({"QUIET": 1}, "g2", "abc"), ({"QUIET": 1}, "g1", "def")):
+        written = readiness.next_record(previous, results(**failing), generation, sha, NOW)
+        assert written is not None and written["passed"] is False
+    assert readiness.next_record(None, results(QUIET=1), "g1", "abc", NOW)["passed"] is False
+    assert readiness.next_record(previous, results(), "g1", "abc", NOW)["passed"] is True
