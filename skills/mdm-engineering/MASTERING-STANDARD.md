@@ -32,7 +32,7 @@ Two different ids, never confused:
 - **The master id** names the golden record. Mastering mints it (a UUID) when no existing golden record matches; it is never a digest of
   the data, so nothing about the data can change it. A merge keeps the survivor's id, and a merged-away id still answers with the
   survivor. It is the only id that crosses into silver and Gold.
-- **The source key** is the source's own key for one record (a CIK, an accession, an adviser number). The binding keeps it as a plain
+- **The source key** is the source's own key for one record. The binding keeps it as a plain
   column beside the source code, `source_key`, so a join needs no digest. The `subject` digest of source code and key is the engine's
   internal index, never a join key.
 
