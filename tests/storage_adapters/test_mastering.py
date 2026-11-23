@@ -378,9 +378,9 @@ def two_stores(database_factory):
                 db.close()
 
 
-def test_a_merge_of_another_kind_runs_beside_one_in_flight_and_a_reader_misses_neither(database_factory, monkeypatch):
-    """A Security merge does not wait for a Company merge. The Company merge started first and commits last:
-    its golden record is numbered after the Security's, so a reader that stopped in between still gets it."""
+def test_a_merge_of_another_kind_runs_beside_one_in_flight_and_a_reader_of_the_quiet_store_misses_neither(database_factory, monkeypatch):
+    """A Security merge does not wait for a Company merge. The Company merge took its number first and commits last: its number is
+    the lower, so a reader that resumes from a number reads only a quiet store, where both are committed."""
     with two_stores(database_factory) as (first, second):
         seen, finish = {}, first.finish_file
 
@@ -391,15 +391,15 @@ def test_a_merge_of_another_kind_runs_beside_one_in_flight_and_a_reader_misses_n
                 seen["merged"] = pool.submit(merge.merge_file, second, SECURITY, [security]).result(timeout=30)
             finally:
                 pool.shutdown(wait=False)
-            seen["checkpoint"] = max(file_no for file_no, _, _ in second.changes(0))
+            seen["quiet"] = second.quiet()  # the Company merge still holds its kind lock
             second.commit()
             finish(key, records)
 
         monkeypatch.setattr(first, "finish_file", while_in_flight)
         merge.merge_file(first, COMPANY, [record(SEC, "1", cik="0000000017")])
-        assert seen["merged"]["skipped"] is False and seen["checkpoint"] == 1
-        later = [(file_no, json.loads(body)["kind"]) for file_no, _, body in second.changes(seen["checkpoint"])]
-        assert later == [(2, "company")]
+        assert seen["merged"]["skipped"] is False and seen["quiet"] is False
+        assert second.quiet()
+        assert sorted(json.loads(body)["kind"] for _, _, body in second.changes(0)) == ["company", "security"]
         assert sorted(body["kind"] for body in live(second).values()) == ["company", "security"]
 
 

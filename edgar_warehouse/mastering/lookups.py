@@ -47,8 +47,15 @@ def tokens_of(pin: str, body: dict, records: list[dict]) -> set[str]:
     return tokens
 
 
+class NotQuiet(RuntimeError):
+    """Another session is merging: numbers are not in commit order, so a reader that resumes from one waits for a quiet store."""
+
+
 def build(store, progress=lambda built: None) -> dict:
-    """Bring the lookups up to the last file. Each page commits with its progress, so a stopped build resumes."""
+    """Bring the lookups up to the last file. Each page commits with its progress, so a stopped build resumes. It reads
+    from a number, so it runs on a quiet store (after the loads)."""
+    if not store.quiet():
+        raise NotQuiet("A merge is running: build the lookups after the loads")
     pin, built = _pin(), 0
     last = store.last_file()
     reached = store.lookup_progress(pin)

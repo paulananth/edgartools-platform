@@ -19,3 +19,4 @@ create table if not exists mastering_deferred(deferred_id varchar(128) primary k
 create table if not exists mastering_lookup(token char(64) not null, entity_id char(36) not null, primary key(token, entity_id));
 create index if not exists mastering_lookup_entity on mastering_lookup(entity_id);
 create table if not exists mastering_lookup_progress(pin char(64) primary key, changed_file bigint not null, entity_id varchar(36) not null);
+create sequence if not exists mastering_number;

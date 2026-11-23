@@ -11,3 +11,4 @@ create table if not exists mastering_withheld(subject varchar(255) not null, nam
 create table if not exists mastering_deferred(deferred_id varchar(128) primary key, source_code varchar(64) not null, reason varchar(64) not null, blocking bigint not null, body longtext not null) collate utf8mb4_bin;
 create table if not exists mastering_lookup(token char(64) not null, entity_id char(36) not null, primary key(token, entity_id), index mastering_lookup_entity(entity_id)) collate utf8mb4_bin;
 create table if not exists mastering_lookup_progress(pin char(64) primary key, changed_file bigint not null, entity_id varchar(36) not null) collate utf8mb4_bin;
+create table if not exists mastering_number(n bigint not null auto_increment primary key);

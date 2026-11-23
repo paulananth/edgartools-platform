@@ -10,8 +10,7 @@ from pathlib import Path
 from . import master_row
 
 BLOCK = 2000
-LOCK_CLASS, FILE_KEY = 74821, 2  # advisory-lock class; file numbering is the second key
-PENDING = 0  # a changed golden record's file number until its transaction commits
+LOCK_CLASS = 74821  # the advisory-lock class of the store; a merge's kind lock is LOCK_CLASS + 1
 CLAIMS = 2000  # the most identifier values one batch claims beside other merges of its kind; more merge alone
 WRITTEN = ("master", "file", "delivery", "identifier", "record", "name_key", "review", "withheld", "deferred",
            "lookup", "lookup_progress", "profile")
@@ -41,12 +40,14 @@ class Store:
         self.connection = connection
         self.cursor = connection.cursor()
         self.staged: list[tuple] = []  # the file being merged: (assertion_id, subject, source_code, source_key, lei, body)
-        self.changed: set[str] = set()  # the golden records this transaction wrote, not yet numbered
+        self.changed: set[str] = set()  # the golden records this transaction wrote
+        self.number: int | None = None  # this transaction's change number, taken at its first write
         self.shared: str | None = None  # the kind this transaction merges beside others of it, if it does
         self.minted: set[str] = set()  # the golden records this transaction created: no other merge can touch them
 
     def commit(self) -> None:
-        self.number_changes()
+        self.number = None
+        self.changed.clear()
         self.shared = None
         self.minted.clear()
         try:
@@ -55,6 +56,7 @@ class Store:
             self.release_locks()
 
     def rollback(self) -> None:
+        self.number = None
         self.changed.clear()
         self.shared = None
         self.minted.clear()
@@ -63,18 +65,20 @@ class Store:
         finally:
             self.release_locks()
 
-    def number_changes(self) -> None:
-        """Give what this transaction changed the next file number, as its last step and one transaction at a
-        time. A reader that has seen file N has then seen every change numbered N or less, whichever merge
-        started first: a number given at the start would let a merge that commits late land below a reader."""
-        if not self.changed:
-            return
-        self.lock_file()
-        number = self.last_file() + 1
-        for block in blocks(sorted(self.changed)):
-            self.cursor.execute(f"update mastering_master set changed_file=%s where changed_file={PENDING} "
-                                f"and entity_id in ({marks(block)})", [number, *block])
-        self.changed.clear()
+    def take_number(self) -> int:
+        """This transaction's change number: taken once, at its first write, from a counter no merge holds. Each golden record
+        is written once, with it. Numbers are not in commit order and a rolled-back merge leaves a gap, so a reader that
+        resumes from a number reads a quiet store (`quiet`)."""
+        if self.number is None:
+            self.number = self.next_number()
+        return self.number
+
+    def next_number(self) -> int:
+        raise NotImplementedError
+
+    def quiet(self) -> bool:
+        """Whether no other session is merging: every number up to the highest is then committed."""
+        raise NotImplementedError
 
     def close(self) -> None:
         self.release_locks()
@@ -147,9 +151,6 @@ class Store:
     def lock_kind(self, kind: str, *, shared: bool = False) -> None:
         raise NotImplementedError
 
-    def lock_file(self) -> None:
-        raise NotImplementedError
-
     def release_locks(self) -> None:
         return
 
@@ -190,17 +191,13 @@ class Store:
         if name_keys:  # in order, so two merges writing shared keys wait for each other without a deadlock
             self.insert("mastering_name_key", ("role", "value", "subject"), sorted(name_keys))
 
-    def holders(self, wanted: dict, *, changed_after: int | None = None) -> list[tuple]:
-        """Who holds each wanted identifier: {namespace: values}; with `changed_after`, only golden records changed
-        after that file number."""
+    def holders(self, wanted: dict) -> list[tuple]:
+        """Who holds each wanted identifier: {namespace: values}."""
         found = []
-        since = "" if changed_after is None else (" and entity_id in (select entity_id from mastering_master "
-                                                   "where changed_file>%s)")
         for namespace, values in wanted.items():
             for block in blocks(sorted(set(values))):
                 found += self.rows("select distinct namespace,value,entity_id from mastering_identifier "
-                                   f"where namespace=%s and value in ({marks(block)})" + since,
-                                   [namespace, *block, *([] if changed_after is None else [changed_after])])
+                                   f"where namespace=%s and value in ({marks(block)})", [namespace, *block])
         return found
 
     def identifiers_of(self, entities, namespaces) -> dict:
@@ -449,15 +446,16 @@ class Store:
 
     def write_masters(self, rows: list) -> None:
         """Golden records (entity id, the body survivorship gave), written or changed: the columns a reader selects by, each
-        profile as a row and the rest as text (master_row). Each changed one is numbered when the transaction commits."""
+        profile as a row and the rest as text (master_row). Each is written once, with the transaction's change number."""
+        number = self.take_number()
         split = [(entity, *master_row.split(body)) for entity, body in rows]
         columns = ("entity_id", *master_row.COLUMNS, "body")
         for block in blocks(split):
-            one = "(" + ",".join(["%s"] * len(columns)) + f",{PENDING})"
+            one = "(" + ",".join(["%s"] * len(columns)) + ",%s)"
             self.cursor.execute(f"insert into mastering_master({','.join(columns)},changed_file) values "
                                 + ",".join([one] * len(block)) + self.master_upsert,
                                 [value for entity, held, _, text in block
-                                 for value in (entity, *(held[c] for c in master_row.COLUMNS), text)])
+                                 for value in (entity, *(held[c] for c in master_row.COLUMNS), text, number)])
             entities = [entity for entity, *_ in block]
             self.cursor.execute(f"delete from mastering_profile where entity_id in ({marks(entities)})", entities)
             profiles = [(entity, position, p.get("profile_id"), p.get("role"), p.get("valid_from"), p.get("valid_to"),
@@ -624,8 +622,13 @@ class Postgres(Store):
             self.rows("select pg_advisory_xact_lock(%s, hashtext(v)) from (select unnest(%s::text[]) v order by 1) s",
                       [LOCK_CLASS + 2, block])
 
-    def lock_file(self) -> None:
-        self.rows("select pg_advisory_xact_lock(%s, %s)", [LOCK_CLASS, FILE_KEY])
+    def next_number(self) -> int:
+        return self.rows("select nextval('mastering_number')")[0][0]
+
+    def quiet(self) -> bool:
+        """No other session holds a kind lock (pg_locks; this session's own locks are left out)."""
+        return not self.rows("select 1 from pg_locks where locktype='advisory' and classid::bigint=%s and granted "
+                             "and pid<>pg_backend_pid() limit 1", [LOCK_CLASS + 1])
 
 
 class MySQL(Store):
@@ -674,9 +677,22 @@ class MySQL(Store):
         if not self._acquire(f"mastering-kind-{kind}", 86400):
             raise TimeoutError(f"Mastering lock for {kind} was not acquired")
 
-    def lock_file(self) -> None:
-        if not self._acquire("mastering-file", 86400):
-            raise TimeoutError("Mastering file lock was not acquired")
+    def next_number(self) -> int:
+        """An auto-increment row: the counter is allocated outside the transaction, so no merge holds it."""
+        self.cursor.execute("insert into mastering_number() values ()")
+        return self.rows("select last_insert_id()")[0][0]
+
+    def quiet(self) -> bool:
+        """No other session holds the kind lock of any kind the policy names (`is_used_lock` is the holder's connection;
+        this session's own locks are left out)."""
+        from edgar_warehouse.rules import files
+
+        mine = self.rows("select connection_id()")[0][0]
+        for kind in files.policy()["kinds"]:
+            holder = self.rows("select is_used_lock(%s)", [f"mastering-kind-{kind}"])[0][0]
+            if holder not in (None, mine):
+                return False
+        return True
 
     def release_locks(self) -> None:
         for name in self.held:
@@ -701,7 +717,7 @@ def install(engine, *, runtime_role: str) -> None:
     source = (Path(__file__).parent / "schema" / f"{engine.dialect.name}.sql").read_text()
     grantee = f'"{runtime_role}"' if engine.dialect.name == "postgresql" else f"'{runtime_role}'@'%%'"
     schema = "current_schema()" if engine.dialect.name == "postgresql" else "database()"
-    used = {f"mastering_{name}" for name in (*WRITTEN, "decision")}
+    used = {f"mastering_{name}" for name in (*WRITTEN, "decision", *(("number",) if engine.dialect.name == "mysql" else ()))}
     with engine.begin() as conn:
         if engine.dialect.name == "postgresql":
             conn.exec_driver_sql(f"create schema if not exists {SCHEMA}")
@@ -716,4 +732,8 @@ def install(engine, *, runtime_role: str) -> None:
                 conn.exec_driver_sql(f"drop table {name}")
         for name in WRITTEN:
             conn.exec_driver_sql(f"grant select,insert,update,delete on mastering_{name} to {grantee}")
+        if engine.dialect.name == "postgresql":
+            conn.exec_driver_sql(f"grant usage,select on sequence mastering_number to {grantee}")  # the change counter
+        else:
+            conn.exec_driver_sql(f"grant select,insert on mastering_number to {grantee}")
         conn.exec_driver_sql(f"grant select,insert on mastering_decision to {grantee}")

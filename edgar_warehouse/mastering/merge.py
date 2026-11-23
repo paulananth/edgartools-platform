@@ -183,7 +183,6 @@ def _merge_file(store, settings, records, again, deferred, quiet, record_updates
     key = file_key([*records, *({"assertion_id": r["deferred_id"]} for r in deferred)])
     try:
         store.take_lock(settings.kind, shared=shared)
-        seen = store.last_file() if shared else None
         if store.file_done(key) and not again:
             store.commit()
             return {"file": key, "skipped": True}
@@ -209,11 +208,11 @@ def _merge_file(store, settings, records, again, deferred, quiet, record_updates
             raise Contended("rolled back beside another merge of its kind") from exc
         raise
     if shared:
-        counts["released"] += _wake(store, settings, records, arrived, tried, seen, written)
+        counts["released"] += _wake(store, settings, records, arrived, tried, written)
     return {"file": key, "skipped": False, **counts}
 
 
-def _wake(store, settings: Settings, records: list[dict], arrived: set, tried: set, seen: int, written: set) -> int:
+def _wake(store, settings: Settings, records: list[dict], arrived: set, tried: set, written: set) -> int:
     """After a merge beside others of its kind, the waits neither could see: a record this merge left waiting for an
     identifier another merge gave a golden record meanwhile, and one another merge left waiting for an identifier this
     merge gave. Each looks once, and only what it finds is merged again, alone."""
@@ -226,7 +225,7 @@ def _wake(store, settings: Settings, records: list[dict], arrived: set, tried: s
             if r["source_code"] in waits:
                 for namespace, values in (r.get("identifiers") or {}).items():
                     wanted[namespace].update(v for v in (values if isinstance(values, list) else [values]) if v)
-        came = {(n, v) for n, v, e in store.holders(wanted, changed_after=seen) if e not in written} if wanted else set()
+        came = {(n, v) for n, v, e in store.holders(wanted) if e not in written} if wanted else set()
         look = arrived | came
         ready = [r for r in store.waiting_for(look) if r["subject"] not in tried] if look else []
         if not ready:
