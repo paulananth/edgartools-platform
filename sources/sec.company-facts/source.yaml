@@ -20,5 +20,7 @@ bookkeeping:
       silver:
         - {name: land, land: {silver: company_fact, table: company_fact}}
         - {name: line_items, derive: {build: line_items, reads: company_fact, silver: company_line_item}}
+        - {name: line_item_inputs, derive: {build: line_item_inputs, reads: company_fact, silver: company_line_item_input}}
         - {name: measures, derive: {build: measures, reads: company_line_item, silver: company_measure}}
+        - {name: measure_inputs, derive: {build: measure_inputs, reads: company_line_item, silver: company_measure_input}}
       # Each derived table is rebuilt whole, and only when the Change Journal names a changed file.

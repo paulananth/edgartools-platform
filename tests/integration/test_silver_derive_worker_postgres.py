@@ -25,7 +25,8 @@ from tests.integration.test_silver_writer_postgres import RUNTIME, silver_databa
 from tests.support.patching import checked
 
 FOLDER = files.sources_root() / "sec.company-facts"
-TABLES = ("silver-company-fact.yaml", "silver-company-line-item.yaml", "silver-company-measure.yaml")
+TABLES = ("silver-company-fact.yaml", "silver-company-line-item.yaml", "silver-company-line-item-input.yaml",
+          "silver-company-measure.yaml", "silver-company-measure-input.yaml")
 
 
 def envelope(build, checks=("silver.derived",)):
@@ -97,6 +98,18 @@ def test_measures_are_rebuilt_from_the_line_items(silver_store):
     assert json.loads(store.written[out["uri"]])["rows"] > 0
     assert silver_derive.check({**envelope("measures"), "candidate": {"uri": out["uri"], "sha256": "x"}}, store)[0] == {
         "silver.derived": True}
+
+
+def test_each_input_table_is_its_own_build_over_the_same_query(silver_store):
+    land(PostgresSink(silver_store), "company_fact", copy.deepcopy(line_tests.FACTS), line_tests.no_masters)
+    land(PostgresSink(silver_store), "company_line_item", copy.deepcopy(measure_tests.LINES), line_tests.no_masters)
+    for build, table in (("line_item_inputs", "company_line_item_input"), ("measure_inputs", "company_measure_input")):
+        store = Artifacts()
+        out = silver_derive.execute(envelope(build), store)
+        receipt = json.loads(store.written[out["uri"]])
+        with silver_store.connect() as conn:
+            held = conn.execute(text(f"SELECT count(*) FROM silver.{table}")).scalar()
+        assert receipt["table"] == table and receipt["rows"] == held > 0
 
 
 def test_an_unknown_build_or_check_is_refused(silver_store):

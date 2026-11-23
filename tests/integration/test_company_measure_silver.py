@@ -31,8 +31,9 @@ COMPANIES = {GROWING: ("3571", "DE"), LOSS: ("3571", "DE"), STATUTORY: ("3571", 
 def line(company, year, item, value, currency="USD", end=None):
     return {"company_key": company, "line_item": item, "fiscal_year": year, "period_start": None,
             "period_end": end or f"{year}-12-31", "value": str(value), "unit": currency or "shares",
-            "currency": currency, "taxonomy": "us-gaap", "concept": "Invented", "inputs": None,
-            "accession_number": f"{company}-{year % 100:02d}-000001", "filed": f"{year + 1}-02-01", "flags": [],
+            "currency": currency, "taxonomy": "us-gaap", "concept": "Invented",
+            "accession_number": f"{company}-{year % 100:02d}-000001", "filed": f"{year + 1}-02-01", "computed": False, "basis": None, "industry_kind": None,
+            "revenue_quality_check": False,
             "null_reason": None, "rule_version": "invented"}
 
 
@@ -88,7 +89,8 @@ def built(postgres):
     with silver_database(admin) as (owner, runtime):
         silver.migrate(owner, runtime_role=RUNTIME)
         sink = PostgresSink(runtime)
-        for name in ("silver-company-fact.yaml", "silver-company-line-item.yaml", "silver-company-measure.yaml"):
+        for name in ("silver-company-fact.yaml", "silver-company-line-item.yaml", "silver-company-measure.yaml",
+                     "silver-company-measure-input.yaml"):
             silver.register(owner, spec_file(FOLDER / name, None), runtime_role=RUNTIME)
         land(sink, "company_fact", copy.deepcopy(FACTS), no_masters)
         land(sink, "company_line_item", copy.deepcopy(LINES), no_masters)
@@ -97,7 +99,16 @@ def built(postgres):
                                 lambda keys: asked.append(keys) or {k: COMPANIES[k] for k in keys if k in COMPANIES})
         with runtime.connect() as conn:
             rows = [dict(r._mapping) for r in conn.execute(text("SELECT * FROM silver.company_measure"))]
-        yield result, asked, {(r["company_key"], r["measure"], r["fiscal_year"], r["window_years"]): r for r in rows}
+        measures.build(runtime, sink, no_masters, lambda keys: {k: COMPANIES[k] for k in keys if k in COMPANIES},
+                       table="company_measure_input")
+        with runtime.connect() as conn:
+            inputs = [dict(r._mapping) for r in conn.execute(text("SELECT * FROM silver.company_measure_input"))]
+        read = {}
+        for r in inputs:
+            read.setdefault((r["company_key"], r["measure"], r["fiscal_year"], r["window_years"]), {})[
+                (r["role"], r["part"])] = r
+        yield result, asked, {(r["company_key"], r["measure"], r["fiscal_year"], r["window_years"]): r | {
+            "inputs": read.get((r["company_key"], r["measure"], r["fiscal_year"], r["window_years"]), {})} for r in rows}
 
 
 def got(rows, company, measure, fiscal_year, window=1):
@@ -125,8 +136,9 @@ def test_a_ratio_and_its_reasons(built):
     assert (per_share["value"], per_share["currency"]) == (Decimal(12), "USD")
     assert rows[(GROWING, "gross_margin", 2025, 1)]["currency"] is None
     margin = rows[(GROWING, "gross_margin", 2025, 1)]["inputs"]
-    assert margin["revenue"] == {"fiscal_year": 2025, "value": "146.4100000000", "concept": "Invented",
-                                 "accession_number": f"{GROWING}-25-000001"}
+    revenue = margin[("revenue", "figure")]
+    assert (revenue["input_fiscal_year"], revenue["value"], revenue["concept"], revenue["accession_number"]) == (
+        2025, Decimal("146.41"), "Invented", f"{GROWING}-25-000001")
 
 
 def test_the_statement_format_decides_what_is_meaningful(built):
@@ -151,11 +163,11 @@ def test_roic_after_tax_on_its_own_rate_or_the_statutory_rate(built):
     # 100 x (1 - 20/80) over debt + equity - cash: 150 at the year's end, 100 at its beginning.
     assert got(rows, GROWING, "roic_average", 2025) == (Decimal("0.6"), None)
     assert got(rows, GROWING, "roic_beginning", 2025) == (Decimal("0.75"), None)
-    assert rows[(GROWING, "roic_beginning", 2025, 1)]["inputs"]["return"]["rate_source"] == "filed"
+    assert rows[(GROWING, "roic_beginning", 2025, 1)]["inputs"][("return", "tax_rate")]["basis"] == "filed"
     rate = next(Decimal(r["value"]) for r in line_items.published("corporate-tax-rates", "1")
                 if r["code"] == "US:2025") / 100
     assert got(rows, STATUTORY, "roic_beginning", 2025) == (round(1 - rate, 10), None)
-    assert rows[(STATUTORY, "roic_beginning", 2025, 1)]["inputs"]["return"]["rate_source"] == "statutory: US"
+    assert rows[(STATUTORY, "roic_beginning", 2025, 1)]["inputs"][("return", "tax_rate")]["basis"] == "statutory: US"
     assert got(rows, NO_PLACE, "roic_average", 2025) == (None, "no country of incorporation")
     assert got(rows, NO_RATE, "roic_average", 2025) == (None, "no statutory rate for the country and year")
 
@@ -185,6 +197,8 @@ def test_a_computed_input_in_two_currencies_says_so(built):
     assert got(rows, MIXED_PARTS, "fcf_margin", 2025) == (Decimal("0.2"), None)
     assert got(rows, MIXED_PARTS, "fcf_cagr", 2025, 1) == (None, "mixed currencies")  # the start year's
     assert got(rows, MIXED_PARTS, "roic_beginning", 2025) == (None, "mixed currencies")  # this year's capital
-    fcf = rows[(MIXED_PARTS, "fcf_margin", 2025, 1)]["inputs"]["fcf"]
-    assert (fcf["concept"], fcf["capex"]) == ("computed", {"value": "10.0000000000", "concept": "Invented",
-                                                           "accession_number": f"{MIXED_PARTS}-25-000001"})
+    read = rows[(MIXED_PARTS, "fcf_margin", 2025, 1)]["inputs"]
+    capex = read[("fcf", "capex")]
+    assert read[("fcf", "figure")]["concept"] == "computed"
+    assert (capex["value"], capex["concept"], capex["accession_number"]) == (
+        Decimal(10), "Invented", f"{MIXED_PARTS}-25-000001")

@@ -3,8 +3,10 @@
 The unit's input names the build (`input.keys.build`):
 
 - `line_items`: `company_line_item` from `company_fact` (`financials.line_items`);
+- `line_item_inputs`: `company_line_item_input`, the terms each figure was computed from, from the same query;
 - `measures`: `company_measure` from `company_line_item` (`financials.measures`),
   each company's statement format read from its Company master;
+- `measure_inputs`: `company_measure_input`, the figures each measure read, from the same query;
 - `links`: `relationship` from the records MDM stores (`mastering.links`).
 
 Each build rebuilds its whole table: both tables are snapshots, and the writer
@@ -23,8 +25,11 @@ import json
 from edgar_warehouse.workers.silver_land import engines
 
 CHECK = "silver.derived"
-BUILDS = {"line_items": "company_line_item", "measures": "company_measure"}  # build -> the table it writes
-SOURCES = {"line_items": "company_fact", "measures": "company_line_item"}  # build -> what it reads
+# build -> the table it writes; each build runs its query once and lands that one table
+BUILDS = {"line_items": "company_line_item", "line_item_inputs": "company_line_item_input",
+          "measures": "company_measure", "measure_inputs": "company_measure_input"}
+SOURCES = {"line_items": "company_fact", "line_item_inputs": "company_fact",  # build -> what it reads
+           "measures": "company_line_item", "measure_inputs": "company_line_item"}
 
 
 def _build(envelope: dict) -> str:
@@ -81,10 +86,11 @@ def execute(envelope: dict, artifacts) -> dict:
         if mdm is None:  # both tables link to the Company masters
             raise ValueError("silver.derive reads each company's master: source the loader file")
         sink = DatabaseSink(silver)
-        if build == "line_items":
-            line_items.build(silver, sink, MdmIds(mdm))
+        if build in ("line_items", "line_item_inputs"):
+            line_items.build(silver, sink, MdmIds(mdm), table=BUILDS[build])
         else:
-            measures.build(silver, sink, MdmIds(mdm), lambda keys: measures.from_company(mdm, keys))
+            measures.build(silver, sink, MdmIds(mdm), lambda keys: measures.from_company(mdm, keys),
+                           table=BUILDS[build])
         receipt = _receipt(silver, sink, build)
         _floor(silver, build, json.loads(receipt)["rows"])
         return artifacts.put_bytes(envelope["output"], receipt)

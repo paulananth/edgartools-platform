@@ -15,6 +15,30 @@ possible". The writer sends plain typed columns. Six silver columns, though, sto
 | `relationship` | `properties` | the dated details the source rule keeps with the period |
 | `relationship` | `evidence` | the assertion id of each stored record that states the link |
 
+## Findings (data-profiling and data-modeling, 2026-11-22 19:24 ET)
+
+Read from the builders and the rules, since no store holds these tables today (counts, no values):
+
+- `company_line_item.flags`: a row carries at most one wording flag (a map entry has one `flag` or one `kind`; a computed entry adds
+  "computed"; the revenue check adds one more). The map has 12 wording flags (two are one idea spelled amortisation and amortization),
+  3 industry kinds (bank, insurer, utility) and 1 quality flag. Eleven boolean columns could never be true together, so the straight
+  form is `computed` BOOLEAN, `basis` VARCHAR (the one wording), `industry_kind` VARCHAR, `revenue_quality_check` BOOLEAN. The
+  wording-to-match-type table the line-item map already holds (broad, narrow, close) stays the map's.
+- `company_line_item.inputs`: filled for 14 computed entries (at most 3 terms each) and for the cover-page figure (1 input, with its
+  date). A list, so a child table `company_line_item_input`: key (company_key, line_item, fiscal_year, position); columns concept,
+  line_item_ref (a term can be another line item, then no filing), accession_number, value DECIMAL(38,10), as_of DATE.
+- `company_measure.inputs`: a set of named inputs per measure (top and bottom, return and balance and prior balance, start and end,
+  operating cash flow and capex, and the tax rate with its source). Child table `company_measure_input`: key (company_key, measure,
+  fiscal_year, window_years, role); columns input_fiscal_year, value, concept, accession_number. The tax rate is a role whose value is
+  the rate and whose concept holds its source.
+- `relationship.evidence`: a list per link, repeated on each period row today. Child table `relationship_evidence`: key
+  (relationship_id, assertion_id), one row per link, no repeat.
+- `relationship.path`: a list per derived period. Child table `relationship_path`: key (relationship_id, valid_from, position).
+- `relationship.properties`: the names a source rule declares (7 today, text or boolean). Typed nullable columns named as the
+  source rule names them; one table-wide column set grows only with a rule.
+- Silver keeps no copy of a master field: none of these columns is one.
+- A column leaves a store by a new table, never by a drop (data-modeling, ticket 143): the writer adds columns and refuses a changed spec.
+
 ## Checklist
 
 - [ ] Decide, per column, its straight form: a child table keyed on the parent's key and an ordinal (a list of terms, inputs, links or

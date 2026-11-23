@@ -60,6 +60,9 @@ SILVER, RDM, CODE_SETS = "silver", "rdm", "code_sets"
 JOURNAL, JOURNAL_SCHEMA, JOURNAL_TABLE = "journal", "change_journal", "processed_files"
 TEXT = "STRING"  # the catalog shows what a value means, not a database type
 GOLD, SILVER_MARK = "Certification.Gold", "Certification.Silver"
+# The silver tables of a company's filed figures, its standard line items and its measures, each with its inputs.
+FUNDAMENTALS = ("company_fact", "company_line_item", "company_line_item_input", "company_measure",
+                "company_measure_input")
 # The kinds of an identity: the domain whose glossary holds the term, for a heading
 # that does not start with a domain's display name (ticket 158, ticket 159).
 KIND_HOME = {"Adviser": "company", "Audit Firm": "company", "Fund Company": "company",
@@ -808,7 +811,7 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
     present = {_table_name(table) for table in tables}
     for table in tables:
         name = _table_name(table)
-        if table["name"] in {"company_fact", "company_line_item", "company_measure"}:
+        if table["name"] in FUNDAMENTALS:
             membership[name].add("company")
     memberships = [{"table": name, "domains": sorted(domains_)} for name, domains_ in sorted(membership.items()) if name in present and domains_]
     certifications = []
@@ -839,7 +842,7 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
         prefix = fqn(SERVICE, MDM, MASTER_RECORDS, domain)
         return sorted(name for name, domains_ in membership.items()
                       if domain in domains_ and (name == prefix or f".{SOURCES}." in name) and name in present)
-    facts = sorted(name for name in membership if name.endswith(("company_fact", "company_line_item", "company_measure")) and "company" in membership[name])
+    facts = sorted(name for name in membership if name.endswith(FUNDAMENTALS) and "company" in membership[name])
     company_assets = subject_assets("company")
     security_assets = subject_assets("security")
     products = [

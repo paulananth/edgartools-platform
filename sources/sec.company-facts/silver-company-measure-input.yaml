@@ -1,0 +1,92 @@
+# The inputs of a measure (ticket 18): one row per input a measure read, so a reader joins them to
+# `company_measure` on its key and never unpacks a document. Built with the measures.
+table: company_measure_input
+definition: "One figure a measure read: a line item of a fiscal year, or a part a computed input was made from."
+grain: "one row per company, measure, fiscal year, window, input role and part"
+columns:
+- name: company_key
+  type: VARCHAR
+  nullable: false
+  definition: "The filer's CIK as ten digits, as on company_measure."
+  source: "company_measure.company_key"
+  sensitivity: none
+- name: measure
+  type: VARCHAR
+  nullable: false
+  definition: "The measure these figures feed."
+  source: "company_measure.measure"
+  sensitivity: none
+- name: fiscal_year
+  type: BIGINT
+  nullable: false
+  definition: "The fiscal year of that measure."
+  source: "company_measure.fiscal_year"
+  sensitivity: none
+- name: window_years
+  type: BIGINT
+  nullable: false
+  definition: "The window of that measure."
+  source: "company_measure.window_years"
+  sensitivity: none
+- name: role
+  type: VARCHAR
+  nullable: false
+  definition: "What the measure used the input as: the line item it names (revenue), or return, balance, prior_balance, start or end."
+  source: "measures.yaml"
+  sensitivity: none
+- name: part
+  type: VARCHAR
+  nullable: false
+  definition: "figure for the input's own figure; otherwise the part a computed input was made from (ocf, capex, total_debt, tax_rate, ...)."
+  source: "measures.yaml"
+  sensitivity: none
+- name: input_fiscal_year
+  type: BIGINT
+  nullable: false
+  definition: "The fiscal year the figure is of (a prior balance and a growth start are earlier years than the measure's)."
+  source: "company_line_item.fiscal_year"
+  sensitivity: none
+- name: value
+  type: DECIMAL(38,10)
+  nullable: false
+  definition: "The figure, exact; a tax rate is a share from 0 to 1."
+  source: "company_line_item.value"
+  sensitivity: none
+- name: concept
+  type: VARCHAR
+  nullable: true
+  definition: "The concept the line item was chosen from, or computed."
+  source: "company_line_item.concept"
+  sensitivity: none
+- name: accession_number
+  type: VARCHAR
+  nullable: true
+  definition: "The filing the figure was taken from."
+  source: "company_line_item.accession_number"
+  sensitivity: none
+- name: basis
+  type: VARCHAR
+  nullable: true
+  definition: "For a tax rate, where it came from: filed, or statutory: and the country."
+  source: "measures.yaml"
+  sensitivity: none
+key:
+- company_key
+- measure
+- fiscal_year
+- window_years
+- role
+- part
+links: []
+time:
+  as_of: input_fiscal_year
+  as_at: loaded_at
+  event_time: null
+partition:
+- company_key
+load_mode: snapshot
+why: >-
+  Rebuilt whole with company_measure, so a changed line item replaces a measure's inputs without
+  editing rows. A figure a measure read is a row, not a document (operator, 2026-11-22: "you should
+  not be using json just straignt data so easy access is possible"); an input that could not be
+  computed has no row, and its measure's null_reason says why.

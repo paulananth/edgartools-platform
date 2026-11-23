@@ -68,12 +68,6 @@ columns:
   definition: "The concept chosen by the line item's ordered list, or computed."
   source: "company_fact.concept"
   sensitivity: none
-- name: inputs
-  type: JSON
-  nullable: true
-  definition: "For a computed figure, each term's concept (or line item), accession number and value."
-  source: "company_fact"
-  sensitivity: none
 - name: accession_number
   type: VARCHAR
   nullable: true
@@ -86,11 +80,29 @@ columns:
   definition: "That filing's date."
   source: "company_fact.filed"
   sensitivity: none
-- name: flags
-  type: JSON
+- name: computed
+  type: BOOLEAN
   nullable: false
-  definition: "Words a reader must know: computed, includes NCI, continuing operations, cover-page date, kind: bank, revenue quality check, ..."
+  definition: "True when the figure is a sum or difference of its inputs (company_line_item_input), not one filed concept."
   source: "line-items.yaml"
+  sensitivity: none
+- name: basis
+  type: VARCHAR
+  nullable: true
+  definition: "The one wording a reader must know about what the figure includes or excludes (includes NCI, continuing operations, cover-page date, cash only, ...); empty for a plain figure."
+  source: "line-items.yaml"
+  sensitivity: none
+- name: industry_kind
+  type: VARCHAR
+  nullable: true
+  definition: "bank, insurer or utility, when the figure is an industry concept's; empty otherwise."
+  source: "line-items.yaml"
+  sensitivity: none
+- name: revenue_quality_check
+  type: BOOLEAN
+  nullable: false
+  definition: "True when another unflagged revenue total filed for the period is larger than the chosen revenue, for a steward to read."
+  source: "line-items.yaml larger_total_check"
   sensitivity: none
 - name: null_reason
   type: VARCHAR

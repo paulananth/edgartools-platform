@@ -313,7 +313,7 @@ def _steps(items: LineItems, source: str) -> tuple[list[tuple[str, str]], str]:
          CASE WHEN c.taxonomy = y.taxonomy THEN c.concept ELSE c.taxonomy || ':' || c.concept END,
          c.accession_number, c.filed, e.flags,
          jsonb_build_array(jsonb_build_object('concept', c.taxonomy || ':' || c.concept, 'accession_number', c.accession_number,
-                                              'value', c.value::text, 'date', c.period_end::text))
+                                              'filed', c.filed::text, 'value', c.value::text, 'date', c.period_end::text))
   FROM fiscal y JOIN entry e ON e.taxonomy = y.taxonomy AND e.as_of = 'report'
   JOIN report_copy c ON c.company_key = y.company_key AND c.fiscal_year = y.fiscal_year
              AND c.taxonomy = e.concept_taxonomy AND c.concept = e.concept AND c.kind = e.kind"""),
@@ -352,7 +352,7 @@ def _steps(items: LineItems, source: str) -> tuple[list[tuple[str, str]], str]:
          (array_agg(v.filed ORDER BY v.term) FILTER (WHERE v.accession_number IS NOT NULL))[1] AS filed,
          e.flags,
          jsonb_agg(jsonb_strip_nulls(jsonb_build_object('concept', v.concept, 'line_item', v.line_item_ref,
-             'accession_number', v.accession_number, 'value', v.value::text)) ORDER BY v.term)
+             'accession_number', v.accession_number, 'filed', v.filed::text, 'value', v.value::text)) ORDER BY v.term)
              FILTER (WHERE v.value IS NOT NULL) AS inputs
   FROM term_{stage} v JOIN computed_entry e
     ON e.line_item = v.line_item AND e.taxonomy = v.taxonomy AND e.position = v.position
@@ -388,16 +388,48 @@ LEFT JOIN larger g ON g.company_key = y.company_key AND g.fiscal_year = y.fiscal
 ORDER BY y.company_key, i.line_item, y.fiscal_year"""
 
 
-def build(silver_engine, sink, ids, items: LineItems | None = None) -> dict:
-    """Run the query on silver and land its rows in `company_line_item` through the writer."""
+TABLES = ("company_line_item", "company_line_item_input")
+
+
+def straight(rows: list[dict], checks: frozenset = frozenset({"revenue quality check"})) -> dict[str, list[dict]]:
+    """The query's rows as the silver tables hold them: each figure's flag words as columns, and each figure's
+    trace (a JSON list the query builds, never stored) as one row per input. `checks` is the data-quality
+    wording the map gives its larger-total check."""
+    figures, inputs = [], []
+    for row in rows:
+        figure = {k: v for k, v in row.items() if k not in ("flags", "inputs")}
+        basis, kind = [], None
+        for word in row["flags"]:
+            if word.startswith("kind: "):
+                kind = word[len("kind: "):]
+            elif word != "computed" and word not in checks:
+                basis.append(word)
+        if len(basis) > 1:
+            raise Blocked(f"{row['line_item']} carries more than one basis wording: {basis}")
+        figure |= {"computed": "computed" in row["flags"], "basis": basis[0] if basis else None, "industry_kind": kind,
+                   "revenue_quality_check": bool(checks & set(row["flags"]))}
+        figures.append(figure)
+        for position, term in enumerate(row["inputs"] or [], 1):
+            inputs.append({"company_key": row["company_key"], "line_item": row["line_item"],
+                           "fiscal_year": row["fiscal_year"], "position": position, "concept": term.get("concept"),
+                           "line_item_ref": term.get("line_item"), "accession_number": term.get("accession_number"),
+                           "filed": term.get("filed"),
+                           "value": term["value"], "as_of": term.get("date")})
+    return {"company_line_item": figures, "company_line_item_input": inputs}
+
+
+def build(silver_engine, sink, ids, items: LineItems | None = None, table: str = "company_line_item") -> dict:
+    """Run the query on silver and land one of its tables through the writer: the figures, or their inputs."""
     from sqlalchemy import text
 
     from edgar_warehouse.silver_writer.writer import land
 
+    if table not in TABLES:
+        raise Blocked(f"the line items build {TABLES}: {table!r}")
     items = items or load()
     with silver_engine.connect() as conn, conn.begin():
         *steps, final = statements(items)
         for step in steps:
             conn.execute(text(step))
         rows = [dict(r._mapping) for r in conn.execute(text(final))]
-    return land(sink, "company_line_item", rows, ids)
+    return land(sink, table, straight(rows, frozenset(items.larger_total_check.values()))[table], ids)

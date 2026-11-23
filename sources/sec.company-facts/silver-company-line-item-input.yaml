@@ -1,0 +1,84 @@
+# The inputs of a computed or cover-page line item (ticket 18): one row per term, so a reader joins
+# them to `company_line_item` on its key and never unpacks a document. Built with the line items.
+table: company_line_item_input
+definition: "One term a line item's figure was computed from, or the cover-page count it was read at its own date."
+grain: "one row per company, line item, fiscal year and input position"
+columns:
+- name: company_key
+  type: VARCHAR
+  nullable: false
+  definition: "The filer's CIK as ten digits, as on company_line_item."
+  source: "company_line_item.company_key"
+  sensitivity: none
+- name: line_item
+  type: VARCHAR
+  nullable: false
+  definition: "The line item whose figure this term feeds."
+  source: "company_line_item.line_item"
+  sensitivity: none
+- name: fiscal_year
+  type: BIGINT
+  nullable: false
+  definition: "The fiscal year of that figure."
+  source: "company_line_item.fiscal_year"
+  sensitivity: none
+- name: position
+  type: BIGINT
+  nullable: false
+  definition: "The term's place among the figure's inputs, from 1, in the order the line-items map lists them."
+  source: "line-items.yaml"
+  sensitivity: none
+- name: concept
+  type: VARCHAR
+  nullable: true
+  definition: "The reported concept the term read; empty when the term is another line item."
+  source: "company_fact.concept"
+  sensitivity: none
+- name: line_item_ref
+  type: VARCHAR
+  nullable: true
+  definition: "The line item the term read; empty when the term is a reported concept."
+  source: "line-items.yaml"
+  sensitivity: none
+- name: accession_number
+  type: VARCHAR
+  nullable: true
+  definition: "The filing the term was taken from; empty when the term is another line item."
+  source: "company_fact.accession_number"
+  sensitivity: none
+- name: filed
+  type: DATE
+  nullable: true
+  definition: "That filing's date; empty when the term is another line item."
+  source: "company_fact.filed"
+  sensitivity: none
+- name: value
+  type: DECIMAL(38,10)
+  nullable: false
+  definition: "The term's figure, exact."
+  source: "company_fact.value"
+  sensitivity: none
+- name: as_of
+  type: DATE
+  nullable: true
+  definition: "The date a cover-page count was read at; empty for a figure of the fiscal year's own period."
+  source: "company_fact.period_end"
+  sensitivity: none
+key:
+- company_key
+- line_item
+- fiscal_year
+- position
+links: []
+time:
+  as_of: as_of
+  as_at: filed
+  event_time: null
+partition:
+- company_key
+load_mode: snapshot
+why: >-
+  Rebuilt whole with company_line_item, so a new filing replaces a year's inputs without editing rows.
+  A list a figure was computed from is rows, not a document (operator, 2026-11-22: "you should not be
+  using json just straignt data so easy access is possible"). The values are the figure's own trace,
+  kept beside it; every filed copy stays in company_fact.
