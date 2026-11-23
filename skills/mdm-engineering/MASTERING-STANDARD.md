@@ -33,7 +33,7 @@ Two different ids, never confused:
   the data, so nothing about the data can change it. A merge keeps the survivor's id, and a merged-away id still answers with the
   survivor. It is the only id that crosses into silver and Gold.
 - **The source key** is the source's own key for one record (a CIK, an accession, an adviser number). The binding keeps it as a plain
-  column beside the source code, `record_key`, so a join needs no digest. The `subject` digest of source code and key is the engine's
+  column beside the source code, `source_key`, so a join needs no digest. The `subject` digest of source code and key is the engine's
   internal index, never a join key.
 
 Silver and Gold read the master by a join, never by a copy written onto the row: one view per master kind in the `mdm` schema gives the
