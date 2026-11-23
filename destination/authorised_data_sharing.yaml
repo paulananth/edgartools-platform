@@ -182,7 +182,12 @@ tables:
     alias row whose body names the record it now is (`canonical_id`, status alias).
   columns:
     entity_id: The golden record's MDM id.
-    changed_file: The mastering file that last changed the record, in the order files were merged.
+    changed_file: "The number of the merge that last changed the record; numbers are not in commit order, so read them on a quiet store."
+    kind: The golden record's kind (company, security, person, fund_structure, and the other kinds of the merge rules).
+    status: "The record's status, active or alias (alias when it was merged into another golden record)."
+    canonical_id: For an alias, the MDM id of the golden record it now is; empty otherwise.
+    policy_digest: The digest of the merge policy the record was built under.
+    kind_version: The version of the kind's rules the record was built under.
     body: The golden record as JSON, its kind, fields and identifiers, or an alias's canonical_id.
     created_at: When the row was first written.
 - layer: mdm
