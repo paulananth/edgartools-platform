@@ -57,15 +57,15 @@ by `silver.master_binding`; this ticket makes the table itself a statement insid
 
 - [ ] Time each phase of `silver links` on the hosted store (calculate, relationship, evidence, path, binding), as the skill asks, so the
   figure that remains after the binding moves is known and the relationship tables are changed only if they matter
-- [ ] Tests first, each failing on today's code (PostgreSQL adapter tests, invented records):
+- [x] Tests first (`tests/storage_adapters/test_master_binding_in_database.py`, 6 tests; each failed first with `AttributeError: no attribute 'bind'`, and the unchanged-rerun test and the gone-record test also fail when the `where … is distinct from` comparison is removed; 6 pass, and the mastering, context and binding adapter tests pass on PostgreSQL and MySQL) 2026-11-23 15:03 ET. Invented records:
   - the in-database build gives exactly the rows `Store.bindings()` gives today (equality, then change the build once to see it fail);
   - the client reads no binding row: no `select` over `mastering_record` runs in Python, and the writer receives no `master_binding` rows;
   - an unchanged rerun writes no row (updated and inserted counts both zero);
   - a record whose master merged into a survivor is bound to the survivor, and a record no longer in MDM loses its binding;
   - two records with one source key leave one row;
   - the finish login without `select` on `mdm` is refused with a message naming the missing grant
-- [ ] Build it in `mastering/links.py` with one Store method per dialect (`build_bindings`); the PostgreSQL one is the two statements above
-- [ ] `init` / hardening grants for the finish login, with `test_harden_hosted_roles.py` holding them
+- [x] Built: `links.bind(silver)` in `mastering/links.py` (PostgreSQL: the two statements, inside one transaction under the table's lock, an empty result refused as an empty snapshot is, a missing grant named); `links.build` calls it on PostgreSQL and keeps the writer for MySQL 2026-11-23 15:03 ET
+- [x] Grants: none to add. The finish login already reads `mdm` (it merges there) and inserts, updates and deletes `silver.master_binding` (the writer does); the hosted run below used it unchanged, and a test names the grants when `select` on `mdm.mastering_record` is revoked 2026-11-23 15:03 ET
 - [ ] Prove on the hosted store: `silver links` timed before (about 28 minutes on 2026-11-23) and after; the finish under five minutes
   without lookups, and the same row count and the same rows as the table the old build wrote (a count and a checksum of
   `(source_code, source_key, kind, master_id)`, no value printed)

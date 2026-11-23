@@ -69,13 +69,14 @@ disposable store is the next check to add.
   way as every wait: sample `pg_stat_activity` and `pg_locks` (wait event and lock type) as the diagnostic login, and say each wait's share.
 
 ## The finish takes at most five minutes
-`--finish` builds the links tables and `master_binding` once, each whole from the stored records; no silver row is written with a master
-id, so nothing is refreshed. A finish that takes minutes more than five is the measure of the slowest phase still left (time each phase,
+`--finish` builds the links tables and `master_binding` from the stored records; `master_binding` is two statements inside the data database
+(an upsert that writes only a changed row, and a delete), so no binding row reaches the client; no silver row is written with a master id. A finish that takes minutes more than five is the measure of the slowest phase still left (time each phase,
 below), never a reason to skip it: Gold and the links read what it writes. It is bounded by the operator at five minutes, and a longer
 one is a defect, not a wait. Time each part of a slow finish by phase
 before changing it, and run the cheap check that can fail first. For a step that is one native call, sample the running process
 (`sample <pid> 30`) before reading its code: the links build spent 265 s in a pairwise comparison of every link with every later link,
-which no phase timing could name.
+which no phase timing could name. A phase that moves a table between two schemas of one database through the client is the same defect: the binding
+rebuild read 4.4 million rows into Python and wrote them back (18 of the finish's 30 minutes) until it became one statement.
 
 ## Stopping loads
 - Stop the scheduler first (it would start the next step), then its step processes. The state file keeps every done step.
