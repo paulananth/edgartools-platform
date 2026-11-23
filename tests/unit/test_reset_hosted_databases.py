@@ -155,10 +155,15 @@ def test_reset_journey_reports_and_force_drops_only_idle_extension_workers(monke
     approvals = [reset.json.loads(line) for line in (tmp_path / "reinit-approvals.log").read_text().splitlines()]
     assert approvals[-1]["sessions_to_disconnect"] == {"data": 2}
 
-    # An ordinary transaction remains a hard stop before any database drop or new approval record.
-    sessions.append(active_client)
     before = len(approvals)
-    assert reset.main() == 3
-    assert engines[-1].connection.statements == []
-    assert len((tmp_path / "reinit-approvals.log").read_text().splitlines()) == before
+    blockers = [
+        active_client,
+        ("control", "pg base extension worker", None, object()),
+        ("control", "pg base extension worker", "active", None),
+    ]
+    for blocker in blockers:
+        sessions[:] = idle_extension_workers + [blocker]
+        assert reset.main() == 3
+        assert engines[-1].connection.statements == []
+        assert len((tmp_path / "reinit-approvals.log").read_text().splitlines()) == before
     assert engines[-1].disposed
