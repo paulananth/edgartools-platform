@@ -25,6 +25,25 @@ new one, then choose each field's value (survivorship). A human steward handles 
 source record (a record-origin table); a business identifier is an ordinary attribute found by match rules. Ours holds
 every identifier the record states and looks golden records up by them, closer to a lookup index. Say so when comparing.
 
+## The master id, the source key and the join
+
+Two different ids, never confused:
+
+- **The master id** names the golden record. Mastering mints it (a UUID) when no existing golden record matches; it is never a digest of
+  the data, so nothing about the data can change it. A merge keeps the survivor's id, and a merged-away id still answers with the
+  survivor. It is the only id that crosses into silver and Gold.
+- **The source key** is the source's own key for one record. The binding keeps it as a plain
+  column beside the source code, `source_key`, so a join needs no digest. The `subject` digest of source code and key is the engine's
+  internal index, never a join key.
+
+Silver and Gold read the master by a join, never by a copy written onto the row: one view per master kind in the `mdm` schema gives the
+kind's master id with the source code and source key (and the kind's identifiers), and a silver row joins it on its own source key.
+No id is stored twice, so a merge never leaves a stale id behind and no load step fills one in.
+
+Our model is both industry styles in one place: the golden record (the operational style's result) and the Cross-reference (the analytical
+style's linked view). It is read-only toward the sources: masters flow forward to silver and Gold, never back to a source application.
+Matching is by rule, identifier first, never by a score threshold.
+
 ## Matching order
 
 Exact matching on a trusted identifier first; fuzzy or probabilistic matching for what remains. In the practice read, a
