@@ -63,7 +63,10 @@ see go wrong; if nothing, write no test.
    property (`x` is not empty, each item has its field), or the one item the rule is about. A closed external
    code set (309 place codes) may keep its count.
 4. **A mock matches the real interface.** Patch a function with `tests.support.patching.checked(monkeypatch, owner, "name", replacement)`
-   (never a bare `lambda *a`), or subclass the real class or protocol, so a changed signature fails the test. A hand-written fake of an outside service
+   (never a bare `lambda *a`), or subclass the real class or protocol, so a changed signature fails the test.
+   `checked` holds the arguments to the real function's, not the result: a replacement returns what the real function returns
+   (one value, not a tuple the caller once took), and at least one test calls the real function unpatched. A fake that kept an
+   old return shape kept CI green while the code that unpacked it failed on the first live load. A hand-written fake of an outside service
    (OpenMetadata, Docker) names the version it was probed against and has one contract test against the
    real service or a recorded response.
 5. **Not tied to call order.** Assert the outcome (rows, state, refusal), not the exact sequence of internal
