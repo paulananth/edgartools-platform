@@ -35,6 +35,12 @@ disposable store is the next check to add.
 ## While a load runs
 - **One scheduler per run label.** A second `load_chain.py --auto` on the same label doubles every step. Look for a running
   scheduler (`ps`) before starting one, and stop the scheduler before its steps.
+- **A run label names the state and logs, never an input.** A new `RUN` gives a fresh state file and loads the same
+  records: the capture runs are the chain file's `capture_label` and a fact is written as its value. Changing either is a
+  new input of every record it reaches: the Change Journal processes those files again and the Stage refuses them under
+  the same revision, so it needs `--revision` above the last load's.
+- **Plan one step with `--plan --only <step>`** (or `--lane`): it prints the documents, the bundles, and the open runs a load
+  would finish first and those it would leave. A plan of every step takes minutes.
 - **Read the database with the database-monitoring skill**: `summary` and `locks` every check,
   `logs` after any step that stops with a database error.
 - **Resizing a step is a decision with a price, never a reflex.** The scheduler resizes a running step by stopping it and starting it

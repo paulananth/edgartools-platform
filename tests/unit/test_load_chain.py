@@ -51,12 +51,24 @@ def test_a_later_delivery_of_one_source_carries_the_next_revision():
 
 def test_the_arguments_follow_the_step():
     step = {"name": "x", "source": "s", "target": "t", "capture": "a/b", "workers": 2, "bundles": 3, "minutes": 5,
-            "revision": 1, "facts": {"run": "{run}-x"}}
+            "revision": 1, "capture_run": "label-x", "facts": {"run": "label-x"}}
     args = chain.arguments(step)
     assert args[:4] == ["--source", "s", "--target", "t"]
-    assert args[args.index("--capture-run") + 1] == f"{chain.RUN}-x"
+    assert args[args.index("--capture-run") + 1] == "label-x"
     assert args[args.index("--revision") + 1] == "1"
-    assert args[args.index("--fact") + 1] == f"run={chain.RUN}-x"
+    assert args[args.index("--fact") + 1] == "run=label-x"
+
+
+def test_the_run_label_is_no_input_of_a_load(monkeypatch):
+    """A fact is part of what a file is processed under: a run label in one made a rerun under another label process
+    every company document again, and the Stage refused the changed records under the same revision."""
+    monkeypatch.setattr(chain, "RUN", "one-label")
+    first = [chain.arguments(step) for step in chain.chain_steps()]
+    monkeypatch.setattr(chain, "RUN", "another-label")
+    assert [chain.arguments(step) for step in chain.chain_steps()] == first
+    company = BY_NAME["company"]
+    assert company["capture_run"] == "fresh-v1-company"  # the label the store's records were loaded under
+    assert company["facts"]["capture_run"] == "fresh-v1-company" and company["facts"]["catalog_run"] == "fresh-v1-catalog"
 
 
 def test_an_env_file_is_read_as_data(tmp_path):
@@ -181,7 +193,7 @@ def test_every_wait_is_explained_by_what_the_rules_declare():
 
 def test_a_step_takes_the_chains_defaults_for_what_it_does_not_say(tmp_path):
     path = tmp_path / "chain.yaml"
-    path.write_text(yaml.safe_dump({"defaults": {"workers": 2, "bundles": 1}, "steps": [
+    path.write_text(yaml.safe_dump({"defaults": {"workers": 2, "bundles": 1}, "capture_label": "l", "steps": [
         {"name": "plain", "minutes": 60}, {"name": "sized", "minutes": 60, "workers": 8}]}))
 
     assert [(s["name"], s["workers"], s["bundles"]) for s in chain.chain_steps(path)] == [("plain", 2, 1), ("sized", 8, 1)]
@@ -866,7 +878,14 @@ def test_a_retry_is_pointless_only_when_the_same_error_comes_back_with_nothing_m
     error = "ValueError: Step sec_tickers: no document of the bundle matches '*company_tickers_exchange*'"
     assert chain.retry_is_pointless(error, error)
     assert chain.retry_is_pointless("Blocked: silver.t: refused (SQLSTATE 42501)", "Blocked: silver.t: refused (SQLSTATE 42501)")
-    assert not chain.retry_is_pointless("", error)  # a first failure is always retried
+    assert not chain.retry_is_pointless("", error)  # a first failure is retried, unless it names a cause that never clears
+    stopped = "Load stopped: 146 of 150 did not finish: bundle 1: rules run --source failed with status 1"
+    refused = "Traceback ...\nValueError: Source native revision has contradictory publications: a record of this revision"
+    assert chain.retry_is_pointless("", stopped, refused)  # the same inputs give the same refusal: a retry only adds runs
+    assert not chain.retry_is_pointless("", stopped, "OperationalError: server closed the connection unexpectedly")
+    kept = "$ rules run\nTraceback\n  File x\n" + "ValueError: Source native revision has contradictory publications\n" * 3
+    assert chain.cause_of(kept) == "3 times: ValueError: Source native revision has contradictory publications"
+    assert chain.cause_of("nothing raised here") == ""
     assert not chain.retry_is_pointless(error, "ValueError: another failure")
     late = "Load stopped: 2 of 149 did not finish: bundle 42 did not finish before the deadline"
     assert not chain.retry_is_pointless(late, late)  # the window ran out; the next attempt resumes where it stopped
@@ -975,7 +994,7 @@ def test_a_worker_memory_that_is_not_a_positive_finite_number_is_refused_and_the
     assert chain.workers_range(vcpu=8, memory_gb=4.0, worker_gb=0.4) == (1, 10)  # 4.0 // 0.4 is 9.0 in floating point
     for bad in (0, -1, float("inf"), float("nan"), 1e9):
         path = tmp_path / "chain.yaml"
-        path.write_text(yaml.safe_dump({"defaults": {"workers": 2, "bundles": 1}, "steps": [
+        path.write_text(yaml.safe_dump({"defaults": {"workers": 2, "bundles": 1}, "capture_label": "l", "steps": [
             {"name": "x", "minutes": 60, "worker_gb": bad}]}))
         with pytest.raises(ValueError, match="worker_gb"):
             chain.chain_steps(path)
@@ -1463,3 +1482,28 @@ def test_every_verdict_comes_with_five_whys_and_the_fifth_names_a_cause_or_what_
 def test_a_loads_database_sessions_carry_the_step_name_as_their_application_name(monkeypatch):
     monkeypatch.delenv("PGAPPNAME", raising=False)
     assert chain.application_name("gleif") == "chain-gleif"
+
+
+def test_a_plan_of_one_step_or_lane_plans_only_it(monkeypatch, tmp_path):
+    """A plan of every step took over five minutes to answer for one."""
+    from tests.support.patching import checked
+
+    (tmp_path / "worker.env").write_text("")
+    monkeypatch.setattr(chain, "STORES", tmp_path)
+    monkeypatch.setattr(chain, "LOGS", tmp_path)
+    checked(monkeypatch, chain.subprocess, "Popen", lambda *a, **k: None)  # the wake lock
+    planned = []
+    checked(monkeypatch, chain, "plan", lambda step, env: planned.append(step["name"]) or "")
+    monkeypatch.setattr(sys, "argv", ["load_chain.py", "--plan", "--only", "company"])
+    assert chain.main() == 0 and planned == ["company"]
+    planned.clear()
+    monkeypatch.setattr(sys, "argv", ["load_chain.py", "--plan", "--lane", "A"])
+    assert chain.main() == 0 and planned == [s["name"] for s in STEPS if s["lane"] == "A"]
+
+
+def test_a_plan_names_the_open_runs_a_load_would_finish_and_those_it_would_leave(monkeypatch):
+    from tests.support.patching import checked
+
+    body = '{"documents": 7, "bundles": 2, "blocked": null, "finishable_runs": ["a", "b"], "left_as_they_are": {"c": "why"}}'
+    checked(monkeypatch, chain.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": body, "stderr": ""})())
+    assert chain.plan(BY_NAME["company"], {}) == "documents 7 bundles 2 blocked None open runs: 2 to finish first, 1 left"

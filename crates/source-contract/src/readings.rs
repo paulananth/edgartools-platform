@@ -192,7 +192,10 @@ pub fn prepare_current_records(
                 .get(&version)
                 .is_some_and(|id| id != &reading.assertion_id)
             {
-                return Err("Source native revision has contradictory publications".into());
+                return Err("Source native revision has contradictory publications: a record of this revision was \
+                     published before with other content, so an input changed (a rule, a run fact or a run file). Load \
+                     it with the inputs it was loaded with, or pass --revision above the last load's"
+                    .into());
             }
             seen.insert(version, reading.assertion_id.clone());
             let mut metadata = BTreeMap::new();
@@ -339,5 +342,15 @@ mod tests {
         let raw = r#"[{"assertion_id":"a","subject":"record","source_code":"example","record_key":"r","publication_key":"p","revision":1,"effective_at":null,"kind":"security","fields":{},"identifiers":{"isin":"LEFT"},"cross_references":{"share_class_figi":"BBG000000001"},"profiles":[],"relationships":[]}]"#;
         let output = prepare_current_records(raw, "2026-10-24T00:00:00+00:00", &[]).unwrap();
         assert!(output.contains(r#""share_class_figi":"BBG000000001""#));
+    }
+
+    #[test]
+    fn a_contradictory_publication_names_its_cause_and_both_remedies() {
+        let one = r#"{"assertion_id":"ID","subject":"record","source_code":"example","record_key":"r","publication_key":"p","revision":1,"effective_at":null,"kind":"record","fields":{},"identifiers":{},"profiles":[],"relationships":[]}"#;
+        let raw = format!("[{},{}]", one.replace("ID", "a"), one.replace("ID", "b"));
+        let refused = prepare_current_records(&raw, "2026-11-23T00:00:00+00:00", &[]).unwrap_err().to_string();
+        assert!(refused.starts_with("Source native revision has contradictory publications"));
+        assert!(refused.contains("an input changed"));
+        assert!(refused.contains("--revision"));
     }
 }

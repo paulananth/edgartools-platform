@@ -43,7 +43,7 @@ Read the verdict, not the word "running":
 - **progressing**: its processes worked, its log moved in the last ten minutes, or one of its own database sessions (tagged `chain-<step>`) is active or
   changed state lately; a neighbour's writes never count. There is no "unclear": a step that is not progressing is stalled, with five whys;
 - a step that **stopped**: read its own errors file (`chain-<RUN>-<step>.log.attempt-<n>.errors`), not the shared error log;
-  an unchanged failure stops the step at once, since a retry cannot change it;
+  an unchanged failure, or a refusal the same inputs always give (contradictory publications), stops the step at once, naming its cause;
 - **no sign of work** (stalled, with its five whys printed): no CPU, no session of its own working and a silent log: read its log and the stores folder's `load-errors.log` (and `.1`, rotated at 10 MiB)
   before saying anything else, since it may be stalled;
 - **waiting on database locks** (three or more sessions): the contention ladder of the daily-run runbook;

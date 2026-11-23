@@ -19,7 +19,8 @@
 Each step is the same resumable `load` command, run again until it finishes (a stopped attempt names why in its log and
 the next carries on from where it stopped). The chain stops at the first step that does not finish in its attempts.
 STORES (default ~/.config/edgartools/hosted) is the stores folder, whose worker.env holds the logins; CAPTURES, PROVING
-and LOGS name the captured files and the logs; RUN labels the capture runs. The machine stays awake for the whole chain
+and LOGS name the captured files and the logs; RUN names the chain's state and log files, never a load's inputs (the
+capture runs are the chain file's `capture_label`). The machine stays awake for the whole chain
 (a sleep once dropped a hosted connection and lost 74 minutes). Run it from the checkout whose code should load.
 """
 import argparse
@@ -77,7 +78,8 @@ def worker_env() -> dict:
 def chain_steps(path: Path = ROOT / "rules/load-chain.yaml") -> list[dict]:
     """The chain's steps, each with the chain's `defaults` for what it does not say itself."""
     chain = yaml.safe_load(path.read_text())
-    steps = [{**(chain.get("defaults") or {}), **step} for step in chain["steps"]]
+    steps = [{**(chain.get("defaults") or {}), "capture_run": f"{chain['capture_label']}-{step['name']}", **step}
+             for step in chain["steps"]]
     for step in steps:
         priority = step.get("priority", 3)
         if type(priority) is not int or priority not in (1, 2, 3):  # `true` and `2.0` are not tiers
@@ -886,13 +888,13 @@ def status_inputs() -> tuple[Path, str | None, str]:
 def arguments(step: dict) -> list[str]:
     capture = ROOTS[step.get("capture_root", "captures")] / step["capture"]
     args = ["--source", step["source"], "--target", step["target"], "--capture", str(capture),
-            "--capture-run", f"{RUN}-{step['name']}", "--stores", str(STORES),
+            "--capture-run", step["capture_run"], "--stores", str(STORES),
             "--workers", str(step["workers"]), "--bundles", str(step["bundles"]), "--minutes", str(step["minutes"]),
             "--no-links"]  # the links table is built once, in `finish`
     if "revision" in step:
         args += ["--revision", str(step["revision"])]
     for name, value in (step.get("facts") or {}).items():
-        args += ["--fact", f"{name}={value.format(run=RUN)}"]
+        args += ["--fact", f"{name}={value}"]
     return args
 
 
@@ -913,7 +915,9 @@ def plan(step: dict, env: dict) -> str:
     found = re.search(r"\{.*\}", done.stdout, re.S)
     try:
         body = json.loads(found.group(0))
-        return f"documents {body.get('documents')} bundles {body.get('bundles')} blocked {body.get('blocked')}"
+        return (f"documents {body.get('documents')} bundles {body.get('bundles')} blocked {body.get('blocked')} "
+                f"open runs: {len(body.get('finishable_runs') or [])} to finish first, "
+                f"{len(body.get('left_as_they_are') or {})} left")
     except (AttributeError, ValueError):
         return "no plan: " + (done.stderr.strip().splitlines() or ["?"])[-1][:140]
 
@@ -1035,10 +1039,26 @@ CLEARS_ITSELF = re.compile(r"deadline|deadlock|lock timeout|lock not available|c
                            r"connection (?:timed out|refused|reset|closed)|server closed the connection|timed out", re.I)
 
 
-def retry_is_pointless(previous: str, current: str) -> bool:
+NEVER_CLEARS = re.compile(r"contradictory publications")
+
+
+def cause_of(errors: str) -> str:
+    """The error the attempt's kept errors end in most often, with how many times: one line where the log has hundreds."""
+    raised = Counter(redact(line.strip())[:300] for line in errors.splitlines()
+                     if re.match(r"\w+(?:Error|Exception|Conflict|Blocked|Stopped)\b", line))
+    if not raised:
+        return ""
+    line, count = raised.most_common(1)[0]
+    return f"{count} time{'s' if count != 1 else ''}: {line}"
+
+
+def retry_is_pointless(previous: str, current: str, errors: str = "") -> bool:
     """A failure that comes back exactly as it was, with nothing moved (its bundle and counts are the same), is not one
     a retry can change. A window that ran out, a lock or deadlock, and a lost connection are not that: they clear when
-    the other load ends or the connection returns, and the next attempt resumes where this one stopped."""
+    the other load ends or the connection returns, and the next attempt resumes where this one stopped. A refusal the
+    same inputs always give (`errors`, the attempt's kept errors) stops at the first attempt: a retry only adds runs."""
+    if NEVER_CLEARS.search(current) or NEVER_CLEARS.search(errors):
+        return True
     return bool(previous) and previous == current and not CLEARS_ITSELF.search(current)
 
 
@@ -1291,8 +1311,8 @@ def attempt_loop(step: dict, env: dict, state: Path) -> bool:
         if kept:
             log.with_name(log.name + f".attempt-{attempt}.errors").write_text(kept)
         current = why[-1] if why else ""
-        if retry_is_pointless(previous, current):
-            note(f"{name} stopped: the same failure came back, so a retry cannot change it (its errors: "
+        if retry_is_pointless(previous, current, kept):
+            note(f"{name} stopped: a retry cannot change this failure; {cause_of(kept) or current[:200]} (its errors: "
                  f"{log.name}.attempt-{attempt}.errors)", state)
             return False
         previous = current
@@ -1399,6 +1419,8 @@ def main() -> int:
             print(f"{state.name} adopted as this store's, on your word", flush=True)
     if args.plan:
         for step in steps:
+            if (args.only and step["name"] != args.only) or (args.lane and step["lane"] != args.lane):
+                continue
             print(f"{step['name']:30} {plan(step, env)}", flush=True)
         return 0
     if args.catalog_status:
