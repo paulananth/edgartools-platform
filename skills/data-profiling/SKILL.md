@@ -247,7 +247,7 @@ uv run --with duckdb --with pyyaml python profile_data.py --help
 | sensitivity | none, personal, sensitive personal, each with its signals: words in the column's name, detectors on its values, a vote over its values (a column named for people whose values are mostly people's names), and whether the part describes people (then its address counts too); samples masked, and free-text samples too, since a sentence can name anyone | `sensitivity`, `sensitivity_signals` |
 | quality | Every data quality rule each part needs on every load, with the rows that fail it: a defect when above 0, a rule the clean data passes at 0 (a key column filled, an identifier's one shape or check digit, a link that resolves, a code list); masked examples; each invalid hierarchy row marked with an evidence-backed fix or "needs steward" | `quality`, `invalid_rows.jsonl` |
 | code sets | The RDM code sets the data set needs: each existing or proposed set, the columns that use it, how many codes | `code_sets` |
-| suggest-store, silver | Advice: MDM, RDM, MDM relationships, silver, bookkeeping; a silver table spec per part under "Silver fields" (a master's rows also carry their own MDM id) | `store_suggestion`, `silver` |
+| suggest-store, silver | Advice: MDM, RDM, MDM relationships, silver, bookkeeping; a silver table spec per part under "Silver fields" (a master's rows link to their own master) | `store_suggestion`, `silver` |
 | catalog | From approved findings, the public summary the Data Catalog shows: every part's silver fields and quality rules, and the code sets; names and counts only. It declares every part as a silver table, landed or not, and two parts may name one table, which the catalog's profile check refuses; so data-onboarding writes it when a part lands in silver (its **plan-parts** step) | `sources/<source>/profile.yaml` |
 | report | `REPORT.md` and `findings.yaml` | files |
 | approve | Records the operator's approval in their exact words | `approval` |
@@ -435,7 +435,8 @@ that matter most:
   keep it with the approved findings.
 - **silver:** the table spec for every part, under "Silver fields". Its links
   point to master parts only, each with an empty `kind` and `source_code` that
-  data-onboarding fills; a master part's rows link to themselves (`mdm_id`).
+  data-onboarding fills; a master part's rows link to themselves by their key,
+  and silver finds each master by a join on `master_binding`.
   Creating the table from that spec is data-onboarding, on PostgreSQL, MySQL, or SQL
   Server Express. This skill does not create the table.
 - **code_sets:** the RDM code sets the data needs, one per existing or
