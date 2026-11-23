@@ -55,8 +55,11 @@ def public_objects(env, database: str) -> int | None:
         url = instance_url(env, database).set(drivername="postgresql").render_as_string(hide_password=False)
         with psycopg2.connect(url, connect_timeout=10) as conn, conn.cursor() as cur:
             cur.execute("select (select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' "
-                        "and c.relkind in ('r', 'p', 'v', 'm', 'S', 'f')) + (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace "
-                        "where n.nspname = 'public' and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e'))")
+                        "and c.relkind in ('r', 'p', 'v', 'm', 'S', 'f') "
+                        "and not exists (select 1 from pg_depend d where d.classid = 'pg_class'::regclass and d.objid = c.oid "
+                        "and d.refclassid = 'pg_extension'::regclass and d.deptype = 'e')) + (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace "
+                        "where n.nspname = 'public' and not exists (select 1 from pg_depend d where d.classid = 'pg_proc'::regclass "
+                        "and d.objid = p.oid and d.refclassid = 'pg_extension'::regclass and d.deptype = 'e'))")
             return cur.fetchone()[0]
     except psycopg2.Error:
         return None
