@@ -28,18 +28,19 @@ SNAPSHOT = {
               {"name": "c1", "lane": "C", "state": "failed", "waits_for": []}],
     "running": [{"name": 'b"1', "lane": "B", "attempt": 2, "workers": 2, "elapsed": 14.0, "bound": 300, "log_age": 3.0,
                  "cpu": 40.0, "memory_mb": 210.0, "store": "mdm", "rows_per_min": 900.0,
-                 "why": ["a", "b", "c", "d", 'the store reads the table from disk ("cache misses")']}]}
+                 "kind": "stalled", "why": ["a", "b", "c", "d", 'the store reads the table from disk ("cache misses")']}]}
 
 
 def test_every_state_has_one_code_and_one_colour():
     names, codes, colours = zip(*[(n, c, k) for n, c, k, _ in design.STATES])
     assert len(set(names)) == len(set(codes)) == len(set(colours)) == 6
-    assert sorted(codes) == list(range(6)) and "unclear" not in names  # a step is working or it is not
+    # Prometheus keeps the codes it stored: dropping `unclear` leaves code 2 unused, and no other state is renumbered (history would repaint)
+    assert sorted(codes) == [0, 1, 3, 4, 5, 6] and "unclear" not in names
 
 
 def test_the_exporter_writes_a_code_per_step_and_a_count_per_state_zeros_included():
     text = exporter.render(SNAPSHOT)
-    assert 'load_step_state{lane="A",step="a1"} 4' in text and 'load_step_state{lane="C",step="c1"} 5' in text
+    assert 'load_step_state{lane="A",step="a1"} 5' in text and 'load_step_state{lane="C",step="c1"} 6' in text
     for state in design.CODE:
         assert f'load_steps{{state="{state}"}}' in text
     assert 'load_steps{state="stalled"} 0' in text and "load_machine_load_per_core 0.5" in text
@@ -101,3 +102,14 @@ def test_a_running_step_publishes_the_cause_its_five_whys_end_on_and_the_table_s
     running = dashboard.running_table()
     assert any("load_step_cause" in t["expr"] for t in running["targets"])
     assert "Why" in str(running["transformations"])
+
+
+def test_a_step_that_is_not_progressing_publishes_all_five_whys_and_a_panel_lists_them():
+    text = exporter.render(SNAPSHOT)
+    for number, words in enumerate(["a", "b", "c", "d"], 1):
+        assert f'load_step_why{{lane="B",step="b\\"1",number="{number}",why="{words}"}} 1' in text
+    healthy = {**SNAPSHOT, "running": [{**SNAPSHOT["running"][0], "kind": "progressing"}]}
+    assert "load_step_why" not in exporter.render(healthy)  # a step that works has no whys to show
+    panel = dashboard.whys_table()
+    assert any("load_step_why" in t["expr"] for t in panel["targets"]) and "Because" in str(panel["transformations"])
+    assert panel in dashboard.build()["panels"] and panel["description"]

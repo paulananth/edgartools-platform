@@ -59,6 +59,8 @@ def render(snapshot: dict, age: float = 0.0) -> str:
                   sample("load_step_memory_mb", row["memory_mb"], **who),
                   sample("load_step_rows_per_minute", row["rows_per_min"], store=row["store"], **who),
                   sample("load_step_cause", 1, **who, cause=row["why"][-1])]  # the last of the five whys, a sentence of counts and names
+        if row.get("kind") != "progressing":  # a step that is stalled or locked shows the whole chain; one that works has none
+            lines += [sample("load_step_why", 1, **who, number=str(number), why=words) for number, words in enumerate(row["why"], 1)]
     lines += [sample("load_store_rows_per_minute", rate, store=store) for store, rate in snapshot["writes"].items()]
     lines.append(sample("load_lock_waiters", snapshot["lock_waiters"]))
     for database, counts_ in snapshot["sessions"].items():
