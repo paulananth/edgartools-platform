@@ -1,6 +1,6 @@
 # 21: `master_binding` is built inside the database, and only what changed is written
 
-Status: open
+Status: resolved
 Type: task
 
 Operator, 2026-11-23, after the hosted `--finish` ran over its five-minute bound: "Is it over processed", then "open the ticket for the
@@ -55,8 +55,20 @@ by `silver.master_binding`; this ticket makes the table itself a statement insid
 
 ## Parts
 
-- [ ] Time each phase of `silver links` on the hosted store (calculate, relationship, evidence, path, binding), as the skill asks, so the
-  figure that remains after the binding moves is known and the relationship tables are changed only if they matter
+- [x] Timed each phase of `silver links` on the hosted store (three runs, seconds; `Store.rows` is every database read the links make):
+
+  | Phase | Before (the finish, 2026-11-23) | After binding in the database | After one statement per landing batch |
+  |---|---|---|---|
+  | `calculate`: read `linked_records` | 75 | 76 | 70 |
+  | `calculate`: `store.bound` | 138 | 138 | 137 |
+  | `calculate`: `store.master_states` | 100 | 100 | 100 |
+  | `calculate`: `current_claims`, `project` | 77 | 61 | 62 |
+  | `calculate` total | 375 | 402 | 376 |
+  | Landing the three relationship tables | 189 | 150 | 90 |
+  | `master_binding` | about 1,080 (18 min, through the client) | 99 | 105 |
+  | `silver links` | 1,776 (29.6 min) | 661 | 581 (9.7 min) |
+
+  `calculate` is 65% of what remains and 71% of it is database reads (`bound` and `master_states` are 2,000-id `IN` lookups at 300 to 630 ms each: disk reads on the hosted store, not network). The binding run twice at 52 s and 99 to 105 s, the second time with the mirror replicating 2026-11-23 16:15 ET
 - [x] Tests first (`tests/storage_adapters/test_master_binding_in_database.py`, 6 tests; each failed first with `AttributeError: no attribute 'bind'`, and the unchanged-rerun test and the gone-record test also fail when the `where … is distinct from` comparison is removed; 6 pass, and the mastering, context and binding adapter tests pass on PostgreSQL and MySQL) 2026-11-23 15:03 ET. Invented records:
   - the in-database build gives exactly the rows `Store.bindings()` gives today (equality, then change the build once to see it fail);
   - the client reads no binding row: no `select` over `mastering_record` runs in Python, and the writer receives no `master_binding` rows;
@@ -66,9 +78,7 @@ by `silver.master_binding`; this ticket makes the table itself a statement insid
   - the finish login without `select` on `mdm` is refused with a message naming the missing grant
 - [x] Built: `links.bind(silver)` in `mastering/links.py` (PostgreSQL: the two statements, inside one transaction under the table's lock, an empty result refused as an empty snapshot is, a missing grant named); `links.build` calls it on PostgreSQL and keeps the writer for MySQL 2026-11-23 15:03 ET
 - [x] Grants: none to add. The finish login already reads `mdm` (it merges there) and inserts, updates and deletes `silver.master_binding` (the writer does); the hosted run below used it unchanged, and a test names the grants when `select` on `mdm.mastering_record` is revoked 2026-11-23 15:03 ET
-- [ ] Prove on the hosted store: `silver links` timed before (about 28 minutes on 2026-11-23) and after; the finish under five minutes
-  without lookups, and the same row count and the same rows as the table the old build wrote (a count and a checksum of
-  `(source_code, source_key, kind, master_id)`, no value printed)
-- [ ] `mdm-engineering` `MASTERING-STANDARD.md` ("The master id, the source key and the join"): the binding is built by a statement in the
-  data database; `data-operations/HOSTED-LOADS.md` ("The finish takes at most five minutes"): the measured phases
-- [ ] Learning → skill: name the skill lines changed, or "none"
+- [x] Proved on the hosted store: the rows equal the old build's (an unchanged rerun compared 4,166,083 bindings with 0 inserted, 0 changed, 0 deleted); `silver links` 1,776 s before, 581 s after (the table above). **The finish is still over its 5-minute bound** (9.7 min); the first build into an empty table is not measured. The remainder is `calculate`, which recomputes every link from every record on every finish: deferred to ticket 22 2026-11-23 16:16 ET
+- [x] `mdm-engineering/MASTERING-STANDARD.md` (the binding is built by statements in the data database, writing only what changed) and `data-operations/HOSTED-LOADS.md` ("The finish takes at most five minutes": the binding rebuild through the client; one statement a landing batch) 2026-11-23 16:16 ET
+- [x] Found while building: the silver writer's PostgreSQL landing made three round trips a batch (insert the missing, find the differing, and for a snapshot read back the keys it had just sent), 70 ms each. It is now one statement a batch for new and unchanged rows (the finding is read again only when fewer rows were inserted than were absent, so an append still refuses a different value another delivery wrote first: `test_the_same_key_delivered_at_once…`), and a snapshot's delivered keys come from the batch when its key columns are text or whole numbers. `test_a_delivery_costs_one_statement_a_batch…` failed first (6 and 9 statements for 3 batches); 77 integration tests that land silver pass 2026-11-23 16:16 ET
+- [x] Learning → skill: `mdm-engineering/MASTERING-STANDARD.md`, `data-operations/HOSTED-LOADS.md` (a table moved between two schemas of one database through the client is the defect; count round trips a batch before tuning the batch size) 2026-11-23 16:16 ET

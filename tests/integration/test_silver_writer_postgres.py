@@ -471,3 +471,41 @@ def test_the_same_rows_delivered_by_two_deliveries_at_once_land_once(stores):
     assert not any(isinstance(r, Blocked) for r in results.values()), results
     assert sorted(table(runtime)) == [1, 2, 3]
     assert sum(r["inserted"] for r in results.values()) == 3  # each row landed once, whichever delivery got it
+
+
+def _many_visits(count):
+    return [{"visit_id": n, "member_id": "a", "amount": "1", "visited_on": "2026-10-01", "tags": None} for n in range(1, count + 1)]
+
+
+@pytest.mark.parametrize("load_mode", ["append", "snapshot"])
+def test_a_delivery_costs_one_statement_a_batch_and_returns_no_key_it_already_holds(stores, load_mode):
+    """Each 1,000-row batch is one round trip: the missing rows are inserted and the differing ones found in one statement, and a
+    snapshot's delivered keys are read from the batch, not echoed back by the server (a landing was three round trips a batch)."""
+    from sqlalchemy import event
+
+    owner, runtime = stores
+    silver.register(owner, visit_spec(load_mode=load_mode), runtime_role=RUNTIME)
+    sink = PostgresSink(runtime)
+    rows = _many_visits(2500)
+    assert land(sink, "visit", rows)["inserted"] == 2500
+    seen = []
+    listener = lambda conn, cur, statement, *rest: seen.append(statement.lower())
+    event.listen(runtime, "before_cursor_execute", listener)
+    try:
+        again = land(sink, "visit", rows)
+    finally:
+        event.remove(runtime, "before_cursor_execute", listener)
+    assert again["inserted"] == 0 and again["changed"] == 0 and again.get("deleted", 0) == 0
+    assert len([s for s in seen if "unnest" in s]) == 3  # three batches of 1,000, 1,000 and 500, one statement each
+
+
+def test_a_snapshot_with_a_changed_row_and_a_row_the_delivery_dropped_still_updates_and_removes(stores):
+    owner, runtime = stores
+    silver.register(owner, visit_spec(load_mode="snapshot"), runtime_role=RUNTIME)
+    sink = PostgresSink(runtime)
+    assert land(sink, "visit", _many_visits(2100))["inserted"] == 2100
+    delivery = _many_visits(2100)[:2050]
+    delivery[1500] = {**delivery[1500], "amount": "9"}
+    result = land(sink, "visit", delivery)
+    assert (result["inserted"], result["changed"], result["deleted"]) == (0, 1, 50)
+    assert len(table(runtime)) == 2050 and table(runtime)[1501]["amount"] == 9
