@@ -231,6 +231,58 @@ def test_a_generated_fact_resolves_its_links_and_dates_on_rows():
     assert rows == [("a1", "c1", "2026-01-02", "2026-01-03"), ("a2", config["members"]["unknown"], "2026-01-04", "2026-01-05")]
 
 
+def failing(conn, sql):
+    return conn.execute(sql).fetchall()
+
+
+def test_a_link_that_resolves_less_than_its_inclusion_fails_its_gold_test(db):
+    """Operator, 2026-11-22: "gold must have best data quality". The fixture's filing of manager 9 has no master:
+    four of five filing rows resolve, under the share of 1.0 a link declares by default."""
+    tests = views.quality_tests(dialect="sqlite", qualify=False)
+    test = tests["thirteenf_filing_cik_resolves"]
+    assert failing(db, test) == [(5, 4)]
+    db.execute("insert into master_binding values ('sec.company.v1', '9', 'company', 'c4')")
+    assert failing(db, test) == []
+
+
+def test_a_generated_fact_link_takes_its_inclusion_from_the_silver_spec():
+    tests = views.quality_tests(dialect="sqlite", qualify=False)
+    assert "WHERE t.found < 1.0 * t.n" in tests["ipo_filing_cik_resolves"]
+    assert set(tests) >= {f"{item['source'].split('.')[1]}_{link['column']}_resolves"
+                          for item in views.load()["objects"] for link in item.get("links", [])}
+
+
+def identifier_config():
+    config = views.load()
+    item = {"name": "fact_offering", "kind": "fact", "source": "silver.offering", "key": ["offering_id"],
+            "links": [{"column": "ticker", "kind": "security", "identifier": "ticker", "dimension": "dim_security",
+                       "role": "security", "inclusion": 0.5}], "requirement": "silver_spec", "grain": "one row per offering"}
+    return {**config, "objects": [o for o in config["objects"] if o["kind"] in ("base", "dimension")] + [item]}
+
+
+def test_an_identifier_two_masters_hold_fails_its_gold_test_and_finds_no_master(db):
+    config = identifier_config()
+    db.execute("create table offering (offering_id text, ticker text)")
+    db.executemany("insert into offering values (?, ?)", [("o1", "AAA"), ("o2", "BBB")])
+    db.executemany("insert into mastering_identifier values (?, ?, ?)", [("ticker", "AAA", "s1"), ("ticker", "BBB", "s2")])
+    db.execute(views.render(config, dialect="sqlite", qualify=False)["fact_offering"])
+    tests = views.quality_tests(config, dialect="sqlite", qualify=False)
+    assert failing(db, tests["security_ticker_one_master"]) == []
+    assert failing(db, tests["offering_ticker_resolves"]) == []
+    db.execute("insert into mastering_identifier values ('ticker', 'BBB', 's1')")   # a second master holds BBB
+    assert failing(db, tests["security_ticker_one_master"]) == [("BBB",)]
+    assert rows(db, "select offering_id, security_key from fact_offering order by 1") == [("o1", "s1"), ("o2", "unknown")]
+    db.execute("insert into mastering_identifier values ('ticker', 'AAA', 's2')")   # now neither resolves: 0 of 2 < 0.5
+    assert failing(db, tests["offering_ticker_resolves"]) == [(2, 0)]
+
+
+def test_the_project_writes_one_dbt_test_per_rule(tmp_path):
+    views.write_project(tmp_path)
+    written = sorted(p.name for p in (tmp_path / "tests").glob("*.sql"))
+    assert written == sorted(f"{name}.sql" for name in views.quality_tests())
+    assert "{{ source('silver', 'master_binding') }}" in (tmp_path / "tests" / "thirteenf_filing_cik_resolves.sql").read_text()
+
+
 def test_rdm_publishes_one_view_per_published_code_set():
     views_by_set = {i["code_set"]: i["name"] for i in views.load()["objects"] if i["kind"] == "code_set"}
     published = sorted(d.name for d in (files.ROOT / "reference" / "published").iterdir() if d.is_dir())

@@ -1189,7 +1189,7 @@ def test_a_load_does_not_build_the_name_search_lookups_and_they_are_built_only_w
     assert ["mdm", "build-lookups"] not in calls and ["silver", "links"] in calls
     calls.clear()
     chain.finish({}, Path("/dev/null"), lookups=True)
-    assert calls[0] == ["mdm", "build-lookups"]  # asked for: built first, then the links and the master ids
+    assert calls[0] == ["mdm", "build-lookups"]  # asked for: built first, then the links and master_binding
     assert ["silver", "links"] in calls
 
 

@@ -172,16 +172,16 @@ for it, and the log of a step with one document stays silent. That is a wait, no
 every silver table.
 
 Masters come first and each source's silver target last, so silver rows find their masters as they land; a silver step
-needs none before it (a row lands with its link key, and `--finish` fills the master ids). A source's later
+needs none before it (a row lands with its link key and finds its master by a join on `master_binding`, which `--finish` builds). A source's later
 delivery is a new publication and carries the next `--revision`. The chain stops at the first step that does not finish
-in its attempts and names why in that step's log. After the last step it builds the links table once and fills each silver table's master ids (`--finish` runs only those; the
+in its attempts and names why in that step's log. After the last step it builds the links tables and `master_binding` once (`--finish` runs only those; the
 name-search lookups are built only on `--finish --lookups`, since a load reads none of them and only the context search does). Check a running chain every 30 minutes; a step that stops reports at its
 check, never on a tighter loop.
 
-### The links table is built once
+### The links tables and `master_binding` are built once
 
-The links table is built whole from every stored record (`edgar-warehouse silver links`), so no target carries a step
-for it. A `load` run alone builds it after its last bundle when it mastered anything; a load that is one of several
+The links tables and `master_binding` (each source key's master) are built whole from every stored record
+(`edgar-warehouse silver links`), so no target carries a step for them. No master id is written on a silver row. A `load` run alone builds it after its last bundle when it mastered anything; a load that is one of several
 passes `--no-links` and the last step builds it (the chain's `--finish`). A newly mastered record can be the end a
 stored link waited for, so any load that masters builds, whatever its source states.
 
@@ -193,7 +193,7 @@ record that finds no master and releases it when a later file gives one, so a lo
 rules state three kinds of ordering:
 
 - **Must** (a load leaves something out otherwise). A target that publishes a second batch of its source's records follows the
-  target that publishes the first. The links table and each silver table's master ids follow every load (`--finish`).
+  target that publishes the first. The links tables and `master_binding` follow every load (`--finish`).
 - **Prefer** (records wait until the other load is done; never wrong, only later). A source with a
   matching rule that waits follows the source the rule names (`holder_source`), else the sources whose minting rules use the
   same identifier namespace, else the sources that mint its kind. Links set no order. Two sources that each prefer the

@@ -98,6 +98,6 @@ time:
   event_time: null
 partition: []
 load_mode: append
-why: 'A registration is transaction data: one row per filed original, keyed by its accession number, linked to the registrant Company by lookup, so no record of its own goes through
+why: 'A registration is transaction data: one row per filed original, keyed by its accession number, linked to the registrant Company by a join on master_binding, so no record of its own goes through
   the Merge Stage. Append, since a filed document never changes; an amendment is another filing.'
 checks: []

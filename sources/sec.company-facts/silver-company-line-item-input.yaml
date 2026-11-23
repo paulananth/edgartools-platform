@@ -69,7 +69,14 @@ key:
 - line_item
 - fiscal_year
 - position
-links: []
+links:
+- columns:
+  - company_key
+  kind: company
+  source_code: sec.company.v1
+  to_part: company
+  source_key: company_key
+  inclusion: 1.0
 time:
   as_of: as_of
   as_at: filed

@@ -3,7 +3,7 @@
 Invented SGML submissions run through Bookkeeping's claim, lease and verify path:
 read (one unit a file), then the five silver landings, with no merge and an empty
 MDM. What is proven is that the silver path needs no MDM run: every landing lands
-its rows, and an owner not mastered yet keeps an empty id for `silver refresh-ids`.
+its rows, and no master id is written on a row.
 Every name and number is invented."""
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.rules import frozen

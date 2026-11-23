@@ -74,8 +74,8 @@ load_mode: append
 why: >-
   A custody row is transaction data: what one adviser reports one custodian holds for it at one filing.
   It lands in silver with the MDM ids of the adviser and the custodian found by their record keys,
-  never as a property of the CUSTODIAN link (operator, 2026-10-09). A row whose Company is not mastered
-  yet keeps an empty MDM id, which `silver refresh-ids` fills later. Append, since a filed row never changes.
+  never as a property of the CUSTODIAN link (operator, 2026-10-09). A row's Company is found by a join on
+  `master_binding`, so one mastered later needs no rewrite. Append, since a filed row never changes.
 checks:
 - id: related_person_is_y_or_n
   check: in_set

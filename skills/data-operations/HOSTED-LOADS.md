@@ -62,13 +62,10 @@ disposable store is the next check to add.
   Fix the cause (engine, memory, a login), then start it again; done steps cost one call each.
 
 ## The finish takes at most five minutes
-On a fresh store every master id is empty, so the first finish is the full-size one: the links build reads every master, and the refresh of the
-largest silver table reads and writes every one of its rows. A finish that takes minutes more than five is the measure of the slowest phase
-still left (time each phase, below), never a reason to skip it: Gold and the links read what it writes.
-`--finish` builds the links table once and fills each silver table's empty master ids. It is bounded by the operator at five minutes, and
-a longer one is a defect, not a wait. `silver refresh-ids` reads and writes only rows whose id is empty: a row that has an id is never read
-or written again (an id whose master merged away still resolves to the survivor through `mastering.reads.master`). A refresh that looks up
-every key of every row, in batches, costs about one random disk read a row on the master store. Time each part of a slow finish by phase
+`--finish` builds the links tables and `master_binding` once, each whole from the stored records; no silver row is written with a master
+id, so nothing is refreshed. A finish that takes minutes more than five is the measure of the slowest phase still left (time each phase,
+below), never a reason to skip it: Gold and the links read what it writes. It is bounded by the operator at five minutes, and a longer
+one is a defect, not a wait. Time each part of a slow finish by phase
 before changing it, and run the cheap check that can fail first. For a step that is one native call, sample the running process
 (`sample <pid> 30`) before reading its code: the links build spent 265 s in a pairwise comparison of every link with every later link,
 which no phase timing could name.

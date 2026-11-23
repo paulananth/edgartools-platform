@@ -21,8 +21,8 @@ bronze:
   family: filing_artifact
 # Bookkeeping: read the SEC submission files on two paths (operator, 2026-11-14: "make it two
 # split one to mdm and one to silver"). `mastering` masters each reporting owner (a Person, or a Company by its
-# CIK); `silver` lands the owners and the lines. The silver writer finds each row's Person and Companies by
-# lookup, and a row whose owner is not mastered yet keeps an empty id for `silver refresh-ids`, so the silver
+# CIK); `silver` lands the owners and the lines. The silver writer lands each row's Person and Company keys;
+# their masters are found by a join on `master_binding`, so the silver
 # path waits for no merge. Each records its files in the Change Journal.
 bookkeeping:
   version: 2

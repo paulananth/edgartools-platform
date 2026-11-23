@@ -106,9 +106,9 @@ def check(spec: dict) -> dict:
                                                       and 0 <= link["inclusion"] <= 1):
             raise Blocked(f"Link on {link['source_key']}: inclusion is a share from 0 to 1")
     ways = [bool(spec["links"]), bool(spec.get("master_columns")), bool(spec.get("master_through"))]
-    if sum(ways) > 1:
-        raise Blocked("A table finds its master one way: links (a key found by a view), master_columns (columns that "
-                      "hold master ids) or master_through (the table whose key it carries)")
+    if sum(ways) != 1:
+        raise Blocked("A table finds its master exactly one way: links (a key found in master_binding), master_columns "
+                      "(columns that hold master ids) or master_through (the table whose key it carries)")
     for column in spec.get("master_columns") or []:
         if column not in names:
             raise Blocked(f"master_columns names a column of the spec: {column!r}")

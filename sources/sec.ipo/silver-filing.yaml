@@ -65,5 +65,5 @@ time:
   event_time: filing_date
 partition: []
 load_mode: append
-why: 'A filing is transaction data: one row per filed document and filer, keyed by its accession number and CIK (a filing listed under co-registrants is one row each), linked to the Company by lookup. Append, since a filed document never changes.'
+why: 'A filing is transaction data: one row per filed document and filer, keyed by its accession number and CIK (a filing listed under co-registrants is one row each), linked to the Company by a join on master_binding. Append, since a filed document never changes.'
 checks: []

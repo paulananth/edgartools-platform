@@ -172,7 +172,7 @@ keeps, name the waste each step holds, and propose the fold or split that remove
 | Transport | A step that writes rows only so that the next step reads them again | Fold it into the read, or into the combine's joins |
 | Inventory | One step's output holding both paths' rows, or two reduces' states at once | One path per destination; keep two reduces when one would hold both |
 | Motion | A second read of the same files, for a table the first read could emit | One read emits every table its path uses |
-| Waiting | A silver landing that waits for a merge | Silver finds masters by lookup; `silver refresh-ids` fills an id that was not mastered yet |
+| Waiting | A silver landing that waits for a merge | Silver lands the source key only; its master is found by a join on `master_binding` |
 | Over-processing | A combine or a record step computing what the read could, or a read emitting tables its path never uses | Compute per-row values in the read; give each path the tables it lands |
 | Over-production | A reduce that does not cut rows by orders of magnitude; a target, table or column no reader uses | Measure the rows with and without it; delete what nothing reads |
 | Defects | A fold that is not proved, or a proof that ran an old engine build | Compare the records and the silver rows with main's, on disposable stores, with today's engine |

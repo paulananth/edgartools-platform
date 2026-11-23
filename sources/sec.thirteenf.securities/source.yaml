@@ -152,8 +152,8 @@ bookkeeping:
     # Two paths (operator, 2026-11-14: "make it two split one to mdm and one to silver"). `mastering`: the
     # Securities of one data set: every information table is read, reduced by CUSIP, combined to
     # one row each, prepared for the Dataset Contract and merged. `silver`: the holdings, landed
-    # from their own read; the silver writer finds each holding's Security by lookup, and a holding whose
-    # Security is not mastered yet keeps an empty id for `silver refresh-ids`, so it waits for no merge.
+    # from their own read; the silver writer lands each holding's CUSIP, and its
+    # Security is found by a join on `master_binding`, so it waits for no merge.
     # Each notes its files in the Change Journal, so an unchanged file is not read again.
     mastering:
       grain: run

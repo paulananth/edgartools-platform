@@ -283,7 +283,7 @@ def test_a_name_with_symbols_is_quoted_everywhere(stores):
     odd = a_spec(table="Odd % : Table", columns=[
         {"name": "Line No.", "type": "BIGINT", "nullable": False},
         {"name": "Price ($) 100%", "type": "DOUBLE", "nullable": True}],
-        key=["Line No."], links=[], time={"as_of": None, "as_at": "loaded_at", "event_time": None}, partition=[])
+        key=["Line No."], links=[], master_through="member", time={"as_of": None, "as_at": "loaded_at", "event_time": None}, partition=[])
     silver.register(owner, odd, runtime_role=RUNTIME)
     assert land(PostgresSink(runtime), "Odd % : Table", [{"Line No.": 1, "Price ($) 100%": 2.5}])["inserted"] == 1
     with runtime.connect() as conn:  # the table and its columns carry the names exactly as the spec writes them
@@ -318,7 +318,7 @@ def test_an_agent_reads_a_table_spec_through_context(stores):
 def test_interval_text_transport_is_preserved(stores):
     from datetime import timedelta
     owner, runtime = stores
-    config = a_spec(links=[], columns=[{"name": "visit_id", "type": "BIGINT", "nullable": False},
+    config = a_spec(links=[], master_through="member", columns=[{"name": "visit_id", "type": "BIGINT", "nullable": False},
         {"name": "duration", "type": "INTERVAL", "nullable": True}], partition=[],
         time={"as_of": None, "as_at": "loaded_at", "event_time": None})
     silver.register(owner, config, runtime_role=RUNTIME)

@@ -77,7 +77,14 @@ key:
 - window_years
 - role
 - part
-links: []
+links:
+- columns:
+  - company_key
+  kind: company
+  source_code: sec.company.v1
+  to_part: company
+  source_key: company_key
+  inclusion: 1.0
 time:
   as_of: input_fiscal_year
   as_at: loaded_at

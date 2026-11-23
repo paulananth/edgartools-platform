@@ -83,6 +83,6 @@ time:
   event_time: null
 partition: []
 load_mode: append
-why: 'A final prospectus is transaction data: one row per filed document, keyed by its accession number, linked to the registrant Company and the listed Security by lookup, so no record
+why: 'A final prospectus is transaction data: one row per filed document, keyed by its accession number, linked to the registrant Company and the listed Security by a join on master_binding, so no record
   of its own goes through the Merge Stage. Append, since a filed document never changes.'
 checks: []

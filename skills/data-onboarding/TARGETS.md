@@ -48,11 +48,10 @@ Every step says what differs for each target.
     at most 1,000 members per list (`sample_limit`), so a widely held entity
     loses links silently: one row per link instead.
   - **A row that states an identifier the master holds links by it**
-    (`identifier: <namespace>` in place of `source_code`): the MDM id fills only
-    when exactly one master of the link's kind holds the value, so a reused
-    value, or one no master holds yet, stays empty until `silver refresh-ids`
-    finds one. A test lands a value one master holds, one two hold and one
-    none holds.
+    (`identifier: <namespace>` in place of `source_code`): Gold finds the master
+    only when exactly one master of the link's kind holds the value, and its
+    generated test fails a value two masters hold. A test reads a value one
+    master holds, one two hold and one none holds.
   - **The row's link key is the master's record key, as its contract makes
     it.** Repeat the contract's own choice (an identifier, else another, a
     folded key) in the rows' contract, and prove every row's key is a record
@@ -94,9 +93,9 @@ Every step says what differs for each target.
      Otherwise the runtime, with MDM read access configured through the central
      connection section, runs `edgar-warehouse silver land <table> <rows file>` with the
      part's rows as a flat CSV, Parquet or JSON Lines file. A rerun of the same
-     delivery changes nothing; an unmastered record keeps its source key and an
-     empty MDM id. Once its master is onboarded, `edgar-warehouse silver
-     refresh-ids <table>` fills the ids of rows already landed.
+     delivery changes nothing; a row keeps its source key and finds its master
+     through `master_binding`, built at the finish, so a master onboarded later
+     needs no rewrite of rows already landed.
   3. `edgar-warehouse context silver <table>` shows an agent what the table holds.
 
   Scheduled landing through the declared pipeline still needs a verified

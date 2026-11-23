@@ -167,6 +167,6 @@ time:
   event_time: null
 partition: []
 load_mode: append
-why: 'A statement line is a fact of a filed document: transaction data keyed by its place in the page, linked to the registrant Company by lookup. Append, since a filed document never
+why: 'A statement line is a fact of a filed document: transaction data keyed by its place in the page, linked to the registrant Company by a join on master_binding. Append, since a filed document never
   changes.'
 checks: []

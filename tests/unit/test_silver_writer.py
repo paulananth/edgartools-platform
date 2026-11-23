@@ -159,6 +159,7 @@ def test_a_field_the_spec_does_not_name_is_refused():
     {"links": [], "master_columns": ["member_id"], "master_through": "member"},
     {"links": [], "master_columns": ["nope"]},
     {"links": [], "master_through": ""},
+    {"links": []},
 ])
 def test_a_table_finds_its_master_one_way_and_names_real_columns(more):
     with pytest.raises(Blocked, match="one way|names a column|names the table"):
@@ -168,6 +169,16 @@ def test_a_table_finds_its_master_one_way_and_names_real_columns(more):
 @pytest.mark.parametrize("more", [{"links": [], "master_columns": ["member_id"]}, {"links": [], "master_through": "member"}])
 def test_a_table_may_declare_master_columns_or_the_table_it_carries_the_key_of(more):
     assert specs.check(a_spec(**more))["table"] == "visit"
+
+
+def test_every_silver_spec_of_the_repository_finds_its_master():
+    """Operator, 2026-11-22: "every silver table should join to the appropriate master"."""
+    from edgar_warehouse.rules import files
+
+    paths = [*files.sources_root().glob("*/silver-*.yaml"), *(files.ROOT / "silver").glob("silver-*.yaml")]
+    assert len(paths) >= 20
+    for path in paths:
+        specs.check(files.load(path))
 
 
 CHECKS = [

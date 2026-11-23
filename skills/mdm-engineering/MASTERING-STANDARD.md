@@ -36,9 +36,12 @@ Two different ids, never confused:
   column beside the source code, `source_key`, so a join needs no digest. The `subject` digest of source code and key is the engine's
   internal index, never a join key.
 
-Silver and Gold read the master by a join, never by a copy written onto the row: one view per master kind in the `mdm` schema gives the
-kind's master id with the source code and source key (and the kind's identifiers), and a silver row joins it on its own source key.
-No id is stored twice, so a merge never leaves a stale id behind and no load step fills one in.
+Silver and Gold read the master by a join, never by a copy written onto the row: the finish builds `master_binding` whole from the
+stored records (source code, source key, kind, master id), the mirror carries it as a table (a mirror copies tables, not views), and a
+silver row joins it on its own source key. An identifier link joins the one master of its kind that holds the value. No id is stored
+on a silver row, so a merge never leaves a stale id behind and no load step fills one in. Every silver table reaches its master one way:
+`links`, `master_columns` (its columns hold master ids) or `master_through` (the table whose key it carries); the spec checker refuses
+a table with none. Gold's generated dbt tests fail a link that resolves under its declared `inclusion` and an identifier two masters hold.
 
 Our model is both industry styles in one place: the golden record (the operational style's result) and the Cross-reference (the analytical
 style's linked view). It is read-only toward the sources: masters flow forward to silver and Gold, never back to a source application.

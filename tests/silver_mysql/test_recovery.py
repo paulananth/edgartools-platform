@@ -35,7 +35,7 @@ def test_empty_marker_interruption_recovers(store, monkeypatch):
 def test_register_after_create_interruption_resumes_without_adopting_data(store, monkeypatch):
     owner, runtime, role = store
     migrate(owner, runtime_role=role)
-    config = a_spec(links=[])
+    config = a_spec(links=[], master_through="member")
     execute = Connection.execute
     def interrupted(conn, statement, *args, **kwargs):
         if getattr(statement, "is_insert", False) and statement.table.name == "table_spec":
@@ -52,7 +52,7 @@ def test_register_after_create_interruption_resumes_without_adopting_data(store,
 def test_permissive_session_is_refused_before_delivery(store):
     owner, runtime, role = store
     migrate(owner, runtime_role=role)
-    register(owner, a_spec(links=[]), runtime_role=role)
+    register(owner, a_spec(links=[], master_through="member"), runtime_role=role)
     @event.listens_for(runtime, "checkout")
     def permissive(dbapi, record, proxy):
         with dbapi.cursor() as cursor: cursor.execute("SET SESSION sql_mode=''")
@@ -65,7 +65,7 @@ def test_runtime_cannot_shadow_registry_with_a_temporary_table(store):
     from sqlalchemy.exc import DBAPIError
     owner, runtime, role = store
     migrate(owner, runtime_role=role)
-    config = a_spec(links=[])
+    config = a_spec(links=[], master_through="member")
     register(owner, config, runtime_role=role)
     with pytest.raises(DBAPIError):
         with runtime.begin() as conn:
@@ -91,7 +91,7 @@ def test_partition_index_recovers_after_interrupted_create_and_populated_upgrade
     from edgar_warehouse.silver_writer.tables import data_table
     owner, runtime, role = store
     migrate(owner, runtime_role=role)
-    config = a_spec(links=[])
+    config = a_spec(links=[], master_through="member")
     execute = Connection.execute
     def interrupted(conn, statement, *args, **kwargs):
         if statement.__class__.__name__ == "CreateIndex" and statement.element.name == "silver_partition":
@@ -123,7 +123,7 @@ def test_runtime_cannot_change_partition_index(store):
     from sqlalchemy.exc import DBAPIError
     owner, runtime, role = store
     migrate(owner, runtime_role=role)
-    register(owner, a_spec(links=[]), runtime_role=role)
+    register(owner, a_spec(links=[], master_through="member"), runtime_role=role)
     with pytest.raises(DBAPIError):
         with runtime.begin() as conn:
             conn.execute(text("DROP INDEX silver_partition ON visit"))
@@ -132,7 +132,7 @@ def test_runtime_cannot_change_partition_index(store):
 def test_calendar_interval_refusal_preserves_existing_rows(store):
     owner, runtime, role = store
     migrate(owner, runtime_role=role)
-    config = a_spec(links=[], columns=[{"name": "visit_id", "type": "BIGINT", "nullable": False},
+    config = a_spec(links=[], master_through="member", columns=[{"name": "visit_id", "type": "BIGINT", "nullable": False},
                                      {"name": "duration", "type": "INTERVAL", "nullable": True}],
                     partition=[], time={"as_of": None, "as_at": "loaded_at", "event_time": None})
     register(owner, config, runtime_role=role)

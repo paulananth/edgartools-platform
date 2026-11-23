@@ -13,7 +13,7 @@ approve a destination.
 |---|---|---|
 | Choose the business process | One registered silver transaction part, or one dated relationship | The silver table named, with its requirement |
 | Declare the grain | The silver spec's `grain:` sentence, unchanged | One sentence a reader can count from |
-| Identify the dimensions | The spec's `links` (each `mdm_id_column`), its time roles and any code it states | Each dimension named once, each join a role |
+| Identify the dimensions | The spec's `links` (each found through `master_binding`), its time roles and any code it states | Each dimension named once, each join a role |
 | Identify the facts | The spec's measure columns, each with its unit | Each measure with its additivity (below) |
 
 Declare the grain before anything else; a dimension or measure that does not fit the grain is a different fact.

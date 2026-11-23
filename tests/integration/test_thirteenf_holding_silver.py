@@ -1,6 +1,6 @@
 """The 13F `silver` target lands each information table's holdings in silver (ticket 183), through real
-workers on PG16: read (one unit a file), then one landing a file, with no merge and an empty MDM; a holding
-whose Security is not mastered yet keeps an empty id for `silver refresh-ids`.
+workers on PG16: read (one unit a file), then one landing a file, with no merge and an empty MDM; no master
+id is written on a holding.
 Every name and number is invented."""
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.rules import frozen

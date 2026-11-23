@@ -16,7 +16,7 @@
 # ticket 143): a row holds the holding's own facts and its links. The CUSIP,
 # ISIN and the facts it repeats about its Security (currency, asset category,
 # issuer type, investment country, restricted, derivative category) are the
-# Security's, in MDM, read through `security_mdm_id`. The row's
+# Security's, in MDM, found by a join on `master_binding`. The row's
 # currency code stays as the unit of its own value and exchange rate
 # (operator, 2026-10-28: "Keep it on the row (Recommended)"). The issuer LEI
 # identifies the issuer Company in MDM, which the Security reaches by
@@ -130,9 +130,8 @@ key:
 - accession_number
 - holding_id
 # The holder: the Fund when the filing names a series, else the registrant
-# Company (both filled when both exist). The Security by its record key. A row
-# whose master is not mastered yet keeps an empty MDM id; `silver refresh-ids`
-# fills it later.
+# Company (both filled when both exist). The Security by its record key. Each
+# master is found by a join on `master_binding`.
 links:
 - columns:
   - series_id
@@ -162,7 +161,7 @@ load_mode: append
 why: >-
   A holding is transaction data (finding q5): one row per filed holding, keyed
   by the filing and the holding id (unique over the quarter). It links to its
-  holder and its Security by lookup, so the Fund-to-Security link needs no
+  holder and its Security by a join on master_binding, so the Fund-to-Security link needs no
   MDM record of its own. Append, since a filed holding never changes.
 # No checks: the CUSIP and ISIN they checked are the Security's,
 # checked by its Dataset Contract.

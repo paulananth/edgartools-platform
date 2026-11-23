@@ -3,7 +3,7 @@
 
     python load_chain.py --list               the steps, in order
     python load_chain.py --plan               what each step would load (documents and bundles); writes nothing
-    python load_chain.py                      the whole chain, then the links table and each silver table's master ids
+    python load_chain.py                      the whole chain, then the links tables and master_binding
     python load_chain.py --from <step>        carry on from a step (a done step costs one call: nothing is loaded twice)
     python load_chain.py --only <step>        one step
     python load_chain.py --lane <name>        the steps of one lane; run several lanes at once (see the chain file)
@@ -354,7 +354,7 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
     behind its schedule (more of the window used than of the work done) is allowed twice the cores in load; at the
     deadline the miss is reported once, naming what is left, and the loads go on: a deadline never stops one (a stopped step
     loses the work of its attempt), and the run says how long after the deadline it finished. A step that uses up its attempts
-    blocks what follows it and the rest carry on. Ends when every step is done (then the links table and the master ids) or when
+    blocks what follows it and the rest carry on. Ends when every step is done (then the links tables and master_binding) or when
     nothing more can start."""
     def range_of(name: str) -> tuple[int, int]:
         return bounds or bounds_for(capacity, by_name[name].get("worker_gb", WORKER_GB))
@@ -1128,7 +1128,7 @@ def attempt_loop(step: dict, env: dict, state: Path) -> bool:
 
 
 def finish(env: dict, state: Path, lookups: bool = False) -> None:
-    """After the loads: the links table is built once (a silver row finds its master by a join, so no id is filled). The name-search lookups are built only when asked
+    """After the loads: the links tables and master_binding are built once (a silver row finds its master by a join on master_binding, so no id is filled). The name-search lookups are built only when asked
     (`lookups`): a load reads none of them, only the context search does, and building them re-derives every master."""
     if lookups:
         note("lookups start", state)

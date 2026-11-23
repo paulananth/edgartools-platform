@@ -308,9 +308,11 @@ are not installed dbt models. Nothing above depends on them.
 The shared dimensions are Company, Person, Security, the date (business and
 recorded as two roles), and the code sets a fact actually uses
 (`financial-line-items`, `mdm-relationship-types`, and a measure's own code
-when the measure list is a code set). A fact joins a dimension through the
-master id its silver link declares (`mdm_id_column`). The source key stays
-the lookup that fills that id.
+when the measure list is a code set). A fact joins a dimension through
+`master_binding` on the row's source key (an identifier link: the one master
+of its kind holding the value); no master id is stored on a silver row.
+The Gold generator writes the views and the dbt tests of every link (the data-quality skill, "Gold link rules"); run
+`dbt build`, never `dbt run` alone, so a failed test stops Gold.
 
 | Silver grain | Fact on the bus | Why it is its own fact |
 |---|---|---|
@@ -321,7 +323,7 @@ the lookup that fills that id.
 | `company_measure_input`: one row per company, measure, fiscal year, window, role and part. | Child of `company_measure`. | The figures a measure read. |
 | `relationship`: one row per relationship and period start. Rebuilt (`load_mode: snapshot`). `rules/silver/silver-relationship.yaml` | Factless bridge. | The link and its period. Parent, adviser or issuer attributes stay on the masters. A holding fact does not grow a parent column. |
 | `relationship_evidence` (one row per link and assertion) and `relationship_path` (one row per calculated period and step). | Children of `relationship`. | The stored records that state a link, and the chain a calculated link walked. |
-| `thirteenf_holding`: one row per accession and holding index. Append. Manager, report period and filing date live on `thirteenf_filing` (one row per accession and manager, also append). | Transaction fact of a reported position. An amendment is a new accession, so two filings of one quarter stay two rows. | A periodic snapshot (one row per manager, instrument and report date) is a further fact, and only when a requirement says which amendment wins. Join to the filing on the key that keeps one filing row per holding. The filing grain includes the manager, so an accession shared by two managers multiplies holdings when the join is the accession alone. CUSIP stays the link key; the class title and the FIGI stay on the Security dimension through `security_mdm_id`. |
+| `thirteenf_holding`: one row per accession and holding index. Append. Manager, report period and filing date live on `thirteenf_filing` (one row per accession and manager, also append). | Transaction fact of a reported position. An amendment is a new accession, so two filings of one quarter stay two rows. | A periodic snapshot (one row per manager, instrument and report date) is a further fact, and only when a requirement says which amendment wins. Join to the filing on the key that keeps one filing row per holding. The filing grain includes the manager, so an accession shared by two managers multiplies holdings when the join is the accession alone. CUSIP stays the link key; the class title and the FIGI stay on the Security dimension through the CUSIP's master. |
 | `nport_holding`: one row per accession and holding id. Append. | Transaction fact of its own. | A fund holding (series, registrant, Security). The value currency stays on the row. A manager's 13F position is a different grain and a different question; the two facts share the Security dimension and are not stacked into one table. |
 | `insider_position`: one row per accession, table and line. Append. `line_table` is transaction or holding, derivative or not. | Two transaction facts when both questions exist: the trade lines, and the lines that state a position. | Both are filed rows. Collapsing the position lines to one row per holder and date is a further snapshot, with the same amendment rule as a 13F position. The Security link is not on the row: the form names a class in words. |
 | `insider_reporting_owner`: one row per accession and reporting owner. | Factless fact at the owner grain. | A joint filing names each owner once and the lines once. Joining owners to lines on the accession multiplies the lines. Keep the two facts until a source pairs a line to an owner. |

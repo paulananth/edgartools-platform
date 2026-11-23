@@ -28,7 +28,7 @@ def silver(database_factory):
 
 
 def spec(**values):
-    return a_spec(table="delivery_" + uuid4().hex[:10], links=[], **values)
+    return a_spec(table="delivery_" + uuid4().hex[:10], links=[], master_through="member", **values)
 
 
 def rows():
@@ -165,8 +165,7 @@ def test_long_exact_text_keys_do_not_alias(silver):
     values = [{"visit_id": key, "member_id": key} for key in keys]
     assert land(sink, config["table"], values)["inserted"] == 4
     assert land(sink, config["table"], values)["changed"] == 0
-    with runtime.connect() as conn:
-        assert {r[0] for r in conn.execute(text(f"SELECT member_id FROM silver.{config['table']}"))} == set(keys)
+    assert {r["member_id"] for r in stored(runtime, config)} == set(keys)
 
 
 def test_concurrent_deliveries_serialize_and_replay(silver):

@@ -75,7 +75,8 @@ def silver_facts(config: dict) -> list[dict]:
         spec = files.load(files.ROOT.parent / entry["requirement"])
         links = [{"column": link["source_key"], "kind": link["kind"], **({"identifier": link["identifier"]} if link.get("identifier")
                   else {"source_code": link["source_code"]}), "dimension": dimensions[link["kind"]],
-                  "role": link.get("to_part") or link["kind"]} for link in spec.get("links") or []]
+                  "role": link.get("to_part") or link["kind"], **({"inclusion": link["inclusion"]} if link.get("inclusion")
+                  is not None else {})} for link in spec.get("links") or []]
         time = spec.get("time") or {}
         times = {"business": time.get("as_of"), "event": time.get("event_time"), "recorded": time.get("as_at")}
         used = set(spec["key"]) | {v for v in times.values() if v}
@@ -222,6 +223,34 @@ def render(config: dict | None = None, dialect: str = "snowflake", qualify: bool
             for item in order}
 
 
+def quality_tests(config: dict | None = None, dialect: str = "snowflake", qualify: bool = True,
+                  dbt: bool = False) -> dict[str, str]:
+    """{test name: query}, each query returning rows only on a defect (a dbt singular test), so Gold never shows a link
+    turned empty in silence. Every fact link resolves at least its declared share of filled keys (`inclusion`, 1.0 when
+    none is declared); an identifier link also holds each value it reads on one master of its kind."""
+    config = config or load()
+    ctx = Context(config, dialect, qualify, dbt)
+    tests = {}
+    for item in config["objects"]:
+        pairs = [(item.get("source"), link) for link in item.get("links", [])]
+        if "parent" in item:
+            pairs.append((item["parent"]["source"], item["parent"]["single_link"]))
+        for source, link in pairs:
+            found, master_id = master_join(link, ctx, "s", "b")
+            column, share = link["column"], 1.0 if link.get("inclusion") is None else float(link["inclusion"])
+            tests[f"{source.split('.')[1]}_{column}_resolves"] = (
+                f"SELECT t.n, t.found FROM (SELECT COUNT(*) AS n, COUNT({master_id}) AS found FROM {ctx.mirror(source)} s "
+                f"{found} WHERE s.{column} IS NOT NULL) t WHERE t.found < {share} * t.n")
+            if link.get("identifier"):
+                tests[f"{link['kind']}_{link['identifier']}_one_master"] = (
+                    f"SELECT i.value FROM {ctx.mirror('mdm.mastering_identifier')} i "
+                    f"JOIN {ctx.mirror(config['master']['source'])} k ON k.entity_id = i.entity_id AND k.kind = {literal(link['kind'])} "
+                    f"WHERE i.namespace = {literal(link['identifier'])} "
+                    f"AND i.value IN (SELECT CAST(s.{column} AS VARCHAR) FROM {ctx.mirror(source)} s) "
+                    f"GROUP BY i.value HAVING COUNT(DISTINCT i.entity_id) > 1")
+    return tests
+
+
 def render_models(config: dict | None = None) -> dict[str, str]:
     """{model file name: dbt model text}. Snowflake writes go through dbt: each model is one view, reads the mirror
     through `source` and the other Gold views through `ref`, so dbt orders the build and the destination is dbt's."""
@@ -266,6 +295,12 @@ def write_project(folder: Path, config: dict | None = None) -> list[str]:
         (models / name).write_text(text)
         written.append(name)
     (models / "sources.yml").write_text(files.dumps(sources(config)))
+    checks = Path(folder) / "tests"
+    checks.mkdir(exist_ok=True)
+    for stale in checks.glob("*.sql"):
+        stale.unlink()
+    for name, query in quality_tests(config, dbt=True).items():
+        (checks / f"{name}.sql").write_text(query + "\n")
     profiles = Path(folder) / "profiles.yml"
     if profiles.exists():
         profiles.write_text(profile(profiles.read_text(), config))
