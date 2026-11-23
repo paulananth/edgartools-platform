@@ -151,18 +151,26 @@ one golden record twice.
   - a rolled-back merge leaves a gap and the next build reads every change; two merges of one golden record that commit out of
     order leave the later commit's number, and the next build reads that record;
   - `_wake` releases the same records as today on the concurrent-merge case (decides the open point above)
-- [ ] Part 2, the claim table. Tests first:
+- [ ] ~~Part 2, the claim table~~ deferred, not built: the measurement (1% lock waits) leaves it no measured gain. It replaces one lock
+  statement with one insert statement, so it saves no round trip, and it must follow every identifier writer (`add_identifiers`,
+  `repoint`, `split`, `keep_identifiers`, `clear`) on two engines, plus an init backfill. Its one benefit is removing the
+  2,000-value cap and the cut into parts, which the next load's `mastering_merge_alone` counts can show to matter or not. Build it
+  only if they do 2026-11-23 13:58 ET. Tests it would need:
   - two merges claiming one value leave one golden record;
   - a value held by a golden record of another kind is not a conflict;
   - combine and split move the claims;
   - `init` fills claims for a store that already holds golden records;
   - no merge is cut for the lock table's cap
-- [ ] Part 3, no store lock in a merge. Tests first:
+- [x] Part 3, no store lock in a merge: `test_the_whole_store_refuses_while_a_merge_is_in_flight_and_a_merge_takes_no_store_lock` failed first (`assert [()] == []`: the merge took the store lock) and passes on both engines with the mastering, write-once and clear adapter tests; `Store.take_lock()` with no kind raises `NotQuiet` while another session merges, and MySQL's 32 store slots are one lock. Not built: the Bookkeeping open-run half 2026-11-23 13:58 ET. Tests first:
   - a merge takes no store lock (fails today: every merge takes it shared);
   - `clear` refuses while a mastering run is open, and while another session holds a kind lock; it runs on a quiet store under
     its own login;
   - `clear` still clears an idle store
-- [ ] Proof: rerun the mastering step that limited the measured load (`gleif`) on a disposable store. Report golden records a
+- [x] Proof, writes (local PostgreSQL 16, 4,000 invented companies in 20 batches, the same script on both code versions): updates of
+  `mastering_master` 4,000 rows in 20 statements before, 0 after; statements 681 before, 601 after (4 fewer a batch: store lock, file
+  lock, number read, update). Time is equal locally (1.9 s and 2.0 s: no network, warm cache), so **the hosted effect on disk
+  reads and round trips is not measured** 2026-11-23 13:58 ET
+- [ ] Proof on the hosted load: rerun the mastering step that limited the measured load (`gleif`) on a disposable store. Report golden records a
   minute, disk reads per golden record, and the updates of `mastering_master` during the merge: zero, against 17.6k a minute
   today
 - [ ] Skills: mdm-engineering's lock paragraph (merges no longer number changes; claims are a constraint; the cap is gone);

@@ -16,6 +16,10 @@ WRITTEN = ("master", "file", "delivery", "identifier", "record", "name_key", "re
            "lookup", "lookup_progress", "profile")
 
 
+class NotQuiet(RuntimeError):
+    """Another session is merging: the whole store, and any reader that resumes from a change number, waits for a quiet store."""
+
+
 class Contended(Exception):
     """A merge beside others of its kind met what only a merge alone may do; it is rolled back and merged alone."""
 
@@ -96,14 +100,17 @@ class Store:
                                 [value for row in block for value in row])
 
     def take_lock(self, kind: str | None = None, *, shared: bool = False) -> None:
-        """A merge shares the store's lock and takes its kind's, so merges of two kinds run together. Of one kind,
-        merges that only join existing golden records share the kind's lock and run side by side (`shared`); one that
-        creates or merges golden records holds it alone. With no kind, the whole store: every merge waits (`clear`).
-        The database frees a lock when its holder commits or dies. There is no lock table."""
-        self.lock_store(exclusive=kind is None)
-        if kind:
-            self.lock_kind(kind, shared=shared)
-            self.shared = kind if shared else None
+        """A merge takes its kind's lock only, so merges of two kinds run together. Of one kind, merges that only join
+        existing golden records share the kind's lock and run side by side (`shared`); one that creates or merges golden
+        records holds it alone. With no kind, the whole store (`clear`): it refuses while any merge is open and holds the
+        store lock against another clear. The database frees a lock when its holder commits or dies. There is no lock table."""
+        if kind is None:
+            if not self.quiet():
+                raise NotQuiet("A merge is running: clear the store when no load runs")
+            self.lock_store()
+            return
+        self.lock_kind(kind, shared=shared)
+        self.shared = kind if shared else None
 
     def lock_masters(self, entities) -> None:
         """Beside other merges of its kind: hold these golden records until commit, so two merges that change one
@@ -145,7 +152,7 @@ class Store:
     def lock_values(self, values: list[str]) -> None:
         raise NotImplementedError
 
-    def lock_store(self, *, exclusive: bool) -> None:
+    def lock_store(self) -> None:
         raise NotImplementedError
 
     def lock_kind(self, kind: str, *, shared: bool = False) -> None:
@@ -609,9 +616,8 @@ class Postgres(Store):
         text = io.StringIO("".join("\t".join(clean(value) for value in row) + "\n" for row in rows))
         self.cursor.copy_expert(f"copy {table}({','.join(columns)}) from stdin", text)
 
-    def lock_store(self, *, exclusive: bool) -> None:
-        name = "pg_advisory_xact_lock" if exclusive else "pg_advisory_xact_lock_shared"
-        self.rows(f"select {name}(%s, 1)", [LOCK_CLASS])
+    def lock_store(self) -> None:
+        self.rows("select pg_advisory_xact_lock(%s, 1)", [LOCK_CLASS])
 
     def lock_kind(self, kind: str, *, shared: bool = False) -> None:
         name = "pg_advisory_xact_lock_shared" if shared else "pg_advisory_xact_lock"
@@ -640,8 +646,6 @@ class MySQL(Store):
                      "mastering_master.changed_file,new.changed_file),body=new.body,kind=new.kind,status=new.status,"
                      "canonical_id=new.canonical_id,policy_digest=new.policy_digest,kind_version=new.kind_version")
     review_upsert = " as new on duplicate key update assertion_id=new.assertion_id,open_review=1"
-    slots = 32
-
     def __init__(self, connection):
         super().__init__(connection)
         self.held: list[str] = []
@@ -658,17 +662,8 @@ class MySQL(Store):
         self.held.append(name)
         return True
 
-    def lock_store(self, *, exclusive: bool) -> None:
-        names = [f"mastering-store-{slot}" for slot in range(self.slots)]
-        if exclusive:
-            for name in names:
-                if not self._acquire(name, 86400):
-                    raise TimeoutError(f"Mastering lock {name} was not acquired")
-            return
-        for name in names:
-            if self._acquire(name, 0):
-                return
-        if not self._acquire(names[0], 86400):
+    def lock_store(self) -> None:
+        if not self._acquire("mastering-store", 86400):
             raise TimeoutError("Mastering store lock was not acquired")
 
     def lock_kind(self, kind: str, *, shared: bool = False) -> None:

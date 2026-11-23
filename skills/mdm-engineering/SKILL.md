@@ -342,7 +342,7 @@ location: `Path(__file__).parents[N]` and `.parent`. Before the move, grep `pare
   before reading their members, and after its commit it looks once for a wait neither merge could see. MySQL merges one kind at a
   time. The locks are database locks (advisory and row), not tables. Its file stays in memory:
   a shared working table would force one lock for the whole store. Only a whole-store change (`clear`) takes
-  the store's lock, with no kind.
+  the store's lock, with no kind, and it refuses while any merge is open (`NotQuiet`).
 - When a ruling changes what a load does (it joined, now it creates), re-check every lock rule that assumed the old
   behaviour, and time one batch alone, then the same batches beside each other, in a transaction rolled back, before
   the first full run. A load far slower than its batches alone is contention.

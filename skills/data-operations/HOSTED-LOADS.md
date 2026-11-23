@@ -60,6 +60,9 @@ disposable store is the next check to add.
   (`<ip>`, the hostname) in the same command, as the database-monitoring commands already do, and count sockets instead of listing them.
 - **A scheduler that "stopped" has usually finished everything it could**: it names the failed steps and what waits on them.
   Fix the cause (engine, memory, a login), then start it again; done steps cost one call each.
+- **Read how often a mastering merge went alone after a load**: `grep mastering_merge_alone <the step logs>`. A line names each reason and its
+  count; no line in any step log means no part merged alone, and the kind lock was shared throughout. Lock waits are read the same
+  way as every wait: sample `pg_stat_activity` and `pg_locks` (wait event and lock type) as the diagnostic login, and say each wait's share.
 
 ## The finish takes at most five minutes
 `--finish` builds the links tables and `master_binding` once, each whole from the stored records; no silver row is written with a master
