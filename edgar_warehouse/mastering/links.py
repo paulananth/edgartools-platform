@@ -16,7 +16,6 @@ from edgar_warehouse.mdm import relationships
 from edgar_warehouse.mdm.survivorship import current_claims
 from edgar_warehouse.silver_writer.writer import land
 
-
 def _ends(claims: dict) -> list[str]:
     found = set(claims)
     for subject, claim in claims.items():
@@ -25,7 +24,6 @@ def _ends(claims: dict) -> list[str]:
             if link.get("target_subject"):
                 found.add(link["target_subject"])
     return sorted(found)
-
 
 def calculate(store, policy: dict, as_of: str, stored: dict) -> tuple[list[dict], Counter]:
     """Every link, and how many reported links have no result yet, by reason. `stored` holds the links
@@ -38,7 +36,6 @@ def calculate(store, policy: dict, as_of: str, stored: dict) -> tuple[list[dict]
     edges, reviews = relationships.project(claims, state, masters, as_of,
                                            types=relationships.types_of(policy), stored=stored)
     return edges, Counter(review["reason"] for review in reviews)
-
 
 def build(silver, mdm, policy_digest: str, as_of: str) -> dict:
     """The links table, built whole from the stored records as they are now, once a load's merges are done. A link
@@ -80,11 +77,9 @@ def build(silver, mdm, policy_digest: str, as_of: str) -> dict:
     return {"table": "relationship", "links": len(edges), "rows": len(tables["relationship"]),
             "bindings": bound["bindings"], "waiting": dict(sorted(waiting.items()))}
 
-
 WANTED = ("select distinct on (r.source_code, r.source_key) r.source_code, r.source_key, m.kind, r.entity_id as master_id "
           "from mdm.mastering_record r join mdm.mastering_master m on m.entity_id = r.entity_id "
           "order by r.source_code, r.source_key, r.entity_id")
-
 
 def bind(silver) -> dict:
     """`silver.master_binding` (the golden record of each source record, by the source's own key) built by two statements inside
@@ -104,19 +99,27 @@ def bind(silver) -> dict:
                 if conn.scalar(text("select exists (select 1 from silver.master_binding)")):
                     raise Blocked("silver.master_binding is a snapshot: an empty delivery would empty it; refused")
                 return {"inserted": 0, "changed": 0, "deleted": 0, "bindings": 0}  # a store with no master yet binds nothing
-            inserted = conn.scalar(text(
-                f"with wanted as ({WANTED}), written as (insert into silver.master_binding "
+            # One pass: the wanted rows (sorted once), those that are new or differ found by a join against the stored table (a bulk
+            # comparison, never a key probe a row), and only those written. The wanted count comes from the same pass.
+            figures = conn.execute(text(
+                f"with wanted as materialized ({WANTED}), todo as (select w.* from wanted w left join silver.master_binding b "
+                "on b.source_code = w.source_code and b.source_key = w.source_key where b.source_code is null or "
+                "(b.kind, b.master_id) is distinct from (w.kind, w.master_id)), written as (insert into silver.master_binding "
                 "(source_code, source_key, kind, master_id, loaded_at) select source_code, source_key, kind, master_id, now() "
-                "from wanted on conflict (source_code, source_key) do update set kind = excluded.kind, "
-                "master_id = excluded.master_id, loaded_at = excluded.loaded_at where "
-                "(silver.master_binding.kind, silver.master_binding.master_id) is distinct from (excluded.kind, excluded.master_id) "
-                "returning (xmax = 0) as is_new) select count(*) filter (where is_new) || ',' || count(*) filter (where not is_new) "
-                "from written"))
-            added, changed = (int(n) for n in inserted.split(","))
-            deleted = conn.execute(text(
-                "delete from silver.master_binding b where not exists (select 1 from mdm.mastering_record r join mdm.mastering_master m "
-                "on m.entity_id = r.entity_id where r.source_code = b.source_code and r.source_key = b.source_key)")).rowcount
+                "from todo on conflict (source_code, source_key) do update set kind = excluded.kind, master_id = excluded.master_id, "
+                "loaded_at = excluded.loaded_at where (silver.master_binding.kind, silver.master_binding.master_id) is distinct from "
+                "(excluded.kind, excluded.master_id) returning (xmax = 0) as is_new) select "
+                "(select count(*) from written where is_new), (select count(*) from written where not is_new), "
+                "(select count(*) from wanted)")).one()
+            added, changed, wanted = figures
             total = conn.scalar(text("select count(*) from silver.master_binding"))
+            deleted = 0
+            if total > wanted:  # a stored row has no record now: find and remove it (skipped when every stored row is wanted)
+                deleted = conn.execute(text(
+                    "delete from silver.master_binding b where not exists (select 1 from mdm.mastering_record r join mdm.mastering_master m "
+                    "on m.entity_id = r.entity_id where r.source_code = b.source_code and r.source_key = b.source_key)")).rowcount
+                total -= deleted
+
     except ProgrammingError as error:
         if getattr(error.orig, "pgcode", None) != "42501":
             raise
@@ -124,10 +127,8 @@ def bind(silver) -> dict:
                       "delete on silver.master_binding") from None
     return {"inserted": added, "changed": changed, "deleted": deleted, "bindings": total}
 
-
 PROPERTIES = ("source_event_type", "source_event_status", "source_entity_status", "source_relationship_status",
               "source_registration_status", "source_start_date_basis", "source_start_date_is_provisional")
-
 
 def rows_of(edges: list[dict]) -> dict[str, list[dict]]:
     """The silver rows of the links: one row for each period of each link, the stored records that state each
@@ -153,7 +154,6 @@ def rows_of(edges: list[dict]) -> dict[str, list[dict]]:
                 path.append({"relationship_type": edge["type"], "relationship_id": edge["relationship_id"],
                              "valid_from": period["valid_from"], "position": position, "step_relationship_id": step})
     return {"relationship": links, "relationship_evidence": list(evidence.values()), "relationship_path": path}
-
 
 def around(silver, ids: list[str], relationship_type: str = "") -> list[dict]:
     """The links touching these masters, each with all its periods."""
@@ -187,7 +187,6 @@ def around(silver, ids: list[str], relationship_type: str = "") -> list[dict]:
             if period is not None:  # a chain whose period the table no longer holds is not read
                 period["path"] = [*(period["path"] or []), row["step_relationship_id"]]
     return [links[key] for key in sorted(links)]
-
 
 def stored_of(rows) -> dict:
     """The links of the last run, in the form `calculate` takes. A source rule declares the same properties for
