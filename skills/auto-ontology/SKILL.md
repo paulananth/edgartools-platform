@@ -65,6 +65,12 @@ Reader URLs use the standard store variable names in
 `~/.local/share/edgartools/auto-ontology/reader.env`, mode `0600`. All live URLs,
 credentials and service settings stay in private local files.
 
+UI-managed source connections send credentials to the AutoOntology API.
+Without Vault, upstream stores the complete connection object, including
+passwords, unencrypted in its catalog PostgreSQL database. Verify Vault is
+fully configured before any live connection write; a private client
+environment alone does not protect server-side storage.
+
 ```bash
 CATALOG_OWNER_ENV="$HOME/.local/share/edgartools/hosted-prod/owner.env" \
   bash infra/scripts/catalog-services.sh sync-auto

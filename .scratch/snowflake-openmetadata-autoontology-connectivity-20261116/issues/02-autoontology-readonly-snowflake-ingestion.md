@@ -32,4 +32,5 @@ Blocked by: 01
 - [x] The connection string's user and password are percent-decoded once; an error names the route and the counts only. 2026-11-19 12:30 ET
 - [x] `Any` and `Callable` imported. 2026-11-19 12:30 ET
 - [ ] Qualify generated SQL and returned rows on the approved Snowflake mirror after it exists and the exact target, credentials and authorization are approved; no live query was attempted. The synthetic stream test is client-contract evidence only.
-- [x] Learning → skill: documented the SSE endpoint and that fixture results are not live qualification evidence (2026-11-22).
+- [x] Learning → skill: documented SSE validation, fixture limits, and the upstream Vault requirement for credential writes (2026-11-22).
+- [ ] Before any live connection write, verify AutoOntology Vault is fully configured; upstream otherwise persists connection credentials unencrypted in catalog PostgreSQL.
