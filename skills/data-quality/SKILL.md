@@ -433,9 +433,11 @@ incomplete/unknown detail and exact readback.
 
 ## Gold link rules
 
-Gold shows no link turned empty in silence. The Gold generator writes two dbt tests per fact link, each returning rows only on a defect:
+Gold shows no link turned empty in silence. The Gold generator writes dbt tests, each returning rows only on a defect:
 
 - **Every link resolves:** the share of filled keys that find a master is at least the silver link's declared `inclusion` (1.0 when
   none is declared).
 - **One master per identifier:** for a link by identifier, no value the table reads is held by two masters of the kind. Such a value
   is a mastering defect, shown to a steward; Gold leaves the row unresolved rather than guess.
+- **One master per source key:** `master_binding` binds each source code and source key to one master, so no join doubles a
+  fact row.

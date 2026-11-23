@@ -373,8 +373,8 @@ Name the claim in one sentence, then take the smallest cohort that can falsify i
 | A version whose rules moved since its last proof, each change proven by its own merged PR at the level this table names for it | No new run: carry the last proof forward. Write a proof file from the last one: its counts and `batch_hash`, `passed: true`, `digest` set to the new version's digest (`rules record-proof` refuses any other), its acquisition evidence if it had any, and under `evidence` and `note` the run it came from and each change since with its PR. Record it with `rules record-proof --proof-uri --proof-sha256`; `rules pending` then shows that evidence for approval. A change without such a proof gets its own row's proof first |
 
 **Compare two stores** by what they hold, never by the ids each store makes. Records: each body without its
-assertion id and publication key. Silver rows: column by column, without the load time; an MDM id column by
-how many rows hold one. Links: each master and assertion id mapped to the records it holds, and each evidence
+assertion id and publication key. Silver rows: column by column, without the load time; `master_binding` by
+how many keys find a master. Links: each master and assertion id mapped to the records it holds, and each evidence
 list sorted, since it keeps store order. Build the links (`silver links`) after the kinds they point to are mastered. Two full loads side by side on one laptop share its memory, so
 each runs slower than alone; say the pair's time.
 

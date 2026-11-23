@@ -75,8 +75,8 @@ source named. A year-to-date measure is a query over the period fact, not a stor
 - **A master's key is the MDM id.** It is the durable key: it survives a merge (the alias row names the survivor) and
   never comes from a source. A dimension needs no second surrogate unless it keeps history, and then the key is the
   master id plus the version's valid-from.
-- **A source key is a lookup, never a join.** The silver link already filled the master id; a Gold model that joins on a
-  source identifier has bypassed mastering.
+- **A source key is a lookup, never a join.** The silver link finds the master id through `master_binding`; a Gold model
+  that joins a source identifier to anything else has bypassed mastering.
 - **A fact's key is its grain's natural key** (the silver `key:`). Add a fact surrogate only where a downstream consumer
   needs one row identity, derived by one shared deterministic macro, and say who needs it.
 - **Never a business meaning in a key.** An identifier keeps its leading zeros and is stored as filed.

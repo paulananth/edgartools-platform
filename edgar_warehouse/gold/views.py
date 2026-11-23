@@ -161,15 +161,19 @@ def link_key(link: dict, ctx: Context, alias: str, column: str | None = None) ->
     return f"COALESCE({alias}.canonical_id, {literal(ctx.unknown)})"
 
 
+def holders(link: dict, ctx: Context, masters: str) -> str:
+    """The values of the link's identifier, each with its masters of the link's kind; `masters` is the HAVING test on their count."""
+    return (f"SELECT i.value AS value, MIN(i.entity_id) AS master_id FROM {ctx.mirror('mdm.mastering_identifier')} i "
+            f"JOIN {ctx.mirror(ctx.config['master']['source'])} k ON k.entity_id = i.entity_id AND k.kind = {literal(link['kind'])} "
+            f"WHERE i.namespace = {literal(link['identifier'])} GROUP BY i.value HAVING COUNT(DISTINCT i.entity_id) {masters}")
+
+
 def master_join(link: dict, ctx: Context, row: str, alias: str) -> tuple[str, str]:
     """How a silver row finds its master: (the join, the column holding the master id). A source-code link joins
     `master_binding` on the row's own source key; an identifier link joins the one master of the kind that holds the value."""
     key = f"CAST({row}.{link['column']} AS VARCHAR)"
     if link.get("identifier"):
-        holders = (f"(SELECT i.value AS value, MIN(i.entity_id) AS master_id FROM {ctx.mirror('mdm.mastering_identifier')} i "
-                   f"JOIN {ctx.mirror(ctx.config['master']['source'])} k ON k.entity_id = i.entity_id AND k.kind = {literal(link['kind'])} "
-                   f"WHERE i.namespace = {literal(link['identifier'])} GROUP BY i.value HAVING COUNT(DISTINCT i.entity_id) = 1)")
-        return f"LEFT JOIN {holders} {alias} ON {alias}.value = {key}", f"{alias}.master_id"
+        return f"LEFT JOIN ({holders(link, ctx, '= 1')}) {alias} ON {alias}.value = {key}", f"{alias}.master_id"
     return (f"LEFT JOIN {ctx.mirror('silver.master_binding')} {alias} ON {alias}.source_code = {literal(link['source_code'])} "
             f"AND {alias}.source_key = {key}"), f"{alias}.master_id"
 
@@ -227,27 +231,28 @@ def quality_tests(config: dict | None = None, dialect: str = "snowflake", qualif
                   dbt: bool = False) -> dict[str, str]:
     """{test name: query}, each query returning rows only on a defect (a dbt singular test), so Gold never shows a link
     turned empty in silence. Every fact link resolves at least its declared share of filled keys (`inclusion`, 1.0 when
-    none is declared); an identifier link also holds each value it reads on one master of its kind."""
+    none is declared); an identifier link also holds each value it reads on one master of its kind; and `master_binding`
+    gives each source key one master, so no join doubles a fact row."""
     config = config or load()
     ctx = Context(config, dialect, qualify, dbt)
-    tests = {}
+    tests = {"master_binding_one_master_per_key": (
+        f"SELECT source_code, source_key FROM {ctx.mirror('silver.master_binding')} "
+        f"GROUP BY source_code, source_key HAVING COUNT(DISTINCT master_id) > 1")}
     for item in config["objects"]:
         pairs = [(item.get("source"), link) for link in item.get("links", [])]
         if "parent" in item:
             pairs.append((item["parent"]["source"], item["parent"]["single_link"]))
         for source, link in pairs:
             found, master_id = master_join(link, ctx, "s", "b")
-            column, share = link["column"], 1.0 if link.get("inclusion") is None else float(link["inclusion"])
-            tests[f"{source.split('.')[1]}_{column}_resolves"] = (
+            column, table = link["column"], source.split(".")[1]
+            share = "1.0" if link.get("inclusion") is None else str(link["inclusion"])  # the declared share, never through a float
+            tests[f"{table}_{column}_resolves"] = (
                 f"SELECT t.n, t.found FROM (SELECT COUNT(*) AS n, COUNT({master_id}) AS found FROM {ctx.mirror(source)} s "
                 f"{found} WHERE s.{column} IS NOT NULL) t WHERE t.found < {share} * t.n")
             if link.get("identifier"):
-                tests[f"{link['kind']}_{link['identifier']}_one_master"] = (
-                    f"SELECT i.value FROM {ctx.mirror('mdm.mastering_identifier')} i "
-                    f"JOIN {ctx.mirror(config['master']['source'])} k ON k.entity_id = i.entity_id AND k.kind = {literal(link['kind'])} "
-                    f"WHERE i.namespace = {literal(link['identifier'])} "
-                    f"AND i.value IN (SELECT CAST(s.{column} AS VARCHAR) FROM {ctx.mirror(source)} s) "
-                    f"GROUP BY i.value HAVING COUNT(DISTINCT i.entity_id) > 1")
+                tests[f"{table}_{column}_one_master"] = (
+                    f"SELECT h.value FROM ({holders(link, ctx, '> 1')}) h "
+                    f"WHERE h.value IN (SELECT CAST(s.{column} AS VARCHAR) FROM {ctx.mirror(source)} s)")
     return tests
 
 

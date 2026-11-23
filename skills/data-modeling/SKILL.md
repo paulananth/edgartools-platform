@@ -316,8 +316,8 @@ build the table.
 
 - **A transaction row links to its master by the master id only.** The
   identifiers it reported are found through the Cross-reference; the one
-  source key a link reads stays, since the writer fills the master id from it
-  once that record is mastered.
+  source key a link reads stays, since the master is found from it by a join
+  on `master_binding` once that record is mastered.
 - **A fact every row repeats about the master** (a category, a country, a
   currency the instrument is in) is a master field, so it must reach MDM: the
   value most rows report, none on a tie, on the kind's fields and the Dataset

@@ -18,8 +18,8 @@ Every step says what differs for each target.
   - **One link, one Dataset Contract.** The writer finds a row's MDM id by
     the source key among the records that one Dataset Contract staged. When
     a key may have been staged by either of two contracts (one column holding
-    either of two identifier types), give that column two links, each with its
-    own MDM id column; each row fills the one whose contract staged its key.
+    either of two identifier types), give that column two links; each row finds
+    its master through the contract that staged its key.
   - **A master whose record key has several parts** is found by that key as
     MDM writes it: the parts as a compact JSON list (`["<part 1>","<part 2>"]`).
     Build that text as a column in the reading (`concat` of the parts) and

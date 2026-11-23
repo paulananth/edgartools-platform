@@ -136,7 +136,7 @@ def check(spec: dict) -> dict:
 
 def columns(spec: dict) -> list[str]:
     """Every column of the table: the spec's columns, the quality column when the spec has
-    checks, and loaded_at when added. A master is found by a join, so no column holds its id."""
+    checks, and loaded_at when added. A linked master is found by a join on master_binding, so no column is added for its id."""
     return [c["name"] for c in spec["columns"]] + quality_columns(spec) + added_time(spec)
 
 

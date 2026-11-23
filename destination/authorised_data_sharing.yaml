@@ -42,8 +42,8 @@ layers:
 
 # Silver: every registered table. Its spec is its requirement (approved when its source was onboarded);
 # the writer puts the spec's definitions on the table and its columns, which the manifest reads back.
-# A load mode of append keeps every row (history); the others hold the current rows. A table with an
-# MDM id column is filled from the golden records.
+# A load mode of append keeps every row (history); the others hold the current rows. A silver row finds
+# its master by a join on master_binding.
 #
 # MDM: its two final tables (edgar_warehouse/mastering/schema/postgresql.sql), which carry no comments,
 # so their definitions are here. The other mastering_* tables are working tables: source records,

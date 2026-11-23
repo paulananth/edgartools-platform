@@ -267,13 +267,25 @@ def test_an_identifier_two_masters_hold_fails_its_gold_test_and_finds_no_master(
     db.executemany("insert into mastering_identifier values (?, ?, ?)", [("ticker", "AAA", "s1"), ("ticker", "BBB", "s2")])
     db.execute(views.render(config, dialect="sqlite", qualify=False)["fact_offering"])
     tests = views.quality_tests(config, dialect="sqlite", qualify=False)
-    assert failing(db, tests["security_ticker_one_master"]) == []
+    assert failing(db, tests["offering_ticker_one_master"]) == []
     assert failing(db, tests["offering_ticker_resolves"]) == []
     db.execute("insert into mastering_identifier values ('ticker', 'BBB', 's1')")   # a second master holds BBB
-    assert failing(db, tests["security_ticker_one_master"]) == [("BBB",)]
+    assert failing(db, tests["offering_ticker_one_master"]) == [("BBB",)]
     assert rows(db, "select offering_id, security_key from fact_offering order by 1") == [("o1", "s1"), ("o2", "unknown")]
     db.execute("insert into mastering_identifier values ('ticker', 'AAA', 's2')")   # now neither resolves: 0 of 2 < 0.5
     assert failing(db, tests["offering_ticker_resolves"]) == [(2, 0)]
+
+
+def test_two_tables_reading_one_identifier_each_get_their_test():
+    names = set(views.quality_tests(dialect="sqlite", qualify=False))
+    assert {"registration_offering_ticker_one_master", "prospectus_offering_ticker_one_master"} <= names
+
+
+def test_a_source_key_bound_to_two_masters_fails_its_gold_test(db):
+    test = views.quality_tests(dialect="sqlite", qualify=False)["master_binding_one_master_per_key"]
+    assert failing(db, test) == []
+    db.execute("insert into master_binding values ('sec.company.v1', '1', 'company', 'c2')")
+    assert failing(db, test) == [("sec.company.v1", "1")]
 
 
 def test_the_project_writes_one_dbt_test_per_rule(tmp_path):
