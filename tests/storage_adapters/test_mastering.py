@@ -403,20 +403,19 @@ def test_a_merge_of_another_kind_runs_beside_one_in_flight_and_a_reader_of_the_q
         assert sorted(body["kind"] for body in live(second).values()) == ["company", "security"]
 
 
-def test_the_whole_store_lock_waits_for_a_merge_in_flight(database_factory):
-    """`clear` takes the whole store: it starts only when no merge of any kind is open."""
+def test_the_whole_store_refuses_while_a_merge_is_in_flight_and_a_merge_takes_no_store_lock(database_factory, monkeypatch):
+    """`clear` takes the whole store: it refuses while any merge is open. A merge takes only its kind's lock."""
     with two_stores(database_factory) as (first, second):
+        taken = []
+        real = first.lock_store
+        monkeypatch.setattr(first, "lock_store", lambda *a, **k: taken.append(a) or real(*a, **k))
         first.take_lock("company")
-        pool = ThreadPoolExecutor(1)
-        try:
-            waiting = pool.submit(second.take_lock)
-            with pytest.raises(TimeoutError):
-                waiting.result(timeout=1)
-            first.commit()
-            waiting.result(timeout=30)
-        finally:
-            first.rollback()
-            pool.shutdown(wait=False)
+        assert taken == []
+        with pytest.raises(stores.NotQuiet):
+            second.take_lock()
+        first.commit()
+        second.take_lock()
+        second.commit()
 
 
 def _beside(first, second, during):

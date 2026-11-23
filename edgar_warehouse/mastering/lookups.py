@@ -12,7 +12,7 @@ import json
 from edgar_warehouse.mdm import detail_lookups, master_search
 from edgar_warehouse.mdm.store import digest
 
-from .store import blocks
+from .store import NotQuiet, blocks
 
 PAGE = 1000
 SCAN = 5000
@@ -45,10 +45,6 @@ def tokens_of(pin: str, body: dict, records: list[dict]) -> set[str]:
     for record in records:
         tokens |= {_token(pin, "cross", *item) for item in record["cross_references"].items()}
     return tokens
-
-
-class NotQuiet(RuntimeError):
-    """Another session is merging: numbers are not in commit order, so a reader that resumes from one waits for a quiet store."""
 
 
 def build(store, progress=lambda built: None) -> dict:
