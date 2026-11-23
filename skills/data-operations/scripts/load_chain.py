@@ -11,6 +11,7 @@
     python load_chain.py --catalog-status     publish the catalog status of every step already done (a catch-up)
     python load_chain.py --finish --lookups   the same, with the name-search lookups built first (only the context search needs them)
     python load_chain.py --status             what each running step is doing: progress, rate, processes, a verdict
+    python load_chain.py --status --json      the same as one JSON document: every step's state, the running steps, the stores and the machine
     python load_chain.py --auto [--slots N] [--hours H | --deadline HH:MM]
                                               watch the loads: start each step when its lane is free, move its
                                               workers (within --capacity) with the machine, report a missed deadline and go on (see `auto`)
@@ -550,17 +551,31 @@ def outlook(left: float | None, elapsed: float, bound: int, attempt: int, attemp
             "raise its workers or its minutes")
 
 
+def verdict_kind(log_age: float, cpu: float, writes_per_min: float, lock_waiters: int,
+                 shares_store: list[str] | None = None) -> str:
+    """A step's state by its own evidence: `locked` (sessions waiting on locks), `unclear` (no CPU and a silent log, with
+    rows written that may be a sharing step's), `progressing` (it wrote rows, its processes work, or its log moved in the
+    last ten minutes) or `stalled` (no sign of work)."""
+    if lock_waiters >= 3:  # the scheduler's own threshold: one waiting session is normal
+        return "locked"
+    if shares_store and cpu < 5 and log_age >= 10:
+        return "unclear"
+    if writes_per_min > 0 or cpu >= 5 or log_age < 10:
+        return "progressing"
+    return "stalled"
+
+
 def verdict(elapsed: float, bound: int, log_age: float, cpu: float, writes_per_min: float, lock_waiters: int,
             shares_store: list[str] | None = None) -> str:
-    """A step's state by its own evidence: waiting on locks; progressing (it wrote rows, its processes work, or its log
-    moved in the last ten minutes); or no sign of work, which names what is silent. Past its bound is said first."""
+    """The words of `verdict_kind`; being past the step's bound is said first."""
     late = f"past its bound of {bound} min; " if elapsed > bound else ""
-    if lock_waiters >= 3:  # the scheduler's own threshold: one waiting session is normal
+    kind = verdict_kind(log_age, cpu, writes_per_min, lock_waiters, shares_store)
+    if kind == "locked":
         return f"{late}waiting on database locks ({lock_waiters} sessions on the store)"
-    if shares_store and cpu < 5 and log_age >= 10:
+    if kind == "unclear":
         return (f"{late}unclear: its own processes used no CPU and its log is {log_age:.0f} min old, and the rows written "
                 f"are the store's, shared with {', '.join(shares_store)}, so they may be theirs; check its log and processes")
-    if writes_per_min > 0 or cpu >= 5 or log_age < 10:
+    if kind == "progressing":
         return f"{late}progressing"
     return f"{late}no sign of work: no CPU, no rows written, log silent for {log_age:.0f} min; read its log, it may be stalled"
 
@@ -676,12 +691,21 @@ def process_use(source: str, target: str) -> tuple[dict[int, float], float]:
 WRITES_NOTE = "rows written a minute are counted when a transaction commits, so a long transaction shows none until it ends"
 
 
-def status(steps: list[dict], state: Path, reader_url: str | None, sample: int = 20) -> list[str]:
-    """One report line a running step: how long, how far, how fast, what it holds, and a verdict from the evidence.
-    The log gives the bundles done and the minutes left; the database (two readings `sample` seconds apart) the rows
-    written a minute; the processes their CPU and memory; the log's file its age."""
+def machine_reading() -> dict:
+    """The machine now: one-minute load average, cores, and the share of memory free (None where it cannot be read)."""
+    memory = subprocess.run(["memory_pressure"], check=False, capture_output=True,
+                            text=True).stdout if sys.platform == "darwin" else ""
+    return {"load": os.getloadavg()[0], "cores": os.cpu_count() or 1, "memory_free": memory_free_fraction(memory)}
+
+
+def status_snapshot(steps: list[dict], state: Path, reader_url: str | None, sample: int = 20) -> dict:
+    """What every step and the stores are doing, as plain data: each step's state (`done`, `waiting`, or the kind of its
+    verdict while it runs) and, for each running step, how long, how far, how fast, what it holds and its verdict. The
+    log gives the bundles done and the minutes left; the database (two readings `sample` seconds apart) the rows written a
+    minute; the processes their CPU and memory; the log's file its age. `status_lines` writes it as text."""
     text = state.read_text() if state.exists() else ""
     done = done_steps(state)
+    failed = failed_steps(state)
     started = {}
     for found in re.finditer(r"^(\d\d-\d\d \d\d:\d\d:\d\d) ET (\S+) attempt (\d+) start", text, re.M):
         started[found.group(2)] = (datetime.strptime(found.group(1), "%m-%d %H:%M:%S").replace(year=clock().year), int(found.group(3)))
@@ -694,10 +718,7 @@ def status(steps: list[dict], state: Path, reader_url: str | None, sample: int =
     waiters = (database_load(reader_url) or {}).get("lock_waiters", 0)
     listing = subprocess.run(["ps", "-Ao", "pid,ppid,time,rss,args"], check=False, capture_output=True, text=True).stdout
     sessions = database_sessions(reader_url) if reader_url else {}
-    lines = [f"{clock():%H:%M} ET: {len(running)} running, {len(done & {s['name'] for s in steps})} of {len(steps)} done; "
-             f"database writes a minute: " + (", ".join(f"{k} {v:,.0f}" for k, v in rate.items() if v) or "none") +
-             f"; lock waiters {waiters} ({WRITES_NOTE})"]
-    lines += [f"  {session_note(name, counts)}" for name, counts in sorted(sessions.items()) if counts["active"] + counts["waiting_on_client"] > 1]
+    rows = []
     for step in running:
         began, attempt = started[step["name"]]
         elapsed = (clock().replace(tzinfo=None) - began).total_seconds() / 60
@@ -705,21 +726,69 @@ def status(steps: list[dict], state: Path, reader_url: str | None, sample: int =
         age = (time.time() - log.stat().st_mtime) / 60 if log.exists() else elapsed
         progress = bundle_progress(log.read_text()) if log.exists() else None
         seconds, memory = process_use(step["source"], step["target"])
-        count = len(seconds)
         cpu = cpu_percent(0.0, window_cpu(cpu_before[step["name"]], seconds), sample)
         store = store_of(step["target"])
         mine = rate.get(store, 0.0)
         sharing = [o["name"] for o in running if o is not step and store_of(o["target"]) == store]
-        wrote = f"{store} {mine:,.0f} rows/min" + (f" shared with {', '.join(sharing)}" if sharing else "")
         left = minutes_left(*progress, elapsed, bundles_run(log.read_text())) if progress and progress[1] > 1 else None
-        warn = outlook(left, elapsed, step["minutes"], attempt, step["attempts"])
+        rows.append({
+            "name": step["name"], "lane": step["lane"], "attempt": attempt, "attempts": step["attempts"],
+            "workers": load_workers(listing, step["source"], step["target"]) or step.get("workers", 2),
+            "elapsed": elapsed, "bound": step["minutes"], "bundles": progress, "left": left,
+            "processes": len(seconds), "cpu": cpu, "memory_mb": memory, "store": store, "rows_per_min": mine,
+            "shared_with": sharing, "log_age": age, "kind": verdict_kind(age, cpu, mine, waiters, sharing),
+            "verdict": verdict(elapsed, step["minutes"], age, cpu, mine, waiters, sharing),
+            "warning": outlook(left, elapsed, step["minutes"], attempt, step["attempts"])})
+    kinds = {row["name"]: row["kind"] for row in rows}
+    names = {s["name"] for s in steps}
+    return {"time": f"{clock():%H:%M}", "total": len(steps), "done": len(done & names), "failed": len(failed & names), "writes": rate,
+            "lock_waiters": waiters, "sessions": sessions, "machine": machine_reading(), "running": rows,
+            "steps": [{"name": s["name"], "lane": s["lane"], "waits_for": sorted(s.get("waits_for") or []),
+                       "state": "done" if s["name"] in done else "failed" if s["name"] in failed and s["name"] not in kinds
+                       else kinds.get(s["name"], "waiting")} for s in steps]}
+
+
+def status_lines(snapshot: dict) -> list[str]:
+    """One report line a running step: how long, how far, how fast, what it holds, and a verdict from the evidence."""
+    rate, running = snapshot["writes"], snapshot["running"]
+    lines = [f"{snapshot['time']} ET: {len(running)} running, {snapshot['done']} of {snapshot['total']} done; "
+             f"database writes a minute: " + (", ".join(f"{k} {v:,.0f}" for k, v in rate.items() if v) or "none") +
+             f"; lock waiters {snapshot['lock_waiters']} ({WRITES_NOTE})"]
+    lines += [f"  {session_note(name, counts)}" for name, counts in sorted(snapshot["sessions"].items())
+              if counts["active"] + counts["waiting_on_client"] > 1]
+    for row in running:
+        progress, left = row["bundles"], row["left"]
+        wrote = f"{row['store']} {row['rows_per_min']:,.0f} rows/min" + (
+            f" shared with {', '.join(row['shared_with'])}" if row["shared_with"] else "")
         shown = (f"bundles {progress[0]} of {progress[1]}" + (f", about {left:.0f} min left" if left else "")
                  if progress and progress[1] > 1 else "one document, so its log shows no progress; the database does")
-        started_with = load_workers(listing, step["source"], step["target"])
-        lines.append(f"  {step['name']} (lane {step['lane']}, attempt {attempt}, {started_with or step.get('workers', 2)} workers): {elapsed:.0f} min of {step['minutes']}; "
-                     f"{shown}; {count} processes, {cpu:.0f}% CPU, {memory:,.0f} MB; wrote {wrote}; log {age:.0f} min old; "
-                     + verdict(elapsed, step["minutes"], age, cpu, mine, waiters, sharing) + (f"; {warn}" if warn else ""))
+        lines.append(f"  {row['name']} (lane {row['lane']}, attempt {row['attempt']}, {row['workers']} workers): {row['elapsed']:.0f} min of {row['bound']}; "
+                     f"{shown}; {row['processes']} processes, {row['cpu']:.0f}% CPU, {row['memory_mb']:,.0f} MB; wrote {wrote}; log {row['log_age']:.0f} min old; "
+                     + row["verdict"] + (f"; {row['warning']}" if row["warning"] else ""))
     return lines
+
+
+def status(steps: list[dict], state: Path, reader_url: str | None, sample: int = 20) -> list[str]:
+    return status_lines(status_snapshot(steps, state, reader_url, sample))
+
+
+def status_inputs() -> tuple[Path, str | None, str]:
+    """What a read-only status needs: the state file to count (set aside when it was not written for this store), the
+    reader login's URL (None when there is no reader login), and a notice for the operator (empty when none). Only the
+    reader login is used: nothing is written."""
+    state = LOGS / f"chain-{RUN}.log"
+    reader = STORES / "reader.env"
+    reader_url = data_url(load_env(reader)) if reader.exists() else None
+    notice = ""
+    if reader_url and state.exists():  # the file the next run would set aside is no evidence about this store
+        try:
+            if state_verdict(state.read_text(), store_id(reader_url), database_generation(reader_url)) == "set aside":
+                notice = (f"{state.name} was not written for this store (another store, a database made again, or no marker): "
+                          "the next run sets it aside, and its done lines are not counted here")
+                state = state.with_name(state.name + ".not-this-store")
+        except ValueError:
+            pass
+    return state, reader_url, notice
 
 
 def arguments(step: dict) -> list[str]:
@@ -909,6 +978,17 @@ def errors_since(path: Path, start, source: str | None = None, target: str | Non
 def done_steps(state: Path) -> set[str]:
     """The steps any lane has finished, read from the shared state file."""
     return set(re.findall(r" ET (\S+) done:", state.read_text())) if state.exists() else set()
+
+
+def failed_steps(state: Path) -> set[str]:
+    """The steps the scheduler gave up on: a step-level `stopped:` line (not an attempt's) with no later attempt or finish."""
+    last: dict[str, str] = {}
+    if state.exists():
+        for line in state.read_text().splitlines():
+            found = re.search(r" ET (\S+) (?:attempt \d+ start|done:|stopped: )", line)
+            if found:
+                last[found.group(1)] = "stopped" if " stopped: " in line else "other"
+    return {name for name, event in last.items() if event == "stopped"}
 
 
 def wait_for(step: dict, state: Path, poll: int = 30) -> None:
@@ -1150,6 +1230,7 @@ def main() -> int:
                         help="publish the catalog status of every step already done (a catch-up); needs the catalog configured")
     parser.add_argument("--status", action="store_true",
                         help="one line a running step: progress, rate, processes, database writes and a verdict")
+    parser.add_argument("--json", action="store_true", help="with --status: the same readings as one JSON document (counts, states and times only)")
     parser.add_argument("--workers", type=int, help="with --only: the step's workers, within the capacity's range, instead of the chain file's")
     parser.add_argument("--capacity", default="local",
                         help="the compute: local (this machine, measured) or a profile of the chain file (aws-small, aws-medium, aws-large)")
@@ -1179,17 +1260,12 @@ def main() -> int:
         return 0
     state = LOGS / f"chain-{RUN}.log"
     if args.status:  # read-only: the reader login only, no loader login, no wake lock, nothing written
-        reader = STORES / "reader.env"
-        reader_url = data_url(load_env(reader)) if reader.exists() else None
-        counted = state
-        if reader_url and state.exists():  # the file the next run would set aside is no evidence about this store
-            try:
-                if state_verdict(state.read_text(), store_id(reader_url), database_generation(reader_url)) == "set aside":
-                    print(f"{state.name} was not written for this store (another store, a database made again, or no marker): "
-                          "the next run sets it aside, and its done lines are not counted here")
-                    counted = state.with_name(state.name + ".not-this-store")
-            except ValueError:
-                pass
+        counted, reader_url, notice = status_inputs()
+        if args.json:
+            print(json.dumps(status_snapshot(steps, counted, reader_url), indent=1))
+            return 0
+        if notice:
+            print(notice)
         print("\n".join(status(steps, counted, reader_url)))
         return 0
     env = {**os.environ, **load_env(STORES / "worker.env")}
