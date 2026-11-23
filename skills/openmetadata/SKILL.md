@@ -40,7 +40,8 @@ target differs, check that release's schema and API behavior before publishing.
 Treat rolling documentation as concept guidance, not proof of the installed
 API. For the local instance, use its private `.env` login and PAT as described
 in [Local server and rebuilds](LOCAL-SERVER.md); hosted instances use their
-authorized bot credentials.
+authorized bot credentials. To deploy, restart or recover the server, use
+[openmetadata-deploy](../openmetadata-deploy/SKILL.md).
 
 Run the repository initializer before using the local catalog. It clears all
 active AI Governance entities through the native API and verifies zero active

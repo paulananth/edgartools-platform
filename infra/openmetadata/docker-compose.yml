@@ -28,7 +28,7 @@ x-server-env: &server-env
   SEARCH_TYPE: elasticsearch
   PIPELINE_SERVICE_CLIENT_ENABLED: "false"
   SERVER_HOST_API_URL: http://openmetadata-server:8585/api
-  OPENMETADATA_HEAP_OPTS: "${CATALOG_SERVER_HEAP_OPTS:--Xmx1G -Xms1G}"
+  OPENMETADATA_HEAP_OPTS: "${CATALOG_SERVER_HEAP_OPTS:--Xmx768m -Xms768m}"
 
 services:
   postgresql:
@@ -51,7 +51,7 @@ services:
     restart: unless-stopped
     environment:
       - discovery.type=single-node
-      - "ES_JAVA_OPTS=${CATALOG_SEARCH_HEAP_OPTS:--Xms1024m -Xmx1024m}"
+      - "ES_JAVA_OPTS=${CATALOG_SEARCH_HEAP_OPTS:--Xms512m -Xmx512m}"
       - xpack.security.enabled=false
     volumes:
       - es-data:/usr/share/elasticsearch/data
@@ -76,10 +76,14 @@ services:
     image: docker.getcollate.io/openmetadata/server:2.0.7
     restart: unless-stopped
     environment: *server-env
-    volumes:
+    configs:
       # The release puts its working directory before jars on the classpath.
       # Override its bundled example edges so startup cannot restore them.
-      - ./no-ai-demo-lineage.json:/opt/openmetadata/json/data/aiGovernance/lineage/ai_governance_lineage.json:ro
+      # Inline content, not a file of the checkout: a bind of a repository path
+      # ties the container to that worktree, and a restart after it is deleted
+      # fails to create the container.
+      - source: no-ai-demo-lineage
+        target: /opt/openmetadata/json/data/aiGovernance/lineage/ai_governance_lineage.json
     ports:
       - "127.0.0.1:${OPENMETADATA_HOST_PORT:-8587}:8585"
     depends_on:
@@ -95,6 +99,10 @@ services:
       timeout: 10s
       retries: 20
       start_period: 600s
+
+configs:
+  no-ai-demo-lineage:
+    content: "[]"
 
 volumes:
   db-data:
