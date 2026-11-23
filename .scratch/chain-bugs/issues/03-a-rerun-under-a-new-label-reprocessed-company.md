@@ -35,12 +35,12 @@ publications`, 146 times each. The 10 steps behind it never ran, and 292 Bookkee
 - [x] Failing test, then fix: the run label is no input of a load (`test_the_run_label_is_no_input_of_a_load` failed with
   `--capture-run another-label-company` against `one-label-company`), 2026-11-23 18:22 ET
 - [x] Failing test, then fix: `--plan --only` plans only that step and prints the open runs
-  (`test_a_plan_of_one_step_or_lane_plans_only_it_and_names_the_open_runs` failed: 42 more steps planned), 2026-11-23 18:22 ET
+  (`test_a_plan_of_one_step_or_lane_plans_only_it` failed: 42 more steps planned), 2026-11-23 18:22 ET
 - [x] Failing test, then fix: a contradictory publication stops at the first attempt and the note names its cause
   (`test_a_retry_is_pointless_...` failed: `retry_is_pointless()` took no errors), 2026-11-23 18:22 ET
 - [x] Failing test, then fix: the refusal names its cause and both remedies (Rust
   `a_contradictory_publication_names_its_cause_and_both_remedies` failed on `an input changed`), 2026-11-23 18:22 ET
 - [ ] ~~Close the 292 open runs~~ deferred to ticket 04: Bookkeeping has no state for a run that can never finish
 - [x] Skills: `data-operations/HOSTED-LOADS.md` (a run label names the state and logs, never an input; plan one step) and
-  `data-operations/SKILL.md` (a refusal the same inputs always give stops at once), 2026-11-23 18:22 ET
+  `data-operations/SKILL.md` (a refusal the same inputs always give stops at once); skill lints 148 passed, 2026-11-23 18:22 ET
 - [x] Learning → skill: the two `data-operations` lines above, 2026-11-23 18:22 ET

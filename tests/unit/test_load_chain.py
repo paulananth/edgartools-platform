@@ -1484,20 +1484,26 @@ def test_a_loads_database_sessions_carry_the_step_name_as_their_application_name
     assert chain.application_name("gleif") == "chain-gleif"
 
 
-def test_a_plan_of_one_step_or_lane_plans_only_it_and_names_the_open_runs(monkeypatch, tmp_path, capsys):
-    """A plan of every step took over five minutes to answer for one, and dropped the open runs a load would finish."""
+def test_a_plan_of_one_step_or_lane_plans_only_it(monkeypatch, tmp_path):
+    """A plan of every step took over five minutes to answer for one."""
+    from tests.support.patching import checked
+
     (tmp_path / "worker.env").write_text("")
     monkeypatch.setattr(chain, "STORES", tmp_path)
     monkeypatch.setattr(chain, "LOGS", tmp_path)
-    monkeypatch.setattr(chain.subprocess, "Popen", lambda *a, **k: None)
+    checked(monkeypatch, chain.subprocess, "Popen", lambda *a, **k: None)  # the wake lock
     planned = []
-    monkeypatch.setattr(chain, "plan", lambda step, env: planned.append(step["name"]) or "")
+    checked(monkeypatch, chain, "plan", lambda step, env: planned.append(step["name"]) or "")
     monkeypatch.setattr(sys, "argv", ["load_chain.py", "--plan", "--only", "company"])
     assert chain.main() == 0 and planned == ["company"]
     planned.clear()
     monkeypatch.setattr(sys, "argv", ["load_chain.py", "--plan", "--lane", "A"])
     assert chain.main() == 0 and planned == [s["name"] for s in STEPS if s["lane"] == "A"]
+
+
+def test_a_plan_names_the_open_runs_a_load_would_finish_and_those_it_would_leave(monkeypatch):
+    from tests.support.patching import checked
+
     body = '{"documents": 7, "bundles": 2, "blocked": null, "finishable_runs": ["a", "b"], "left_as_they_are": {"c": "why"}}'
-    monkeypatch.undo()
-    monkeypatch.setattr(chain.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": body, "stderr": ""})())
+    checked(monkeypatch, chain.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": body, "stderr": ""})())
     assert chain.plan(BY_NAME["company"], {}) == "documents 7 bundles 2 blocked None open runs: 2 to finish first, 1 left"
