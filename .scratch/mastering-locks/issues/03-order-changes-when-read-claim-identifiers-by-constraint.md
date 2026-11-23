@@ -130,6 +130,11 @@ one golden record twice.
 - [x] Measure first: lock waits are 1% of merge session time, disk reads 43% (above); the lock root cause is overturned and
   parts 1 to 3 go on for the second write and the round trips (`pg_locks` and `pg_stat_activity` every 10 s for 10
   minutes, reader login) 2026-11-23 13:02 ET
+- [x] The design's PostgreSQL behaviour, tested on a disposable PostgreSQL 16 store (6 pass): two open merges take sequence
+  numbers without waiting; a rolled-back merge leaves a gap and a quiet reader misses nothing; a record's number can go down and
+  a quiet reader still reads it; a reader during merges misses a late commit (why readers need a quiet store); the quiet check
+  sees another session's kind lock of the same login and never its own; a claim is won once, the loser waits on the row and
+  reads back that it lost, and another kind may hold the value. MySQL is not tested 2026-11-23 13:21 ET
 - [ ] `/gof-refactor-reviewer` consult on `edgar_warehouse/mastering/store.py` and `merge.py` before code
 - [ ] Part 1, each golden record written once with its number. Tests first, each failing on today's code:
   - a merge writes each changed golden record once, with its number, and takes no numbering lock (today: an insert, then an
