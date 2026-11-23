@@ -9,6 +9,8 @@ create table if not exists mastering_record(assertion_id varchar(128) primary ke
 create index if not exists mastering_record_entity on mastering_record(entity_id);
 create index if not exists mastering_record_subject on mastering_record(subject);
 create index if not exists mastering_record_lei on mastering_record(lei);
+-- the doubled percent sign is one to the driver, and the index serves exactly the query of Store.linked_records
+create index if not exists mastering_record_linked on mastering_record(assertion_id) where body like '%%"relationships":[{%%';
 create table if not exists mastering_name_key(role varchar(16) not null, value varchar(64) not null, subject varchar(255) not null, primary key(role, value, subject));
 create index if not exists mastering_name_key_subject on mastering_name_key(subject);
 create table if not exists mastering_review(subject varchar(255) not null, reason varchar(64) not null, assertion_id varchar(128), open_review bigint not null, primary key(subject, reason));
