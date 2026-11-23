@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS bookkeeping_pipeline_run (
   JSON_UNQUOTE(JSON_EXTRACT(submission,'$.kind')),':',JSON_UNQUOTE(JSON_EXTRACT(submission,'$.name')),':',
   JSON_UNQUOTE(JSON_EXTRACT(submission,'$.target'))),256))) STORED,
  KEY run_document_lookup(document_hash,created_at,run_id),
- CHECK (expected_count>=0), CHECK (state IN ('running','waiting','blocked','complete')),
+ CHECK (expected_count>=0), CHECK (state IN ('running','waiting','blocked','complete','abandoned')),
  CHECK (JSON_VALID(submission)), CHECK (JSON_VALID(checks)), CHECK (JSON_VALID(summary)), CHECK (JSON_VALID(runtimes))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin COMMENT='bookkeeping-storage-v1'
 -- statement boundary
@@ -484,6 +484,18 @@ BEGIN
  UPDATE bookkeeping_pipeline_run SET state='blocked',completed_at=NULL,
   checks=JSON_OBJECT('blocked',JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.m')))
   WHERE run_id=REPLACE(JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.r')),'-','');
+END
+
+-- statement boundary
+DROP PROCEDURE IF EXISTS bookkeeping_abandon_run
+-- statement boundary
+CREATE PROCEDURE bookkeeping_abandon_run(IN p_wire LONGTEXT)
+SQL SECURITY DEFINER
+BEGIN
+ CALL bookkeeping_require_ready();
+ UPDATE bookkeeping_pipeline_run SET state='abandoned',completed_at=NULL,
+  checks=JSON_OBJECT('abandoned',JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.m')))
+  WHERE run_id=REPLACE(JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.r')),'-','') AND state IN ('running','waiting','blocked');
 END
 
 -- statement boundary

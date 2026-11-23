@@ -1310,7 +1310,7 @@ def test_catalog_status_reports_retryable_bookkeeping_failure_on_target_pipeline
 
 
 @pytest.mark.parametrize("kind", ["source", "pipeline"])
-@pytest.mark.parametrize("state", ["running", "waiting", "blocked", "complete"])
+@pytest.mark.parametrize("state", ["running", "waiting", "blocked", "complete", "abandoned"])
 def test_bookkeeping_run_states_map_to_target_pipeline(kind, state):
     plan = catalog.plan()
     folder = "sources" if kind == "source" else "pipelines"
@@ -1331,7 +1331,7 @@ def test_bookkeeping_run_states_map_to_target_pipeline(kind, state):
                 "failed_steps": failed_steps}
 
     update = catalog.pipeline_status_from_bookkeeping(plan, files.ROOT, snapshot)
-    expected_status = "Successful" if state == "complete" else "Pending"
+    expected_status = {"complete": "Successful", "abandoned": "Failed"}.get(state, "Pending")
 
     assert update["pipeline"] == catalog.fqn(pipeline["service"], pipeline["name"])
     assert update["status"]["executionStatus"] == expected_status

@@ -539,3 +539,45 @@ def test_a_run_at_grain_run_whose_check_fails_stays_open_and_is_worked_again(con
         local.work_run(book, run_id, modules={book.profile: Failing})
     assert book.status(run_id)["run"]["state"] == "running"
     assert local.work_run(book, run_id, modules={book.profile: copy})["run"]["state"] == "complete"
+
+
+def test_a_run_at_grain_run_refused_for_good_is_abandoned_and_never_worked_again(control, tmp_path):
+    """A refusal the same frozen inputs always give (contradictory publications) can never finish: the run is closed as
+    abandoned, so a later load does not drive it again and no guard waits on it. A run that can still finish never is."""
+    from edgar_warehouse.control_contract import Blocked
+    from edgar_warehouse.rules import local
+    from edgar_warehouse.workers import copy
+
+    _, _, _, book, _ = control
+    body = config()
+    target = body["bookkeeping"]["targets"]["silver"]
+    target["grain"] = "run"
+    for held in ("lease_seconds", "heartbeat_seconds"):
+        target.pop(held, None)
+    run_id, _, _ = submission(book, tmp_path, body=body)
+    worked = []
+
+    class Refused:
+        @staticmethod
+        def execute(envelope, artifacts):
+            worked.append(envelope["claim"]["key"])
+            raise ValueError("Source native revision has contradictory publications: an input changed")
+        check = staticmethod(copy.check)
+
+    with pytest.raises(ValueError, match="contradictory publications"):
+        local.work_run(book, run_id, modules={book.profile: Refused})
+    run = book.status(run_id)["run"]
+    assert run["state"] == "abandoned" and "contradictory publications" in run["checks"]["abandoned"]
+    assert run_id in {str(r["run_id"]) for r in book.runs(state="abandoned")}
+    assert run_id not in {str(r["run_id"]) for r in book.runs(state="running")}
+    count = len(worked)
+    with pytest.raises(Blocked, match="abandoned"):
+        local.work_run(book, run_id, modules={book.profile: copy})
+    assert len(worked) == count  # nothing worked again
+    with pytest.raises(Blocked):
+        book.resume(run_id)  # an abandoned run is closed for good
+
+    done, _, _ = submission(book, tmp_path / "done", body=body)
+    local.work_run(book, done, modules={book.profile: copy})
+    book.abandon(done, "invented")
+    assert book.status(done)["run"]["state"] == "complete"  # a complete run is never abandoned

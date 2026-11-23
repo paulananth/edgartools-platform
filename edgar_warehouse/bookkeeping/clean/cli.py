@@ -135,7 +135,7 @@ def register(subparsers):
 
     grant.set_defaults(handler=_handle)
     listing = commands.add_parser("runs", help="Find runs after a lost submission acknowledgement")
-    listing.add_argument("--state", choices=("running", "waiting", "blocked", "complete"))
+    listing.add_argument("--state", choices=("running", "waiting", "blocked", "complete", "abandoned"))
     listing.add_argument("--limit", type=int, default=100)
     listing.set_defaults(handler=_handle)
     for name in ("status", "checks", "leases", "resume", "finalize"):
