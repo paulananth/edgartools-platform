@@ -486,8 +486,10 @@ def test_a_delivery_costs_one_statement_a_batch_and_returns_no_key_it_already_ho
     owner, runtime = stores
     silver.register(owner, visit_spec(load_mode=load_mode), runtime_role=RUNTIME)
     sink = PostgresSink(runtime)
-    rows = _many_visits(2500)
-    assert land(sink, "visit", rows)["inserted"] == 2500
+    from edgar_warehouse.silver_writer import relational
+
+    rows = _many_visits(2 * relational.POSTGRES_BATCH + 500)
+    assert land(sink, "visit", rows)["inserted"] == len(rows)
     seen = []
     listener = lambda conn, cur, statement, *rest: seen.append(statement.lower())
     event.listen(runtime, "before_cursor_execute", listener)
@@ -496,7 +498,7 @@ def test_a_delivery_costs_one_statement_a_batch_and_returns_no_key_it_already_ho
     finally:
         event.remove(runtime, "before_cursor_execute", listener)
     assert again["inserted"] == 0 and again["changed"] == 0 and again.get("deleted", 0) == 0
-    assert len([s for s in seen if "unnest" in s]) == 3  # three batches of 1,000, 1,000 and 500, one statement each
+    assert len([s for s in seen if "unnest" in s]) == 3  # three batches (two full and one of 500), one statement each
 
 
 def test_a_snapshot_with_a_changed_row_and_a_row_the_delivery_dropped_still_updates_and_removes(stores):
