@@ -10,6 +10,7 @@ from .storage import registered_spec
 from .tables import bound_row, data_table, staging_name
 
 BATCH = 1000
+POSTGRES_BATCH = 5000  # a landing batch is one round trip (about 70 ms on a hosted store) whatever its size, so a batch carries more rows
 
 
 
@@ -229,7 +230,7 @@ class DatabaseSink:
                     prepared = bound_row(spec, row)
                     batch.append(tuple(prepared.get(c) for c in written))
                     counts["rows"] += 1
-                    if len(batch) == BATCH:
+                    if len(batch) == POSTGRES_BATCH:
                         merge(conn, batch, delivered if snapshot else None); batch = []
                 if batch:
                     merge(conn, batch, delivered if snapshot else None)
