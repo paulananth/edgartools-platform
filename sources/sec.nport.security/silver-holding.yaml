@@ -140,21 +140,18 @@ links:
   source_code: sec.nport.fund.v1
   to_part: fund
   source_key: series_id
-  mdm_id_column: fund_mdm_id
 - columns:
   - registrant_cik
   kind: company
   source_code: sec.nport.registrant.v2
   to_part: registrant
   source_key: registrant_cik
-  mdm_id_column: registrant_mdm_id
 - columns:
   - security_key
   kind: security
   source_code: sec.nport.security.v2
   to_part: security
   source_key: security_key
-  mdm_id_column: security_mdm_id
 time:
   as_of: period
   as_at: filed

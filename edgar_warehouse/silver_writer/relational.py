@@ -68,8 +68,8 @@ class DatabaseSink:
         target = data_table(spec, "mysql")
         stage = data_table(spec, "mysql", temporary=staging_name(spec))
         source = [c["name"] for c in spec["columns"]]
-        groups = {"mdm_ids_updated": specs.mdm_id_columns(spec), "quality_updated": specs.quality_columns(spec)}
-        staged = source + groups["mdm_ids_updated"] + groups["quality_updated"]
+        groups = {"quality_updated": specs.quality_columns(spec)}
+        staged = source + groups["quality_updated"]
         key_types = {c["name"]: specs.postgres_type(c["type"]) for c in spec["columns"]}
         key_values = [func.hex(stage.c[k]) if key_types[k] == "bytea" else
                       func.nullif(stage.c[k], 0) if key_types[k] == "double precision" else stage.c[k] for k in spec["key"]]
@@ -101,7 +101,7 @@ class DatabaseSink:
                     if changed and spec["load_mode"] == "append":
                         raise Blocked(f"silver.{spec['table']} is append only: delivered rows change rows already landed under the same key")
                     inserted = conn.execute(insert(target).from_select(staged + specs.added_time(spec), incoming)).rowcount
-                    updates = {"mdm_ids_updated": 0}
+                    updates = {}
                     for name, columns in groups.items():
                         if columns:
                             updates[name] = conn.execute(update(target).where(match, differs(columns)).values(
@@ -132,11 +132,11 @@ class DatabaseSink:
 
         target = data_table(spec, "postgresql")
         keys, source = list(spec["key"]), [c["name"] for c in spec["columns"]]
-        groups = {"mdm_ids_updated": specs.mdm_id_columns(spec), "quality_updated": specs.quality_columns(spec)}
-        written = source + groups["mdm_ids_updated"] + groups["quality_updated"]
+        groups = {"quality_updated": specs.quality_columns(spec)}
+        written = source + groups["quality_updated"]
         added, snapshot, append = specs.added_time(spec), spec["load_mode"] == "snapshot", spec["load_mode"] == "append"
         counts = {"rows": 0, "inserted": 0, "changed": 0, "deleted": 0,
-                  **{name: 0 for name, columns in groups.items() if columns or name == "mdm_ids_updated"}}
+                  **{name: 0 for name, columns in groups.items() if columns}}
         now = datetime.now(UTC)
         differs = lambda incoming, fields: or_(*(target.c[c].is_distinct_from(incoming.c[c]) for c in fields))
 
@@ -219,28 +219,3 @@ class DatabaseSink:
         except (DBAPIError, StatementError) as exc:
             raise Blocked(delivery_refusal(spec["table"], exc)) from None
         return {"table": spec["table"], **counts}
-
-    def link_keys(self, spec, link):
-        from sqlalchemy import cast, Text
-        table = data_table(spec, self.engine.dialect.name)
-        column = table.c[link["source_key"]]
-        empty = table.c[link["mdm_id_column"]].is_(None)  # a row that has an id is never read again
-        with self.engine.connect() as conn:
-            return {str(value) for value in conn.scalars(select(cast(column, Text)).where(column.is_not(None), empty))}
-
-    def set_ids(self, spec, link, found):
-        # Refresh is coordinated with deliveries and commits as one operation.
-        from sqlalchemy import case, cast, Text
-        table = data_table(spec, self.engine.dialect.name)
-        key, column = cast(table.c[link["source_key"]], Text), table.c[link["mdm_id_column"]]
-        if self.engine.dialect.name == "mysql": key = key.collate("utf8mb4_0900_bin")
-        changed = 0
-        pairs = [(k, v) for k, v in found.items() if v is not None]
-        with self.engine.begin() as conn:
-            lock(conn, spec)
-            for start in range(0, len(pairs), BATCH):
-                batch = dict(pairs[start:start+BATCH])
-                value = case(batch, value=key, else_=column)
-                changed += conn.execute(update(table).where(key.in_(batch), column.is_(None)).values(
-                    {column.name: value})).rowcount
-        return changed

@@ -142,7 +142,7 @@ def recovery_run(databases, tmp_path, monkeypatch):
         spec["table"] = "recovery_fact"
         spec["links"] = []
         assert silver.register(owner, spec, runtime_role=SILVER_RUNTIME)["created"]
-        monkeypatch.setattr(silver_land, "engines", lambda: (runtime, None))
+        monkeypatch.setattr(silver_land, "engines", lambda: runtime)
         monkeypatch.setattr(runtime, "dispose", lambda: None)
         read_units(book, rid)
         land_keys = [unit["keys"]["unit"] for unit in book.artifacts.json(report["manifest"])["steps"]["land"]]

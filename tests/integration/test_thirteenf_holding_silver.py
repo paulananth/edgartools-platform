@@ -76,7 +76,7 @@ def test_each_holding_lands_in_silver_with_no_merge_with_its_filing_and_facts(da
     with silver_database(databases.admin) as (owner, runtime):
         silver.migrate(owner, runtime_role=RUNTIME)
         assert silver.register(owner, spec_file(FOLDER / "silver-holding.yaml", None), runtime_role=RUNTIME)["created"]
-        monkeypatch.setattr(silver_land, "engines", lambda: (runtime, mdm.application))  # an empty MDM: no Security mastered
+        monkeypatch.setattr(silver_land, "engines", lambda: runtime)  # an empty MDM: no Security mastered
         monkeypatch.setattr(runtime, "dispose", lambda: None)
         monkeypatch.setattr(mdm.application, "dispose", lambda: None)
         state = drive(book, rid, databases.ledger, workers=workers)

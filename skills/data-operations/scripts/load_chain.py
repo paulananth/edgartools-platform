@@ -1128,17 +1128,12 @@ def attempt_loop(step: dict, env: dict, state: Path) -> bool:
 
 
 def finish(env: dict, state: Path, lookups: bool = False) -> None:
-    """After the loads: the links table is built once, then each silver table's master ids are filled from MDM as it is now
-    (a row that landed before its master was mastered keeps an empty id). The name-search lookups are built only when asked
+    """After the loads: the links table is built once (a silver row finds its master by a join, so no id is filled). The name-search lookups are built only when asked
     (`lookups`): a load reads none of them, only the context search does, and building them re-derives every master."""
     if lookups:
         note("lookups start", state)
         note(f"lookups rc={run(['mdm', 'build-lookups'], env, LOGS / f'chain-{RUN}-lookups.log')}", state)
     note(f"links rc={run(['silver', 'links'], env, LOGS / f'chain-{RUN}-links.log')}", state)
-    for spec in sorted((ROOT / "sources").glob("*/silver-*.yaml")):
-        table = yaml.safe_load(spec.read_text())["table"]
-        code = run(["silver", "refresh-ids", table], env, LOGS / f"chain-{RUN}-refresh-{table}.log")
-        note(f"refresh-ids {table} rc={code}", state)
     note("chain done", state)
 
 

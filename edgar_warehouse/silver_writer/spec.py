@@ -15,9 +15,9 @@ from .checks import QUALITY
 from .checks import check as check_quality
 
 KEYS = {"table", "grain", "columns", "key", "links", "time", "partition", "load_mode", "why"}
-OPTIONAL = {"definition", "checks", "may_be_empty"}
+OPTIONAL = {"definition", "checks", "may_be_empty", "master_columns", "master_through"}
 COLUMN_KEYS = {"name", "type", "nullable", "definition", "source", "sensitivity"}
-LINK_KEYS = {"columns", "kind", "source_code", "identifier", "to_part", "source_key", "mdm_id_column", "inclusion"}
+LINK_KEYS = {"columns", "kind", "source_code", "identifier", "to_part", "source_key", "inclusion"}
 LOAD_MODES = ("append", "upsert", "snapshot")
 LOADED_AT = "loaded_at"  # the as-at column the writer adds when no source column holds it
 NAME_BYTES = 63  # PostgreSQL cuts longer names silently; two long names could become one
@@ -91,9 +91,9 @@ def check(spec: dict) -> dict:
                       "is empty when the parent has none")
     added = []
     for link in spec["links"] or []:
-        if not isinstance(link, dict) or not {"columns", "kind", "source_key", "mdm_id_column"} <= set(link) \
+        if not isinstance(link, dict) or not {"columns", "kind", "source_key"} <= set(link) \
                 or set(link) - LINK_KEYS:
-            raise Blocked(f"A link holds columns, kind, source_code or identifier, source_key and mdm_id_column: {link!r}")
+            raise Blocked(f"A link holds columns, kind, source_code or identifier, and source_key: {link!r}")
         finds = [link.get(by) for by in ("source_code", "identifier") if link.get(by) is not None]
         if not isinstance(link["kind"], str) or not link["kind"] or len(finds) != 1 \
                 or not isinstance(finds[0], str) or not finds[0]:
@@ -105,7 +105,15 @@ def check(spec: dict) -> dict:
                                                       and not isinstance(link["inclusion"], bool)
                                                       and 0 <= link["inclusion"] <= 1):
             raise Blocked(f"Link on {link['source_key']}: inclusion is a share from 0 to 1")
-        added.append(_name(link["mdm_id_column"], "column"))
+    ways = [bool(spec["links"]), bool(spec.get("master_columns")), bool(spec.get("master_through"))]
+    if sum(ways) > 1:
+        raise Blocked("A table finds its master one way: links (a key found by a view), master_columns (columns that "
+                      "hold master ids) or master_through (the table whose key it carries)")
+    for column in spec.get("master_columns") or []:
+        if column not in names:
+            raise Blocked(f"master_columns names a column of the spec: {column!r}")
+    if "master_through" in spec and not (isinstance(spec["master_through"], str) and spec["master_through"]):
+        raise Blocked("master_through names the table whose key this table carries")
     check_quality(spec, names)
     added += quality_columns(spec)
     time = spec["time"]
@@ -127,9 +135,9 @@ def check(spec: dict) -> dict:
 
 
 def columns(spec: dict) -> list[str]:
-    """Every column of the table: the spec's columns, each link's MDM id column, the
-    quality column when the spec has checks, and loaded_at when added."""
-    return [c["name"] for c in spec["columns"]] + mdm_id_columns(spec) + quality_columns(spec) + added_time(spec)
+    """Every column of the table: the spec's columns, the quality column when the spec has
+    checks, and loaded_at when added. A master is found by a join, so no column holds its id."""
+    return [c["name"] for c in spec["columns"]] + quality_columns(spec) + added_time(spec)
 
 
 def quality_columns(spec: dict) -> list[str]:
@@ -144,8 +152,6 @@ def describe_link(link: dict) -> str:
     return f"the {link['kind']} whose `{link['source_code']}` record key is `{link['source_key']}`"
 
 
-def mdm_id_columns(spec: dict) -> list[str]:
-    return [link["mdm_id_column"] for link in spec["links"] or []]
 
 
 def added_time(spec: dict) -> list[str]:

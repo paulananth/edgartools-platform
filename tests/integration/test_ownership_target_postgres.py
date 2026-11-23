@@ -100,7 +100,7 @@ def test_the_silver_path_lands_every_row_with_no_merge_and_no_owner_mastered(dat
         silver.migrate(owner, runtime_role=RUNTIME)
         for name in ("silver-owner.yaml", "silver-line.yaml"):
             assert silver.register(owner, spec_file(FOLDER / name, None), runtime_role=RUNTIME)["created"]
-        monkeypatch.setattr(silver_land, "engines", lambda: (runtime, mdm.application))  # an empty MDM: no owner mastered
+        monkeypatch.setattr(silver_land, "engines", lambda: runtime)  # an empty MDM: no owner mastered
         monkeypatch.setattr(runtime, "dispose", lambda: None)
         monkeypatch.setattr(mdm.application, "dispose", lambda: None)
         state = drive(book, rid, databases.ledger, workers=workers)

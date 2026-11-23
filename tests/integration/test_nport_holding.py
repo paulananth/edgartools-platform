@@ -218,7 +218,7 @@ def test_the_land_step_lands_every_holding_once_and_its_verifier_confirms(databa
     with silver_database(database.admin) as (owner, runtime):
         silver.migrate(owner, runtime_role=RUNTIME)
         assert silver.register(owner, spec_file(FOLDER / "silver-holding.yaml", None), runtime_role=RUNTIME)["created"]
-        monkeypatch.setattr(silver_land, "engines", lambda: (runtime, database.application))
+        monkeypatch.setattr(silver_land, "engines", lambda: runtime)
         monkeypatch.setattr(runtime, "dispose", lambda: None)
         monkeypatch.setattr(database.application, "dispose", lambda: None)
         store = Store()

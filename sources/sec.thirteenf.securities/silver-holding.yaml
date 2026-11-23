@@ -92,7 +92,6 @@ links:
   source_code: sec.thirteenf.securities.v2
   to_part: security
   source_key: cusip
-  mdm_id_column: security_mdm_id
 time:
   as_of: null
   as_at: loaded_at

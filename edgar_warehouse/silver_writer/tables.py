@@ -139,7 +139,6 @@ def data_table(spec, dialect, *, temporary=None):
     metadata = MetaData(schema="silver" if dialect == "postgresql" and not temporary else None)
     columns = [Column(c["name"], logical_type(c["type"], dialect), nullable=c["nullable"])
                for c in spec["columns"]]
-    columns += [Column(c, logical_type("VARCHAR", dialect)) for c in specs.mdm_id_columns(spec)]
     columns += [Column(c, SilverJSON()) for c in specs.quality_columns(spec)]
     if not temporary:
         columns += [Column(c, UTCDateTime(), nullable=False) for c in specs.added_time(spec)]

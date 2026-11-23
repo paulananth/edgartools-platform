@@ -69,7 +69,6 @@ parts:
     links:
     - source_key: id
       to_part: security
-      mdm_id_column: security_mdm_id
   quality:
   - check: missing
     column: figi
@@ -246,13 +245,10 @@ parts:
     links:
     - source_key: figi
       to_part: answers.data.figi
-      mdm_id_column: mdm_id
     - source_key: compositeFIGI
       to_part: answers.data.compositeFIGI
-      mdm_id_column: compositeFIGI_mdm_id
     - source_key: shareClassFIGI
       to_part: answers.data.shareClassFIGI
-      mdm_id_column: shareClassFIGI_mdm_id
   quality:
   - check: missing
     column: figi
@@ -365,10 +361,8 @@ parts:
     links:
     - source_key: compositeFIGI
       to_part: answers.data.compositeFIGI
-      mdm_id_column: mdm_id
     - source_key: shareClassFIGI
       to_part: answers.data.shareClassFIGI
-      mdm_id_column: shareClassFIGI_mdm_id
   quality:
   - check: missing
     column: compositeFIGI
@@ -462,7 +456,6 @@ parts:
     links:
     - source_key: shareClassFIGI
       to_part: answers.data.shareClassFIGI
-      mdm_id_column: mdm_id
   quality:
   - check: missing
     column: shareClassFIGI

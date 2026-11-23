@@ -69,7 +69,7 @@ def worker(monkeypatch):
     source_artifact = {"tables": {"sample_table": copy.deepcopy(ROWS)}}
     monkeypatch.setenv(silver_land.QUALITY_V2_GATE, "enabled")
     checked(monkeypatch, silver_land, "_artifacts", lambda *_args, **_kwargs: iter([copy.deepcopy(source_artifact)]))
-    monkeypatch.setattr(silver_land, "engines", lambda: (Engine(), None))
+    monkeypatch.setattr(silver_land, "engines", lambda: Engine())
     monkeypatch.setattr(DatabaseSink, "__init__", lambda self, _engine: None)
     monkeypatch.setattr(DatabaseSink, "spec", Sink.spec)
     checked(monkeypatch, silver_land, "_missing", lambda *_args: 0)

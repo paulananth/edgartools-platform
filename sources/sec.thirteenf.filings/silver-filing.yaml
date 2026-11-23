@@ -61,7 +61,6 @@ links:
   source_code: sec.company.v1
   to_part: manager
   source_key: cik
-  mdm_id_column: manager_mdm_id
 time:
   as_of: report_date
   as_at: filing_date

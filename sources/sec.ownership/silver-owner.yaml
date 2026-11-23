@@ -70,21 +70,18 @@ links:
   source_code: sec.ownership.reporting_owner.v1
   to_part: reporting_owner
   source_key: owner_record_key
-  mdm_id_column: person_mdm_id
 - columns:
   - rpt_owner_cik
   kind: company
   source_code: sec.company.v1
   to_part: company_owner
   source_key: rpt_owner_cik
-  mdm_id_column: company_mdm_id
 - columns:
   - issuer_cik
   kind: company
   source_code: sec.company.v1
   to_part: issuer
   source_key: issuer_cik
-  mdm_id_column: issuer_mdm_id
 time:
   as_of: period_of_report
   as_at: filed

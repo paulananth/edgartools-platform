@@ -419,7 +419,7 @@ def straight(rows: list[dict], checks: frozenset = frozenset({"revenue quality c
     return {"company_line_item": figures, "company_line_item_input": inputs}
 
 
-def build(silver_engine, sink, ids, items: LineItems | None = None, table: str = "company_line_item") -> dict:
+def build(silver_engine, sink, items: LineItems | None = None, table: str = "company_line_item") -> dict:
     """Run the query on silver and land one of its tables through the writer: the figures, or their inputs."""
     from sqlalchemy import text
 
@@ -433,4 +433,4 @@ def build(silver_engine, sink, ids, items: LineItems | None = None, table: str =
         for step in steps:
             conn.execute(text(step))
         rows = [dict(r._mapping) for r in conn.execute(text(final))]
-    return land(sink, table, straight(rows, frozenset(items.larger_total_check.values()))[table], ids)
+    return land(sink, table, straight(rows, frozenset(items.larger_total_check.values()))[table])

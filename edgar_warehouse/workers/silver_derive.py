@@ -76,21 +76,19 @@ def _receipt(silver, sink, build: str) -> bytes:
 def execute(envelope: dict, artifacts) -> dict:
     from edgar_warehouse.financials import line_items, measures
     from edgar_warehouse.silver_writer.relational import DatabaseSink
-    from edgar_warehouse.silver_writer.writer import MdmIds
 
     if set(envelope["checks"]) != {CHECK}:
         raise ValueError(f"silver.derive verifies {CHECK} only")
     build = _build(envelope)
     silver, mdm = engines()
     try:
-        if mdm is None:  # both tables link to the Company masters
+        if mdm is None:  # a measure reads each company's statement format from its Company master
             raise ValueError("silver.derive reads each company's master: source the loader file")
         sink = DatabaseSink(silver)
         if build in ("line_items", "line_item_inputs"):
-            line_items.build(silver, sink, MdmIds(mdm), table=BUILDS[build])
+            line_items.build(silver, sink, table=BUILDS[build])
         else:
-            measures.build(silver, sink, MdmIds(mdm), lambda keys: measures.from_company(mdm, keys),
-                           table=BUILDS[build])
+            measures.build(silver, sink, lambda keys: measures.from_company(mdm, keys), table=BUILDS[build])
         receipt = _receipt(silver, sink, build)
         _floor(silver, build, json.loads(receipt)["rows"])
         return artifacts.put_bytes(envelope["output"], receipt)

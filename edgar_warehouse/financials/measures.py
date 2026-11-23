@@ -378,7 +378,7 @@ def straight(rows: list[dict]) -> dict[str, list[dict]]:
     return {"company_measure": measures, "company_measure_input": inputs}
 
 
-def build(silver_engine, sink, ids, companies, measures: Measures | None = None, table: str = "company_measure") -> dict:
+def build(silver_engine, sink, companies, measures: Measures | None = None, table: str = "company_measure") -> dict:
     """Run the query on silver and land one of its tables through the writer: the measures, or their inputs.
     `companies` gives each company key's SIC and place of incorporation (`from_company`)."""
     from sqlalchemy import text
@@ -396,4 +396,4 @@ def build(silver_engine, sink, ids, companies, measures: Measures | None = None,
         for step in steps:
             conn.execute(text(step))
         rows = [dict(r._mapping) for r in conn.execute(text(final))]
-    return land(sink, table, straight(rows)[table], ids)
+    return land(sink, table, straight(rows)[table])

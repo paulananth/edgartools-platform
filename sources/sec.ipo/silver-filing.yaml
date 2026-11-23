@@ -59,7 +59,6 @@ links:
   source_code: sec.company.v1
   to_part: filer
   source_key: cik
-  mdm_id_column: filer_mdm_id
 time:
   as_of: null
   as_at: observed_at

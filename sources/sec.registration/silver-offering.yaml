@@ -86,14 +86,12 @@ links:
   source_code: sec.company.v1
   to_part: registrant
   source_key: cik
-  mdm_id_column: registrant_mdm_id
 - columns:
   - ticker
   kind: security
   identifier: ticker
   to_part: listed_security
   source_key: ticker
-  mdm_id_column: listed_security_mdm_id
 time:
   as_of: null
   as_at: captured_at
