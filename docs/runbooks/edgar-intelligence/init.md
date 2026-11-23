@@ -40,20 +40,22 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    `snow sql --connection edgartools-prod -q "ALTER POSTGRES INSTANCE <instance> RESTART POSTGRES"`.
    This disconnects existing sessions; wait for the instance to return to
    `READY`, reading only its name and state from the instance description. Then
-   run the read-only reset preflight below. Continue only when it reports no
-   other sessions. Snowflake-managed `pg_lake` sessions can return after
-   restart; if any session remains or returns, stop and resolve it through the
-   Snowflake Postgres operations path. Never terminate internal sessions or
-   bypass the reset script's session guard. The service restart is disruptive
-   and needs the operator's approval; approval to reset the databases alone is
-   not approval to disconnect every client.
+   run the read-only reset preflight below. Continue only when no client
+   session or active transaction remains. Snowflake-managed `pg_lake` workers
+   can return after restart; the script reports idle extension workers without
+   transactions separately and the approved database drop disconnects them
+   with `WITH (FORCE)`. If any client session or extension worker with an open
+   transaction remains, stop. Never terminate internal sessions directly or
+   bypass the reset script's session classification. The service restart is
+   disruptive and needs the operator's approval; approval to reset the
+   databases alone is not approval to disconnect every client.
 
 2. **Databases.** An instance that holds an old store keeps its logins and gets its databases made again: with the
    operator's word, list them, then drop and create them with the owner and the grants each had:
    ```bash
    set -a; . ~/.config/edgartools/hosted/owner.env; set +a
-   python infra/scripts/reset-hosted-databases.py             # lists sizes; refuses while any session is connected
-   python infra/scripts/reset-hosted-databases.py --words "<the operator's exact words>"   # a drop needs the operator's sign-off, kept in reinit-approvals.log
+   python infra/scripts/reset-hosted-databases.py             # lists sizes and session classes; drops nothing
+   python infra/scripts/reset-hosted-databases.py --words "<the operator's exact words>"   # refuses client sessions/transactions; records any forced idle-worker disconnects
    ```
    The drop also deletes the dropped stores' run files (`<manifest root>/load`, the root `worker.env` names): no store refers
    to them once Bookkeeping is dropped. Extracts (`<manifest root>/extracts`) stay, since a load reuses one by its content. A

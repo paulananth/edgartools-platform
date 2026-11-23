@@ -78,12 +78,15 @@ which no phase timing could name.
 - Before a hosted reset, follow the quiesce and drain procedure in the repository's Edgar Intelligence initialize
   runbook: stop clients that can reconnect, confirm no open Bookkeeping runs or leases, resolve managed mirrors under
   their own approval, restart the PostgreSQL service, wait for `READY`, and rerun the read-only reset preflight. An
-  empty load-chain status alone does not prove that the databases have no sessions. If Snowflake-managed `pg_lake`
-  sessions remain or return, stop; never terminate those sessions or bypass the reset script's guard.
-- The reset script (`reset-hosted-databases.py --words "<the operator's words>"`, which records them) also requires the
-  operator's sign-off and refuses while any session is connected. After the reset, expect the previous run's done steps
-  to be set aside as another store's state. It deletes the dropped stores' run files (`<manifest root>/load`) and keeps
-  the extracts.
+  empty load-chain status alone does not prove that the databases have no sessions. The preflight must find no client
+  sessions or active transactions. It reports idle PostgreSQL extension workers separately; the approved reset records
+  and disconnects those with `DROP DATABASE ... WITH (FORCE)`. Stop for any client session or extension worker with an
+  open transaction; never terminate internal sessions directly or bypass the reset script's classification.
+- The reset script (`reset-hosted-databases.py --words "<the operator's words>"`, which records them) requires the
+  operator's sign-off and refuses while a client session or transaction remains. The approval record includes counts of
+  the idle extension worker sessions that `DROP DATABASE ... WITH (FORCE)` disconnects. After the reset, expect the
+  previous run's done steps to be set aside as another store's state. It deletes the dropped stores' run files
+  (`<manifest root>/load`) and keeps the extracts.
 
 ## Dropping objects nothing reads
 A store's objects that no code reads (tables, functions, views) are dropped in place on the operator's words, never by a

@@ -61,3 +61,109 @@ def test_a_reset_deletes_the_run_files_of_the_stores_it_drops_and_keeps_the_extr
 def test_a_stores_folder_that_names_no_run_files_folder_deletes_nothing(tmp_path):
     (tmp_path / "worker.env").write_text("export DATA_URL='postgresql://invented/db'\n")
     assert reset.clear_run_files(tmp_path) is None
+
+
+def test_reset_journey_reports_and_force_drops_only_idle_extension_workers(monkeypatch, tmp_path, capsys):
+    class Result:
+        def __init__(self, row=None, rows=()):
+            self.row = row
+            self.rows = list(rows)
+
+        def first(self):
+            return self.row
+
+        def all(self):
+            return self.rows
+
+    class Connection:
+        def __init__(self, sessions):
+            self.sessions = sessions
+            self.statements = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def execute(self, statement, params=None):
+            sql = str(statement)
+            if "FROM pg_database" in sql:
+                database = params["n"]
+                size = "25 GB" if database == "data" else "469 MB"
+                return Result(row=("admin", ["app_runtime=c/admin"], size))
+            if "FROM pg_stat_activity" in sql:
+                return Result(rows=self.sessions)
+            raise AssertionError(f"unexpected query: {sql}")
+
+        def exec_driver_sql(self, statement):
+            self.statements.append(statement)
+
+    class Engine:
+        def __init__(self, sessions):
+            self.connection = Connection(sessions)
+            self.dialect = type("Dialect", (), {
+                "identifier_preparer": type("Preparer", (), {"quote": staticmethod(lambda name: f'"{name}"')})()
+            })()
+            self.disposed = False
+
+        def connect(self):
+            return self.connection
+
+        def dispose(self):
+            self.disposed = True
+
+    idle_extension_workers = [
+        ("data", "pg base extension worker", None, None),
+        ("data", "pg base extension worker", None, None),
+    ]
+    active_client = ("control", "client backend", "idle in transaction", object())
+    sessions = idle_extension_workers.copy()
+    engines = []
+
+    def engine_factory(*_args, **_kwargs):
+        engine = Engine(sessions.copy())
+        engines.append(engine)
+        return engine
+
+    import types
+    import sys
+
+    monkeypatch.setitem(sys.modules, "edgar_warehouse.database_connections", types.SimpleNamespace(
+        instance_url=lambda: "postgresql://not-a-real-address"
+    ))
+    monkeypatch.setattr(reset.sa, "create_engine", engine_factory)
+    monkeypatch.setenv("STORES_FOLDER", str(tmp_path))
+    monkeypatch.setattr(reset.sys, "argv", ["reset-hosted-databases.py"])
+
+    # The dry run identifies the idle server workers but does not disconnect or mutate anything.
+    assert reset.main() == 0
+    dry_run = capsys.readouterr().out
+    assert "data: 2 idle extension worker session(s)" in dry_run
+    assert "Nothing dropped." in dry_run
+    assert engines[-1].connection.statements == []
+    assert not (tmp_path / "reinit-approvals.log").exists()
+
+    # The approved reset records those workers and relies on the database drop's FORCE behavior.
+    monkeypatch.setattr(reset.sys, "argv", ["reset-hosted-databases.py", "--words", "operator reset words"])
+    assert reset.main() == 0
+    reset_sql = engines[-1].connection.statements
+    assert 'DROP DATABASE IF EXISTS "data" WITH (FORCE)' in reset_sql
+    assert 'CREATE DATABASE "data" OWNER "admin"' in reset_sql
+    assert 'GRANT CONNECT ON DATABASE "data" TO "app_runtime"' in reset_sql
+    assert 'DROP DATABASE IF EXISTS "control" WITH (FORCE)' in reset_sql
+    approvals = [reset.json.loads(line) for line in (tmp_path / "reinit-approvals.log").read_text().splitlines()]
+    assert approvals[-1]["sessions_to_disconnect"] == {"data": 2}
+
+    before = len(approvals)
+    blockers = [
+        active_client,
+        ("control", "pg base extension worker", None, object()),
+        ("control", "pg base extension worker", "active", None),
+    ]
+    for blocker in blockers:
+        sessions[:] = idle_extension_workers + [blocker]
+        assert reset.main() == 3
+        assert engines[-1].connection.statements == []
+        assert len((tmp_path / "reinit-approvals.log").read_text().splitlines()) == before
+    assert engines[-1].disposed

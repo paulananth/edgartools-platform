@@ -2,13 +2,15 @@
 """Drop and create again the platform's databases on a hosted instance, with the owner and the grants each had.
 
     set -a; . <stores folder>/owner.env; set +a
-    python infra/scripts/reset-hosted-databases.py            # lists what it would drop: sizes, no values
+    python infra/scripts/reset-hosted-databases.py            # lists sizes and session classes; drops nothing
     python infra/scripts/reset-hosted-databases.py --words "<the operator's exact words>"  # drops and creates them again
 
 Uses the owner login's connection (owner.env, the instance's administrator), which must be able to
 create databases. The roles stay (they belong to the instance), so no password changes and no login is rotated.
 Each database's owner and CONNECT list are read before it is dropped and put back after, so the runtime, registration
-and any read-only logins reach it as before. Refuses while another session is connected to one of them.
+and any read-only logins reach it as before. Refuses while a client session or a session with an open transaction is
+connected. Idle PostgreSQL extension workers without a transaction are reported separately and disconnected by the
+approved database drop (`WITH (FORCE)`).
 The stores' schemas come next (docs/runbooks/edgar-intelligence/init.md, "Initialize a hosted store", step 3). Prints names and sizes only.
 
 Dropping needs a sign-off: --words is the operator's exact approval of this drop, and the run refuses without it.
@@ -49,12 +51,17 @@ def grants(acl: list[str], owner: str) -> list[tuple[str, str]]:
     return found
 
 
-def sign_off(path: Path, words: str, dropped: dict) -> None:
-    """Append the operator's words, the ET time and what is dropped to the approvals log, private to the owner."""
+def sign_off(path: Path, words: str, dropped: dict, sessions_to_disconnect: dict | None = None) -> None:
+    """Append the operator's words, ET time, affected databases and forced idle-worker sessions privately."""
     stamp = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M ET")
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a") as handle:
-        handle.write(json.dumps({"at": stamp, "words": words, "dropped": dropped}) + "\n")
+        handle.write(json.dumps({
+            "at": stamp,
+            "words": words,
+            "dropped": dropped,
+            "sessions_to_disconnect": sessions_to_disconnect or {},
+        }) + "\n")
     path.chmod(0o600)
 
 
@@ -76,6 +83,18 @@ def clear_run_files(stores: Path) -> Path | None:
         return None
     shutil.rmtree(folder)
     return folder
+
+
+def classify_sessions(sessions) -> tuple[dict[str, int], dict[str, int]]:
+    """Return blocking sessions and idle extension workers the approved reset may disconnect."""
+    blockers: dict[str, int] = {}
+    extension_workers: dict[str, int] = {}
+    for database, backend_type, state, xact_start in sessions:
+        if backend_type == "pg base extension worker" and state is None and xact_start is None:
+            extension_workers[database] = extension_workers.get(database, 0) + 1
+        else:
+            blockers[database] = blockers.get(database, 0) + 1
+    return blockers, extension_workers
 
 
 def main() -> int:
@@ -108,18 +127,22 @@ def main() -> int:
                     continue
                 held[name] = (row[0], row[1], row[2])
                 print(f"{name}: {row[2]}, owner {row[0]}, {len(grants(row[1], row[0]))} grants")
-            busy = conn.execute(sa.text(
-                "SELECT datname, count(*) FROM pg_stat_activity WHERE datname = ANY(:d) AND pid <> pg_backend_pid() GROUP BY 1"),
+            sessions = conn.execute(sa.text(
+                "SELECT datname, backend_type, state, xact_start FROM pg_stat_activity "
+                "WHERE datname = ANY(:d) AND pid <> pg_backend_pid()"),
                 {"d": list(DATABASES)}).all()
-            for name, count in busy:
+            blockers, extension_workers = classify_sessions(sessions)
+            for name, count in extension_workers.items():
+                print(f"{name}: {count} idle extension worker session(s); an approved reset will disconnect these")
+            for name, count in blockers.items():
                 print(f"{name}: {count} other session(s) connected")
-            if busy:
-                print("Refusing: stop every session on these databases first.", file=sys.stderr)
+            if blockers:
+                print("Refusing: stop every client session and active transaction before resetting.", file=sys.stderr)
                 return 3
             if args.words is None:
                 print("Nothing dropped. A drop needs the operator's sign-off: run again with --words \"<their exact words>\".")
                 return 0
-            sign_off(approvals_log(), args.words.strip(), {n: held[n][2] for n in held})
+            sign_off(approvals_log(), args.words.strip(), {n: held[n][2] for n in held}, extension_workers)
             for name, (owner, acl, _) in held.items():
                 conn.exec_driver_sql(f"DROP DATABASE IF EXISTS {quote(name)} WITH (FORCE)")
                 conn.exec_driver_sql(f"CREATE DATABASE {quote(name)} OWNER {quote(owner)}")
