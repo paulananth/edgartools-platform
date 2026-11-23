@@ -65,6 +65,12 @@ Reader URLs use the standard store variable names in
 `~/.local/share/edgartools/auto-ontology/reader.env`, mode `0600`. All live URLs,
 credentials and service settings stay in private local files.
 
+UI-managed source connections send credentials to the AutoOntology API.
+Without Vault, upstream stores the complete connection object, including
+passwords, unencrypted in its catalog PostgreSQL database. Verify Vault is
+fully configured before any live connection write; a private client
+environment alone does not protect server-side storage.
+
 ```bash
 CATALOG_OWNER_ENV="$HOME/.local/share/edgartools/hosted-prod/owner.env" \
   bash infra/scripts/catalog-services.sh sync-auto
@@ -135,5 +141,11 @@ Reset means delete **all state owned by the exact AutoOntology instance**—its 
 ## Verify and hand off
 
 Read back AutoOntology's source inventory, semantic model, relationships, and readiness through the selected release's supported API/MCP/UI. Test one positive and one unsupported question with invented or specifically approved data; inspect generated SQL and returned rows before presenting a claim. Confirm the three platform stores remain unchanged and that AutoOntology has no write grants. Record the exact release, target, source scopes, verification outcomes, and any unsupported mappings without logging credentials or real record values.
+
+For HTTP query qualification, use the authenticated Next.js gateway's
+`POST /api/chat/completions` SSE stream, consume through `[DONE]`, and compare
+the final `result.answer.sql_code` and `sql_response_from_db` with the approved
+expected query and rows. A synthetic stream fixture tests the client only; it
+does not prove that live SQL ran or returned those rows.
 
 Treat generated concepts, joins, and SQL attributes as proposals until reviewed against repository definitions and evidence. Preserve provenance and relationship direction. Do not publish AutoOntology edits into OpenMetadata or rules automatically; route an approved business-definition change through its owning repository rules and existing publisher.
