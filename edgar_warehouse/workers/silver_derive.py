@@ -22,7 +22,13 @@ from __future__ import annotations
 import hashlib
 import json
 
-from edgar_warehouse.workers.silver_land import engines
+
+def engines():
+    """The silver engine and the MDM engine (None when the duty file names no MDM store): a measure reads each company's
+    statement format from its Company master."""
+    from edgar_warehouse.database_connections import configured, store_engine
+
+    return store_engine("silver"), store_engine("mdm") if configured("mdm") else None
 
 CHECK = "silver.derived"
 # build -> the table it writes; each build runs its query once and lands that one table
