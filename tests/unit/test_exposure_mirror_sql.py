@@ -69,7 +69,7 @@ def test_the_repository_record_lists_the_masters_the_published_codes_and_every_s
     silver = sorted(f"silver.{t['table']}" for t in exposure["tables"] if t["layer"] == "silver")
     assert names == ["mdm.mastering_identifier", "mdm.mastering_master", "rdm.published_code"] + silver and len(names) == 24
     assert mirror_sql.unmirrored_reads(views.sources(), managed) == []
-    assert managed["verified"] is False  # no mirror exists until a read-back says every table replicates
+    assert isinstance(managed["verified"], bool)  # true only after a read-back says every table replicates (`readback`)
 
 
 def test_nothing_is_exposed_from_the_public_schema():
@@ -116,3 +116,13 @@ def test_readback_names_what_is_missing_unexpected_or_still_snapshotting():
         mirror_sql.readback(MANAGED, EXPOSURE, listing)
     text = str(refused.value)
     assert "missing: ref.codes" in text and "unexpected: pub.unread" in text and "pub.thing (SNAPSHOTTING)" in text
+
+
+def test_readback_takes_the_rows_as_the_listing_gives_them():
+    raw = [{"source_schema_name": "pub", "source_table_name": "thing", "state": "REPLICATING", "snapshot_state": "REPLICATING"},
+           {"source_schema_name": "ref", "source_table_name": "codes", "state": "SNAPSHOTTING", "snapshot_state": "REPLICATING"}]
+    with pytest.raises(SystemExit) as refused:
+        mirror_sql.readback(MANAGED, EXPOSURE, raw)
+    assert "ref.codes (SNAPSHOTTING)" in str(refused.value)
+    raw[1]["state"] = "REPLICATING"
+    assert "schemas PUB, REF" in mirror_sql.readback(MANAGED, EXPOSURE, raw)

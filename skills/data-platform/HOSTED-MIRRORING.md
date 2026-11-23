@@ -193,8 +193,9 @@ target database (`mirror.database`) and the schemas `MDM`, `RDM` and `SILVER`. N
 The create plan names the one source database, its tables per schema, its target and its refresh interval, and is approved before it runs
 (`mirror_sql.py plan`). RDM lists the published-only table, never the tables that hold drafts: a mirror carries tables, not views.
 
-**Done is read back, not assumed:** list the mirror (`mirror_sql.py verify`), save the rows as a JSON list of `{table, state}`, and run
-`mirror_sql.py readback --listing <file>`. It fails naming what is missing, unexpected or still snapshotting, and passes only when the mirror is exactly
+**Done is read back, not assumed:** list the mirror (`mirror_sql.py verify`; its first call can return no rows while metadata fills, and each table's
+`state` stays SNAPSHOTTING until its snapshot ends, about 10 minutes for 20 million rows), save the rows (`source_schema_name`, `source_table_name`,
+`state`) as JSON, and run `mirror_sql.py readback --listing <file>`. It fails naming what is missing, unexpected or still snapshotting, and passes only when the mirror is exactly
 the record with every table REPLICATING; then set `verified: true` in `sources/managed-mirror.yaml`. Read the snapshot cost from metering history
 (`SERVERLESS_TASK` lines lag by hours) against the 5-credit bound.
 

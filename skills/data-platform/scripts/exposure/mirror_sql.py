@@ -12,7 +12,7 @@ the operator's approval:
     snow sql -c <connection> -f create.sql
     python mirror_sql.py alter --mirrored <JSON list of the mirrored schema.table names, read back>   # adds and removes the difference
     python mirror_sql.py verify                  # the listing call
-    python mirror_sql.py readback --listing <JSON list of {"table": "schema.table", "state": "..."} from the listing>   # fails until the mirror is exactly the record, every table REPLICATING, in schemas MDM, RDM and SILVER
+    python mirror_sql.py readback --listing <JSON list of the listing's rows (source_schema_name, source_table_name, state) or of {table, state}>   # fails until the mirror is exactly the record, every table REPLICATING, in schemas MDM, RDM and SILVER
     python mirror_sql.py check --reads <sources file>   # fails when Gold reads a table the record does not list
     python mirror_sql.py retire                  # TRUE: the target database goes with the mirror
     python mirror_sql.py release                 # FALSE, then the owner role takes the target
@@ -101,6 +101,8 @@ def verify(managed: dict) -> str:
 def readback(managed: dict, exposure: dict, listing: list[dict]) -> str:
     """Whether the mirror is the record: nothing missing or unexpected, every table REPLICATING, and each target schema the
     source schema in upper case (`mdm` gives `MDM`). Raises with every difference; never reads Snowflake itself."""
+    listing = [{"table": row.get("table") or f"{row['source_schema_name']}.{row['source_table_name']}".lower(), "state": row["state"]}
+               for row in listing]  # the rows as LIST_MIRRORED_TABLES gives them, or {table, state}
     wanted, held = set(tables(managed, exposure)), {row["table"] for row in listing}
     problems = []
     if missing := sorted(wanted - held):
