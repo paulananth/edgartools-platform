@@ -147,14 +147,15 @@ def statements(measures: Measures, formats: dict, lines: str = "silver.company_l
 
 
 def _part(alias: str) -> str:
-    """One figure's trace: its value, concept and filing."""
-    return (f"jsonb_strip_nulls(jsonb_build_object('value', {alias}.value::text, 'concept', {alias}.concept, "
+    """One figure's trace: its value, concept and filing. A computed value is traced to the 10 places the
+    silver column holds; the measure itself is computed from the unrounded one."""
+    return (f"jsonb_strip_nulls(jsonb_build_object('value', round({alias}.value, 10)::text, 'concept', {alias}.concept, "
             f"'accession_number', {alias}.accession_number))")
 
 
 def _input(alias: str) -> str:
     """One input's trace: its fiscal year and its figure, or the parts it was computed from."""
-    return (f"jsonb_strip_nulls(jsonb_build_object('fiscal_year', {alias}.fiscal_year, 'value', {alias}.value::text, "
+    return (f"jsonb_strip_nulls(jsonb_build_object('fiscal_year', {alias}.fiscal_year, 'value', round({alias}.value, 10)::text, "
             f"'concept', {alias}.concept, 'accession_number', {alias}.accession_number)) || COALESCE({alias}.detail, '{{}}'::jsonb)")
 
 
@@ -236,7 +237,7 @@ def _steps(measures: Measures, formats: dict, lines: str, facts: str) -> tuple[l
                 WHEN t.own_rate IS NULL AND r.rate IS NULL THEN 'no statutory rate for the country and year'
            END AS reason,
            jsonb_strip_nulls(jsonb_build_object('operating_income', t.oi_part, 'pretax_income', t.pre_part,
-               'income_tax', t.tax_part, 'tax_rate', COALESCE(t.own_rate, r.rate)::text,
+               'income_tax', t.tax_part, 'tax_rate', round(COALESCE(t.own_rate, r.rate), 10)::text,
                'rate_source', CASE WHEN t.own_rate IS NOT NULL THEN 'filed'
                                    WHEN r.rate IS NOT NULL THEN 'statutory: ' || t.country END)) AS detail
     FROM taxed t

@@ -89,7 +89,7 @@ class DatabaseSink:
                         if len(batch) == BATCH:
                             conn.execute(insert(stage), batch); batch = []
                     if batch: conn.execute(insert(stage), batch)
-                    if not count and spec["load_mode"] == "snapshot":
+                    if not count and spec["load_mode"] == "snapshot" and not spec.get("may_be_empty"):
                         raise Blocked(f"silver.{spec['table']} is a snapshot: an empty delivery would empty it; refused")
                     duplicates = select(func.count()).select_from(stage).group_by(silver_key).having(func.count() > 1)
                     if conn.execute(duplicates.limit(1)).first():
@@ -213,7 +213,7 @@ class DatabaseSink:
                 if batch:
                     merge(conn, batch, delivered if snapshot else None)
                 if snapshot:
-                    if not counts["rows"]:
+                    if not counts["rows"] and not spec.get("may_be_empty"):
                         raise Blocked(f"silver.{spec['table']} is a snapshot: an empty delivery would empty it; refused")
                     counts["deleted"] = remove_absent(conn, delivered)
         except (DBAPIError, StatementError) as exc:

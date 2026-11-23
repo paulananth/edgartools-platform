@@ -6,7 +6,6 @@ appears once that end is mastered and needs no stored queue.
 
 from __future__ import annotations
 
-import json
 from collections import Counter
 from types import SimpleNamespace
 
@@ -62,22 +61,42 @@ def build(silver, mdm, policy_digest: str, as_of: str) -> dict:
         edges, waiting = calculate(db, policy, as_of, stored_of(last))
     finally:
         db.close()
-    rows = rows_of(edges)
-    land(DatabaseSink(silver), "relationship", rows)
-    return {"table": "relationship", "links": len(edges), "rows": len(rows), "waiting": dict(sorted(waiting.items()))}
+    tables = rows_of(edges)
+    sink = DatabaseSink(silver)
+    for table in ("relationship", "relationship_evidence", "relationship_path"):
+        land(sink, table, tables[table])
+    return {"table": "relationship", "links": len(edges), "rows": len(tables["relationship"]),
+            "waiting": dict(sorted(waiting.items()))}
 
 
-def rows_of(edges: list[dict]) -> list[dict]:
-    """One silver row for each period of each link."""
-    return [{"relationship_id": edge["relationship_id"], "relationship_type": edge["type"], "scope": edge["scope"],
-             "source_master_id": edge["source_id"], "target_master_id": edge["target_id"],
-             "valid_from": period["valid_from"], "valid_from_basis": period["valid_from_basis"],
-             "valid_to": period.get("valid_to"), "valid_to_basis": period.get("valid_to_basis"),
-             "capacity": edge.get("capacity"), "derived": bool(edge.get("derived")), "last_seen": edge.get("last_seen"),
-             "ended_by": period.get("ended_by"), "path": period.get("path"),
-             "properties": period.get("properties") or {},
-             "evidence": sorted(item["assertion_id"] for item in edge["evidence"])}
-            for edge in edges for period in edge["periods"]]
+PROPERTIES = ("source_event_type", "source_event_status", "source_entity_status", "source_relationship_status",
+              "source_registration_status", "source_start_date_basis", "source_start_date_is_provisional")
+
+
+def rows_of(edges: list[dict]) -> dict[str, list[dict]]:
+    """The silver rows of the links: one row for each period of each link, the stored records that state each
+    link once, and each calculated period's chain one step a row."""
+    links, evidence, path = [], {}, []
+    for edge in edges:
+        for assertion in sorted(item["assertion_id"] for item in edge["evidence"]):
+            evidence[(edge["relationship_id"], assertion)] = {
+                "relationship_type": edge["type"], "relationship_id": edge["relationship_id"], "assertion_id": assertion}
+        for period in edge["periods"]:
+            declared = period.get("properties") or {}
+            if set(declared) - set(PROPERTIES):
+                raise ValueError(f"a relationship property no silver column holds: {sorted(set(declared) - set(PROPERTIES))}")
+            links.append({"relationship_id": edge["relationship_id"], "relationship_type": edge["type"],
+                          "scope": edge["scope"], "source_master_id": edge["source_id"],
+                          "target_master_id": edge["target_id"], "valid_from": period["valid_from"],
+                          "valid_from_basis": period["valid_from_basis"], "valid_to": period.get("valid_to"),
+                          "valid_to_basis": period.get("valid_to_basis"), "capacity": edge.get("capacity"),
+                          "derived": bool(edge.get("derived")), "last_seen": edge.get("last_seen"),
+                          "ended_by": period.get("ended_by")}
+                         | {name: declared.get(name) for name in PROPERTIES})
+            for position, step in enumerate(period.get("path") or [], 1):
+                path.append({"relationship_type": edge["type"], "relationship_id": edge["relationship_id"],
+                             "valid_from": period["valid_from"], "position": position, "step_relationship_id": step})
+    return {"relationship": links, "relationship_evidence": list(evidence.values()), "relationship_path": path}
 
 
 def around(silver, ids: list[str], relationship_type: str = "") -> list[dict]:
@@ -89,27 +108,45 @@ def around(silver, ids: list[str], relationship_type: str = "") -> list[dict]:
         wanted += " and relationship_type=:relationship_type"
         names["relationship_type"] = relationship_type
     links: dict = {}
+    periods: dict = {}
     for row in silver.execute(text(f"select * from silver.relationship where {wanted}"), names).mappings():
         link = links.setdefault(row["relationship_id"], {
             "relationship_id": row["relationship_id"], "type": row["relationship_type"], "scope": row["scope"],
             "source_id": row["source_master_id"], "target_id": row["target_master_id"], "capacity": row["capacity"],
-            "derived": row["derived"], "last_seen": row["last_seen"], "evidence": _json(row["evidence"]), "periods": []})
-        link["periods"].append({key: row[key] for key in ("valid_from", "valid_from_basis", "valid_to", "ended_by")}
-                               | {"path": _json(row["path"])})
+            "derived": row["derived"], "last_seen": row["last_seen"], "evidence": [], "periods": []})
+        period = {key: row[key] for key in ("valid_from", "valid_from_basis", "valid_to", "ended_by")} | {"path": None}
+        link["periods"].append(period)
+        periods[(row["relationship_id"], row["valid_from"])] = period
+    if links:
+        found = {f"link{number}": key for number, key in enumerate(links)}
+        marks = ",".join(f":{name}" for name in found)
+        for row in silver.execute(text("select relationship_id, assertion_id from silver.relationship_evidence "
+                                       f"where relationship_id in ({marks}) order by relationship_id, assertion_id"),
+                                  found).mappings():
+            links[row["relationship_id"]]["evidence"].append(row["assertion_id"])
+        for row in silver.execute(text("select relationship_id, valid_from, step_relationship_id "
+                                       f"from silver.relationship_path where relationship_id in ({marks}) "
+                                       "order by relationship_id, valid_from, position"), found).mappings():
+            period = periods.get((row["relationship_id"], row["valid_from"]))
+            if period is not None:  # a chain whose period the table no longer holds is not read
+                period["path"] = [*(period["path"] or []), row["step_relationship_id"]]
     return [links[key] for key in sorted(links)]
 
 
-def _json(value):
-    return json.loads(value) if isinstance(value, str) else value
-
-
 def stored_of(rows) -> dict:
-    """The links of the last run, in the form `calculate` takes."""
+    """The links of the last run, in the form `calculate` takes. A source rule declares the same properties for
+    every period of its scope, an empty one as null: those are the names some period of the scope fills."""
+    rows = list(rows)
+    declared: dict = {}
+    for row in rows:
+        declared.setdefault((row["relationship_type"], row["scope"]), set()).update(
+            name for name in PROPERTIES if row[name] is not None)
     found = {}
     for row in rows:
+        names = declared[(row["relationship_type"], row["scope"])]
         period = {"valid_from": row["valid_from"], "valid_from_basis": row["valid_from_basis"],
                   "valid_to": row["valid_to"], "valid_to_basis": row["valid_to_basis"],
-                  "properties": json.loads(row["properties"]) if isinstance(row["properties"], str) else row["properties"]}
+                  "properties": {name: row[name] for name in PROPERTIES if name in names}}
         if period["valid_to_basis"] is None:
             del period["valid_to_basis"]
         found.setdefault(row["relationship_id"], {"periods": []})["periods"].append(period)

@@ -20,12 +20,12 @@ from tests.integration.test_company_line_item_silver import fact, no_masters
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
 
 FOLDER = files.sources_root() / "sec.company-facts"
-(GROWING, LOSS, STATUTORY, NO_PLACE, NO_RATE, BANK, UNMASTERED, EUROS, MOVED, TWO_ENDS, GAP, MIXED_PARTS) = (
-    f"{n:010d}" for n in range(1, 13))
+(GROWING, LOSS, STATUTORY, NO_PLACE, NO_RATE, BANK, UNMASTERED, EUROS, MOVED, TWO_ENDS, GAP, MIXED_PARTS, THIRDS) = (
+    f"{n:010d}" for n in range(1, 14))
 # Each company's SIC and place of incorporation, as its Company master holds them; UNMASTERED has none.
 COMPANIES = {GROWING: ("3571", "DE"), LOSS: ("3571", "DE"), STATUTORY: ("3571", "DE"), NO_PLACE: ("3571", None),
              NO_RATE: ("3571", "1F"), BANK: ("6022", "DE"), EUROS: ("3571", "DE"), MOVED: ("3571", "DE"),
-             TWO_ENDS: ("3571", "DE"), GAP: ("3571", "DE"), MIXED_PARTS: ("3571", "DE")}
+             TWO_ENDS: ("3571", "DE"), GAP: ("3571", "DE"), MIXED_PARTS: ("3571", "DE"), THIRDS: ("3571", "DE")}
 
 
 def line(company, year, item, value, currency="USD", end=None):
@@ -70,6 +70,8 @@ LINES = [
     *year(TWO_ENDS, 2023, revenue=120),
     *year(GAP, 2021, revenue=100),
     *year(GAP, 2023, revenue=120),
+    # A tax rate that does not end: one third.
+    *year(THIRDS, 2025, operating_income=100, pretax_income=3, income_tax=1, total_debt=50, book_value=50, cash=0),
     # A computed input whose parts are in two currencies: free cash flow, and invested capital.
     *year(MIXED_PARTS, 2024, revenue=100, ocf=30, total_debt=50, book_value=50, cash=0, operating_income=10,
           pretax_income=8, income_tax=2),
@@ -170,6 +172,12 @@ def test_roic_after_tax_on_its_own_rate_or_the_statutory_rate(built):
     assert rows[(STATUTORY, "roic_beginning", 2025, 1)]["inputs"][("return", "tax_rate")]["basis"] == "statutory: US"
     assert got(rows, NO_PLACE, "roic_average", 2025) == (None, "no country of incorporation")
     assert got(rows, NO_RATE, "roic_average", 2025) == (None, "no statutory rate for the country and year")
+
+
+def test_a_tax_rate_that_does_not_end_is_stored_to_ten_places(built):
+    _, _, rows = built
+    rate = rows[(THIRDS, "roic_beginning", 2025, 1)]["inputs"][("return", "tax_rate")]
+    assert (rate["value"], rate["basis"]) == (Decimal("0.3333333333"), "filed")
 
 
 def test_growth_over_exactly_n_years(built):

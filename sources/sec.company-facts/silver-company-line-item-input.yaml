@@ -25,7 +25,7 @@ columns:
 - name: position
   type: BIGINT
   nullable: false
-  definition: "The term's place among the figure's inputs, from 1, in the order the line-items map lists them."
+  definition: "The term's number in the line-items map's list for the figure, from 1; a term with no figure leaves a gap."
   source: "line-items.yaml"
   sensitivity: none
 - name: concept
@@ -77,6 +77,7 @@ time:
 partition:
 - company_key
 load_mode: snapshot
+may_be_empty: true
 why: >-
   Rebuilt whole with company_line_item, so a new filing replaces a year's inputs without editing rows.
   A list a figure was computed from is rows, not a document (operator, 2026-11-22: "you should not be

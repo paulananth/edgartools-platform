@@ -54,6 +54,10 @@ tables:
 - layer: silver
   table: relationship
 - layer: silver
+  table: relationship_evidence
+- layer: silver
+  table: relationship_path
+- layer: silver
   table: thirteenf_filing
 - layer: silver
   table: thirteenf_holding

@@ -72,7 +72,7 @@ def link_run(engine, policy: dict | None = None, as_of: str = "2026-12-31T00:00:
     `last` is the previous run's links, so a link keeps a start its record no longer shows."""
     with opened(engine) as store:
         return link_builder.calculate(store, policy or files.policy(), as_of,
-                                      link_builder.stored_of(link_builder.rows_of(last or [])))
+                                      link_builder.stored_of(link_builder.rows_of(last or [])["relationship"]))
 
 
 def links(engine, policy: dict | None = None, as_of: str = "2026-12-31T00:00:00+00:00", of_type: str = "",

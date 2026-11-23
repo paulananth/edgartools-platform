@@ -1,0 +1,40 @@
+# The stored records that state a relationship (ticket 18): one row per link and record, so a reader
+# joins them to `relationship` on its id and never unpacks a document. Built with the links.
+table: relationship_evidence
+definition: "One stored record that states a relationship."
+grain: "one row per relationship and assertion"
+columns:
+- name: relationship_type
+  type: VARCHAR
+  nullable: false
+  definition: "The link's type in the mdm-relationship-types code set, as on relationship."
+  source: "relationship.relationship_type"
+  sensitivity: none
+- name: relationship_id
+  type: VARCHAR
+  nullable: false
+  definition: "The link's id, as on relationship."
+  source: "relationship.relationship_id"
+  sensitivity: none
+- name: assertion_id
+  type: VARCHAR
+  nullable: false
+  definition: "The assertion id of one stored record that states the link."
+  source: "mastering_record"
+  sensitivity: none
+key:
+- relationship_id
+- assertion_id
+links: []
+time:
+  as_of: null
+  as_at: loaded_at
+  event_time: null
+partition:
+- relationship_type
+load_mode: snapshot
+may_be_empty: true
+why: >-
+  Links are calculated in full after each load, so a snapshot removes any record that no longer states a
+  link. The list of records is rows, once per link and not once per period (operator, 2026-11-22: "you should
+  not be using json just straignt data so easy access is possible").

@@ -55,6 +55,16 @@ tables:
   grain: one row per relationship and period start
   requirement: rules/silver/silver-relationship.yaml
 - layer: silver
+  table: relationship_evidence
+  scope: current
+  grain: one row per relationship and assertion
+  requirement: rules/silver/silver-relationship-evidence.yaml
+- layer: silver
+  table: relationship_path
+  scope: current
+  grain: one row per relationship, period start and step
+  requirement: rules/silver/silver-relationship-path.yaml
+- layer: silver
   table: adv_custody
   scope: history
   grain: one row per filing and custody row (a custodian listed twice is two rows)

@@ -166,7 +166,8 @@ def test_links_land_as_one_row_a_period_and_a_second_build_keeps_them(postgres, 
 
     with silver_database(admin) as (owner, runtime):
         silver.migrate(owner, runtime_role=RUNTIME)
-        silver.register(owner, spec_file(files.ROOT / "silver" / "silver-relationship.yaml", None), runtime_role=RUNTIME)
+        for name in ("relationship", "relationship-evidence", "relationship-path"):
+            silver.register(owner, spec_file(files.ROOT / "silver" / f"silver-{name}.yaml", None), runtime_role=RUNTIME)
         monkeypatch.setattr(links, "calculate", calculate)
         monkeypatch.setattr(stores, "open_store", lambda engine: Master2())
         monkeypatch.setattr("edgar_warehouse.rules.registry.engine", lambda: Rules())
@@ -175,6 +176,9 @@ def test_links_land_as_one_row_a_period_and_a_second_build_keeps_them(postgres, 
         links.build(runtime, MasterPolicy(), "invented", "2026-11-06T00:00:00+00:00")
         assert first == {"table": "relationship", "links": 1, "rows": 1, "waiting": {"no_master": 2}}
         assert seen[0] == {} and seen[1]["invented"]["periods"][0]["valid_from_basis"] == "observed"
+        with runtime.connect() as conn:
+            evidence = [tuple(r) for r in conn.execute(text("SELECT relationship_id, assertion_id FROM silver.relationship_evidence"))]
+        assert evidence == [("invented", "c")]
 
 
 def test_the_worker_no_longer_builds_links():

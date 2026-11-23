@@ -85,6 +85,7 @@ time:
 partition:
 - company_key
 load_mode: snapshot
+may_be_empty: true
 why: >-
   Rebuilt whole with company_measure, so a changed line item replaces a measure's inputs without
   editing rows. A figure a measure read is a row, not a document (operator, 2026-11-22: "you should

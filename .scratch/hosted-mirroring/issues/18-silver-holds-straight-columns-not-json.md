@@ -1,6 +1,6 @@
 # 18: Silver holds straight columns, not JSON
 
-Status: open
+Status: resolved
 Type: grilling
 
 Operator, 2026-11-22, while ticket 17 changed the silver writer: "you should not be using json just straignt data so easy access is
@@ -29,8 +29,8 @@ Read from the builders and the rules, since no store holds these tables today (c
   line_item_ref (a term can be another line item, then no filing), accession_number, value DECIMAL(38,10), as_of DATE.
 - `company_measure.inputs`: a set of named inputs per measure (top and bottom, return and balance and prior balance, start and end,
   operating cash flow and capex, and the tax rate with its source). Child table `company_measure_input`: key (company_key, measure,
-  fiscal_year, window_years, role); columns input_fiscal_year, value, concept, accession_number. The tax rate is a role whose value is
-  the rate and whose concept holds its source.
+  fiscal_year, window_years, role); columns input_fiscal_year, value, concept, accession_number. The tax rate is a part whose value is
+  the rate (to 10 places) and whose `basis` holds its source.
 - `relationship.evidence`: a list per link, repeated on each period row today. Child table `relationship_evidence`: key
   (relationship_id, assertion_id), one row per link, no repeat.
 - `relationship.path`: a list per derived period. Child table `relationship_path`: key (relationship_id, valid_from, position).
@@ -41,9 +41,17 @@ Read from the builders and the rules, since no store holds these tables today (c
 
 ## Checklist
 
-- [ ] Decide, per column, its straight form: a child table keyed on the parent's key and an ordinal (a list of terms, inputs, links or
-      assertions), or typed columns (a fixed set of flags or properties). Recommendation: child tables for `inputs`, `path` and
-      `evidence`; one boolean column per flag of the line-item map for `flags`; typed columns for the properties a source rule declares
-- [ ] The silver specs, the financials SQL (`financials/line_items.py`, `measures.py`), the relationship builder and the answer keys follow
-- [ ] The company-facts cohort proof gives the same figures after the change
-- [ ] Learning → skill: the silver-table rule (no JSON column) in the owning skill, or "none"
+Operator, 2026-11-22: "consult data profiling and modeling skills first", then "design from scratch and finalize tables delete old
+tables update all dependencies". The forms below are the findings above; the tables keep their names (no store is live; the owner drops
+an old table and its registry row, init runbook step 6).
+
+- [x] Consult data-profiling and data-modeling: shapes measured from the builders and rules, forms decided per column (2026-11-22 20:31 ET, findings above)
+- [x] Decide each column's straight form: `flags` → `computed`, `basis`, `industry_kind`, `revenue_quality_check` (a row carries at most one wording, so no boolean per flag); `inputs` → `company_line_item_input` and `company_measure_input`; `path` → `relationship_path`; `evidence` → `relationship_evidence`; `properties` → seven typed columns on `relationship` (2026-11-22 20:31 ET)
+- [x] The silver specs, the builders, the derive worker and the target steps follow: `company_line_item`, `company_measure`, `relationship` and the four new tables; each input table is its own derive step over the same query (2026-11-22 20:31 ET; `tests/integration/test_company_line_item_silver.py`, `test_company_measure_silver.py`, `test_silver_derive_worker_postgres.py`, `tests/unit/test_straight_columns.py`)
+- [x] A snapshot of a list its parent may not own is not refused: `may_be_empty` (2026-11-22 20:31 ET; `test_a_snapshot_that_may_be_empty_is_emptied_by_an_empty_delivery_and_any_other_refuses_it` failed first with "A silver table spec holds [...]", the unknown key)
+- [x] Every dependent follows: mirror list, data-sharing list, catalog, mapping document, recorded target steps, runbook, `deploy-silver.sh` (globs the specs) (2026-11-22 20:31 ET; unit suite 1,867 passed)
+- [x] A traced figure is rounded to the column's 10 places: the cohort build refused a computed return and a tax rate of more than 10 decimals (2026-11-22 20:31 ET; `test_a_tax_rate_that_does_not_end_is_stored_to_ten_places` failed with "A figure does not fit DECIMAL(38,10) exactly")
+- [x] The company-facts cohort proof gives the same figures: 96,807 line items, 168,360 measures, every figure, flag, input and measure equal to the old tables (6,589 line-item inputs, 404,611 measure inputs, 0 differences; builds 41 s, 29 s, 20 s, 50 s) (2026-11-22 20:31 ET)
+- [x] The answer key follows: no answer-key file of this repository reads `inputs` or `flags` (searched), and every measure value equals the old table's (2026-11-22 20:31 ET)
+- [x] Review (Standards, Spec, GoF, Haiku): fixed a `rows_of` caller list in two test files, a stored period's properties (null and flag round trip, so the engine keeps a start), input positions by term number, a child read of a removed period, `may_be_empty` on every child list, `source_start_date_is_provisional` as BOOLEAN, spec-refusal tests, the GOLD list. Left: two `straight()` and `build()` copies (two callers, no pattern), a manual owner drop in the runbook (a destructive drop stays the owner's explicit act) (2026-11-22 20:31 ET)
+- [x] Learning → skill: data-modeling ("No silver column holds JSON", `may_be_empty`) and company-financials (five tables) (2026-11-22 20:31 ET)

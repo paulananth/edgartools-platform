@@ -79,7 +79,7 @@ Evidence and sources: `.scratch/company-financials/research/02-vendor-standards.
   − NCI net income; parent equity = equity including NCI − `MinorityInterest`;
   gross profit = revenue − cost of revenue; liabilities from liabilities and
   equity; total debt from its parts) only where research 01 lists them, each
-  value flagged "computed".
+  value marked `computed`, its terms rows of `company_line_item_input`.
 - **Revenue keeps the standard order** (`Revenues` first), with a data-quality
   rule that flags a period where the chosen revenue is smaller than another
   revenue total filed for it (another unflagged concept of its list, same
@@ -115,7 +115,7 @@ Evidence and sources: `.scratch/company-financials/research/02-vendor-standards.
 - **A cover-page figure is read from the year's own annual report, at its own
   date** (operator: "Annual report's cover (Recommended)"): the
   shares-outstanding fallback takes the cover-page count filed in the annual
-  report covering that year, flagged "cover-page date", its date in `inputs`
+  report covering that year, its `basis` "cover-page date", its date on its input row
   (`as_of: report` in the map, on a balance line item only); never a copy dated
   on the year end from another filing. An amended annual report, filed later,
   wins; one filing no annual facts (a Part III amendment) covers no year, so its
@@ -135,8 +135,8 @@ Evidence and sources: `.scratch/company-financials/research/02-vendor-standards.
 ## Measures (decided)
 
 - **Stored, built from silver** (operator: "Stored, built from silver
-  (Recommended)"): one row per company, measure, fiscal year and window, naming
-  its inputs and the definition's version; definitions are rules configuration;
+  (Recommended)"): one row per company, measure, fiscal year and window, carrying
+  the definition's version, its inputs rows of `company_measure_input`; definitions are rules configuration;
   raw ratios, no truncation or smoothing.
 - **Returns in both forms** (operator: "can we have both"): ROE, ROA and ROIC on
   the average of start and end balance (WRDS) and on the beginning balance
@@ -244,9 +244,12 @@ Evidence and sources: `.scratch/company-financials/research/02-vendor-standards.
 
 ## Silver tables and their review (decided)
 
-- **Three tables**: `company_fact` (every filed fact, append, keyed on the
+- **Five tables**: `company_fact` (every filed fact, append, keyed on the
   measured eight columns), `company_line_item` and `company_measure` (built from
-  the facts by SQL, rebuilt whole each run). `company_line_item` holds one row per company, line item and
+  the facts by SQL, rebuilt whole each run), each with an input table
+  (`company_line_item_input`, `company_measure_input`), one row per term or figure
+  read. No silver column holds JSON: a list is a child table, a fixed set of
+  words is columns (operator: "you should not be using json just straignt data so easy access is possible"). `company_line_item` holds one row per company, line item and
   fiscal year, the latest copy, so CAGR is a plain join on `fiscal_year`; every
   filed copy stays in `company_fact` (one system of record).
 - **Review every ruling before a spec or a build**: each ruling in this skill

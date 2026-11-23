@@ -165,6 +165,10 @@ by its owner after the people reading the shared server are told. A store that h
 Dataset Contract maps (a link key, the record key and a date stay); a column kept by a ruling is named in its
 `KEPT` list with the ruling.
 
+**No silver column holds JSON** (operator): a list a row owns is a child table keyed on the parent's key
+and a position (`may_be_empty: true` on its snapshot spec when the parent can own none); a fixed set of words or
+properties is typed columns. A spec redesigned this way keeps its table name once the store's owner drops the old table and its `silver.table_spec` row.
+
 A part that looks like two classes is usually two parts: a code list inside a
 master file is reference data plus a master attribute that holds its codes.
 

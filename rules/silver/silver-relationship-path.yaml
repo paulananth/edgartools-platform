@@ -1,0 +1,53 @@
+# The chain of links a calculated link walked (ticket 18): one row per step, so a reader joins them to
+# `relationship` on its id and period and never unpacks a document. Built with the links.
+table: relationship_path
+definition: "One link a calculated relationship's period walked, in order."
+grain: "one row per relationship, period start and step"
+columns:
+- name: relationship_type
+  type: VARCHAR
+  nullable: false
+  definition: "The calculated link's type, as on relationship."
+  source: "relationship.relationship_type"
+  sensitivity: none
+- name: relationship_id
+  type: VARCHAR
+  nullable: false
+  definition: "The calculated link's id, as on relationship."
+  source: "relationship.relationship_id"
+  sensitivity: none
+- name: valid_from
+  type: VARCHAR
+  nullable: false
+  definition: "The start of the calculated period, as on relationship."
+  source: "relationship.valid_from"
+  sensitivity: none
+- name: position
+  type: BIGINT
+  nullable: false
+  definition: "The step's place in the chain, from 1."
+  source: "links.py"
+  sensitivity: none
+- name: step_relationship_id
+  type: VARCHAR
+  nullable: false
+  definition: "The id of the stated link the chain walked at this step."
+  source: "relationship.relationship_id"
+  sensitivity: none
+key:
+- relationship_id
+- valid_from
+- position
+links: []
+time:
+  as_of: valid_from
+  as_at: loaded_at
+  event_time: null
+partition:
+- relationship_type
+load_mode: snapshot
+may_be_empty: true
+why: >-
+  Links are calculated in full after each load, so a snapshot removes any chain a link no longer walks. The
+  chain is rows in order, not a document (operator, 2026-11-22: "you should not be using json just
+  straignt data so easy access is possible").

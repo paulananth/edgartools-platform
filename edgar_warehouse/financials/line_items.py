@@ -352,7 +352,7 @@ def _steps(items: LineItems, source: str) -> tuple[list[tuple[str, str]], str]:
          (array_agg(v.filed ORDER BY v.term) FILTER (WHERE v.accession_number IS NOT NULL))[1] AS filed,
          e.flags,
          jsonb_agg(jsonb_strip_nulls(jsonb_build_object('concept', v.concept, 'line_item', v.line_item_ref,
-             'accession_number', v.accession_number, 'filed', v.filed::text, 'value', v.value::text)) ORDER BY v.term)
+             'accession_number', v.accession_number, 'filed', v.filed::text, 'value', v.value::text, 'term', v.term)) ORDER BY v.term)
              FILTER (WHERE v.value IS NOT NULL) AS inputs
   FROM term_{stage} v JOIN computed_entry e
     ON e.line_item = v.line_item AND e.taxonomy = v.taxonomy AND e.position = v.position
@@ -409,9 +409,10 @@ def straight(rows: list[dict], checks: frozenset = frozenset({"revenue quality c
         figure |= {"computed": "computed" in row["flags"], "basis": basis[0] if basis else None, "industry_kind": kind,
                    "revenue_quality_check": bool(checks & set(row["flags"]))}
         figures.append(figure)
-        for position, term in enumerate(row["inputs"] or [], 1):
+        for term in row["inputs"] or []:
             inputs.append({"company_key": row["company_key"], "line_item": row["line_item"],
-                           "fiscal_year": row["fiscal_year"], "position": position, "concept": term.get("concept"),
+                           "fiscal_year": row["fiscal_year"], "position": term.get("term", 1),
+                           "concept": term.get("concept"),
                            "line_item_ref": term.get("line_item"), "accession_number": term.get("accession_number"),
                            "filed": term.get("filed"),
                            "value": term["value"], "as_of": term.get("date")})
