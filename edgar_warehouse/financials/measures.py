@@ -143,7 +143,7 @@ def query(measures: Measures, formats: dict, lines: str = "silver.company_line_i
 
 def statements(measures: Measures, formats: dict, lines: str = "silver.company_line_item",
                facts: str = "silver.company_fact") -> list[str]:
-    return sql.counted(*_steps(measures, formats, lines, facts))
+    return sql.steered(*_steps(measures, formats, lines, facts))
 
 
 def _part(alias: str) -> str:

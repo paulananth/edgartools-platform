@@ -106,10 +106,12 @@ Evidence and sources: `.scratch/company-financials/research/02-vendor-standards.
   and the silver writer lands the rows (operator: "SQL over silver
   (Recommended)", after the engine path proved to need a whole group and join
   language): `edgar_warehouse/financials/line_items.py`, run by
-  `edgar-warehouse silver line-items`. It runs as steps, each a temporary table PostgreSQL has counted
-  (`statements()`): as one statement the planner guessed hundreds of rows for
-  millions and never finished; as steps the cohort builds in
-  seconds. Never test its speed under `count(*)`, which skips the select list.
+  `edgar-warehouse silver line-items`. It runs as one statement with the
+  planner kept off nested loops for its transaction (`statements()`:
+  `SET LOCAL enable_nestloop = off`): left alone, the planner guesses hundreds
+  of rows for millions and never finishes. Never a temporary table: run-time
+  code issues no DDL (operator: "no temp table usage"). Never test its speed
+  under `count(*)`, which skips the select list.
 - **A cover-page figure is read from the year's own annual report, at its own
   date** (operator: "Annual report's cover (Recommended)"): the
   shares-outstanding fallback takes the cover-page count filed in the annual

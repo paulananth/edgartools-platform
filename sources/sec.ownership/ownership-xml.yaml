@@ -74,6 +74,7 @@ read:
         issuer_trading_symbol: {text: {path: issuer.issuerTradingSymbol.$}}
         remarks: {text: {path: remarks.$}}
     reporting_owner:
+      key: [accession_number, rpt_owner_cik]
       each: reportingOwner
       columns:
         accession_number: {context: {name: accession_number}}
@@ -107,6 +108,7 @@ read:
               is_other: {choose: {condition: {test: {path: reportingOwnerRelationship.isOther.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: reportingOwnerRelationship.isOther.$}}, on_missing: error}}, else: {const: {value: null}}}}
               other_text: {text: {path: reportingOwnerRelationship.otherText.$}}
     non_derivative_transaction:
+      key: [accession_number, line_table, position]
       each: nonDerivativeTable.nonDerivativeTransaction
       columns:
         accession_number: {context: {name: accession_number}}
@@ -132,6 +134,7 @@ read:
         direct_or_indirect_ownership: {text: {path: ownershipNature.directOrIndirectOwnership.value.$}}
         nature_of_ownership: {text: {path: ownershipNature.natureOfOwnership.value.$}}
     non_derivative_holding:
+      key: [accession_number, line_table, position]
       each: nonDerivativeTable.nonDerivativeHolding
       columns:
         accession_number: {context: {name: accession_number}}
@@ -147,6 +150,7 @@ read:
         direct_or_indirect_ownership: {text: {path: ownershipNature.directOrIndirectOwnership.value.$}}
         nature_of_ownership: {text: {path: ownershipNature.natureOfOwnership.value.$}}
     derivative_transaction:
+      key: [accession_number, line_table, position]
       each: derivativeTable.derivativeTransaction
       columns:
         accession_number: {context: {name: accession_number}}
@@ -178,6 +182,7 @@ read:
         underlying_security_shares: {text: {path: underlyingSecurity.underlyingSecurityShares.value.$}}
         underlying_security_value: {text: {path: underlyingSecurity.underlyingSecurityValue.value.$}}
     derivative_holding:
+      key: [accession_number, line_table, position]
       each: derivativeTable.derivativeHolding
       columns:
         accession_number: {context: {name: accession_number}}

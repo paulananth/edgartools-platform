@@ -193,6 +193,25 @@ def test_append_lands_typed_rows_with_mdm_ids_reruns_unchanged_and_refuses_a_cha
     assert land(sink, "visit", visits(), ids)["inserted"] == 0
 
 
+@pytest.mark.parametrize("load_mode", ["append", "upsert", "snapshot"])
+def test_a_login_without_temporary_lands_every_load_mode(stores, load_mode):
+    owner, runtime, ids, _ = stores
+    with owner.execution_options(isolation_level="AUTOCOMMIT").connect() as conn:
+        conn.exec_driver_sql(f'REVOKE TEMPORARY ON DATABASE "{conn.scalar(text("SELECT current_database()"))}" '
+                             "FROM PUBLIC")
+    with runtime.connect() as conn:
+        assert not conn.scalar(text("SELECT has_database_privilege(current_database(), 'TEMPORARY')"))
+    silver.register(owner, visit_spec(load_mode=load_mode), runtime_role=RUNTIME)
+    sink = PostgresSink(runtime)
+    assert land(sink, "visit", visits(), ids)["inserted"] == 3
+    if load_mode == "append":
+        return
+    changed = land(sink, "visit", visits((2, "amount", "4"))[:2], ids)
+    assert changed["changed"] == 1
+    assert sorted(table(runtime)) == ([1, 2] if load_mode == "snapshot" else [1, 2, 3])
+    assert table(runtime)[2]["amount"] == 4
+
+
 def test_a_flagged_row_lands_with_its_failed_checks_and_a_refused_row_does_not(stores, database):
     owner, runtime, ids, _ = stores
     checks = [{"id": "known_member", "check": "in_set", "column": "member_id", "values": ["a", "b"],

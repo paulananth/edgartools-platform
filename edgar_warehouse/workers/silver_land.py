@@ -1,18 +1,18 @@
-"""silver.land: one reading's table into a silver table (ticket 169).
+"""silver.land: one source extract's table into a silver table (ticket 169).
 
 The unit's input is a `source.read` output (normally `from` the run's read
 step). Its keys say what to take from it:
 
-- `table`: the reading's table whose rows land;
+- `table`: the source extract's table whose rows land;
 - `silver`: the registered silver table they land in.
 
 The worker calls the existing silver writer (`land`) once for each artifact
-of the reading, so a table with `append` load mode lands each filer's rows
+of the source extract, so a table with `append` load mode lands each filer's rows
 exactly once, and a retry lands the same rows again with no change. The loader
 file names the data database; its MDM schema
 finds each linked master's id. Its output is a receipt naming what the
-reading held: rows, distinct keys and a digest of the keys. The check reads
-the reading again, rebuilds the receipt, and reads silver to
+source extract held: rows, distinct keys and a digest of the keys. The check reads
+the source extract again, rebuilds the receipt, and reads silver to
 confirm the table holds at least that many distinct keys.
 """
 from __future__ import annotations
@@ -34,14 +34,14 @@ INPUT_ROWS = 100_000_000
 
 
 def _artifacts(envelope: dict, artifacts):
-    """Each piece of the unit's reading, in order; the byte and row budgets are spent across all of them."""
+    """Each piece of the unit's source extract, in order; the byte and row budgets are spent across all of them."""
     consumed = rows = 0
     for artifact, used in source_readings.iter_pieces(
             envelope["input"], artifacts, max_bytes=INPUT_BYTES - consumed, max_rows=INPUT_ROWS - rows,
             allow_lookup_receipts=True):
         rows += sum(len(t) for t in artifact["tables"].values() if isinstance(t, list))
         if rows > INPUT_ROWS:
-            raise ValueError("silver.land readings exceed their row budget")
+            raise ValueError("silver.land source extracts exceed their row budget")
         consumed = used
         yield artifact
 
@@ -49,7 +49,7 @@ def _artifacts(envelope: dict, artifacts):
 def _rows(artifact: dict, keys: dict) -> list[dict]:
     found = artifact["tables"].get(keys["table"])
     if found is None:
-        raise ValueError(f"The reading has no table {keys['table']}")
+        raise ValueError(f"The source extract has no table {keys['table']}")
     if not isinstance(found, list) or any(not isinstance(row, dict) for row in found):
         raise ValueError("silver.land table rows must be objects")
     return found
@@ -97,7 +97,7 @@ def _deliveries(spec: dict, artifact_rows):
 
 
 def _receipt(count: int, seen: KeySet, quality: dict | None = None) -> bytes:
-    """What the reading held for the table: rows, distinct keys and a digest of them (read from the key set in one pass,
+    """What the source extract held for the table: rows, distinct keys and a digest of them (read from the key set in one pass,
     so no copy of every key is ever in memory)."""
     distinct, digest = seen.summary()
     receipt = {"version": 2 if quality is not None else 1, "rows": count,
@@ -295,12 +295,12 @@ def check(envelope: dict, artifacts) -> tuple[dict, list]:
                 identity = _quality_identity(envelope, keys["silver"], spec)
                 actual = _recomputed_quality(identity, artifacts, envelope, keys, spec, quality["observed_at"])
                 if quality != actual:
-                    raise ValueError("The receipt's quality outcomes differ from the original reading")
+                    raise ValueError("The receipt's quality outcomes differ from the original source extract")
                 expected = _receipt(count, seen, actual)
             if stored != expected:
-                raise ValueError("The receipt differs from the reading")
+                raise ValueError("The receipt differs from the source extract")
             if _missing(silver, spec, seen):
-                raise ValueError("Silver lacks keys the reading holds")
+                raise ValueError("Silver lacks keys the source extract holds")
         finally:
             silver.dispose()
     completed = {CHECK: True}

@@ -26,6 +26,7 @@ read:
       max_value_bytes: 64
   tables:
     filing:
+      key: [accession_number, cik]
       each:
         parallel:
           path: filings.recent

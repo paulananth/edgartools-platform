@@ -206,8 +206,8 @@ def query(items: LineItems, source: str = "silver.company_fact") -> str:
 
 
 def statements(items: LineItems, source: str = "silver.company_fact") -> list[str]:
-    """The same query as counted steps (`sql.counted`)."""
-    return sql.counted(*_steps(items, source))
+    """The same query, run as one statement with its planner steered (`sql.steered`)."""
+    return sql.steered(*_steps(items, source))
 
 
 def _steps(items: LineItems, source: str) -> tuple[list[tuple[str, str]], str]:

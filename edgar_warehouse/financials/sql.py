@@ -30,12 +30,8 @@ def query(steps: list[tuple[str, str]], final: str) -> str:
     return "WITH " + ",\n".join(f"{name} AS ({body})" for name, body in steps) + "\n" + final
 
 
-def counted(steps: list[tuple[str, str]], final: str) -> list[str]:
-    """The same query as steps, each a temporary table its planner has counted:
-    run as one statement, PostgreSQL guesses each step's rows and picks nested
-    loops over millions of facts (ticket 46: 30 minutes, not finished)."""
-    out = []
-    for name, body in steps:
-        table = name.split("(")[0]
-        out += [f"CREATE TEMPORARY TABLE {name} ON COMMIT DROP AS {body}", f"ANALYZE {table}"]
-    return out + [final]
+def steered(steps: list[tuple[str, str]], final: str) -> list[str]:
+    """The query as one statement, with the planner kept off nested loops for its transaction: left to guess each
+    step's rows, PostgreSQL picks nested loops over millions of facts and never finishes. A session setting, not a
+    temporary table: run-time code issues no DDL. Both statements run in one transaction, or `SET LOCAL` is lost."""
+    return ["SET LOCAL enable_nestloop = off", query(steps, final)]

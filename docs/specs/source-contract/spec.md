@@ -275,6 +275,7 @@ read:
     <silver table name>:
       each: <path>                  # one row per item; "." = one row per document
       where: { has: [<child>, …] }  # keep only items that have every listed child
+      key: [<column>, …]           # optional: each key appears once in this table of one source extract
       columns:
         <column>: <expression>
     <other table>:
@@ -287,6 +288,11 @@ read:
 - Paths inside a table are relative to the item. `from: document` reads from
   the document root instead.
 - A table has **either** `columns` **or** a `custom_reader`, never both.
+- A table that declares `key` holds each key once in one source extract. A repeated key refuses the whole source
+  extract with `repeated_key`, naming the table and the key columns and never a value. A row its checks set aside is
+  not counted. The key names declared columns, so a `custom_reader` table, which has none, declares no key. Keys
+  compare by value and type: a number and its text are two keys, and a null is a value of its own. Silver applies the rows by key and does not check them again
+  (CONTEXT.md, Silver Landing).
 
 ### 8.5 Expressions
 
@@ -571,8 +577,8 @@ validator checks it. Literal keys (`role`, `authority`, `type`,
   batch. **Proposed rule:** either make the adapter's record key the silver
   key (here `filing_id`, with `crd` as an identifier, so binding brings the
   filings to one identity), or collapse to one row per record key first (the
-  Open collapse rule, §25 item 6). The validator should check that the
-  adapter's `record_key` columns are unique in `dataset.table`.
+  Open collapse rule, §25 item 6). The table's declared `key` (§8.4) is that check: declare
+  the adapter's `record_key` columns as the key of `dataset.table`.
 - Relationships whose target key is missing are dropped with no record (gap
   F5), and target keys are never formatted (gap F4).
 - A field value that is a map with `"op"` is an operation. Use

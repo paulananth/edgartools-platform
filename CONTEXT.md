@@ -86,6 +86,10 @@ _Avoid_: Field overwrite only, source-specific direct master writes, identity co
 The tables taken from one captured file by its contract, together with the receipt that names those bytes.
 _Avoid_: Reading, a prediction, Bronze Artifact, Source Capture, Logical Source Revision, Derived Filing Text, Reported Output, Interpretation, Projection, Snapshot, Statement, an extracted temporary file
 
+**Silver Landing**:
+Applying the rows of one table of a Source Extract to its registered silver table by key, in batches, with no staging table of its own: a missing key is inserted, a changed one updated, an equal one left alone, so landing the same rows again changes nothing. Source processing owns the rows and that each key appears once in a table; silver only applies them.
+_Avoid_: A staging or temporary table in silver, a second duplicate-key check in silver, Reading, Staging
+
 **Source Stage**:
 What one source says now about one entity, per field, before any survivorship is applied — read per kind. It holds one record per source record, its newest source extract; a newer source extract replaces it and an older one arriving late does not. A record names the bronze object it was read from, and bronze is the only history of what a source said before. A record waits in the Stage, unbound, until a matching rule links it to an identity.
 _Avoid_: Confusing it with the Merge Stage, which is the step that reads it; a history of every source extract (bronze is that); the surviving value, which is the master record's

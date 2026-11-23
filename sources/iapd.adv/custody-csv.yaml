@@ -145,6 +145,7 @@ read:
     # field, ticket 143), so they stay in `custody` above, for MDM.
     custody_facts:
       each: record
+      key: [filing_id, row]            # silver-custody.yaml's key: each appears once in one source extract
       columns:
         filing_id: {text: {path: "Filing ID", path_mode: literal}}
         row: {ordinal: {}}
