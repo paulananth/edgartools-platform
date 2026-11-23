@@ -17,7 +17,21 @@ these locks? Use 5-whys and 7 wastes analysis"). They agreed with it and asked f
 - One session waited on the lock manager (`LWLock LockManager`) in the sample. **The share of time spent waiting on the advisory
   locks is not measured** (first part below).
 
-## 5 whys
+## Measured, part 1 (overturns the lock root cause)
+
+10 minutes, every 10 s, as the reader login, while `gleif` mastered, 464 session samples, about 8 sessions: **advisory `file` lock
+1%**, lock manager 0%, any other lock under 1%. The rest: waiting on disk reads (`IO:DataFileRead`) 43%, running 28%, idle in
+a transaction while the client computes or sends 23%. A 2-minute sample by statement put the disk reads on the inserts into
+`mastering_record`, `mastering_name_key` and `mastering_master` and on their key reads. The store's cache hits 97.8% on a
+19 GB database with `shared_buffers` of about 950 MB.
+
+So **the locks are not what limits the load**: the merge waits on the store's disk, then on the client. The 5 whys below
+named `lock_file` as the cause; that was read from the code and is wrong for this load. What stands from the review:
+every golden record is written twice (17.6k updates against 17.1k inserts a minute), which is disk work on the very tables the
+merge waits on, and the extra round trips. Parts 1 to 3 stay, now justified by fewer writes and statements, not by lock
+waits. The disk reads are their own question: the next proof reports reads per golden record before and after.
+
+## 5 whys (written before the measurement)
 
 1. A commit takes `lock_file` so that its change number is "highest so far + 1". Without it, a merge that commits late could get
    a number below a reader's checkpoint, and that reader would never see it.
@@ -104,7 +118,8 @@ one golden record twice.
 
 ## Parts
 
-- [ ] Measure first: sample `pg_locks` (advisory, `granted = false`) and `pg_stat_activity` wait events every 10 s for
+- [x] Measure first: lock waits are 1% of merge session time, disk reads 43% (above); the lock root cause is overturned and
+  parts 1 to 3 go on for the second write and the round trips 2026-11-23 13:02 ET. The measurement as planned: sample `pg_locks` (advisory, `granted = false`) and `pg_stat_activity` wait events every 10 s for
   10 minutes during a mastering step, through the diagnostic login. Report the share of merge-transaction time spent waiting on
   each lock key. Go on with part 1 if `lock_file` waits are a material share, or regardless for the second write
   (measured: 17.6k updates against 17.1k inserts a minute)
