@@ -622,10 +622,10 @@ def test_the_minutes_left_follow_the_rate_so_far_and_are_unknown_before_one_bund
 
 
 def test_a_step_is_progressing_waiting_on_locks_or_possibly_stalled_by_its_own_evidence():
-    busy = {"elapsed": 30.0, "bound": 480, "log_age": 40.0, "cpu": 85.0, "writes_per_min": 12000.0, "lock_waiters": 0}
+    busy = {"elapsed": 30.0, "bound": 480, "log_age": 40.0, "cpu": 85.0, "lock_waiters": 0}
     assert chain.verdict(**busy).startswith("progressing")
-    assert chain.verdict(**{**busy, "writes_per_min": 0.0, "cpu": 0.0}).startswith("no sign of work")  # silent log too
-    assert chain.verdict(**{**busy, "writes_per_min": 0.0, "cpu": 0.0, "log_age": 2.0}).startswith("progressing")  # log moved
+    assert chain.verdict(**{**busy, "cpu": 0.0}).startswith("no sign of work")  # silent log too
+    assert chain.verdict(**{**busy, "cpu": 0.0, "log_age": 2.0}).startswith("progressing")  # log moved
     assert chain.verdict(**{**busy, "lock_waiters": 3}).startswith("waiting on database locks")
     assert "past its bound of 480 min" in chain.verdict(**{**busy, "elapsed": 500.0})
 
@@ -644,7 +644,7 @@ def test_cpu_percent_comes_from_the_cpu_time_used_in_the_window_not_a_lifetime_a
 
 def test_a_step_is_judged_by_the_store_it_writes_and_one_waiting_session_is_not_a_lock_problem():
     assert chain.store_of("silver") == "silver" and chain.store_of("mastering") == "mdm" and chain.store_of("custodians") == "mdm"
-    busy = {"elapsed": 30.0, "bound": 480, "log_age": 40.0, "cpu": 0.0, "writes_per_min": 0.0}
+    busy = {"elapsed": 30.0, "bound": 480, "log_age": 40.0, "cpu": 0.0}
     assert chain.verdict(**busy, lock_waiters=1).startswith("no sign of work")  # one waiter is normal
     assert chain.verdict(**busy, lock_waiters=3).startswith("waiting on database locks")
 
@@ -666,12 +666,12 @@ def test_a_stores_sessions_are_counted_by_what_they_wait_for_and_mostly_waiting_
     assert chain.session_summary([]) == {}
 
 
-def test_a_step_sharing_a_store_whose_own_processes_are_idle_is_unclear_not_progressing():
-    shared = {"elapsed": 120.0, "bound": 480, "log_age": 120.0, "cpu": 0.0, "writes_per_min": 214000.0, "lock_waiters": 0}
-    said = chain.verdict(**shared, shares_store=["gleif"])
-    assert said.startswith("unclear: its own processes used no CPU") and "gleif" in said
-    assert chain.verdict(**shared, shares_store=[]).startswith("progressing")  # alone, the writes are its own
-    assert chain.verdict(**{**shared, "cpu": 40.0}, shares_store=["gleif"]).startswith("progressing")
+def test_a_verdict_never_says_unclear_whatever_the_store_shares():
+    quiet = dict(elapsed=120.0, bound=480, log_age=120.0, cpu=0.0, lock_waiters=0)
+    assert chain.verdict(**quiet, evidence=None).startswith("no sign of work")
+    working = {"active": 1, "idle_in_transaction": 0, "changed_min": 0.03, "statement": "insert silver.t", "wait": "IO:DataFileRead"}
+    assert chain.verdict(**quiet, evidence=working).startswith("past its bound of 480 min") is False
+    assert "progressing" in chain.verdict(**quiet, evidence=working)
 
 
 RESUMED = """Bundle 1/149: all 512 documents already loaded
@@ -1359,10 +1359,9 @@ def test_only_a_log_naming_more_than_one_bundle_can_be_moved():
 
 
 def test_a_verdict_has_one_kind_the_words_follow():
-    busy = dict(log_age=2.0, cpu=40.0, writes_per_min=500.0, lock_waiters=0)
+    busy = dict(log_age=2.0, cpu=40.0, lock_waiters=0)
     assert chain.verdict_kind(**busy) == "progressing"
-    assert chain.verdict_kind(**{**busy, "log_age": 30.0, "cpu": 0.0, "writes_per_min": 0.0}) == "stalled"
-    assert chain.verdict_kind(**{**busy, "log_age": 30.0, "cpu": 0.0}, shares_store=["gleif"]) == "unclear"
+    assert chain.verdict_kind(**{**busy, "log_age": 30.0, "cpu": 0.0}) == "stalled"
     assert chain.verdict_kind(**{**busy, "lock_waiters": 3}) == "locked"
     assert chain.verdict_kind(**{**busy, "lock_waiters": 2}) == "progressing"  # one or two waiters are normal
 
@@ -1380,6 +1379,8 @@ def test_a_snapshot_names_the_state_of_every_step_and_what_a_waiting_step_waits_
     monkeypatch.setattr(chain, "machine_reading", lambda: {"load": 1.0, "cores": 8, "memory_free": 0.2})
     monkeypatch.setattr(chain, "database_load", lambda url: {"lock_waiters": 0})
     monkeypatch.setattr(chain, "database_sessions", lambda url: {})
+    monkeypatch.setattr(chain, "step_sessions", lambda url: {"c1": {"active": 1, "idle_in_transaction": 0, "changed_min": 0.1,
+                                                                    "statement": "insert mdm.mastering_record", "wait": "IO:DataFileRead"}})
     monkeypatch.setattr(chain, "database_writes", lambda url: {"mdm": 0})
     monkeypatch.setattr(chain, "writes_per_minute", lambda before, after, sample: {"mdm": 900.0})
     monkeypatch.setattr(chain, "LOGS", tmp_path)
@@ -1416,3 +1417,49 @@ def test_a_running_steps_minutes_are_read_from_the_state_file_so_a_scheduler_res
     now = chain.datetime(2026, 11, 23, 12, 0, tzinfo=chain.ZoneInfo("America/New_York"))
     used = chain.minutes_running(text, {"gleif", "person", "never-started"}, now)
     assert used == {"gleif": 60.0, "person": 15.0}  # from the first attempt's start, none for a step with no start line
+
+
+SESSION_ROWS = [  # (application_name, state, wait_event_type, wait_event, seconds since its last state change, statement)
+    ("chain-nport-security-silver", "active", "IO", "DataFileRead", 2.0, "INSERT INTO silver.nport_holding (a, b) VALUES (1, 2)"),
+    ("chain-nport-security-silver", "idle in transaction", "Client", "ClientRead", 30.0, "SELECT x FROM silver.nport_holding WHERE y = 3"),
+    ("chain-company-facts", "idle in transaction", "Client", "ClientRead", 1500.0, "update silver.company_fact set a = 1"),
+    ("", "active", None, None, 1.0, "select 1"),  # a session no step owns
+]
+
+
+def test_the_sessions_of_each_step_are_read_from_their_tag_and_a_statement_is_named_by_its_verb_and_table_only():
+    found = chain.summarize_sessions(SESSION_ROWS)
+    assert set(found) == {"nport-security-silver", "company-facts"}
+    mine = found["nport-security-silver"]
+    assert (mine["active"], mine["idle_in_transaction"]) == (1, 1) and mine["changed_min"] == pytest.approx(2 / 60)
+    assert mine["statement"] == "insert silver.nport_holding" and mine["wait"] == "IO:DataFileRead"
+    assert "1" not in mine["statement"] and "VALUES" not in mine["statement"]  # never a value
+    assert found["company-facts"]["changed_min"] == 25.0
+
+
+def test_a_step_with_a_working_session_is_progressing_at_no_cpu_and_never_unclear():
+    quiet = dict(log_age=120.0, cpu=0.0, lock_waiters=0)
+    working = {"active": 1, "idle_in_transaction": 0, "changed_min": 0.03, "statement": "insert silver.t", "wait": "IO:DataFileRead"}
+    waiting = {"active": 0, "idle_in_transaction": 1, "changed_min": 25.0, "statement": "update silver.t", "wait": "Client:ClientRead"}
+    assert chain.verdict_kind(**quiet, evidence=working) == "progressing"  # the work is the database's
+    assert chain.verdict_kind(**quiet, evidence=waiting) == "stalled"  # idle in a transaction for 25 minutes
+    assert chain.verdict_kind(**quiet, evidence=None) == "stalled"
+    assert chain.verdict_kind(**{**quiet, "cpu": 40.0}, evidence=waiting) == "progressing"
+    assert chain.verdict_kind(**{**quiet, "lock_waiters": 3}, evidence=working) == "locked"
+
+
+@pytest.mark.parametrize("evidence, key_words", [
+    ({"active": 1, "idle_in_transaction": 0, "changed_min": 0.03, "statement": "insert silver.t", "wait": "IO:DataFileRead"}, "disk"),
+    ({"active": 0, "idle_in_transaction": 1, "changed_min": 25.0, "statement": "update silver.t", "wait": "Client:ClientRead"}, "client"),
+    ({"active": 1, "idle_in_transaction": 0, "changed_min": 0.1, "statement": "update silver.t", "wait": "Lock:transactionid"}, "lock"),
+    (None, "no database session"),
+])
+def test_every_verdict_comes_with_five_whys_and_the_fifth_names_a_cause_or_what_was_not_measured(evidence, key_words):
+    why = chain.five_whys(name="s", kind="stalled", elapsed=90.0, bound=60, log_age=45.0, cpu=0.0, evidence=evidence)
+    assert len(why) == 5 and key_words in " ".join(why).lower()
+    assert all("unclear" not in line.lower() for line in why)
+
+
+def test_a_loads_database_sessions_carry_the_step_name_as_their_application_name(monkeypatch):
+    monkeypatch.delenv("PGAPPNAME", raising=False)
+    assert chain.application_name("gleif") == "chain-gleif"

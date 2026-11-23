@@ -24,6 +24,7 @@ and LOGS name the captured files and the logs; RUN labels the capture runs. The 
 """
 import argparse
 import contextlib
+from collections import Counter
 import hashlib
 import json
 import os
@@ -563,33 +564,104 @@ def outlook(left: float | None, elapsed: float, bound: int, attempt: int, attemp
             "raise its workers or its minutes")
 
 
-def verdict_kind(log_age: float, cpu: float, writes_per_min: float, lock_waiters: int,
-                 shares_store: list[str] | None = None) -> str:
-    """A step's state by its own evidence: `locked` (sessions waiting on locks), `unclear` (no CPU and a silent log, with
-    rows written that may be a sharing step's), `progressing` (it wrote rows, its processes work, or its log moved in the
-    last ten minutes) or `stalled` (no sign of work)."""
+IDLE_MINUTES = 10  # a session or a log silent this long is not work
+
+
+def application_name(step: str) -> str:
+    """The tag every database session of a step carries (libpq reads PGAPPNAME), so the store says whose a session is."""
+    return f"chain-{step}"
+
+
+def summarize_sessions(rows) -> dict[str, dict]:
+    """Each step's sessions from rows of (application_name, state, wait event type, wait event, seconds since the last state
+    change, statement): how many are active or idle in a transaction, the minutes since any changed, the commonest wait, and the
+    newest statement by its verb and table only, never a value."""
+    found: dict[str, dict] = {}
+    for tag, state, wtype, wevent, seconds, statement in rows:
+        if not str(tag).startswith("chain-"):
+            continue
+        one = found.setdefault(tag[len("chain-"):], {"active": 0, "idle_in_transaction": 0, "changed_min": None, "waits": Counter(),
+                                                     "statement": "", "newest": None})
+        if state == "active":
+            one["active"] += 1
+            one["waits"][f"{wtype}:{wevent}" if wtype else "-"] += 1
+        elif state == "idle in transaction":
+            one["idle_in_transaction"] += 1
+            one["waits"][f"{wtype}:{wevent}" if wtype else "-"] += 1
+        if state in ("active", "idle in transaction"):
+            minutes = max(float(seconds), 0.0) / 60
+            one["changed_min"] = minutes if one["changed_min"] is None else min(one["changed_min"], minutes)
+            if one["newest"] is None or minutes < one["newest"]:
+                shape = re.match(r"\s*(insert\s+into|update|delete\s+from|select\b.*?\bfrom|copy)\s+([\w.\"]+)", statement or "", re.I | re.S)
+                one["newest"], one["statement"] = minutes, (
+                    f"{shape.group(1).split()[0].lower()} {shape.group(2)}" if shape else (statement or "").split(" ")[0].lower())
+    return {step: {"active": one["active"], "idle_in_transaction": one["idle_in_transaction"],
+                   "changed_min": 1e9 if one["changed_min"] is None else one["changed_min"], "statement": one["statement"],
+                   "wait": one["waits"].most_common(1)[0][0] if one["waits"] else "-"} for step, one in found.items()}
+
+
+def step_sessions(reader_url: str) -> dict[str, dict]:
+    """The sessions of every chain step, read as the diagnostic login (state, wait and statement shape, never a value)."""
+    import psycopg2
+
+    try:
+        with psycopg2.connect(reader_url.replace("postgresql+psycopg2", "postgresql"), connect_timeout=10) as conn, conn.cursor() as cur:
+            cur.execute("""SELECT application_name, state, wait_event_type, wait_event,
+                                  extract(epoch FROM now() - state_change), left(query, 200)
+                           FROM pg_stat_activity WHERE application_name LIKE 'chain-%%' AND state IS NOT NULL AND pid <> pg_backend_pid()""")
+            return summarize_sessions(cur.fetchall())
+    except Exception:  # noqa: BLE001  a driver error can quote the address: no reading
+        return {}
+
+
+def verdict_kind(log_age: float, cpu: float, lock_waiters: int, evidence: dict | None = None) -> str:
+    """A step's state by its own evidence, never by a neighbour's: `locked` (sessions waiting on locks), `progressing` (its processes
+    work, its log moved, or one of its own database sessions is active or changed state lately) or `stalled` (none of them). A step
+    whose work is on the database side uses no CPU and writes no log, so its own sessions are the evidence."""
     if lock_waiters >= 3:  # the scheduler's own threshold: one waiting session is normal
         return "locked"
-    if shares_store and cpu < 5 and log_age >= 10:
-        return "unclear"
-    if writes_per_min > 0 or cpu >= 5 or log_age < 10:
+    if cpu >= 5 or log_age < IDLE_MINUTES or (evidence and (evidence["active"] > 0 or evidence["changed_min"] < IDLE_MINUTES)):
         return "progressing"
     return "stalled"
 
 
-def verdict(elapsed: float, bound: int, log_age: float, cpu: float, writes_per_min: float, lock_waiters: int,
-            shares_store: list[str] | None = None) -> str:
+WAIT_CAUSES = (("IO:", "the store reads the table from disk (cache misses): the store's disk is the limit, not this step"),
+               ("Lock:", "another session holds a lock this step needs"),
+               ("LWLock:", "a short internal lock of the database under many writers"),
+               ("Client:", "client-bound: the step's own round trips or compute, while the database is idle"))
+
+
+def five_whys(name: str, kind: str, elapsed: float, bound: int, log_age: float, cpu: float, evidence: dict | None) -> list[str]:
+    """Why this step reads as it does, five links, each from a reading: never a guess. A link that cannot be read says what would read it."""
+    late = f", past its bound of {bound} min" if elapsed > bound else ""
+    why = [f"{name} is {kind}{late}: its log is {log_age:.0f} min old and its processes use {cpu:.0f}% CPU"]
+    if evidence is None:
+        return why + ["it has no database session: none carries the tag chain-" + name,
+                      "so it is asking the database for nothing, and its processes are idle",
+                      "nothing it could be waiting on can be read from the database",
+                      "not measured: read its log and its processes; no session and no CPU is no sign of work"]
+    states = f"{evidence['active']} active and {evidence['idle_in_transaction']} idle in a transaction"
+    last = "none" if evidence["changed_min"] >= 1e8 else f"{evidence['changed_min']:.1f} min ago"
+    why.append(f"its database sessions: {states}; the last state change {last}")
+    why.append(f"its latest statement: {evidence['statement'] or 'none'}")
+    wait = evidence["wait"]
+    why.append("it waits on " + (wait if wait != "-" else "nothing: the database is running its statement"))
+    cause = next((words for prefix, words in WAIT_CAUSES if wait.startswith(prefix)), None)
+    if kind == "stalled" and evidence["active"] + evidence["idle_in_transaction"] == 0:
+        cause = "no session of this step is doing anything: it is between bundles or stopped"
+    why.append(cause or ("the database is running its statement" if wait == "-" else f"not measured: the wait {wait} has no cause named here"))
+    return why
+
+
+def verdict(elapsed: float, bound: int, log_age: float, cpu: float, lock_waiters: int, evidence: dict | None = None) -> str:
     """The words of `verdict_kind`; being past the step's bound is said first."""
     late = f"past its bound of {bound} min; " if elapsed > bound else ""
-    kind = verdict_kind(log_age, cpu, writes_per_min, lock_waiters, shares_store)
+    kind = verdict_kind(log_age, cpu, lock_waiters, evidence)
     if kind == "locked":
         return f"{late}waiting on database locks ({lock_waiters} sessions on the store)"
-    if kind == "unclear":
-        return (f"{late}unclear: its own processes used no CPU and its log is {log_age:.0f} min old, and the rows written "
-                f"are the store's, shared with {', '.join(shares_store)}, so they may be theirs; check its log and processes")
     if kind == "progressing":
         return f"{late}progressing"
-    return f"{late}no sign of work: no CPU, no rows written, log silent for {log_age:.0f} min; read its log, it may be stalled"
+    return f"{late}no sign of work: no CPU, no session of its own working, log silent for {log_age:.0f} min"
 
 
 STORE_DATABASES = ("data", "control")  # each store is a schema of one of them
@@ -730,6 +802,7 @@ def status_snapshot(steps: list[dict], state: Path, reader_url: str | None, samp
     waiters = (database_load(reader_url) or {}).get("lock_waiters", 0)
     listing = subprocess.run(["ps", "-Ao", "pid,ppid,time,rss,args"], check=False, capture_output=True, text=True).stdout
     sessions = database_sessions(reader_url) if reader_url else {}
+    tagged = step_sessions(reader_url) if reader_url else {}
     rows = []
     for step in running:
         began, attempt = started[step["name"]]
@@ -742,14 +815,17 @@ def status_snapshot(steps: list[dict], state: Path, reader_url: str | None, samp
         store = store_of(step["target"])
         mine = rate.get(store, 0.0)
         sharing = [o["name"] for o in running if o is not step and store_of(o["target"]) == store]
+        evidence = tagged.get(step["name"])
+        kind = verdict_kind(age, cpu, waiters, evidence)
         left = minutes_left(*progress, elapsed, bundles_run(log.read_text())) if progress and progress[1] > 1 else None
         rows.append({
             "name": step["name"], "lane": step["lane"], "attempt": attempt, "attempts": step["attempts"],
             "workers": load_workers(listing, step["source"], step["target"]) or step.get("workers", 2),
             "elapsed": elapsed, "bound": step["minutes"], "bundles": progress, "left": left,
             "processes": len(seconds), "cpu": cpu, "memory_mb": memory, "store": store, "rows_per_min": mine,
-            "shared_with": sharing, "log_age": age, "kind": verdict_kind(age, cpu, mine, waiters, sharing),
-            "verdict": verdict(elapsed, step["minutes"], age, cpu, mine, waiters, sharing),
+            "shared_with": sharing, "log_age": age, "kind": kind, "evidence": evidence,
+            "why": five_whys(step["name"], kind, elapsed, step["minutes"], age, cpu, evidence),
+            "verdict": verdict(elapsed, step["minutes"], age, cpu, waiters, evidence),
             "warning": outlook(left, elapsed, step["minutes"], attempt, step["attempts"])})
     kinds = {row["name"]: row["kind"] for row in rows}
     names = {s["name"] for s in steps}
@@ -777,6 +853,10 @@ def status_lines(snapshot: dict) -> list[str]:
         lines.append(f"  {row['name']} (lane {row['lane']}, attempt {row['attempt']}, {row['workers']} workers): {row['elapsed']:.0f} min of {row['bound']}; "
                      f"{shown}; {row['processes']} processes, {row['cpu']:.0f}% CPU, {row['memory_mb']:,.0f} MB; wrote {wrote}; log {row['log_age']:.0f} min old; "
                      + row["verdict"] + (f"; {row['warning']}" if row["warning"] else ""))
+        if row["kind"] != "progressing" or row["elapsed"] > row["bound"]:  # something is wrong: the whole chain of whys
+            lines += [f"      why {number}: {words}" for number, words in enumerate(row["why"], 1)]
+        elif row["evidence"]:
+            lines.append(f"      {row['why'][1]}; {row['why'][2]}")
     return lines
 
 
@@ -1283,6 +1363,8 @@ def main() -> int:
             print(notice)
         print("\n".join(status(steps, counted, reader_url)))
         return 0
+    if args.only:
+        os.environ["PGAPPNAME"] = application_name(args.only)  # every session of this step's loads carries its name
     env = {**os.environ, **load_env(STORES / "worker.env")}
     if not (args.plan or args.catalog_status):
         # Every other path starts a load, resumes one or writes the finish: the infrastructure must have passed its checks.

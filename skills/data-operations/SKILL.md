@@ -40,12 +40,11 @@ in its store, and which other running steps share that store), its processes' CP
 verdict. The database sessions are shown by store (working, or waiting on the client), read as the reader login.
 
 Read the verdict, not the word "running":
-- **progressing**: it wrote rows, its processes worked, or its log moved in the last ten minutes;
-- **unclear**: the step's own processes used no CPU and its log is silent, but its store is written by other running
-  steps, so the rows may be theirs: check its log and its processes before calling it alive;
+- **progressing**: its processes worked, its log moved in the last ten minutes, or one of its own database sessions (tagged `chain-<step>`) is active or
+  changed state lately; a neighbour's writes never count. There is no "unclear": a step that is not progressing is stalled, with five whys;
 - a step that **stopped**: read its own errors file (`chain-<RUN>-<step>.log.attempt-<n>.errors`), not the shared error log;
   an unchanged failure stops the step at once, since a retry cannot change it;
-- **no sign of work**: no CPU, no rows written and a silent log: read its log and the stores folder's `load-errors.log` (and `.1`, rotated at 10 MiB)
+- **no sign of work** (stalled, with its five whys printed): no CPU, no session of its own working and a silent log: read its log and the stores folder's `load-errors.log` (and `.1`, rotated at 10 MiB)
   before saying anything else, since it may be stalled;
 - **waiting on database locks** (three or more sessions): the contention ladder of the daily-run runbook;
 - a store note, **client-bound, not the database** (more than half its sessions waiting on the client): the machine

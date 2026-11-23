@@ -31,8 +31,8 @@ def header() -> list[dict]:
     return [
         stat("Done", "Steps finished. The number ticks up when a step's block turns blue on the lanes below.",
              'load_steps{state="done"}', 0, steps((None, d.NEUTRAL), (1, d.BLUE))),
-        stat("Running", "Steps with a process now: progressing, unclear, stalled or locked.",
-             'sum(load_steps{state=~"progressing|unclear|stalled|locked"})', 4, steps((None, d.NEUTRAL), (1, d.GREEN))),
+        stat("Running", "Steps with a process now: progressing, stalled or locked.",
+             'sum(load_steps{state=~"progressing|stalled|locked"})', 4, steps((None, d.NEUTRAL), (1, d.GREEN))),
         stat("Failed", "Steps the scheduler gave up on. Any is red: a retry cannot change a repeated failure.",
              'load_steps{state="failed"}', 8, zero_green(d.RED), graph="none"),
         stat("Stalled or locked", "Running steps with no sign of work, or waiting on database locks. Orange from one.",
@@ -49,7 +49,7 @@ def lanes() -> dict:
     mappings = {str(code): {"text": name, "color": colour, "index": code} for name, code, colour, _ in design.STATES}
     return {"type": "state-timeline", "title": "Lanes", "datasource": SOURCE,
             "description": "One row a step, grouped by lane. A step is grey while it waits, green while it works, "
-                           "yellow, orange or red when its evidence is weak, stalled or locked, blue when done and dark red "
+                           "orange or red when it is stalled or locked, blue when done and dark red "
                            "when it failed. A change of colour is the event; hover a bar for the step and its state. "
                            + " ".join(f"{name}: {meaning}." for name, _, _, meaning in design.STATES),
             "gridPos": {"h": 16, "w": 24, "x": 0, "y": 4},
@@ -82,12 +82,13 @@ def running_table() -> dict:
     d = design
     exprs = [("load_step_attempt", "Attempt"), ("load_step_workers", "Workers"), ("load_step_elapsed_minutes", "Elapsed min"),
              ("load_step_bound_minutes", "Bound min"), ("load_step_log_age_minutes", "Log age min"),
-             ("load_step_cpu_percent", "CPU %"), ("load_step_memory_mb", "Memory MB"), ("load_step_rows_per_minute", "Rows/min")]
+             ("load_step_cpu_percent", "CPU %"), ("load_step_memory_mb", "Memory MB"), ("load_step_rows_per_minute", "Rows/min"),
+             ("load_step_cause", "Why")]
     targets = [target(e, chr(65 + i), fmt="table", instant=True) for i, (e, _) in enumerate(exprs)]
     rename = {f"Value #{chr(65 + i)}": name for i, (_, name) in enumerate(exprs)}
     rename.update({"lane": "Lane", "step": "Step"})
     return table("Running now", "Each running step. Attempt 2 or more means a restart. Log age turns amber at ten minutes and "
-                 "red at twenty: the first sign of a stall. A step with no CPU, no rows and a silent log is stalled.",
+                 "red at twenty: the first sign of a stall. A step with no CPU, no session of its own working and a silent log is stalled. Why is the last of the step's five whys.",
                  targets, rename, 20, 0, 14,
                  [colored("Log age min", steps((None, d.GREEN), (d.LOG_AGE_MINUTES[0], d.AMBER), (d.LOG_AGE_MINUTES[1], d.RED))),
                   colored("Attempt", steps((None, d.GREEN), (2, d.AMBER)))])
@@ -100,11 +101,23 @@ def waiting_table() -> dict:
                  {"lane": "Lane", "step": "Step", "waits_for": "Waits for"}, 20, 14, 10, merge=False)
 
 
+def whys_table() -> dict:
+    """The five whys of every running step that is not progressing: what it shows, why, and what that waits on, down to the cause."""
+    panel = table("Why a step is not working", "The five whys of each running step that is stalled or locked, each read from the step's own "
+                  "sessions, CPU and log: the symptom, its database sessions, its latest statement, what it waits on, and the cause. A "
+                  "line that says not measured names what would measure it. Empty while every running step works.",
+                  [target("load_step_why", fmt="table", instant=True)],
+                  {"lane": "Lane", "step": "Step", "number": "Why #", "why": "Because"}, 30, 0, 24, merge=False)
+    panel["gridPos"]["h"] = 9
+    panel["transformations"].append({"id": "sortBy", "options": {"sort": [{"field": "Step"}, {"field": "Why #"}]}})
+    return panel
+
+
 def rate() -> dict:
     return {"type": "timeseries", "title": "Rows written a minute", "datasource": SOURCE,
             "description": "Rows written to each store a minute, counted when a transaction commits. A flat line while steps "
                            "run is the stall to look for; the colour of a step's block says which.",
-            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 30}, "targets": [target("load_store_rows_per_minute", legend="{{store}}")],
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 39}, "targets": [target("load_store_rows_per_minute", legend="{{store}}")],
             "fieldConfig": {"defaults": {"custom": {"fillOpacity": 20, "lineWidth": 2, "spanNulls": True}, "unit": "none"}, "overrides": []},
             "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}}}
 
@@ -114,13 +127,13 @@ def annotations() -> list[dict]:
         return {"datasource": SOURCE, "enable": True, "name": name, "iconColor": colour, "expr": expr, "step": "30s",
                 "titleFormat": title, "textFormat": "{{step}} (lane {{lane}})"}
     return [note("Restarts", design.AMBER, "changes(load_step_attempt[1m]) > 0", "Attempt restarted"),
-            note("Failures", design.RED, "(changes(load_step_state[1m]) > 0) and (load_step_state == 6)", "Step failed")]
+            note("Failures", design.RED, f"(changes(load_step_state[1m]) > 0) and (load_step_state == {design.CODE['failed']})", "Step failed")]
 
 
 def build() -> dict:
     return {"uid": UID, "title": "Load monitor", "tags": ["load", "monitoring"], "timezone": "America/New_York",
             "refresh": "10s", "time": {"from": "now-6h", "to": "now"}, "schemaVersion": 39, "editable": False,
             "graphTooltip": 1, "annotations": {"list": annotations()},
-            "panels": [*header(), lanes(), running_table(), waiting_table(), rate()],
+            "panels": [*header(), lanes(), running_table(), waiting_table(), whys_table(), rate()],
             "description": "Is the load healthy, and why is a step not running? Colour carries the answer: read the lanes, "
                            "then the stat strip. Built from skills/load-monitoring."}
