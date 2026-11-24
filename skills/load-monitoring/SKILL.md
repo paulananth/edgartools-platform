@@ -97,3 +97,7 @@ dependency lines need a custom panel plugin, which is a separate decision.
 - Animation (see above).
 - Reading a hosted load run elsewhere: the exporter reads the process list of the
   worker it shares a process space with, so it sees only loads of this machine's pipeline.
+
+## Handshake
+
+Reads and shows; changes nothing. Tells [data-operations](../data-operations/SKILL.md) what stalls (the runtime first, then lanes against the budget), sends a lock or slow statement to [database-monitoring](../database-monitoring/SKILL.md) and an unexplained failure to [production-support](../production-support/SKILL.md). Its numbers come from data-operations' `lane_budget`; the two change together. The table of who owns what and hands off to whom is [OWNERSHIP.md](../data-platform/OWNERSHIP.md).

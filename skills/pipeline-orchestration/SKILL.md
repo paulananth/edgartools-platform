@@ -95,3 +95,7 @@ For resource/throughput decisions use
 Use [production-support](../production-support/SKILL.md) for alerts, CPU/memory/log
 analysis and holistic diagnosis. Monitoring and scheduling are ordinary platform
 jobs; AI investigations run only on alerts or scheduled reviews, with bounds.
+
+## Handshake
+
+Owns when and in what order a run starts; [data-operations](../data-operations/SKILL.md) owns what runs and how it recovers, and [aws-snowflake-operations](../aws-snowflake-operations/SKILL.md) the deploy. The table of who owns what and hands off to whom is [OWNERSHIP.md](../data-platform/OWNERSHIP.md).

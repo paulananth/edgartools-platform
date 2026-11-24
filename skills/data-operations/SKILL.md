@@ -492,3 +492,7 @@ A schedule repeats steps 1 to 6 above; it adds no step of its own.
 Use the existing shared stores and private role connections. Preserve captured
 data, source identities and exact integer precision. Public reports contain counts
 and invented examples; keep credentials and row-level evidence private.
+
+## Handshake
+
+Owns the run and its recovery. Gives [load-monitoring](../load-monitoring/SKILL.md) the load jobs' status, the run label and the lane budget, and acts on what it reports (restart the runtime, recover with [bookkeeping](../bookkeeping/SKILL.md)). Sends a failure nothing explains to [production-support](../production-support/SKILL.md) with the run label and logs. Reads [access-audit](../access-audit/SKILL.md) in readiness. The catalog takes no part in a load. The table of who owns what and hands off to whom is [OWNERSHIP.md](../data-platform/OWNERSHIP.md).
