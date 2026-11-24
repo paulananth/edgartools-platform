@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run the load pipeline's tasks in the loader image: take a task from Step Functions, run it, report how it ended.
 
-    ACTIVITY_ARN=<arn> AWS_ENDPOINT_URL_STEPFUNCTIONS=<url> python activity_worker.py
+    ACTIVITY_ARN=<arn> AWS_ENDPOINT_URL_SFN=<url> python activity_worker.py
 
 A task's input says what to run: `{"action": "readiness"}`, `{"action": "step", "step": "<name>", "plan": false}`, or
 `{"action": "finish"}` (what follows the loads: links and lookups). The

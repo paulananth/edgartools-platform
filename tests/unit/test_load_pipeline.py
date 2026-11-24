@@ -114,3 +114,28 @@ def test_the_state_machine_runs_readiness_then_the_given_steps_in_order_and_stop
         assert task["Resource"] == "${activity}" and task["HeartbeatSeconds"] > 2 * activity_worker.HEARTBEAT_SECONDS
     chain = yaml.safe_load((REPO / "rules" / "load-chain.yaml").read_text())
     assert not [s["name"] for s in chain["steps"] if f'"{s["name"]}"' in MACHINE.read_text()]
+
+
+def test_every_variable_the_compose_file_requires_is_set_before_load_sh_first_runs_compose():
+    """Compose reads every service's variables on any `up`: the emulator's `up` failed on the worker's activity, which
+    exists only once the emulator answers ("required variable ACTIVITY_ARN is missing a value")."""
+    import re
+
+    required = set(re.findall(r"\$\{([A-Z_]+):\?", (MACHINE.parent / "compose.yml").read_text()))
+    script = (MACHINE.parent / "load.sh").read_text()
+    before = script[:script.index('"${compose[@]}" up')]
+    set_before = set(re.findall(r"\b([A-Z_]+)=", before))
+    assert required and not required - set_before, sorted(required - set_before)
+
+
+def test_the_worker_s_client_points_at_the_emulator_the_compose_file_names(monkeypatch):
+    """boto3 reads a service's endpoint from AWS_ENDPOINT_URL_<service id>, and Step Functions' id is SFN: a variable named
+    for "stepfunctions" was ignored, so the worker called real AWS with the emulator's placeholder login."""
+    pytest.importorskip("boto3")
+    import boto3
+
+    worker = yaml.safe_load((MACHINE.parent / "compose.yml").read_text())["services"]["worker"]["environment"]
+    for name, value in worker.items():
+        if name.startswith("AWS_") and "$" not in str(value):
+            monkeypatch.setenv(name, str(value))
+    assert boto3.client("stepfunctions").meta.endpoint_url == "http://localhost:8083"

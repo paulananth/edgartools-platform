@@ -32,6 +32,7 @@ endpoint=http://localhost:8083
 sfn() { AWS_ACCESS_KEY_ID=local AWS_SECRET_ACCESS_KEY=local aws stepfunctions --region us-east-1 --endpoint-url "$endpoint" --output json "$@"; }
 compose=(docker compose -f "$here/compose.yml")
 
+export ACTIVITY_ARN=pending  # compose reads the worker's variables on any `up`; the real one is set once the emulator answers
 "${compose[@]}" up -d stepfunctions >/dev/null
 for _ in $(seq 30); do sfn list-activities >/dev/null 2>&1 && break; sleep 1; done
 ACTIVITY_ARN="$(sfn create-activity --name edgartools-load | jq -r .activityArn)"

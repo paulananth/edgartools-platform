@@ -20,7 +20,7 @@ services:
       LOGS: ${LOGS:?}
       RUN: ${RUN:?}
       ACTIVITY_ARN: ${ACTIVITY_ARN:?load.sh creates the activity}
-      AWS_ENDPOINT_URL_STEPFUNCTIONS: http://localhost:8083
+      AWS_ENDPOINT_URL_SFN: http://localhost:8083
       AWS_DEFAULT_REGION: us-east-1
       AWS_ACCESS_KEY_ID: local
       AWS_SECRET_ACCESS_KEY: local
