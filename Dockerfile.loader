@@ -17,7 +17,7 @@ COPY skills /app/skills
 
 # The commit the image was built from, which readiness and the gate read in place of git.
 RUN echo "${COMMIT}" > /app/COMMIT \
-    && printf '#!/bin/sh\nexec python -m edgar_warehouse "$@"\n' > /usr/local/bin/edgar-warehouse \
+    && printf '#!/bin/sh\nexec python -c "import sys; from edgar_warehouse.cli import main; sys.exit(main())" "$@"\n' > /usr/local/bin/edgar-warehouse \
     && chmod +x /usr/local/bin/edgar-warehouse
 ENV PYTHONPATH=/app EDGAR_WAREHOUSE=/usr/local/bin/edgar-warehouse
 
