@@ -26,6 +26,7 @@ One generic function, shared by every source. Inputs are invented configuration 
 - [x] Implement the three operator-approved route scenarios and resume selection: matching completed phases are skipped; the first unfinished or invalidated phase is selected. Overlapping change flags stop for Data Platform clarification, per the existing Start here stop rule (2026-11-23 21:43 ET).
 - [x] Expose the route through `edgar-warehouse plan route` and document its use in Data Platform's entrypoint; verified by CLI tests and the wheel-inclusion check (2026-11-23 21:43 ET).
 - [x] Run affected checks: route behavior **10 passed**, wheel inclusion **1 passed**, skill genericity and path checks **157 passed** (2026-11-23 21:43 ET).
+- [x] Fix the CI skill-size guard failure by shortening Data Platform's route instructions; the focused size test passed (2026-11-23 21:57 ET).
 - [x] Publish this ticket's scoped change on its own branch and PR; affected checks passed locally. [PR #2089](https://github.com/paulananth/edgartools-platform/pull/2089) (2026-11-23 21:46 ET).
 - [x] Learning → skill: Data Platform's entrypoint now routes from normalized config and retained evidence through the executable command (2026-11-23 21:43 ET).
 
@@ -37,4 +38,4 @@ The route was text-only. `route_next_action` now returns one owner/action pair f
 
 The interface uses no GoF pattern: one deterministic route function has no configurable handler chain or alternative algorithms to justify Chain of Responsibility, State or Strategy indirection.
 
-The [route planner pull request](https://github.com/paulananth/edgartools-platform/pull/2089) includes the implementation and evidence. Local checks passed: route behavior 10, wheel inclusion 1, skill genericity/path checks 157.
+The [route planner pull request](https://github.com/paulananth/edgartools-platform/pull/2089) includes the implementation and evidence. Local checks passed: route behavior 10, wheel inclusion 1, skill genericity/path checks 157. Its first CI head failed only the skill-size guard because Data Platform reached 500 lines; the route instructions were shortened and the focused size test now passes. Full CI is rerunning on the updated head.
