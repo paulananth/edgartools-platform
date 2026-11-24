@@ -1,7 +1,7 @@
 # data-quality: Reconcile shared rules
 
 Type: task
-Status: claimed
+Status: resolved
 Priority: P0
 Blocked by: 02, 08, 14, 25
 Labels: wayfinder:task
@@ -36,7 +36,7 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] Inventory each duplicated or conflicting instruction with its authoritative source and proposed disposition. Verified by reconciling `CLAUDE.md`, Data Platform, Data Onboarding, Data Profiling, Data Modeling, Refining Rules, Business Catalog and Bookkeeping recovery; recorded under [Inventory and disposition](#inventory-and-disposition). (2026-11-20 20:01 ET)
 - [x] Align the local phase with the shared rule decision while preserving explicit operator boundaries. Verified in the Data Quality skill's [Shared rules and gates](../../../skills/data-quality/SKILL.md#shared-rules-and-gates) and its [decisions and handoffs](../../../skills/data-quality/SKILL.md#decisions-artifacts-and-handoffs): `quality.yaml` or silver table checks, measured counts, and explicit hierarchy-row dispositions remain distinct artifacts. (2026-11-20 20:01 ET)
 - [x] Trace a routine path and a blocked path; confirm no new approval, provider access or switch-on authority was inferred. Verified by static trace through the Data Quality modes and their owner handoffs; recorded under [Routine and blocked paths](#routine-and-blocked-paths). No workflow or source execution was run. (2026-11-20 20:01 ET)
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. The operator lifted the prior no-PR restriction in this session.
+- [x] Publish the scoped reconciliation and evidence in its own branch and PR; the genericity check passed (**155 passed**). [docs(data-quality): close shared rules reconciliation](https://github.com/paulananth/edgartools-platform/pull/2095) (2026-11-24 06:53 ET).
 - [x] Learning → skill: Shared approval, access and completion rules stay at their authoritative repository or phase owner; Data Quality links to them and owns only check meaning, measured counts and row dispositions. Recorded in [Shared rules and gates](../../../skills/data-quality/SKILL.md#shared-rules-and-gates). (2026-11-20 20:01 ET)
 
 ## Completion evidence
