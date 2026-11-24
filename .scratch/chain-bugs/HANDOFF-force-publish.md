@@ -41,3 +41,31 @@ use a fresh run label, not `load-1124`.
   with a measured time.
 - The 2-hour window is the operator's; the estimate above says it will be missed, so say so before starting.
 - Never print a secret, a password, a token or a database address; no provider request.
+
+## Addendum 2026-11-24 08:00 ET: the forced load `load-1124c` cannot finish; fix, then run the default load
+
+Operator: "Just tell codex to fix it". What Claude measured in execution `49827879` (forced, run label `load-1124c`, started
+07:19 ET). The operator's last instruction was the **default load** (no `--force`), so first **stop this execution**
+(`stop-execution` on the emulator, then stop the worker container so its load processes end; a stopped load resumes), and
+use a fresh run label for the rerun.
+
+Failures, each with its root cause (all read from `chain-load-1124c.log` and the jobs' `.errors` files):
+1. **`gleif-pairs`: FileNotFoundError on the capture files.** The files in `captures/gleif/20260911-1600/` are symlinks
+   into `~/.local/share/edgartools/mdm/research/gleif-20260911-1600/`, and `infra/load-pipeline/compose.yml` mounts
+   `CAPTURES` but not that folder, so in the worker the links point to nothing. Fix: mount what the links point to
+   read-only, or (better, one place for it) have `load.sh` resolve each input's symlinks and mount their target folders;
+   add a test that every file of every input resolves inside the worker's mounts. `gleif` waits on `gleif-pairs`, so it
+   stops with it.
+2. **`ncen-registrant-2025q4`, `ncen-fund-2025q4`, `ownership` (and the lanes after them): "Source native revision has
+   contradictory publications".** A forced load makes every document again as `<run>+force-<time>` with the same revision, and
+   the engine refuses the same revision with other content. Decide with the operator: either a forced load passes a revision
+   above the last load's for each step (the engine's own message says so), or force publish is not used on a store that
+   holds those revisions. A default load does not hit this (it reads the Change Journal and skips).
+3. **`nport-security`, `nport-security-silver`: killed (status -9), `OOMKilled=true` on the worker.** The worker container is
+   limited to about 3.9 GiB for every lane together, and the pipeline starts every lane at once, so nothing holds the heavy
+   merges back (the local scheduler `--auto` does). Fix: size the worker's memory limit from the jobs' measured `worker_gb`,
+   or hold heavy jobs back by memory; check the machine first: it has 8 GiB, swap was about 60 percent used, and the load average
+   was 12 to 14 on 8 cores.
+
+Then: run the default load (`RUN=<fresh label> infra/load-pipeline/load.sh`), 2 hours at most, report the miss (a default
+load should take minutes: the Change Journal skips what is loaded). Each fix is its own branch, PR and test that fails first.
