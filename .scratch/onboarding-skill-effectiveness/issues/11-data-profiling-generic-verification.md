@@ -1,7 +1,7 @@
 # data-profiling: Specify generic verification
 
 Type: task
-Status: open
+Status: claimed
 Priority: P0
 Blocked by: 05, 10
 Labels: wayfinder:task
@@ -79,4 +79,8 @@ The four scenarios below were approved by the operator before implementation; Ma
 - The repository skill on this branch is the current `origin/main` copy. The installed `data-profiling` skill was read; it differs from the repository skill and does not include the repository's current `Run this phase` entrypoint/resume guidance. The repo test exercises `skills/data-profiling/scripts/profile_data.py`, not the installed copy.
 - No provider request, source load, or mutation of approved real findings was performed. The skill needs no change for the verified reusable lessons: archive member/readme behavior and profile-once reuse are already in `Modes` and `Profile once`.
 - PR2010 is merged; its current-head CI passed. The exact-number fix is in PR2015. This parent ticket remains open until its four-scenario evidence is recorded together.
+
+## Comments
+
+- 2026-11-23: The test-order failure was shared fixture state: `test_approve_records_exact_words` mutated the module-scoped `findings.yaml`, while the catalog-summary test assumed that side effect. The catalog-summary test now writes its own draft findings copy and approves it through `profile_data.main` before catalog publication. The isolated test failure was reproduced before the fix; the full `tests/unit/test_profiling_run.py` file now passes with `--testmon-noselect` (46 tests). No profiler runtime code changed. The parent ticket remains open for the combined four-scenario evidence run.
 
