@@ -59,7 +59,7 @@ CODE read it in place of git, and ENGINE does not apply (the image compiles its 
   local scheduler (`--auto`) uses the same capacity, and the rest of the lanes queue. Two knobs for one limit is waste, and the state machine takes
   no computed value (`MaxConcurrencyPath` is refused by the emulator), while a lane queued in the worker times out on its
   heartbeat. Without it every lane starts at once: on 8 cores the first jobs asked for 26 workers, the load average passed 20
-  and the heavy N-PORT merges were killed (status -9).
+  and the heaviest merges were killed (status -9).
 - **One task per poller.** The worker's `ps` sees only its container, so QUIET's process count no longer covers the Mac; the
   loader's database sessions still do. Never start `load_jobs.py` on the Mac beside it.
 - **Mounts:** the logins and the captures are read-only; the stores folder and `LOGS` are written (the readiness record,
