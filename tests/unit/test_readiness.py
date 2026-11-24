@@ -179,16 +179,21 @@ def test_a_run_that_fails_only_because_a_load_runs_leaves_the_passing_record_for
 
 
 def test_a_step_has_a_capture_when_its_folder_holds_receipts_and_the_check_plans_no_load(monkeypatch, tmp_path):
-    """The check planned all 43 loads (174 s of a 201 s readiness pass) to learn whether each capture exists."""
+    """A capture is its folder's receipts file: the check looks at each folder and runs no command."""
     import load_chain
     from tests.support.patching import checked
 
-    (tmp_path / "here" / "c1").mkdir(parents=True)
-    (tmp_path / "here" / "c1" / "receipts.jsonl").write_text("")
+    good = '{"key": "k", "sha256": "' + "0" * 64 + '"}\n'
+    for name, receipts in (("c1", good), ("bad", "not json\n"), ("nosha", '{"key": "k"}\n')):
+        (tmp_path / "here" / name).mkdir(parents=True)
+        (tmp_path / "here" / name / "receipts.jsonl").write_text(receipts)
     (tmp_path / "here" / "c2").mkdir()  # a capture without its receipts cannot be loaded
-    steps = [{"name": "a", "capture": "c1"}, {"name": "b", "capture": "c2"}, {"name": "c", "capture": "c3"},
-             {"name": "d", "capture": "c1", "capture_root": "proving"}]
+    one = {"source": "sec.company", "target": "mastering"}
+    steps = [{"name": "a", "capture": "c1", **one}, {"name": "b", "capture": "c2", **one}, {"name": "c", "capture": "c3", **one},
+             {"name": "d", "capture": "c1", "capture_root": "proving", **one},
+             {"name": "e", "capture": "bad", **one}, {"name": "f", "capture": "nosha", **one},  # receipts a load cannot read
+             {"name": "g", "capture": "c1", "source": "sec.company", "target": "undeclared"}]  # a target the source lacks
     checked(monkeypatch, load_chain, "chain_steps", lambda *a, **k: steps)
     monkeypatch.setattr(load_chain, "ROOTS", {"captures": tmp_path / "here", "proving": tmp_path / "there"})
     checked(monkeypatch, readiness.subprocess, "run", lambda *a, **k: pytest.fail("a capture check runs no command"))
-    assert readiness.plan_missing({}) == 3
+    assert readiness.plan_missing({}) == 6

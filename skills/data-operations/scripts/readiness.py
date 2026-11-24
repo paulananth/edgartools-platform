@@ -247,13 +247,25 @@ def loads_running() -> int:
 
 
 def plan_missing(env: dict) -> int:
-    """The steps whose capture folder holds no receipts file, which a load reads first: a look at each folder, never a
-    plan of each load (that took most of a readiness pass)."""
+    """The steps a load could not start: no readable receipts file in the capture folder (a load reads it first), or a
+    target the source does not declare. Each is read, never planned. A chain file that does not read counts as every step."""
     sys.path.insert(0, str(HERE))
     import load_chain
+    from edgar_warehouse.mdm import raw_capture
+    from edgar_warehouse.rules import files as rules_files
 
-    return sum(1 for step in load_chain.chain_steps()
-               if not (load_chain.ROOTS[step.get("capture_root", "captures")] / step["capture"] / "receipts.jsonl").is_file())
+    def loadable(step: dict) -> bool:
+        try:
+            raw_capture.receipts(load_chain.ROOTS[step.get("capture_root", "captures")] / step["capture"])
+            return step["target"] in (rules_files.source(step["source"]).get("bookkeeping") or {}).get("targets", {})
+        except Exception:  # noqa: BLE001  (missing, oversized or malformed receipts; an unknown source)
+            return False
+
+    try:
+        steps = load_chain.chain_steps()
+    except Exception:  # noqa: BLE001
+        return 99
+    return sum(1 for step in steps if not loadable(step))
 
 
 def audit_failures(env: dict | None = None) -> list[str] | None:

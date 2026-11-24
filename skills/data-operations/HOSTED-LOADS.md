@@ -6,8 +6,8 @@ Read before starting or resuming a load on the hosted instance. Each item is a c
 `scripts/readiness.py` reads thirteen facts and writes `readiness.json` in the stores folder only on a full pass; `load_chain.py`
 refuses to start, resume or finish a load without it (the read-only `--plan`, `--list`, `--status` and `--catalog-status` still
 run). A pass belongs to one store generation (a reset of the databases closes the gate), one commit (any new commit closes it)
-and one day. A pass takes about half a minute: each check reads what it asks (a capture is its folder's receipts
-file), never a plan of the work. The checks: the code is committed, contains `main` and its commit has green CI (tested means CI, never a local run
+and one day. Each check reads only what it asks (a capture is its folder's receipts file), never a plan of
+the work. The checks: the code is committed, contains `main` and its commit has green CI (tested means CI, never a local run
 alone); the compiled engine was built from this checkout's source (`readiness.py --build-engine` rebuilds it and records a hash of what it was built from); `doctor` is ready; the loader holds its connection limit, memory ceiling
 and timeouts; RDM holds its codes and silver a table per spec; every step has a capture; no load runs and the loader has no
 session; disk and load average have room; the access audit of the database has no failing control; every duty file's login connects to the databases of its duty (names only, a
