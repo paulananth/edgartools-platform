@@ -245,7 +245,7 @@ rate, and renews its own lease before each request. It runs by the unit, and the
 
 Prove a change of grain before the switch-on, in two steps. First load one delivery at each grain into two disposable stores
 and compare every table's row count: MDM and silver agree, the Change Journal differs only by Bookkeeping's per-unit events.
-Then load every target once at the new grain on a disposable store (the load chain, with `STORES` naming that store): a
+Then load every target once at the new grain on a disposable store (the load jobs, with `STORES` naming that store): a
 target whose input the loader cannot resolve stops loudly at its first bundle, and no unit test shows it. Not built: a
 grain between the two (one unit a step, or one unit a load).
 

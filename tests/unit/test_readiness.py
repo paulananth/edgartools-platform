@@ -107,15 +107,15 @@ def test_an_installed_bundle_has_no_engine_source_to_compare():
     assert "ENGINE" not in failed(facts(engine={"applicable": False, "built": None, "source": ""}))
 
 
-def test_load_chain_starts_nothing_until_the_gate_is_open(tmp_path, monkeypatch, capsys):
-    spec = importlib.util.spec_from_file_location("load_chain_gate", SCRIPTS / "load_chain.py")
+def test_load_jobs_starts_nothing_until_the_gate_is_open(tmp_path, monkeypatch, capsys):
+    spec = importlib.util.spec_from_file_location("load_jobs_gate", SCRIPTS / "load_jobs.py")
     chain = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(chain)
     monkeypatch.setattr(chain, "STORES", tmp_path)
     monkeypatch.setattr(chain, "LOGS", tmp_path / "logs")
     monkeypatch.setattr(chain, "subprocess", type("S", (), {"Popen": staticmethod(lambda *a, **k: (_ for _ in ()).throw(AssertionError("started"))),
                                                             "run": staticmethod(lambda *a, **k: (_ for _ in ()).throw(AssertionError("started")))}))
-    monkeypatch.setattr(sys, "argv", ["load_chain.py", "--auto"])
+    monkeypatch.setattr(sys, "argv", ["load_jobs.py", "--auto"])
     (tmp_path / "worker.env").write_text("")
     assert chain.main() == 2
     assert "Not started" in capsys.readouterr().err
@@ -180,7 +180,7 @@ def test_a_run_that_fails_only_because_a_load_runs_leaves_the_passing_record_for
 
 def test_a_step_has_a_capture_when_its_folder_holds_receipts_and_the_check_plans_no_load(monkeypatch, tmp_path):
     """A capture is its folder's receipts file: the check looks at each folder and runs no command."""
-    import load_chain
+    import load_jobs
     from tests.support.patching import checked
 
     good = '{"key": "k", "sha256": "' + "0" * 64 + '"}\n'
@@ -193,8 +193,8 @@ def test_a_step_has_a_capture_when_its_folder_holds_receipts_and_the_check_plans
              {"name": "d", "capture": "c1", "capture_root": "proving", **one},
              {"name": "e", "capture": "bad", **one}, {"name": "f", "capture": "nosha", **one},  # receipts a load cannot read
              {"name": "g", "capture": "c1", "source": "sec.company", "target": "undeclared"}]  # a target the source lacks
-    checked(monkeypatch, load_chain, "chain_steps", lambda *a, **k: steps)
-    monkeypatch.setattr(load_chain, "ROOTS", {"captures": tmp_path / "here", "proving": tmp_path / "there"})
+    checked(monkeypatch, load_jobs, "load_jobs", lambda *a, **k: steps)
+    monkeypatch.setattr(load_jobs, "ROOTS", {"captures": tmp_path / "here", "proving": tmp_path / "there"})
     checked(monkeypatch, readiness.subprocess, "run", lambda *a, **k: pytest.fail("a capture check runs no command"))
     assert readiness.plan_missing({}) == 6
 

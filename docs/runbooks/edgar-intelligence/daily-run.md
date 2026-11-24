@@ -45,7 +45,7 @@ Normal runs leave forced replay off. The selector is per file; reprocessing a
 changed multi-record file does not imply every row became a new identity.
 
 **Prove an unchanged rerun.** Count the rows of every table of every store (MDM, Bookkeeping, Change Journal, silver,
-RDM, Rules) and the highest golden record change number, run the same chain again with its own log folder (the chain's
+RDM, Rules) and the highest golden record change number, run the same load jobs again with its own log folder (the run's
 state file is read for `waits_for`, so copy it there), and count again. Every step should print `0 documents loaded`,
 and no table should change. Read a difference by what wrote it: a Bookkeeping run and its unit rows mean a step loaded
 files, so find why the Journal did not skip them. Counts show inserts and deletes only, not an update to a stored
@@ -58,7 +58,7 @@ container's allocation, and server connection limits do not describe its free
 budget. Read available resources and active runs before each new dispatch.
 
 Read the machine before adding a load: a load average above one and a half times the cores, or memory short (under a tenth free, or swap over three
-quarters used while under a quarter is free), means every running load slows (`load_chain.py --auto` checks both before each start). Memory is the
+quarters used while under a quarter is free), means every running load slows (`load_jobs.py --auto` checks both before each start). Memory is the
 limit on a small machine, not the cores.
 
 Record the ready backlog's file count and compressed/expanded byte estimates,
@@ -104,8 +104,8 @@ Bookkeeping/destination leases remain authoritative.
 
 ## Capacity: the workers follow the compute
 
-A step's workers are bounded by the compute it runs on, never by a fixed number. `load_chain.py --capacity <name>` picks
-a profile of `rules/load-chain.yaml`:
+A step's workers are bounded by the compute it runs on, never by a fixed number. `load_jobs.py --capacity <name>` picks
+a profile of `rules/load-jobs.yaml`:
 
 | Profile | vCPU | Memory | Workers a step can carry |
 |---|---|---|---|
@@ -124,7 +124,7 @@ step opens its own database connections, and the hosted instance allows 500) and
 
 A slow load has one saturated tier. Throttling hides which, so it comes last.
 
-1. **Measure each tier** (`load_chain.py --auto` reads the first two every cycle and acts on them):
+1. **Measure each tier** (`load_jobs.py --auto` reads the first two every cycle and acts on them):
    - the machine running the loads: load average against its cores, and memory free (swap used only beside it);
    - the database, as the reader login: sessions active, sessions waiting on locks and the longest wait, connections
      against the limit;
@@ -153,7 +153,7 @@ A step that stops keeps the errors of that attempt in `chain-<RUN>-<step>.log.at
 ones `.2.gz` to `.5.gz`; at each rotation the files past five, or older than 30 days, are removed), and a step whose same failure comes back unchanged stops at once: a
 retry cannot change it. Read the step's own errors file first.
 
-Report a running load from `load_chain.py --status` (progress, rate, processes, database sessions and a verdict for each
+Report a running load from `load_jobs.py --status` (progress, rate, processes, database sessions and a verdict for each
 step; see the data-operations skill), never as "running".
 
 Diagnose as the reader login (`reader.env`): it shows sessions, locks and waits and reads no table. A step that needs the

@@ -21,11 +21,11 @@ cause by the [five whys](../data-platform/ROOT-CAUSE.md) before acting or report
 
 The catalog describes the load; it never starts, resumes or decides one (the
 [openmetadata skill's pipeline execution boundary](../openmetadata/SKILL.md#pipeline-execution-boundary)). After a step is done,
-`load_chain.py` publishes its latest Bookkeeping run as the target Pipeline's status (`rules catalog status --bookkeeping-run`)
+`load_jobs.py` publishes its latest Bookkeeping run as the target Pipeline's status (`rules catalog status --bookkeeping-run`)
 when the catalog's address and token are in its private file (`OPENMETADATA_ENV_FILE`, else
 `~/.config/edgartools/openmetadata.env`, else the checkout's `.env`); `--catalog-status` does it for every step already done.
 A status that cannot be published (no catalog configured, the endpoint down, the Pipeline not published yet) is a note in the
-chain's state file, never a failed load. Report it with the step: published, or not and why. Initializing the catalog's
+run's state file, never a failed load. Report it with the step: published, or not and why. Initializing the catalog's
 credentials is the openmetadata skill's, never done in a load.
 
 After a reset the catalog still says "Successful" for each step from before: history, which each step's new run supersedes. Read a status
@@ -34,7 +34,7 @@ are initialized, before the load (the init runbook's catalog step, `docs/runbook
 
 ## Report a running load from its evidence
 
-Never report a load as "running". Run `load_chain.py --status` (`--json` feeds [load-monitoring](../load-monitoring/SKILL.md)) and report, for each running step, what it prints:
+Never report a load as "running". Run `load_jobs.py --status` (`--json` feeds [load-monitoring](../load-monitoring/SKILL.md)) and report, for each running step, what it prints:
 how long against its bound, how far (bundles done and the minutes left at the rate so far), what it wrote (rows a minute
 in its store, and which other running steps share that store), its processes' CPU and memory, the age of its log, and its
 verdict. The database sessions are shown by store (working, or waiting on the client), read as the reader login.
@@ -54,7 +54,7 @@ Read the verdict, not the word "running":
 A step's workers are found by their parentage (a spawned worker's command line names no source) and the count shown is the one
 the load was started with; a step that reads 0% CPU with several workers is a status that missed them, not an idle step.
 A single-document step has no progress in its log: say so, and report its database rows and sessions. A store's rows are
-shared by every step that writes it and cannot be split: say which steps share it. Check a running chain every 30 minutes
+shared by every step that writes it and cannot be split: say which steps share it. Check a running load every 30 minutes
 and report what changed, with the evidence, not that it is still going.
 
 ## One login for every load
@@ -69,7 +69,7 @@ Diagnosis (sessions, locks, waits, connections, what a load is doing) reads the 
 the stores folder's `reader.env` (its `DATA_URL` and `CONTROL_URL`): it has `pg_monitor`, which shows sessions, locks and
 statistics and the catalogs of each store (who holds what), never a table. Never diagnose as the owner, the administrator or a
 runtime login: each can change or read data, and a diagnosis that needs more than the reader shows is a gap to name.
-`load_chain.py --auto` reads the database this way; [database-monitoring](../database-monitoring/SKILL.md) has the readings.
+`load_jobs.py --auto` reads the database this way; [database-monitoring](../database-monitoring/SKILL.md) has the readings.
 
 The scheduler judges the machine by what is happening now: the load average against the cores, and memory free. Swap used presses
 only while memory is short, because the system keeps swap long after the load that filled it; reading swap alone holds every
@@ -182,7 +182,7 @@ edgar-warehouse load \
   --workers <readers> --bundles <runs at once> --minutes <window>
 ```
 
-**A load uses `grain: run`**: one run row, no units or leases ([bookkeeping grain](../bookkeeping/SKILL.md#grain-how-much-bookkeeping-a-target-uses)). Write `grain: run` on every target (a test refuses one that does not); a run started without it is [By the unit](UNIT-GRAIN.md). Start a load only through the pipeline, never from a checkout: `infra/load-pipeline/load.sh <step>...` runs the chain in the image CI built from `main` ([HOSTED-LOADS.md](HOSTED-LOADS.md#where-a-load-runs)). Load every captured source through the load chain (Edgar Intelligence initialize runbook) with `load_chain.py --auto`: it watches the loads and starts each step when its lane is free, in the chain file's `priority` order (the init runbook's "Load priority" table), then the longest chain (`--lane` A P S C L O D F G N Q and then `--finish` is the same by hand); `waits_for` is the dependency order, and a fresh store starts a fresh chain state file: a run label can repeat, and a state file written for another store or another generation of this one, or with no marker, is set aside, kept and never a reason to stop (a file from before generations is trusted and learns its generation at its next start; `--status` says when the next run would set the file aside). Size `--workers` and `--bundles` by **Fit the load into the window**.
+**A load uses `grain: run`**: one run row, no units or leases ([bookkeeping grain](../bookkeeping/SKILL.md#grain-how-much-bookkeeping-a-target-uses)). Write `grain: run` on every target (a test refuses one that does not); a run started without it is [By the unit](UNIT-GRAIN.md). Start a load only through the pipeline, never from a checkout: `infra/load-pipeline/load.sh <step>...` runs the load jobs in the image CI built from `main` ([HOSTED-LOADS.md](HOSTED-LOADS.md#where-a-load-runs)). Load every captured source through the load jobs (Edgar Intelligence initialize runbook) with `load_jobs.py --auto`: it watches the loads and starts each step when its lane is free, in the load jobs file's `priority` order (the init runbook's "Load priority" table), then the longest chain (`--lane` A P S C L O D F G N Q and then `--finish` is the same by hand); `waits_for` is the dependency order, and a fresh store starts a fresh run state file: a run label can repeat, and a state file written for another store or another generation of this one, or with no marker, is set aside, kept and never a reason to stop (a file from before generations is trusted and learns its generation at its next start; `--status` says when the next run would set the file aside). Size `--workers` and `--bundles` by **Fit the load into the window**.
 
 - `--stores` is the stores folder configured through
   [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
@@ -289,8 +289,8 @@ securities and 13F securities in the same way.
 
 Under `~/.local/share/edgartools/mdm/`, `captures/` holds whole deliveries and `proving/` holds cohorts. A source names
 its own: `sources/<source>/inputs.yaml` lists each delivery by name with its folder (and `root: proving` for a cohort),
-and a step of `rules/load-chain.yaml` names one with `input:`. Read that file, never a list copied here;
-`load_chain.py --list` shows each step's resolved folder. A new delivery is a new entry there.
+and a step of `rules/load-jobs.yaml` names one with `input:`. Read that file, never a list copied here;
+`load_jobs.py --list` shows each step's resolved folder. A new delivery is a new entry there.
 
 `~/edgar-local-tmp/` holds working copies from earlier tests.
 
@@ -346,7 +346,7 @@ Work it out from counts before starting:
 2. **Wide and narrow steps.** A wide step has one unit per file or group
    (`source.read`). A narrow step is one unit per bundle (`mastering.merge`,
    `mdm.prepare`). Only more bundles at once shorten narrow steps in total.
-3. **Bundles and readers.** The workers a step can carry come from the compute it runs on, its capacity profile (`load_chain.py --capacity <local | aws-small | aws-medium | aws-large>`, the profiles in `rules/load-chain.yaml`): a worker is sized at half a gigabyte and four share a vCPU, so a 1 vCPU, 4 GB task carries up to 4 and a 2 vCPU, 8 GB task up to 8, and a bigger task a new profile with no code change. A step starts at the chain file's workers held to the profile's range, and `--auto` moves a long step (the two-minute sample will miss the window, or a step already ran past ten minutes) within that range, raising it at most once in ten minutes (each move abandons the bundles in flight) and shedding at once when the machine is pressed; `local` is this machine measured at half its memory. `--workers` is the processes on each step at either grain, shared out to a step with fewer units (Resource sizing (Edgar Intelligence runbook)); keep `--bundles` × `--workers` near the core count. `load` never starts more workers than a step has units left. A merge into shared masters stays at one bundle when memory is the limiter.
+3. **Bundles and readers.** The workers a step can carry come from the compute it runs on, its capacity profile (`load_jobs.py --capacity <local | aws-small | aws-medium | aws-large>`, the profiles in `rules/load-jobs.yaml`): a worker is sized at half a gigabyte and four share a vCPU, so a 1 vCPU, 4 GB task carries up to 4 and a 2 vCPU, 8 GB task up to 8, and a bigger task a new profile with no code change. A step starts at the load jobs file's workers held to the profile's range, and `--auto` moves a long step (the two-minute sample will miss the window, or a step already ran past ten minutes) within that range, raising it at most once in ten minutes (each move abandons the bundles in flight) and shedding at once when the machine is pressed; `local` is this machine measured at half its memory. `--workers` is the processes on each step at either grain, shared out to a step with fewer units (Resource sizing (Edgar Intelligence runbook)); keep `--bundles` × `--workers` near the core count. `load` never starts more workers than a step has units left. A merge into shared masters stays at one bundle when memory is the limiter.
 4. **The bound.** Measure one bundle first (`load` prints each run's
    minutes). The load takes roughly (the number of bundles ÷ `--bundles`,
    rounded up) × that time.

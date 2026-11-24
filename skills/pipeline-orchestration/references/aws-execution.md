@@ -42,7 +42,7 @@ Each is a rule now; the evidence is the old pipeline's deployed definitions.
 
 | Rule | Why |
 |---|---|
-| One generic state machine; the data's own configuration (the chain file) names the work, and the definition names no step, lane or source | Many machines, each built by hand, drifted: shared stages were copied into several machines and changed apart, and many machines never ran |
+| One generic state machine; the data's own configuration (the load jobs file) names the work, and the definition names no step, lane or source | Many machines, each built by hand, drifted: shared stages were copied into several machines and changed apart, and many machines never ran |
 | Every Task has `TimeoutSeconds` and `HeartbeatSeconds` | The language sets no timeout by default: a lost task waits forever |
 | Retries live in one place: the worker's own attempts. The state machine retries nothing, or only a dead worker (`States.HeartbeatTimeout`), once | A state-machine `Retry` on `States.TaskFailed` around a command that retries multiplies the attempts |
 | The task contract is the same locally and on AWS: an activity task here, an ECS `runTask.sync` there, the same input and the same command | Only the `Resource` changes, so the local run proves the definition |

@@ -139,7 +139,7 @@ owner-specific tests, the capture loads, and full-tree CI passes. Unchanged
 legacy documents are not reparsed as a side effect of a narrow change.
 
 - The run's inputs are named where the source declares them: each fact and file its target needs, how it is
-  produced, and where its captured files are (`sources/<source>/inputs.yaml`, never the chain file). Write how each is
+  produced, and where its captured files are (`sources/<source>/inputs.yaml`, never the load jobs file). Write how each is
   produced in a comment above the target; `scripts/run_inputs.py [source]` prints them with those comments.
 - The order it needs (the sources and the merge rules before it) is declared in the source sequence.
 

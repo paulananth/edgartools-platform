@@ -1,4 +1,4 @@
-"""The load chain names every target a store loads, each with the facts its target declares."""
+"""The load jobs names every target a store loads, each with the facts its target declares."""
 import importlib.util
 import re
 import sys
@@ -10,10 +10,10 @@ import yaml
 from edgar_warehouse.rules import files
 
 ROOT = Path(__file__).resolve().parents[2]
-SPEC = importlib.util.spec_from_file_location("load_chain", ROOT / "skills/data-operations/scripts/load_chain.py")
+SPEC = importlib.util.spec_from_file_location("load_jobs", ROOT / "skills/data-operations/scripts/load_jobs.py")
 chain = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(chain)
-STEPS = chain.chain_steps()
+STEPS = chain.load_jobs()
 INFER = importlib.util.spec_from_file_location("infer_dependencies", ROOT / "skills/data-operations/scripts/infer_dependencies.py")
 infer = importlib.util.module_from_spec(INFER)
 INFER.loader.exec_module(infer)
@@ -63,9 +63,9 @@ def test_the_run_label_is_no_input_of_a_load(monkeypatch):
     """A fact is part of what a file is processed under: a run label in one made a rerun under another label process
     every company document again, and the Stage refused the changed records under the same revision."""
     monkeypatch.setattr(chain, "RUN", "one-label")
-    first = [chain.arguments(step) for step in chain.chain_steps()]
+    first = [chain.arguments(step) for step in chain.load_jobs()]
     monkeypatch.setattr(chain, "RUN", "another-label")
-    assert [chain.arguments(step) for step in chain.chain_steps()] == first
+    assert [chain.arguments(step) for step in chain.load_jobs()] == first
     company = BY_NAME["company"]
     assert company["capture_run"] == "fresh-v1-company"  # the label the store's records were loaded under
     assert company["facts"]["capture_run"] == "fresh-v1-company" and company["facts"]["catalog_run"] == "fresh-v1-catalog"
@@ -157,7 +157,7 @@ def ancestors(name):
 
 
 def steps_of(source, like=None):
-    """The chain steps of one source that master (a target with a kind of its own). A step of a quarterly delivery needs
+    """The load jobs of one source that master (a target with a kind of its own). A step of a quarterly delivery needs
     only the same delivery's steps of another source that has one (the same capture folder name), else all of them."""
     found = [s for s in STEPS if s["source"] == source and INFERRED[key(s)]["kinds"]]
     same = [s for s in found if like and s["capture"].split("/")[-1] == like["capture"].split("/")[-1]]
@@ -185,7 +185,7 @@ def test_a_step_takes_the_chains_defaults_for_what_it_does_not_say(tmp_path):
     path.write_text(yaml.safe_dump({"defaults": {"workers": 2, "bundles": 1}, "capture_label": "l", "steps": [
         {"name": "plain", "minutes": 60}, {"name": "sized", "minutes": 60, "workers": 8}]}))
 
-    assert [(s["name"], s["workers"], s["bundles"]) for s in chain.chain_steps(path)] == [("plain", 2, 1), ("sized", 8, 1)]
+    assert [(s["name"], s["workers"], s["bundles"]) for s in chain.load_jobs(path)] == [("plain", 2, 1), ("sized", 8, 1)]
 
 
 def test_every_step_of_the_chain_has_its_sizes():
@@ -742,7 +742,7 @@ def test_a_capacity_name_gives_its_bounds_and_the_machine_gives_its_own(monkeypa
 
 def test_a_started_step_is_held_to_the_profiles_range(monkeypatch, tmp_path):
     steps = [_step("a1", "A", minutes=600)]
-    steps[0]["workers"] = 8  # the chain file asks for eight; a small task carries two
+    steps[0]["workers"] = 8  # the load jobs file asks for eight; a small task carries two
     state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=10)
     monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: "ok")
     _run_auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=20), bounds=(1, 2))
@@ -764,7 +764,7 @@ def test_every_run_mode_holds_a_steps_workers_to_the_capacity_not_only_the_sched
     steps = [{"name": "gleif", "workers": 8}, {"name": "small", "workers": 2}, {"name": "tiny", "workers": 1}]
     assert [s["workers"] for s in chain.clamped(steps, "local", capacity=(1, 4.0))] == [4, 2, 1]  # a medium task starts GLEIF at 4
     assert [s["workers"] for s in chain.clamped(steps, "local", capacity=(2, 8.0))] == [8, 2, 1]  # and a larger one at 8
-    assert steps[0]["workers"] == 8  # the chain file's own steps are not changed
+    assert steps[0]["workers"] == 8  # the load jobs file's own steps are not changed
 
 
 def test_a_state_file_from_another_store_is_set_aside_so_its_done_lines_never_satisfy_a_wait(tmp_path):
@@ -986,7 +986,7 @@ def test_a_worker_memory_that_is_not_a_positive_finite_number_is_refused_and_the
         path.write_text(yaml.safe_dump({"defaults": {"workers": 2, "bundles": 1}, "capture_label": "l", "steps": [
             {"name": "x", "minutes": 60, "worker_gb": bad}]}))
         with pytest.raises(ValueError, match="worker_gb"):
-            chain.chain_steps(path)
+            chain.load_jobs(path)
 
 
 def test_the_start_count_and_the_rescale_use_each_steps_own_measured_range(monkeypatch, tmp_path):
@@ -1204,7 +1204,7 @@ def test_a_load_does_not_build_the_name_search_lookups_and_they_are_built_only_w
 
 
 def test_lookups_are_refused_beside_a_partial_run_that_would_never_reach_them(monkeypatch, capsys):
-    monkeypatch.setattr(sys, "argv", ["load_chain.py", "--lookups", "--lane", "A"])
+    monkeypatch.setattr(sys, "argv", ["load_jobs.py", "--lookups", "--lane", "A"])
     assert chain.main() == 2
     assert "--lookups" in capsys.readouterr().err
 
@@ -1294,12 +1294,12 @@ def test_a_higher_priority_step_starts_before_one_with_a_longer_chain_behind_it(
 
 def test_every_step_has_a_priority_of_one_two_or_three_and_the_chain_file_refuses_any_other(tmp_path):
     assert {step["priority"] for step in STEPS} <= {1, 2, 3}
-    text = (ROOT / "rules" / "load-chain.yaml").read_text()
+    text = (ROOT / "rules" / "load-jobs.yaml").read_text()
     for bad in ("4", "true", "2.0"):
-        other = tmp_path / "load-chain.yaml"
+        other = tmp_path / "load-jobs.yaml"
         other.write_text(text.replace("defaults: {workers: 2, bundles: 1, priority: 3}", "defaults: {workers: 2, bundles: 1, priority: " + bad + "}"))
         with pytest.raises(ValueError, match="priority"):
-            chain.chain_steps(other)
+            chain.load_jobs(other)
 
 
 def test_a_step_that_says_no_priority_is_three_and_starts_after_a_priority_two():
@@ -1329,7 +1329,7 @@ def test_the_runbook_names_exactly_the_steps_the_chain_file_gives_priority_one_a
 
 
 def test_a_marker_with_no_generation_is_from_before_generations_and_does_not_survive_a_reset():
-    """A store made again inherited 59 done steps from a file whose marker named no generation, and the chain ended at once."""
+    """A store made again inherited 59 done steps from a file whose marker named no generation, and the run ended at once."""
     legacy = "11-18 06:00:00 ET chain store aaaa1111\n11-18 06:40:00 ET company done: Done\n"
     assert chain.state_verdict(legacy, "aaaa1111", "7") == "set aside"
     assert chain.state_verdict(legacy, "aaaa1111", "") == "same"  # nothing readable to compare: nothing is thrown away
@@ -1483,10 +1483,10 @@ def test_a_plan_of_one_step_or_lane_plans_only_it(monkeypatch, tmp_path):
     checked(monkeypatch, chain.subprocess, "Popen", lambda *a, **k: None)  # the wake lock
     planned = []
     checked(monkeypatch, chain, "plan", lambda step, env: planned.append(step["name"]) or "")
-    monkeypatch.setattr(sys, "argv", ["load_chain.py", "--plan", "--only", "company"])
+    monkeypatch.setattr(sys, "argv", ["load_jobs.py", "--plan", "--only", "company"])
     assert chain.main() == 0 and planned == ["company"]
     planned.clear()
-    monkeypatch.setattr(sys, "argv", ["load_chain.py", "--plan", "--lane", "A"])
+    monkeypatch.setattr(sys, "argv", ["load_jobs.py", "--plan", "--lane", "A"])
     assert chain.main() == 0 and planned == [s["name"] for s in STEPS if s["lane"] == "A"]
 
 
@@ -1511,7 +1511,7 @@ def test_a_load_started_from_a_checkout_is_refused_before_the_gate(monkeypatch, 
     import readiness
 
     checked(monkeypatch, readiness, "gate", lambda *a: pytest.fail("a checkout is refused before the gate"))
-    monkeypatch.setattr(sys, "argv", ["load_chain.py", *argv])
+    monkeypatch.setattr(sys, "argv", ["load_jobs.py", *argv])
     assert chain.main() == 2
     assert "infra/load-pipeline/load.sh" in capsys.readouterr().err
 
@@ -1546,7 +1546,7 @@ def test_a_lane_that_stops_marks_its_later_steps_failed_so_no_other_lane_waits_o
 
 
 def test_a_failure_of_an_earlier_load_does_not_stop_a_step_of_this_one(tmp_path):
-    """A rerun reuses the chain state file: a step that failed before and is about to run again is no failure of this load."""
+    """A rerun reuses the run's state file: a step that failed before and is about to run again is no failure of this load."""
     state = tmp_path / "state.log"
     state.write_text("11-23 07:00:00 ET a1 attempt 1 start\n11-23 07:02:00 ET a1 stopped: the same failure came back\n")
     chain.begin_load(state)
@@ -1643,7 +1643,7 @@ def test_a_load_started_by_the_loader_image_is_read_from_its_command_line(monkey
     assert chain.load_workers(f"4 1 0:01 100 {line}", "one", "mastering") == 3
 
 def _chain_with_sources(tmp_path, steps, inputs):
-    """A chain file and a sources folder whose `<source>/inputs.yaml` hold the named deliveries."""
+    """A load jobs file and a sources folder whose `<source>/inputs.yaml` hold the named deliveries."""
     (tmp_path / "chain.yaml").write_text(yaml.safe_dump({"capture_label": "l", "steps": steps}))
     for source, body in inputs.items():
         (tmp_path / "sources" / source).mkdir(parents=True)
@@ -1658,7 +1658,7 @@ def test_a_step_names_its_input_and_the_source_holds_the_folder_and_its_root(tmp
         {"name": "c", "source": "p", "target": "t", "minutes": 1}], {
         "s": {"inputs": {"d1": {"folder": "s/d1"}, "d2": {"folder": "s/d2", "root": "proving"}}},
         "p": {"inputs": {"only": {"folder": "p/only"}}}})
-    got = {s["name"]: (s["capture"], s.get("capture_root", "captures")) for s in chain.chain_steps(path, sources)}
+    got = {s["name"]: (s["capture"], s.get("capture_root", "captures")) for s in chain.load_jobs(path, sources)}
     assert got == {"a": ("s/d2", "proving"), "b": ("s/d1", "captures"), "c": ("p/only", "captures")}
 
 
@@ -1671,17 +1671,17 @@ def test_an_input_that_cannot_be_resolved_is_refused_by_name(tmp_path, step, inp
     path, sources = _chain_with_sources(tmp_path, [{"name": "a", "source": "s", "target": "t", "minutes": 1, **step}],
                                         {"s": {"inputs": inputs}})
     with pytest.raises(ValueError, match=words):
-        chain.chain_steps(path, sources)
+        chain.load_jobs(path, sources)
 
 
 def test_the_chain_file_holds_no_capture_folder_and_every_source_holds_its_own_inputs():
-    text = (ROOT / "rules/load-chain.yaml").read_text()
+    text = (ROOT / "rules/load-jobs.yaml").read_text()
     assert not re.search(r"^\s*capture(_root)?:", text, re.M)
     assert all((ROOT / "sources" / s["source"] / "inputs.yaml").exists() for s in STEPS)
 
 
 def test_each_step_resolves_to_the_folder_its_source_names():
-    """The answer of every step, written once while it agreed with the chain file as it was before inputs moved to the sources."""
+    """The answer of every step, written once while it agreed with the load jobs file as it was before inputs moved to the sources."""
     got = {name: (BY_NAME[name]["capture"], BY_NAME[name].get("capture_root", "captures")) for name in BY_NAME}
     assert got == {
         'company': ('sec.submissions.company/all-76230', 'captures'),
@@ -1728,3 +1728,16 @@ def test_each_step_resolves_to_the_folder_its_source_names():
         'ipo': ('sec.submissions.company/all-76230', 'captures'),
         'prospectus': ('sec.prospectus/first-424b4', 'captures'),
     }
+
+
+def test_the_load_jobs_are_named_load_jobs_everywhere_a_reader_looks():
+    """What the load runs is its load jobs: no tracked file names the old `load chain` or speaks of its chain, file or steps (tickets keep
+    their history; the `chain-<RUN>.log` state files and `chain store` / `chain done` lines keep theirs, since a store's state is read by them)."""
+    import subprocess
+
+    old = re.compile(r"load[-_ ]chain|chain_steps|chain file|chain steps?\b|the chain's|chain state|whole chain|runs the chain|chain ended|chain stops|jobs's")
+    tracked = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.split("\n")
+    named = [name for name in tracked if name and not name.startswith((".scratch/", "crates/")) and name != "uv.lock"
+             and name != "tests/unit/test_load_jobs.py" and (ROOT / name).is_file()
+             and old.search((ROOT / name).read_text(errors="ignore"))]
+    assert named == []

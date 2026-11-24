@@ -5,7 +5,7 @@
     python readiness.py --list     # the checks, without reading anything
     python readiness.py --build-engine   # rebuild the compiled engine from this checkout and record what it was built from
 
-`load_chain.py` refuses to start, resume or finish a load unless the stores folder's `readiness.json` was written by a full
+`load_jobs.py` refuses to start, resume or finish a load unless the stores folder's `readiness.json` was written by a full
 pass for this store generation (the creation identity of its databases) and this code (the commit) in the last day. A reset of
 the databases, a new commit or a day's age each make the gate close again. Every check is read-only and prints counts and
 names, never a connection value. Evidence that the code is tested is its commit's green CI, never a local run alone.
@@ -43,7 +43,7 @@ CHECKS = {
     "ROOM": "The machine has disk and the load average has room",
     "AUDIT": "The access audit of the database has no failing control",
     "LOGINS": "Every duty file's login connects to the databases of its duty",
-    "STATE": "The chain's state file is this store's, or will be set aside, before any step runs",
+    "STATE": "The run's state file is this store's, or will be set aside, before any step runs",
     "CATALOG": "The catalog, when configured, matches the rules",
     "REGISTERED": "The merge policy and every Dataset Contract are registered, and every worker profile is granted",
 }
@@ -203,11 +203,11 @@ def doctor_ok(stores: Path, env: dict) -> bool:
 def sql_facts(reader_env: dict, env: dict) -> tuple[dict | None, dict | None, int]:
     """(the loader's guards, the reference counts, the loader's sessions), read with the reader's and the loader's logins."""
     sys.path.insert(0, str(HERE))
-    import load_chain
+    import load_jobs
 
     try:
         import psycopg2
-        reader = load_chain.in_database(load_chain.data_url(reader_env), "postgres")
+        reader = load_jobs.in_database(load_jobs.data_url(reader_env), "postgres")
         with psycopg2.connect(reader, connect_timeout=10) as conn, conn.cursor() as cur:
             cur.execute("select rolconnlimit from pg_roles where rolname = %s", (LOADER,))
             limit = cur.fetchone()[0]
@@ -220,7 +220,7 @@ def sql_facts(reader_env: dict, env: dict) -> tuple[dict | None, dict | None, in
         return None, None, 1
     try:
         def count(database: str, sql: str) -> int:
-            with psycopg2.connect(load_chain.in_database(load_chain.data_url(env), database), connect_timeout=10) as conn, conn.cursor() as cur:
+            with psycopg2.connect(load_jobs.in_database(load_jobs.data_url(env), database), connect_timeout=10) as conn, conn.cursor() as cur:
                 cur.execute(sql)
                 return cur.fetchone()[0]
         specs = len(list((REPO / "sources").glob("*/silver-*.yaml")))
@@ -235,14 +235,14 @@ def registration_facts(reader_env: dict, env: dict) -> dict | None:
     """What init's steps 5 to 7 leave: the policies and Dataset Contract readings the loader reads in the Rules Database, and the worker profiles Bookkeeping
     has granted (the reader's login sees the memberships). None when a fact cannot be read."""
     sys.path.insert(0, str(HERE))
-    import load_chain
+    import load_jobs
 
     try:
         import psycopg2
         from edgar_warehouse.workers import PROFILES
 
         def one(source: dict, database: str, sql: str) -> int:
-            with psycopg2.connect(load_chain.in_database(load_chain.data_url(source), database), connect_timeout=10) as conn, conn.cursor() as cur:
+            with psycopg2.connect(load_jobs.in_database(load_jobs.data_url(source), database), connect_timeout=10) as conn, conn.cursor() as cur:
                 cur.execute(sql)
                 return cur.fetchone()[0]
         return {"policies": one(env, "control", "select count(*) from rules.policy"),
@@ -256,26 +256,26 @@ def registration_facts(reader_env: dict, env: dict) -> dict | None:
 
 def loads_running() -> int:
     listing = subprocess.run(["ps", "-Ao", "args"], capture_output=True, text=True, check=False).stdout
-    return sum(1 for line in listing.splitlines() if re.search(r"load_chain\.py|edgar-warehouse load ", line) and "readiness.py" not in line)
+    return sum(1 for line in listing.splitlines() if re.search(r"load_jobs\.py|edgar-warehouse load ", line) and "readiness.py" not in line)
 
 
 def plan_missing(env: dict) -> int:
     """The steps a load could not start: no readable receipts file in the capture folder (a load reads it first), or a
-    target the source does not declare. Each is read, never planned. A chain file that does not read counts as every step."""
+    target the source does not declare. Each is read, never planned. A load jobs file that does not read counts as every step."""
     sys.path.insert(0, str(HERE))
-    import load_chain
+    import load_jobs
     from edgar_warehouse.mdm import raw_capture
     from edgar_warehouse.rules import files as rules_files
 
     def loadable(step: dict) -> bool:
         try:
-            raw_capture.receipts(load_chain.ROOTS[step.get("capture_root", "captures")] / step["capture"])
+            raw_capture.receipts(load_jobs.ROOTS[step.get("capture_root", "captures")] / step["capture"])
             return step["target"] in (rules_files.source(step["source"]).get("bookkeeping") or {}).get("targets", {})
         except Exception:  # noqa: BLE001  (missing, oversized or malformed receipts; an unknown source)
             return False
 
     try:
-        steps = load_chain.chain_steps()
+        steps = load_jobs.load_jobs()
     except Exception:  # noqa: BLE001
         return 99
     return sum(1 for step in steps if not loadable(step))
@@ -298,11 +298,11 @@ def login_facts(stores: Path) -> dict:
     the address and the password, so only its class is kept."""
     from urllib.parse import urlsplit, urlunsplit
     sys.path.insert(0, str(HERE))
-    import load_chain
+    import load_jobs
     found = {}
     for name, databases in DUTY_DATABASES.items():
         try:
-            url = load_chain.data_url(load_chain.load_env(stores / name))
+            url = load_jobs.data_url(load_jobs.load_env(stores / name))
             if url is None:
                 raise KeyError("no data database")
         except Exception as exc:  # noqa: BLE001
@@ -320,16 +320,16 @@ def login_facts(stores: Path) -> dict:
 
 
 def state_facts(env: dict) -> dict | None:
-    """What the scheduler will do with the chain's state file: use it (same), start one (fresh) or set it aside, and how many done
+    """What the scheduler will do with the run's state file: use it (same), start one (fresh) or set it aside, and how many done
     steps it holds, so a surprise is seen before a step runs."""
-    import load_chain
+    import load_jobs
     try:
-        url = load_chain.data_url(env)
-        generation = load_chain.database_generation(url)
-        path = load_chain.LOGS / f"chain-{load_chain.RUN}.log"
+        url = load_jobs.data_url(env)
+        generation = load_jobs.database_generation(url)
+        path = load_jobs.LOGS / f"chain-{load_jobs.RUN}.log"
         text = path.read_text() if path.exists() else ""
-        return {"verdict": load_chain.state_verdict(text, load_chain.store_id(url), generation),
-                "done_steps": len(load_chain.done_steps(path)) if path.exists() else 0}
+        return {"verdict": load_jobs.state_verdict(text, load_jobs.store_id(url), generation),
+                "done_steps": len(load_jobs.done_steps(path)) if path.exists() else 0}
     except Exception:  # noqa: BLE001
         return None
 
@@ -340,8 +340,8 @@ def catalog_state(repo: Path) -> str:
     if not env_file.exists():
         return "not configured"
     sys.path.insert(0, str(HERE))
-    import load_chain
-    env = {**os.environ, **load_chain.load_env(env_file)}
+    import load_jobs
+    env = {**os.environ, **load_jobs.load_env(env_file)}
     exe = env.get("EDGAR_WAREHOUSE") or "edgar-warehouse"
     try:
         done = subprocess.run([exe, "rules", "catalog", "--root", str(repo / "rules"), "check"], capture_output=True, text=True, env=env,
@@ -353,9 +353,9 @@ def catalog_state(repo: Path) -> str:
 
 def gather(stores: Path, repo: Path = REPO) -> dict:
     sys.path.insert(0, str(HERE))
-    import load_chain
-    env = {**os.environ, **load_chain.load_env(stores / "worker.env")}
-    reader = load_chain.load_env(stores / "reader.env") if (stores / "reader.env").exists() else {}
+    import load_jobs
+    env = {**os.environ, **load_jobs.load_env(stores / "worker.env")}
+    reader = load_jobs.load_env(stores / "reader.env") if (stores / "reader.env").exists() else {}
     loader, reference, sessions = sql_facts(reader, env)
     usage = shutil.disk_usage(Path.home())
     return {"git": git_facts(repo), "engine": engine_facts(repo), "doctor": doctor_ok(stores, env), "loader": loader, "reference": reference,
@@ -379,12 +379,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     stores = Path(args.stores)
     sys.path.insert(0, str(HERE))
-    import load_chain
+    import load_jobs
     results = evaluate(gather(stores))
     for r in results:
         print(f"{'PASS' if r['ok'] else 'FAIL':5} {r['id']:10} {r['title']}\n      evidence: {r['evidence']}")
-    env = load_chain.load_env(stores / "worker.env")
-    generation = load_chain.database_generation(load_chain.data_url(env)) if load_chain.data_url(env) else ""
+    env = load_jobs.load_env(stores / "worker.env")
+    generation = load_jobs.database_generation(load_jobs.data_url(env)) if load_jobs.data_url(env) else ""
     passed = all(r["ok"] for r in results) and bool(generation)
     try:
         previous = json.loads((stores / READY).read_text())

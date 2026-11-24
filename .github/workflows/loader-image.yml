@@ -64,7 +64,7 @@ jobs:
           docker run --rm --entrypoint sh "${IMAGE}:loader-sha-${{ steps.names.outputs.commit }}" -c \
             'set -e; test "$(cat /app/COMMIT)" = "${{ steps.names.outputs.commit }}"; edgar-warehouse --help >/dev/null
              python -c "import source_contract, psycopg2, boto3, edgar_warehouse.mdm.raw_capture, edgar_warehouse.rules.files, edgar_warehouse.workers"
-             cd /app/skills/data-operations/scripts; python readiness.py --list >/dev/null; python load_chain.py --list >/dev/null
+             cd /app/skills/data-operations/scripts; python readiness.py --list >/dev/null; python load_jobs.py --list >/dev/null
              ps -o pid= -p 1 >/dev/null; pgrep -f . >/dev/null'
 
       - name: Push the loader image

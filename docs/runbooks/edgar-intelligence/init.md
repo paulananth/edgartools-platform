@@ -29,7 +29,7 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    creates older schemas.
 1a. **Quiesce and drain (before step 2).** Before resetting an existing instance, stop scheduled
    loads and applications that can reconnect to its databases. Check
-   `load_chain.py --status` and Bookkeeping's open runs and leases; all must be
+   `load_jobs.py --status` and Bookkeeping's open runs and leases; all must be
    clear. Inventory managed mirrors with the Snowflake Postgres mirror skill.
    Resolve any mirror that reads a database being reset through that skill's
    approved drop or restart procedure first; approval to reset the hosted
@@ -123,24 +123,24 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    The statuses it already holds for the steps are the previous load's history; the new load's statuses supersede them (see
    [data-operations](../../../skills/data-operations/SKILL.md#publish-a-steps-status-to-the-catalog)).
 
-9. **Ready.** `python <data-operations skill>/scripts/readiness.py` reads the infrastructure and writes `readiness.json` only when every check passes (code with green CI, engine built from this source, `doctor`, guards, reference data, captures, quiet instance, room, audit, each duty file's login, the chain's state file, the catalog). Done when it prints `READY` (thirteen checks, the last `REGISTERED`: the merge policy, the Dataset Contracts and every worker profile). The gate is not this runbook: say which steps ran and which did not before a load starts. A load does not start without it, and any reset of the databases or new commit closes it again.
+9. **Ready.** `python <data-operations skill>/scripts/readiness.py` reads the infrastructure and writes `readiness.json` only when every check passes (code with green CI, engine built from this source, `doctor`, guards, reference data, captures, quiet instance, room, audit, each duty file's login, the run's state file, the catalog). Done when it prints `READY` (thirteen checks, the last `REGISTERED`: the merge policy, the Dataset Contracts and every worker profile). The gate is not this runbook: say which steps ran and which did not before a load starts. A load does not start without it, and any reset of the databases or new commit closes it again.
 
 A missing grant or login that a command names is a gap to fix through the central connection section, not to work around.
 
 ## Load a fresh store
 
-`rules/load-chain.yaml` holds the order of every source and target, each one's input (its source names the folder in `sources/<source>/inputs.yaml`), workers and the facts and revision no capture states, and
-`scripts/load_chain.py` runs it, so a store is loaded the same way every time and nobody rewrites the list:
+`rules/load-jobs.yaml` holds the order of every source and target, each one's input (its source names the folder in `sources/<source>/inputs.yaml`), workers and the facts and revision no capture states, and
+`scripts/load_jobs.py` runs it, so a store is loaded the same way every time and nobody rewrites the list:
 
 A load runs only in the loader image CI built from `main`, started by `infra/load-pipeline/load.sh [--plan] [--finish] <step>...`
-(data-operations, HOSTED-LOADS.md, "Where a load runs"). In a checkout `load_chain.py` reads (`--plan`, `--list`, `--status`) and
+(data-operations, HOSTED-LOADS.md, "Where a load runs"). In a checkout `load_jobs.py` reads (`--plan`, `--list`, `--status`) and
 refuses to start, resume or finish a load. The commands below are what the image's worker runs:
 
 ```bash
-python <data-operations skill>/scripts/load_chain.py --plan     # documents and bundles per step; writes nothing
-python <data-operations skill>/scripts/load_chain.py --auto      # watch the loads; start each step when its lane is free
-python <data-operations skill>/scripts/load_chain.py            # one process, the steps in file order; stays awake
-python <data-operations skill>/scripts/load_chain.py --from <step>   # carry on; a step that is done costs one call
+python <data-operations skill>/scripts/load_jobs.py --plan     # documents and bundles per step; writes nothing
+python <data-operations skill>/scripts/load_jobs.py --auto      # watch the loads; start each step when its lane is free
+python <data-operations skill>/scripts/load_jobs.py            # one process, the steps in file order; stays awake
+python <data-operations skill>/scripts/load_jobs.py --from <step>   # carry on; a step that is done costs one call
 ```
 
 **`--auto` is the way to load a store.** It starts the step at the head of every lane whose dependencies are done, longest
@@ -159,9 +159,9 @@ on more compute (production runs them on AWS). With `--hours H` or
 deadline the miss is reported once, naming what is left, while every load goes on (a deadline never stops one; the run says how long
 after it the last step finished). A step that uses up its attempts blocks its lane and whatever waits for it; the
 rest carry on, and the scheduler stops, naming what cannot start, when nothing else can. Every step runs as
-`load_chain.py --only <step>`, so the attempts and the one-load-of-a-source-and-target rule are the same as by hand.
+`load_jobs.py --only <step>`, so the attempts and the one-load-of-a-source-and-target rule are the same as by hand.
 
-**A fresh store starts a fresh state file, and a run label can be used again.** The chain's `done` lines are read from
+**A fresh store starts a fresh state file, and a run label can be used again.** The run's `done` lines are read from
 `chain-<RUN>.log`, which names the store it belongs to: its instance (by the address, never shown) and its database's creation
 identity, so a store whose databases were made again is another store even at the same address. A run whose file was written for
 another store, another generation of this one, or no store at all (an old run's file, from before markers, under a label used
@@ -176,16 +176,16 @@ for it, and the log of a step with one document stays silent. That is a wait, no
 
 Masters come first and each source's silver target last, so silver rows find their masters as they land; a silver step
 needs none before it (a row lands with its link key and finds its master by a join on `master_binding`, which `--finish` builds). A source's later
-delivery is a new publication and carries the next `--revision`. The chain stops at the first step that does not finish
+delivery is a new publication and carries the next `--revision`. The load stops at the first step that does not finish
 in its attempts and names why in that step's log. After the last step it builds the links tables and `master_binding` once (`--finish` runs only those; the
-name-search lookups are built only on `--finish --lookups`, since a load reads none of them and only the context search does). Check a running chain every 30 minutes; a step that stops reports at its
+name-search lookups are built only on `--finish --lookups`, since a load reads none of them and only the context search does). Check a running load every 30 minutes; a step that stops reports at its
 check, never on a tighter loop.
 
 ### The links tables and `master_binding` are built once
 
 The links tables and `master_binding` (each source key's master) are built whole from every stored record
 (`edgar-warehouse silver links`), so no target carries a step for them. No master id is written on a silver row. A `load` run alone builds it after its last bundle when it mastered anything; a load that is one of several
-passes `--no-links` and the last step builds it (the chain's `--finish`). A newly mastered record can be the end a
+passes `--no-links` and the last step builds it (the load's `--finish`). A newly mastered record can be the end a
 stored link waited for, so any load that masters builds, whatever its source states.
 
 ### Dependencies between loads
@@ -203,15 +203,15 @@ rules state three kinds of ordering:
   other have no order to keep.
 - **Alone** (these take turns; they are not dependencies). Merges of one kind of master data that merge golden records or create them by exact name (one that joins stored ones, or creates by an identifier, runs beside the others), and two loads of one source and target (their outputs would collide).
 
-Everything else runs at the same time. The chain file turns that into lanes: `lane` marks steps that may run together,
+Everything else runs at the same time. The load jobs file turns that into lanes: `lane` marks steps that may run together,
 `waits_for` is the edges above that cross lanes, and tests hold every wait to an inferred edge and every inferred edge to a
-wait or an earlier step of its lane, so a rule change that adds a dependency fails a test until the chain follows it.
+wait or an earlier step of its lane, so a rule change that adds a dependency fails a test until the load jobs follow it.
 
 By hand, instead of `--auto`:
 
 ```bash
-for lane in A P S C L O D F G N Q; do python <data-operations skill>/scripts/load_chain.py --lane $lane & done   # eleven lanes, one process each
-python <data-operations skill>/scripts/load_chain.py --finish          # once every lane reports its last step done
+for lane in A P S C L O D F G N Q; do python <data-operations skill>/scripts/load_jobs.py --lane $lane & done   # eleven lanes, one process each
+python <data-operations skill>/scripts/load_jobs.py --finish          # once every lane reports its last step done
 ```
 
 A step waits for the steps of other lanes it needs, and for any other load of its own source and target to end.
@@ -231,15 +231,15 @@ the rules, not from a lane's habit:
 4. Order a lane's steps by what must follow, and start every lane at once. `--auto` starts first the ready step whose own
    `minutes` plus the longest chain of steps that follow it is largest.
 5. Read the critical path from the logs, not the plan: the step still running when every other lane is done sets the
-   total. If it is not the step the plan named, a step waited for something the rules do not state; fix the chain file
-   and its test (`tests/unit/test_load_chain.py` holds each wait equal to the inference), then the lane.
+   total. If it is not the step the plan named, a step waited for something the rules do not state; fix the load jobs file
+   and its test (`tests/unit/test_load_jobs.py` holds each wait equal to the inference), then the lane.
 6. Machine size sets how many lanes run well at once, not their order (see daily run, "Resource sizing"). Memory in
    use beyond the machine's, shown by short memory (swap used while little is free) and a load average above the cores, slows every lane: add lanes when the
    running ones leave memory free, and start the longest first.
 
 **`--plan` proves the documents, not the rest.** It counts what each step would read; it does not open a file a step reads
 beside its capture, and it does not write, so it cannot find a missing right. A fresh store's first minutes find them:
-a lane stops when its step uses up its attempts (the chain file sets them for each step) and names the step. Read its reason where the step's log points, the stores folder's
+a lane stops when its step uses up its attempts (the load jobs file sets them for each step) and names the step. Read its reason where the step's log points, the stores folder's
 `load-errors.log` (one file for every lane, rotated at 10 MiB into `load-errors.log.1` and gzipped `.2.gz` to `.5.gz`: find the step's own command and its last lines), fix the cause, and run the
 lane again; a step that is done costs one call. A silver step that reports "a value is not its column's type or a storage
 constraint refused the delivery" now adds the database's SQLSTATE and the constraint or column it names; a SQLSTATE
@@ -248,7 +248,7 @@ constraint refused the delivery" now adds the database's SQLSTATE and the constr
 #### Files a load needs beside its capture
 
 Some sources read a second file kept in their own capture folder, which no other load supplies. Such a load is **Needs**: it
-stops until the file is there, and the lane that holds it stops with the reason above. The chain file's steps for
+stops until the file is there, and the lane that holds it stops with the reason above. The load jobs file's steps for
 these sources name the file by its fact (`facts`); the file is an additive copy of one already on this machine, with its
 receipt (the file, its bytes and its sha256), never a provider request.
 
@@ -268,10 +268,10 @@ quarter's N-CEN registrants and advisers have nothing to follow, so they start a
 
 ## Load priority
 
-When several steps can start at once, `load_chain.py --auto` starts them in the order of the chain file's `priority`, then the longest
+When several steps can start at once, `load_jobs.py --auto` starts them in the order of the load jobs file's `priority`, then the longest
 chain behind a step (its own time plus the longest run of steps waiting on it, by measured times). A priority orders only what is ready:
 a step still waits for its lane and its `waits_for`. The rule that sets a tier, and the measured chain that placed each step in it
-from the first full load, so a change of tier is a change of evidence (edit `priority` in `rules/load-chain.yaml`; a test holds this
+from the first full load, so a change of tier is a change of evidence (edit `priority` in `rules/load-jobs.yaml`; a test holds this
 table to that file):
 
 | Priority | Steps | Why |
@@ -281,7 +281,7 @@ table to that file):
 | 3 | every other step | Under 30 minutes of chain (the longest measured: 28) |
 
 Every other step is priority 3, and a step added without a `priority` is priority 3. Measure again after a load that changed the
-critical path (`load_chain.py --status` shows each step's progress and `chain-<RUN>.log` its time) and move a step only on that evidence.
+critical path (`load_jobs.py --status` shows each step's progress and `chain-<RUN>.log` its time) and move a step only on that evidence.
 
 ## Mirror the final tables
 
@@ -290,7 +290,7 @@ which `destination/authorised_data_sharing.yaml` lets leave the stores. Its sche
 its target database is `mirror.database` in `rules/snowflake.yaml`. The procedure, its read-only checks and its approval (one create plan) are
 [the data-platform skill's hosted mirroring guide](../../../skills/data-platform/HOSTED-MIRRORING.md#after-the-first-load-mirror-only-the-exposed-subset).
 Done when `mirror_sql.py readback --listing <the listing as JSON>` passes: the mirror lists exactly its recorded tables, each replicating, in schemas `MDM`, `RDM` and `SILVER`, with none missing or unexpected.
-`--finish` writes `finish took <n> min` to the chain's state file (the bound is five minutes without lookups): record that figure on the ticket.
+`--finish` writes `finish took <n> min` to the run's state file (the bound is five minutes without lookups): record that figure on the ticket.
 
 The mirror is made, in this order, after `--finish`: (1) `exposure_manifest.py generate`, then `check` (read-only); (2) the guide's read-only pre-flight on the data
 database (instance `STANDARD_*` or `HIGHMEM_*`, a key and a supported type on every column) and `mirror_sql.py exists`, which must show the target absent before a

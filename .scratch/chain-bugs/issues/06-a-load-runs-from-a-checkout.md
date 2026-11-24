@@ -149,4 +149,11 @@ no account). For the image, "GitHub Container Registry (Recommended)".
   (`HOSTED-LOADS.md`, "Where a load runs"); pipeline-orchestration's AWS page holds what the old state machines and Step
   Functions Local taught; aws-snowflake-operations says the account holds no old state machine and how one is deleted, 2026-11-23 21:05 ET
 - [x] Learning → skill: the three skill changes above, 2026-11-23 21:05 ET
+- [x] The load chain is named load jobs. Operator, 2026-11-23: "no load chain its load jobs"; scope chosen: "Everything live".
+  `rules/load-jobs.yaml`, `load_jobs.py`, `test_load_jobs.py`, `chain_steps` → `load_jobs()`, and the text of skills, runbooks,
+  the workflow and compose. Kept as they are, because a store's state is named by them: the `chain-<RUN>.log` state files, the
+  `chain store` and `chain done` lines in them, and the `chain-<job>` session tag. `test_the_load_jobs_are_named_load_jobs_everywhere_a_reader_looks`
+  fails on main (it names the files holding the old name), 2026-11-23 22:18 ET
+- [ ] ~~Rename `step` to `job` in the file keys, flags and worker input~~ deferred: `steps`, `--only` and the task input are the
+  worker's and state machine's contract; changing them is its own change
 - [x] Learning → skill: data-operations and data-onboarding point at `sources/<source>/inputs.yaml` for a source's deliveries, 2026-11-23 22:03 ET

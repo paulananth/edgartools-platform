@@ -1,4 +1,4 @@
-# The loader: runs a load's tasks (readiness, then chain steps) from a commit that passed CI on main.
+# The loader: runs a load's tasks (readiness, then load jobs) from a commit that passed CI on main.
 # Built only by .github/workflows/loader-image.yml, on the warehouse dependency image, which compiles the engine.
 ARG DEPENDENCY_IMAGE
 FROM ${DEPENDENCY_IMAGE}

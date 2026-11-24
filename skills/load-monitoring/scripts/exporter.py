@@ -1,10 +1,10 @@
 #!/usr/bin/env -S uv run --no-sync python
-"""Serve the load chain's status as Prometheus metrics: counts, states and times only, never a row or an address.
+"""Serve the load jobs' status as Prometheus metrics: counts, states and times only, never a row or an address.
 
     uv run --no-sync python exporter.py serve [--port 9108] [--interval 30] [--sample 10]
     uv run --no-sync python exporter.py print        one reading, written as metrics, then exit
 
-A reading is `load_chain.status_snapshot` (read-only: the reader login, `ps`, the log files). It is repeated every
+A reading is `load_jobs.status_snapshot` (read-only: the reader login, `ps`, the log files). It is repeated every
 `--interval` seconds in the background; a scrape returns the last reading, so a slow reading never holds one up.
 Run it from the checkout whose code should be read, with the repository's environment (`uv run --no-sync`).
 """
@@ -22,8 +22,8 @@ sys.path.insert(0, str(HERE))
 import design  # noqa: E402
 
 
-def load_chain():
-    spec = importlib.util.spec_from_file_location("load_chain", ROOT / "skills/data-operations/scripts/load_chain.py")
+def jobs_module():
+    spec = importlib.util.spec_from_file_location("load_jobs", ROOT / "skills/data-operations/scripts/load_jobs.py")
     module = importlib.util.module_from_spec(spec)
     sys.path.insert(0, str(ROOT / "skills/data-operations/scripts"))
     spec.loader.exec_module(module)
@@ -41,7 +41,7 @@ def sample(name: str, value, **labels) -> str:
 
 def render(snapshot: dict, age: float = 0.0) -> str:
     """The metrics of one reading, in the Prometheus text format."""
-    lines = ["# Counts, states and times of the load chain; no row values.",
+    lines = ["# Counts, states and times of the load jobs; no row values.",
              sample("load_monitor_up", 1), sample("load_monitor_snapshot_age_seconds", age),
              sample("load_steps_total", snapshot["total"])]
     counts = {name: 0 for name, *_ in design.STATES}
@@ -59,7 +59,7 @@ def render(snapshot: dict, age: float = 0.0) -> str:
                   sample("load_step_memory_mb", row["memory_mb"], **who),
                   sample("load_step_rows_per_minute", row["rows_per_min"], store=row["store"], **who),
                   sample("load_step_cause", 1, **who, cause=row["why"][-1])]  # the last of the five whys, a sentence of counts and names
-        if row.get("kind") != "progressing":  # a step that is stalled or locked shows the whole chain; one that works has none
+        if row.get("kind") != "progressing":  # a step that is stalled or locked shows all the load jobs; one that works has none
             lines += [sample("load_step_why", 1, **who, number=str(number), why=words) for number, words in enumerate(row["why"], 1)]
     lines += [sample("load_store_rows_per_minute", rate, store=store) for store, rate in snapshot["writes"].items()]
     lines.append(sample("load_lock_waiters", snapshot["lock_waiters"]))
@@ -81,12 +81,12 @@ class Reading:
 
     def __init__(self, interval: int, sample_seconds: int):
         self.text, self.at, self.interval, self.sample = down(), 0.0, interval, sample_seconds
-        self.chain = load_chain()
+        self.jobs = jobs_module()
 
     def refresh(self) -> None:
-        steps = self.chain.chain_steps()
-        counted, reader_url, _ = self.chain.status_inputs()
-        shot = self.chain.status_snapshot(steps, counted, reader_url, self.sample)
+        steps = self.jobs.load_jobs()
+        counted, reader_url, _ = self.jobs.status_inputs()
+        shot = self.jobs.status_snapshot(steps, counted, reader_url, self.sample)
         self.text, self.at = render(shot), time.time()
 
     def loop(self) -> None:

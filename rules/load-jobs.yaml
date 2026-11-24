@@ -1,22 +1,22 @@
 # The order a fresh store is loaded in: every captured source and target, each one's input and the facts and
-# revision no capture states, read by `skills/data-operations/scripts/load_chain.py` (Edgar Intelligence initialize
+# revision no capture states, read by `skills/data-operations/scripts/load_jobs.py` (Edgar Intelligence initialize
 # runbook, "Load a fresh store"). `input` names one of the deliveries in the step's `sources/<source>/inputs.yaml`, which holds its folder (none needed where the source has one);
 # `capture_label` names each step's capture run (`<label>-<step>`), and a fact is written as its value: both are inputs of a
 # record, so they stay as the store was loaded (a new value processes every file again, and the Stage refuses the changed
-# records under the same revision). The chain's RUN names its state and logs only. `minutes` bounds one attempt, which
+# records under the same revision). The run's RUN names its state and logs only. `minutes` bounds one attempt, which
 # carries on where the last stopped.
 # Steps that may run at the same time are in different `lane`s, and `waits_for` names a step of another lane that must
-# be done first. Each lane runs its steps in file order (`load_chain.py --lane <name>`), so every lane can start at once.
+# be done first. Each lane runs its steps in file order (`load_jobs.py --lane <name>`), so every lane can start at once.
 # Every `waits_for` comes from `infer_dependencies.py` (what the rules declare; tests hold each wait to an inferred edge
 # and each inferred edge to a wait or an earlier step of its lane), never from
 # a machine's size: a load waits only for the source whose golden records its own records join. Links set no order:
-# the links table is built once, after the last load (`load_chain.py --finish`).
+# the links table is built once, after the last load (`load_jobs.py --finish`).
 # Eleven lanes: A the Companies the others follow; P the Persons; S the Securities; C the other Companies; L funds and
 # share classes; Q N-PORT Securities (they wait for no fund); G GLEIF and what follows it (it joins only the SEC Company masters, so it starts when
 # those are done); N N-PORT silver (no master first: a row lands with its link key and finds its master through `master_binding`, built by `--finish`);
 # O ownership; D the other silver-only sources; F company-facts.
 version: 1
-# The compute a load runs on, as vCPUs and gigabytes, and so how many workers a step can carry (load_chain.py
+# The compute a load runs on, as vCPUs and gigabytes, and so how many workers a step can carry (load_jobs.py
 # `--capacity <name>`; `local` is this machine, measured). The AWS sizes are the ECS tasks of the production state
 # machines (edgartools-prod-small, -medium, -large), read from AWS; a bigger task is a new line here, and its workers
 # follow with no change to the code.
@@ -281,7 +281,7 @@ steps:
     facts:
       publication_count: "3428477"
     minutes: 240
-    # `worker_gb` is the memory one worker of this merge was measured to hold (`load_chain.py --status` shows a load's
+    # `worker_gb` is the memory one worker of this merge was measured to hold (`load_jobs.py --status` shows a load's
     # memory and CPU). The compute holds the workers to the range it carries; raise `workers` on a task with the memory
     # and vCPUs for more, and read the effect from the status.
     worker_gb: 0.4

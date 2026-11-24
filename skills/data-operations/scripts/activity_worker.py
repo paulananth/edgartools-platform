@@ -4,12 +4,12 @@
     ACTIVITY_ARN=<arn> AWS_ENDPOINT_URL_SFN=<url> python activity_worker.py
 
 A task's input says what to run: `{"action": "readiness"}`, `{"action": "begin", "steps": [...]}` (named steps: refuse the
-load when a wait could never end, else mark its start), `{"action": "lanes"}` (the same for every lane, then the chain file's
+load when a wait could never end, else mark its start), `{"action": "lanes"}` (the same for every lane, then the load jobs file's
 lanes, in order, as the task's output), `{"action": "lane", "lane": "<name>", "plan": false}`, `{"action": "step", "step": "<name>", "plan": false}`,
 or `{"action": "finish"}` (what follows the loads: links and lookups). The worker runs one task per lane at once, each with
-the workers its step declares; the chain file's waits hold a step until the steps it needs are done. It
+the workers its step declares; the load jobs file's waits hold a step until the steps it needs are done. It
 sends a heartbeat while a task runs, so the state machine learns of a worker that died. Each task's output goes to this
-container's log; the chain's own logs stay in `LOGS`.
+container's log; the run's own logs stay in `LOGS`.
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))  # load_chain sits beside this file
+sys.path.insert(0, str(HERE))  # load_jobs sits beside this file
 HEARTBEAT_SECONDS = 60
 RETRY_POLL_SECONDS = 5
 
@@ -31,7 +31,7 @@ RETRY_POLL_SECONDS = 5
 def begin_command(task: dict) -> list[str]:
     """Before a load's first step: every wait must be able to end (named steps in their order), then the start is marked."""
     named = task.get("steps")
-    return [sys.executable, str(HERE / "load_chain.py"), "--begin",
+    return [sys.executable, str(HERE / "load_jobs.py"), "--begin",
             *(["--steps", ",".join(named)] if named else []), *(["--plan"] if task.get("plan") else [])]
 
 
@@ -43,20 +43,20 @@ def command(task: dict) -> list[str]:
     if task.get("action") == "readiness":
         return [sys.executable, str(HERE / "readiness.py")]
     if task.get("action") == "lane" and isinstance(task.get("lane"), str) and task["lane"]:
-        return [sys.executable, str(HERE / "load_chain.py"), "--lane", task["lane"], *(["--plan"] if task.get("plan") else [])]
+        return [sys.executable, str(HERE / "load_jobs.py"), "--lane", task["lane"], *(["--plan"] if task.get("plan") else [])]
     if task.get("action") == "finish":
-        return [sys.executable, str(HERE / "load_chain.py"), "--finish"]
+        return [sys.executable, str(HERE / "load_jobs.py"), "--finish"]
     if task.get("action") == "step" and isinstance(task.get("step"), str) and task["step"]:
-        return [sys.executable, str(HERE / "load_chain.py"), "--only", task["step"], *(["--plan"] if task.get("plan") else [])]
+        return [sys.executable, str(HERE / "load_jobs.py"), "--only", task["step"], *(["--plan"] if task.get("plan") else [])]
     raise ValueError(f"a task is readiness, begin with its steps, lanes, a lane or a step with its name, or finish, not {sorted(task)}")
 
 
 def run_task(client, token: str, task: dict, start=subprocess.Popen, every: float = HEARTBEAT_SECONDS) -> int:
     """Run one task to its end and report it. Returns the exit code (-1 when the input was refused)."""
-    if task.get("action") == "lanes":  # read from the chain file in this image: the state machine names no lane
+    if task.get("action") == "lanes":  # read from the load jobs file in this image: the state machine names no lane
         code = start(begin_command(task)).wait()
         if code:
-            client.send_task_failure(taskToken=token, error=f"Exit{code}", cause="load_chain.py --begin refused or failed: read the worker's log")
+            client.send_task_failure(taskToken=token, error=f"Exit{code}", cause="load_jobs.py --begin refused or failed: read the worker's log")
         else:
             client.send_task_success(taskToken=token, output=json.dumps({"lanes": lanes()}))
         return code
@@ -77,20 +77,20 @@ def run_task(client, token: str, task: dict, start=subprocess.Popen, every: floa
                 process.terminate()
                 return process.wait()
     if code and task.get("action") == "lane" and not task.get("plan"):  # ended without its notes, perhaps: record them
-        start([sys.executable, str(HERE / "load_chain.py"), "--lane", task["lane"], "--mark-stopped"]).wait()
+        start([sys.executable, str(HERE / "load_jobs.py"), "--lane", task["lane"], "--mark-stopped"]).wait()
     if code == 0:
         client.send_task_success(taskToken=token, output=json.dumps({"exit": 0, **task}))
     else:
         client.send_task_failure(taskToken=token, error=f"Exit{code}",
-                                 cause=f"{' '.join(Path(a).name for a in argv[1:])} ended with {code}: read the worker's log and the chain's log")
+                                 cause=f"{' '.join(Path(a).name for a in argv[1:])} ended with {code}: read the worker's log and the run's log")
     return code
 
 
 def lanes() -> list[str]:
-    """The chain file's lanes, in the order their first step appears."""
-    import load_chain
+    """The load jobs file's lanes, in the order their first step appears."""
+    import load_jobs
 
-    return list(dict.fromkeys(step["lane"] for step in load_chain.chain_steps()))
+    return list(dict.fromkeys(step["lane"] for step in load_jobs.load_jobs()))
 
 
 def work(client, activity: str, start=subprocess.Popen, tasks: int | None = None) -> None:
