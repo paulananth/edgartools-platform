@@ -100,7 +100,7 @@ def test_the_state_machine_runs_readiness_then_the_given_steps_in_order_and_stop
     states = machine["States"]
     assert machine["StartAt"] == "Readiness" and states["Readiness"]["Next"] == "Mode"
     assert states["Readiness"]["Parameters"] == {"action": "readiness"}
-    assert not [s for s in (states["Start"], states["More"], states["Step"], states["Advance"]) if s["Type"] in ("Map", "Parallel")]
+    assert [n for n, s in states.items() if s["Type"] in ("Map", "Parallel")] == ["Run lanes"]  # the steps' branch has none
     assert states["Start"]["Parameters"]["next"] == 0 and states["Start"]["Next"] == "More"
     assert states["More"]["Choices"] == [{"Variable": "$.next", "NumericLessThanPath": "$.count", "Next": "Step"}]
     step = states["Step"]
@@ -145,6 +145,7 @@ def test_the_worker_runs_a_lane_and_reads_the_lanes_from_the_chain_file_in_order
     client = Client([{"action": "lanes"}, {"action": "lane", "lane": "A", "plan": True}])
     started = []
     activity_worker.work(client, "arn", lambda argv: started.append(argv[2:]) or Process(0), tasks=2)
+    assert started.pop(0) == ["--begin"]  # the load's start is marked before its lanes, so a failure before it is not this load's
     chain = yaml.safe_load((REPO / "rules" / "load-chain.yaml").read_text())
     lanes = list(dict.fromkeys(step["lane"] for step in chain["steps"]))
     assert client.reports[0] == ("success", "t0", {"lanes": lanes}) and len(lanes) > 1
@@ -155,20 +156,15 @@ def test_the_worker_runs_as_many_tasks_at_once_as_it_has_pollers():
     """Every lane runs at once: one poller per lane, each running its task while the others run theirs."""
     import threading
 
-    running, most, lock = [0], [0], threading.Lock()
+    together = threading.Barrier(3, timeout=5)  # passes only when three tasks are running at the same time
 
     class Slow(Process):
         def wait(self, timeout=None):
-            with lock:
-                running[0] += 1
-                most[0] = max(most[0], running[0])
-            threading.Event().wait(0.2)
-            with lock:
-                running[0] -= 1
+            together.wait()
             return 0
     clients = [Client([{"action": "lane", "lane": lane}]) for lane in "ABC"]
     activity_worker.work_at_once(clients, "arn", lambda argv: Slow(0), tasks=1)
-    assert most[0] == 3 and [c.reports[0][0] for c in clients] == ["success"] * 3
+    assert [c.reports[0][0] for c in clients] == ["success"] * 3
 
 
 def test_without_steps_the_state_machine_runs_every_lane_at_once_and_a_failed_lane_stops_no_other():
@@ -176,7 +172,7 @@ def test_without_steps_the_state_machine_runs_every_lane_at_once_and_a_failed_la
     to their end, then the execution failed and the finish did not run."""
     states = json.loads(MACHINE.read_text())["States"]
     assert states["Mode"]["Choices"] == [{"Variable": "$.steps", "IsPresent": True, "Next": "Start"}]
-    assert states["Mode"]["Default"] == "Lanes" and states["Lanes"]["Parameters"] == {"action": "lanes"}
+    assert states["Mode"]["Default"] == "Lanes" and states["Lanes"]["Parameters"] == {"action": "lanes", "plan.$": "$.plan"}
     run = states["Run lanes"]
     assert run["Type"] == "Map" and run["ItemsPath"] == "$.lanes.names" and run["MaxConcurrency"] == 0
     lane = run["Iterator"]["States"]["Lane"]
@@ -209,3 +205,22 @@ def test_each_load_gets_its_own_activity_so_no_poller_of_an_older_worker_takes_i
     assert "$" in name, name
     assert "delete-activity" in script
     assert script.index("delete-activity") < script.index("create-activity") < script.index('up -d worker')
+
+
+def test_a_poll_that_fails_costs_the_poller_a_moment_never_its_slot(monkeypatch):
+    class Flaky(Client):
+        def get_activity_task(self, activityArn, workerName):
+            if not getattr(self, "failed", False):
+                self.failed = True
+                raise ConnectionError("the emulator restarted")
+            return super().get_activity_task(activityArn, workerName)
+    monkeypatch.setattr(activity_worker.time, "sleep", lambda s: None)
+    client = Flaky([{"action": "step", "step": "company"}])
+    activity_worker.work(client, "arn", lambda argv: Process(0), tasks=1)
+    assert client.reports[0][0] == "success"
+
+
+def test_a_plan_of_every_lane_marks_no_load_start():
+    client = Client([{"action": "lanes", "plan": True}])
+    activity_worker.work(client, "arn", lambda argv: pytest.fail("a plan writes nothing"), tasks=1)
+    assert client.reports[0][0] == "success"

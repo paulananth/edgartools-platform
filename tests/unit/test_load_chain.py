@@ -1554,3 +1554,35 @@ def test_a_lane_that_stops_marks_its_later_steps_failed_so_no_other_lane_waits_o
     assert chain.run_steps(steps, {}, state, lane="A") is False
     assert ran == ["a1", "a2"] and "a3 stopped: not started, its lane stopped at a2" in state.read_text()
     assert chain.failed_steps(state) == {"a3"}
+
+
+def test_a_failure_of_an_earlier_load_does_not_stop_a_step_of_this_one(tmp_path):
+    """A rerun reuses the chain state file: a step that failed before and is about to run again is no failure of this load."""
+    state = tmp_path / "state.log"
+    state.write_text("11-23 07:00:00 ET a1 attempt 1 start\n11-23 07:02:00 ET a1 stopped: the same failure came back\n")
+    chain.begin_load(state)
+    assert chain.failed_steps(state) == set()
+    chain.note("a2 stopped: blocked by a1", state)
+    assert chain.failed_steps(state) == {"a2"}
+
+
+def test_a_named_step_whose_needed_step_is_not_done_stops_and_never_waits_for_a_step_not_in_its_run(tmp_path, monkeypatch):
+    state = tmp_path / "state.log"
+    state.write_text("")
+    monkeypatch.setattr(chain.time, "sleep", lambda s: pytest.fail("a step named alone never waits on another"))
+    assert chain.wait_for(_step("b1", "B", waits=["a1"]), state, poll=0, others_run=False) == {"a1"}
+    assert "b1 stopped: blocked by a1" in state.read_text()
+
+
+def test_a_lane_that_breaks_records_its_steps_not_done_as_stopped(tmp_path, monkeypatch):
+    from tests.support.patching import checked
+
+    state = tmp_path / "state.log"
+    steps = [_step("a1", "A"), _step("a2", "A")]
+
+    def broken(step, env, state):
+        raise RuntimeError("the worker broke")
+    checked(monkeypatch, chain, "attempt_loop", broken)
+    with pytest.raises(RuntimeError):
+        chain.run_steps(steps, {}, state, lane="A")
+    assert chain.failed_steps(state) == {"a1", "a2"}

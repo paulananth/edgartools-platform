@@ -4,8 +4,8 @@
 #   infra/load-pipeline/load.sh [--plan]                        every lane of the chain file at once, then the finish
 #   infra/load-pipeline/load.sh [--plan] [--finish] <step>...   only those steps, in order
 #
-# The lanes, their steps, order and waits come from the chain file in the image; WORKER_TASKS caps the lanes running at
-# once (default: every lane), and each step runs with the workers the chain file gives it.
+# The lanes, their steps, order and waits come from the chain file in the image: every lane runs at once, and each step
+# with the workers the chain file gives it.
 # Runs on this machine's AWS Step Functions Local. It refuses when main's newest commit has no loader image yet (CI has not
 # passed on it, or the image is still building), and while another execution runs (one load at a time). It waits, up to
 # LOAD_DEADLINE_HOURS (default 72; then it stops the execution), and exits 0 only when the execution succeeded.
@@ -17,6 +17,7 @@ while [ "${1:-}" = "--plan" ] || [ "${1:-}" = "--finish" ]; do
   if [ "$1" = "--plan" ]; then plan=true; else finish=true; fi
   shift
 done
+[ "$plan" = false ] || [ "$finish" = false ] || { echo "--finish writes the links tables: it has no plan" >&2; exit 2; }
 if [ "$#" -eq 0 ] && [ "$plan" = false ]; then finish=true; fi  # a load of every lane ends with the finish
 
 commit="$(git ls-remote https://github.com/paulananth/edgartools-platform.git refs/heads/main | cut -f1)"
@@ -30,6 +31,9 @@ export CAPTURES="${CAPTURES:-$HOME/.local/share/edgartools/mdm/captures}"
 export PROVING="${PROVING:-$HOME/.local/share/edgartools/mdm/proving}"
 export LOGS="${LOGS:-$HOME/.local/share/edgartools/load-logs}"
 mkdir -p "$LOGS"
+lock="$LOGS/load.sh.lock"  # one load.sh at a time: the running check and the activity's replacement must not interleave
+mkdir "$lock" 2>/dev/null || { echo "another load.sh holds $lock (remove it if none runs)" >&2; exit 2; }
+trap 'rmdir "$lock"' EXIT
 
 endpoint=http://localhost:8083
 sfn() { AWS_ACCESS_KEY_ID=local AWS_SECRET_ACCESS_KEY=local aws stepfunctions --region us-east-1 --endpoint-url "$endpoint" --output json "$@"; }
@@ -44,10 +48,10 @@ if [ -n "$machine" ]; then
   [ "$running" = 0 ] || { echo "an execution is still running: one load at a time" >&2; exit 2; }
 fi
 # A new activity per load: a long poll an older worker still holds would take the task and lose it.
-for old in $(sfn list-activities | jq -r '.activities[] | select(.name | startswith("edgartools-load")) | .activityArn'); do
+while IFS= read -r old; do
   sfn delete-activity --activity-arn "$old" >/dev/null
-done
-ACTIVITY_ARN="$(sfn create-activity --name "edgartools-load-$(date +%Y%m%d%H%M%S)" | jq -r .activityArn)"
+done < <(sfn list-activities | jq -r '.activities[] | select(.name | startswith("edgartools-load")) | .activityArn')
+ACTIVITY_ARN="$(sfn create-activity --name "edgartools-load-$(date +%Y%m%d%H%M%S)-$$" | jq -r .activityArn)"
 export ACTIVITY_ARN
 definition="$(sed "s|\${activity}|${ACTIVITY_ARN}|g" "$here/state-machine.asl.json")"
 if [ -n "$machine" ]; then

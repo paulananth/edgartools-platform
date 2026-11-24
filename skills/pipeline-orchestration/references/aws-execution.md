@@ -59,8 +59,8 @@ behaviour (check that with the TestState API or on AWS). Measured on it:
   failure as a Choice loop, not a `Map`.
 - boto3 reads its address from `AWS_ENDPOINT_URL_SFN` (the service's id), never `AWS_ENDPOINT_URL_STEPFUNCTIONS`; a
   wrong name sends the client to real AWS with the placeholder login. A test asserts the client's `endpoint_url`.
-- A long poll still held by a worker that was replaced takes the next task and loses it (it timed out on its heartbeat,
-  3 ms after it was scheduled). Make a new activity for each execution and delete the older ones, after checking nothing runs.
+- A long poll still held by a worker that was replaced takes the next task and loses it: the task times out on its
+  heartbeat. Make a new activity for each execution and delete the older ones, after checking nothing runs.
 - `docker compose up` of one service reads every service's variables: set each the file requires before the first `up`.
 
 ## Evidence and release

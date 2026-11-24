@@ -29,7 +29,9 @@ CODE read it in place of git, and ENGINE does not apply (the image compiles its 
   only on success. Try a new image with `--plan` first: read-only, seconds a step.
 - **The chain file alone decides what runs.** The state machine names no lane and no step: its first task asks the loader for
   the lanes, and each lane runs its steps in order, each with the workers the chain file gives it, each holding until the
-  steps it needs (in any lane) are done. `WORKER_TASKS` caps the lanes running at once (default: every lane).
+  steps it needs (in any lane) are done. Every lane runs at once: a cap would let a lane hold a slot while it waits
+  on a lane still queued. A step named alone never waits: a needed step not done stops it. A failure belongs to
+  its load: each load of every lane marks its start (`load_chain.py --begin`), and a stop before it is not counted.
 - **A failure stops only what depends on it.** A step that fails stops its lane and records the lane's later steps as not
   started; a step of another lane that needs one of them stops at once, never waiting on work that cannot come. The other
   lanes go on, and the execution fails at the end, with no finish. Fix, merge, and start again: done steps cost one call each.

@@ -97,8 +97,8 @@ no account). For the image, "GitHub Container Registry (Recommended)".
   dependency"; "what runs on the lane is never fixed for the step function"). Without named steps the state machine asks
   the loader for the chain file's lanes and runs them all at once, each lane's steps with their own workers. A failed lane
   is caught, so the others go on, and the execution fails at the end. A step whose needed step failed waited forever: it
-  now stops at once (`test_a_step_whose_needed_step_failed_in_another_lane_stops_at_once_and_never_waits`, which failed
-  with `AttributeError: ... no attribute 'out_of_attempts'` before the fix, its two neighbours alike). Probed on Step
+  now stops at once (`test_a_step_whose_needed_step_failed_in_another_lane_stops_at_once_and_never_waits` failed with
+  `Failed: a step blocked by a failed step never waits` on the old `wait_for`; its two neighbours with `AttributeError`). Probed on Step
   Functions Local: the 3 lanes started in the same second; with `B` failing, `A` and `C` ran to their end and the
   execution failed with no finish, 2026-11-23 21:05 ET
 - [x] A load's tasks were lost to an older worker's poll: the 8-step execution failed with `States.Timeout` before any
@@ -106,6 +106,11 @@ no account). For the image, "GitHub Container Registry (Recommended)".
   load now gets a new activity, the older ones deleted after the check that nothing runs
   (`test_each_load_gets_its_own_activity_so_no_poller_of_an_older_worker_takes_its_tasks` failed with
   `assert '$' in 'edgartools-load'`, then passes), 2026-11-23 21:05 ET
+- [x] Review (Standards, Spec, GoF): GoF none. Fixed: a failure counts only after its load's start (`--begin`), a step
+  named alone never waits, a lane that breaks records its steps, no cap on the lanes at once (a capped lane could wait on a
+  queued one), `--plan --finish` refused, `load.sh` holds a lock, a failed poll keeps its poller, tighter tests. Each new
+  case failed first (`AttributeError: ... 'begin_load'`, `TypeError: ... 'others_run'`, `assert set() == {'a1', 'a2'}`).
+  Rejected: typed times (stamped by the script); a lock for two lanes of one source and target (none in the chain file), 2026-11-23 21:12 ET
 - [ ] Rerun the 8 steps left after `company` through the pipeline: `nport-registrant`, `nport-fund`,
   `adv-mastering-03`, `adv-mastering-06`, `adv-silver-03`, `adv-silver-06`, `adv-custodians-03`, `adv-custodians-06`
 - [ ] `gleif`: a read-only check of how many of its documents the Change Journal calls new; load it only at 0

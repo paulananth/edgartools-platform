@@ -29,7 +29,8 @@
       "Resource": "${activity}",
       "HeartbeatSeconds": 300,
       "Parameters": {
-        "action": "lanes"
+        "action": "lanes",
+        "plan.$": "$.plan"
       },
       "TimeoutSeconds": 600,
       "ResultSelector": {
