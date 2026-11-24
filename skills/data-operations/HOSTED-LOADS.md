@@ -30,8 +30,12 @@ CODE read it in place of git, and ENGINE does not apply (the image compiles its 
 - **The chain file alone decides what runs.** The state machine names no lane and no step: its first task asks the loader for
   the lanes, and each lane runs its steps in order, each with the workers the chain file gives it, each holding until the
   steps it needs (in any lane) are done. Every lane runs at once: a cap would let a lane hold a slot while it waits
-  on a lane still queued. A step named alone never waits: a needed step not done stops it. A failure belongs to
-  its load: each load of every lane marks its start (`load_chain.py --begin`), and a stop before it is not counted.
+  on a lane still queued. A failure belongs to its load: a stop before the load's start is not counted.
+- **A load never waits on what cannot come.** Before the first step, `load_chain.py --begin` refuses the load when a
+  step waits on a step that does not exist, on lanes that cannot finish, or, for named steps, on a step neither done
+  nor earlier in the run (name it first). A plan runs the same check. While running, a needed step that failed, or a
+  lane that stopped, broke or was killed, stops what waits on it at once. A step this load runs is done only once this
+  load finishes it; one it does not run counts as done by an earlier load.
 - **A failure stops only what depends on it.** A step that fails stops its lane and records the lane's later steps as not
   started; a step of another lane that needs one of them stops at once, never waiting on work that cannot come. The other
   lanes go on, and the execution fails at the end, with no finish. Fix, merge, and start again: done steps cost one call each.

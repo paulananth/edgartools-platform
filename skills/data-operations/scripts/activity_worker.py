@@ -3,8 +3,9 @@
 
     ACTIVITY_ARN=<arn> AWS_ENDPOINT_URL_SFN=<url> python activity_worker.py
 
-A task's input says what to run: `{"action": "readiness"}`, `{"action": "lanes"}` (the chain file's lanes, in order, as the
-task's output), `{"action": "lane", "lane": "<name>", "plan": false}`, `{"action": "step", "step": "<name>", "plan": false}`,
+A task's input says what to run: `{"action": "readiness"}`, `{"action": "begin", "steps": [...]}` (named steps: refuse the
+load when a wait could never end, else mark its start), `{"action": "lanes"}` (the same for every lane, then the chain file's
+lanes, in order, as the task's output), `{"action": "lane", "lane": "<name>", "plan": false}`, `{"action": "step", "step": "<name>", "plan": false}`,
 or `{"action": "finish"}` (what follows the loads: links and lookups). The worker runs one task per lane at once, each with
 the workers its step declares; the chain file's waits hold a step until the steps it needs are done. It
 sends a heartbeat while a task runs, so the state machine learns of a worker that died. Each task's output goes to this
@@ -27,8 +28,18 @@ HEARTBEAT_SECONDS = 60
 RETRY_POLL_SECONDS = 5
 
 
+def begin_command(task: dict) -> list[str]:
+    """Before a load's first step: every wait must be able to end (named steps in their order), then the start is marked."""
+    named = task.get("steps")
+    return [sys.executable, str(HERE / "load_chain.py"), "--begin",
+            *(["--steps", ",".join(named)] if named else []), *(["--plan"] if task.get("plan") else [])]
+
+
 def command(task: dict) -> list[str]:
     """The command a task runs. An input of any other shape is refused, never guessed."""
+    if task.get("action") == "begin" and isinstance(task.get("steps"), list) and task["steps"] \
+            and all(isinstance(name, str) and name for name in task["steps"]):
+        return begin_command(task)
     if task.get("action") == "readiness":
         return [sys.executable, str(HERE / "readiness.py")]
     if task.get("action") == "lane" and isinstance(task.get("lane"), str) and task["lane"]:
@@ -37,15 +48,15 @@ def command(task: dict) -> list[str]:
         return [sys.executable, str(HERE / "load_chain.py"), "--finish"]
     if task.get("action") == "step" and isinstance(task.get("step"), str) and task["step"]:
         return [sys.executable, str(HERE / "load_chain.py"), "--only", task["step"], *(["--plan"] if task.get("plan") else [])]
-    raise ValueError(f"a task is readiness, lanes, a lane or a step with its name, or finish, not {sorted(task)}")
+    raise ValueError(f"a task is readiness, begin with its steps, lanes, a lane or a step with its name, or finish, not {sorted(task)}")
 
 
 def run_task(client, token: str, task: dict, start=subprocess.Popen, every: float = HEARTBEAT_SECONDS) -> int:
     """Run one task to its end and report it. Returns the exit code (-1 when the input was refused)."""
     if task.get("action") == "lanes":  # read from the chain file in this image: the state machine names no lane
-        code = start([sys.executable, str(HERE / "load_chain.py"), "--begin"]).wait() if not task.get("plan") else 0
+        code = start(begin_command(task)).wait()
         if code:
-            client.send_task_failure(taskToken=token, error=f"Exit{code}", cause="load_chain.py --begin refused: read the worker's log")
+            client.send_task_failure(taskToken=token, error=f"Exit{code}", cause="load_chain.py --begin refused or failed: read the worker's log")
         else:
             client.send_task_success(taskToken=token, output=json.dumps({"lanes": lanes()}))
         return code
@@ -65,6 +76,8 @@ def run_task(client, token: str, task: dict, start=subprocess.Popen, every: floa
             except client.exceptions.TaskTimedOut:  # the execution gave up on this task: stop the work it no longer waits for
                 process.terminate()
                 return process.wait()
+    if code and task.get("action") == "lane" and not task.get("plan"):  # ended without its notes, perhaps: record them
+        start([sys.executable, str(HERE / "load_chain.py"), "--lane", task["lane"], "--mark-stopped"]).wait()
     if code == 0:
         client.send_task_success(taskToken=token, output=json.dumps({"exit": 0, **task}))
     else:

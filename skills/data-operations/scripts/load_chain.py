@@ -1088,17 +1088,89 @@ def errors_since(path: Path, start, source: str | None = None, target: str | Non
     return redact(text)
 
 
+BEGINS = re.compile(r" ET load begins(?:: (.*))?$")
+
+
+def this_load(lines: list[str]) -> tuple[int, set[str] | None]:
+    """Where the last load began in the state file's lines, and the steps it runs (None: every step; no begin: none)."""
+    for i in range(len(lines) - 1, -1, -1):
+        found = BEGINS.search(lines[i])
+        if found:
+            return i, (set(found.group(1).split(",")) if found.group(1) else None)
+    return -1, set()
+
+
 def done_steps(state: Path) -> set[str]:
-    """The steps any lane has finished, read from the shared state file."""
-    return set(re.findall(r" ET (\S+) done:", state.read_text())) if state.exists() else set()
+    """The steps finished, read from the shared state file. A step this load runs is done only once this load finishes it
+    (it may run again under a changed rule); one it does not run counts as done by any earlier load."""
+    if not state.exists():
+        return set()
+    lines = state.read_text().splitlines()
+    start, runs = this_load(lines)
+    done = set()
+    for i, line in enumerate(lines):
+        found = re.search(r" ET (\S+) done:", line)
+        if found and (i > start or (runs is not None and found.group(1) not in runs)):
+            done.add(found.group(1))
+    return done
 
 
 LOAD_BEGINS = "load begins"
 
 
-def begin_load(state: Path) -> None:
-    """Mark where this load begins in the shared state file: a failure before it belongs to an earlier load."""
-    note(LOAD_BEGINS, state)
+def begin_load(state: Path, named: list[str] | None = None) -> None:
+    """Mark where this load begins in the shared state file, with the steps it runs (none named: every step). A failure
+    before it belongs to an earlier load, and so does a step done before it that this load runs again."""
+    note(f"{LOAD_BEGINS}: {','.join(named)}" if named else LOAD_BEGINS, state)
+
+
+def mark_lane_stopped(steps: list[dict], state: Path, lane: str) -> None:
+    """Record every step of a lane that this load has not finished as stopped: its process ended without saying so (a
+    signal, a lost container), and a step of another lane waiting on one of them must stop, not wait."""
+    done = done_steps(state)
+    for step in steps:
+        if step["lane"] == lane and step["name"] not in done:
+            note(f"{step['name']} stopped: not done, its lane's process ended", state)
+
+
+def wait_problems(steps: list[dict], named: list[str] | None = None, done: set[str] = frozenset()) -> list[str]:
+    """Every wait that could never end, before any step runs: a needed step that does not exist; lanes that cannot finish
+    (a step waiting, through other lanes, on a later step of its own lane); and, for named steps run in order, a needed step
+    neither done nor earlier in the run. Empty when every wait can end."""
+    by_name = {step["name"]: step for step in steps}
+    problems = [f"{step['name']} needs {need}: no such step" for step in steps
+                for need in step.get("waits_for") or [] if need not in by_name]
+    if problems:
+        return problems
+    if named is not None:
+        earlier = set(done)
+        for name in named:  # a named step runs alone, in the given order: only its waits count, never its lane's order
+            if name not in by_name:
+                problems.append(f"{name}: no such step")
+                continue
+            problems += [f"{name} needs {need}: not done, and not before it in this run"
+                         for need in by_name[name].get("waits_for") or [] if need not in earlier]
+            earlier.add(name)
+        return problems
+    follows, finished = needs(steps), set(done)
+    while True:  # every lane at once: a step moves once the step before it in its lane and its waits are done
+        moved = {name for name, before in follows.items() if name not in finished and before <= finished}
+        if not moved:
+            break
+        finished |= moved
+    stuck = sorted(set(follows) - finished)
+    return [f"the lanes cannot finish: {', '.join(stuck)} wait on each other"] if stuck else []
+
+
+def begin(steps: list[dict], state: Path, named: list[str] | None = None, plan: bool = False) -> int:
+    """Before a load's first step: refuse it when a wait could never end, else mark its start (a plan checks, writes nothing)."""
+    problems = wait_problems(steps, named, done_steps(state))
+    if problems:
+        print("Not started: a step would wait for what cannot come: " + "; ".join(problems), file=sys.stderr)
+        return 2
+    if not plan:
+        begin_load(state, named)
+    return 0
 
 
 def failed_steps(state: Path) -> set[str]:
@@ -1107,8 +1179,7 @@ def failed_steps(state: Path) -> set[str]:
     last: dict[str, str] = {}
     if state.exists():
         lines = state.read_text().splitlines()
-        begins = [i for i, line in enumerate(lines) if line.endswith(f" ET {LOAD_BEGINS}")]
-        for line in lines[begins[-1] + 1 if begins else 0:]:
+        for line in lines[this_load(lines)[0] + 1:]:
             found = re.search(r" ET (\S+) (?:attempt \d+ start|done:|stopped: )", line)
             if found:
                 last[found.group(1)] = "stopped" if " stopped: " in line else "other"
@@ -1402,7 +1473,11 @@ def main() -> int:
     parser.add_argument("--deadline", help="with --auto: HH:MM ET today, the run's schedule: a miss is reported once and the loads go on")
     parser.add_argument("--hours", type=float, help="with --auto: a deadline this many hours from now")
     parser.add_argument("--begin", action="store_true",
-                        help="mark this load's start in the chain state, before its lanes start (the pipeline runs it)")
+                        help="before a load's first step: refuse it when a wait could never end, else mark its start (the "
+                             "pipeline runs it; with --plan it only checks)")
+    parser.add_argument("--mark-stopped", action="store_true",
+                        help="with --lane: record its steps not done as stopped (the pipeline, after a lane's process ended)")
+    parser.add_argument("--steps", help="with --begin: the named steps of the load, in order, comma-separated")
     parser.add_argument("--auto", action="store_true", help="watch the loads and start each step when its lane is free")
     parser.add_argument("--slots", type=int, default=max(2, min(os.cpu_count() or 2, int(
         os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") / 2**30 // 2))), help="loads running at once")
@@ -1471,8 +1546,10 @@ def main() -> int:
                   "and kept beside it, and this store starts a fresh chain state", flush=True)
         elif outcome == "adopted":
             print(f"{state.name} adopted as this store's, on your word", flush=True)
-    if args.begin:  # once, before the lanes start: a failure recorded before this line belongs to an earlier load
-        begin_load(state)
+    if args.begin:  # once, before the first step: every wait can end, and a failure before this line is an earlier load's
+        return begin(steps, state, args.steps.split(",") if args.steps else None, plan=args.plan)
+    if args.mark_stopped:  # the worker, after a lane's process ended without success
+        mark_lane_stopped(steps, state, args.lane)
         return 0
     if args.plan:
         for step in steps:
@@ -1497,6 +1574,10 @@ def main() -> int:
         finish(env, state, args.lookups)
         return 0
     if not args.finish:
+        if not (args.lane or args.only):  # the whole chain, one step after another in file order
+            order = [step["name"] for step in steps]
+            if begin(steps, state, order[order.index(args.start):] if args.start in order else order):
+                return 2
         if not run_steps(steps, env, state, lane=args.lane, only=args.only, start=args.start):
             return 1
         if args.only or args.lane:

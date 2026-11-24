@@ -111,7 +111,24 @@ no account). For the image, "GitHub Container Registry (Recommended)".
   queued one), `--plan --finish` refused, `load.sh` holds a lock, a failed poll keeps its poller, tighter tests. Each new
   case failed first (`AttributeError: ... 'begin_load'`, `TypeError: ... 'others_run'`, `assert set() == {'a1', 'a2'}`).
   Rejected: typed times (stamped by the script); a lock for two lanes of one source and target (none in the chain file), 2026-11-23 21:12 ET
-- [ ] Rerun the 8 steps left after `company` through the pipeline: `nport-registrant`, `nport-fund`,
+- [x] Six of the 8 steps ran through the pipeline, each skipped in about 20 s (0 documents loaded); `adv-custodians-03`
+  then waited on `gleif`, which was not in the run, and the execution was stopped after 12 min, 2026-11-23 21:24 ET
+- [x] A load never waits on what cannot come (operator, 2026-11-23: "load must never confuse itself on waiting for
+  others"): before the first step, the loader refuses a load when a step needs a step that does not exist, lanes that
+  cannot finish, or, for named steps, a step neither done nor earlier in the run.
+  `test_a_load_whose_step_would_wait_on_what_cannot_come_is_refused_before_any_step_runs` failed with
+  `AttributeError: module 'load_chain' has no attribute 'wait_problems'`, then passes. The real 8-step run is refused
+  ("adv-custodians-03 needs gleif: not done, and not before it in this run"); with `gleif` first it passes; the chain file
+  has no problem. On Step Functions Local a refused begin ends the execution before any step, 2026-11-23 21:24 ET
+- [x] Review of the wait check (Standards, Spec, GoF): fixed a killed lane leaving its waiters (the worker records its
+  steps not done: `test_a_lane_that_ends_without_success_has_its_unfinished_steps_recorded` failed with
+  `assert [['--lane', 'A']] == [...]`), a step done by an earlier load satisfying a step while this load runs it again
+  (`test_a_step_this_load_runs_is_done_only_once_this_load_finishes_it` failed with `TypeError: begin_load() takes 1
+  positional argument`), the whole chain in file order checked like named steps; the lanes check derived from the one
+  rule of what a step follows (`needs`), and the test that copied the scheduler now calls the check. Rejected: lane runs
+  outside the pipeline (a checkout refuses them, the pipeline runs every lane); a store lease for two loads of one source
+  and target (no such pair in the chain file); another store's state file (set aside by design, a rerun skips), 2026-11-23 21:28 ET
+- [ ] Run `adv-custodians-03` and `adv-custodians-06` after `gleif`: `nport-registrant`, `nport-fund`,
   `adv-mastering-03`, `adv-mastering-06`, `adv-silver-03`, `adv-silver-06`, `adv-custodians-03`, `adv-custodians-06`
 - [ ] `gleif`: a read-only check of how many of its documents the Change Journal calls new; load it only at 0
 - [x] Skills: data-operations names the pipeline as the only way to start a load, with lanes, waits and failure

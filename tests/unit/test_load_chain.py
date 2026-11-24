@@ -86,18 +86,7 @@ def test_every_step_has_a_lane_and_waits_only_for_steps_that_exist():
 
 def test_the_lanes_run_to_the_end_together_with_no_step_waiting_on_a_later_one():
     """Each lane takes its steps in file order and a step runs once what it waits for is done: no lane deadlocks."""
-    lanes = {}
-    for step in STEPS:
-        lanes.setdefault(step["lane"], []).append(step)
-    done = set()
-    while any(lanes.values()):
-        ran = False
-        for queue in lanes.values():
-            if queue and set(queue[0].get("waits_for") or []) <= done:
-                done.add(queue.pop(0)["name"])
-                ran = True
-        assert ran, f"stuck: {[q[0]['name'] for q in lanes.values() if q]}"
-
+    assert chain.wait_problems(STEPS) == []
 
 def test_the_chain_builds_the_links_table_once_after_the_loads_and_no_target_builds_it():
     builds = sorted(f"{s}/{t}" for (s, t), body in targets().items()
@@ -1586,3 +1575,60 @@ def test_a_lane_that_breaks_records_its_steps_not_done_as_stopped(tmp_path, monk
     with pytest.raises(RuntimeError):
         chain.run_steps(steps, {}, state, lane="A")
     assert chain.failed_steps(state) == {"a1", "a2"}
+
+
+def test_a_load_whose_step_would_wait_on_what_cannot_come_is_refused_before_any_step_runs():
+    """Measured: named steps ran six loads, then one waited on a step not in the run, and would have until its timeout.
+    Every wait is checked before the first step: a needed step that does not exist, a later step of its own lane, or, for
+    named steps, a step neither done nor earlier in the run."""
+    steps = [_step("a1", "A"), _step("a2", "A"), _step("b1", "B", waits=["a2"]), _step("c1", "C", waits=["b1"])]
+    assert chain.wait_problems(steps) == []
+    assert chain.wait_problems(steps, named=["a1", "a2", "b1"]) == []
+    assert chain.wait_problems(steps, named=["b1"], done={"a2"}) == []
+    assert chain.wait_problems(steps, named=["a1", "c1"]) == ["c1 needs b1: not done, and not before it in this run"]
+    assert chain.wait_problems(steps, named=["b1", "a2"]) == ["b1 needs a2: not done, and not before it in this run"]
+    assert chain.wait_problems(steps, named=["x9"]) == ["x9: no such step"]
+    ghost = [*steps, _step("d1", "D", waits=["nope"])]
+    assert chain.wait_problems(ghost) == ["d1 needs nope: no such step"]
+    deadlock = [_step("a1", "A", waits=["b1"]), _step("b1", "B", waits=["a2"]), _step("a2", "A")]
+    assert chain.wait_problems(deadlock) == ["the lanes cannot finish: a1, a2, b1 wait on each other"]
+
+
+def test_begin_refuses_a_load_with_a_wait_problem_and_marks_no_start(tmp_path, monkeypatch, capsys):
+    state = tmp_path / "state.log"
+    steps = [_step("a1", "A"), _step("b1", "B", waits=["a1"])]
+    assert chain.begin(steps, state, named=["b1"]) == 2
+    assert "b1 needs a1" in capsys.readouterr().err and not state.exists()
+    assert chain.begin(steps, state, named=["a1", "b1"]) == 0 and chain.LOAD_BEGINS in state.read_text()
+    state.unlink()
+    assert chain.begin(steps, state, named=["a1", "b1"], plan=True) == 0 and not state.exists()  # a plan writes nothing
+
+
+def test_a_step_this_load_runs_is_done_only_once_this_load_finishes_it(tmp_path):
+    """A step done by an earlier load satisfies a step that needs it only when this load does not run it again: a step this
+    load runs again (a changed rule) is done when this load says so, so nothing reads it before then."""
+    state = tmp_path / "state.log"
+    chain.note("a1 done: Done: 0 documents loaded", state)
+    chain.note("b1 done: Done: 0 documents loaded", state)
+    chain.begin_load(state, ["b1", "c1"])
+    assert chain.done_steps(state) == {"a1"}  # b1 runs again in this load
+    chain.note("b1 done: Done: 3 documents loaded", state)
+    assert chain.done_steps(state) == {"a1", "b1"}
+    chain.begin_load(state)  # every step
+    assert chain.done_steps(state) == set()
+
+
+def test_a_lane_whose_process_ended_without_its_notes_has_its_steps_recorded_stopped(tmp_path):
+    """A lane killed by a signal writes nothing: the worker records its steps not done, so no other lane waits on them."""
+    state = tmp_path / "state.log"
+    steps = [_step("a1", "A"), _step("a2", "A"), _step("b1", "B")]
+    chain.begin_load(state)
+    chain.note("a1 done: Done: 1 documents loaded", state)
+    chain.mark_lane_stopped(steps, state, "A")
+    assert chain.failed_steps(state) == {"a2"}
+
+
+def test_the_whole_chain_in_file_order_is_refused_when_a_step_waits_on_a_later_one(tmp_path, capsys):
+    steps = [_step("a1", "A", waits=["b1"]), _step("b1", "B")]
+    assert chain.wait_problems(steps, named=[s["name"] for s in steps]) == [
+        "a1 needs b1: not done, and not before it in this run"]
