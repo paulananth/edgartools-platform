@@ -285,15 +285,12 @@ rest are set aside by its classification), not the Companies; GLEIF joins the Co
 the SEC Companies pair with GLEIF through the waterfall pass, which runs first so a paired record joins its filer. A Security is mastered from OpenFIGI, N-PORT
 securities and 13F securities in the same way.
 
-### Examples: where retained files are
+### Where retained files are
 
-Under `~/.local/share/edgartools/mdm/`, `captures/` holds whole deliveries and `proving/` holds cohorts:
-
-| Feed | Folder |
-|---|---|
-| Company facts | `proving/company-facts/` |
-| ADV | `proving/p07/inputs/warehouse/bronze/reference/iapd_adv_bulk/` |
-| 13F and ownership, by CIK | `proving/p07/inputs/warehouse/bronze/filings/sec/` |
+Under `~/.local/share/edgartools/mdm/`, `captures/` holds whole deliveries and `proving/` holds cohorts. A source names
+its own: `sources/<source>/inputs.yaml` lists each delivery by name with its folder (and `root: proving` for a cohort),
+and a step of `rules/load-chain.yaml` names one with `input:`. Read that file, never a list copied here;
+`load_chain.py --list` shows each step's resolved folder. A new delivery is a new entry there.
 
 `~/edgar-local-tmp/` holds working copies from earlier tests.
 

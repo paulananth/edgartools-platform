@@ -1,0 +1,7 @@
+# The files this source loads from: each delivery by name, its folder under the captures root (or `root: proving`).
+# A load-chain step names one with `input:`, or none when this source has one. Not a rules document: no run reads it.
+inputs:
+  20260911-1600:
+    folder: gleif/20260911-1600
+  20260911-1600-publisher:
+    folder: gleif/20260911-1600-publisher

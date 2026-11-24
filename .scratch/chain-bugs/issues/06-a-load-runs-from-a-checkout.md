@@ -128,10 +128,21 @@ no account). For the image, "GitHub Container Registry (Recommended)".
   rule of what a step follows (`needs`), and the test that copied the scheduler now calls the check. Rejected: lane runs
   outside the pipeline (a checkout refuses them, the pipeline runs every lane); a store lease for two loads of one source
   and target (no such pair in the chain file); another store's state file (set aside by design, a rerun skips), 2026-11-23 21:28 ET
-- [ ] Run `adv-custodians-03` and `adv-custodians-06` after `gleif`: `nport-registrant`, `nport-fund`,
-  `adv-mastering-03`, `adv-mastering-06`, `adv-silver-03`, `adv-silver-06`, `adv-custodians-03`, `adv-custodians-06`
-- [ ] `gleif`: a read-only check of how many of its documents the Change Journal calls new; load it only at 0
+- [x] Run `gleif`, `adv-custodians-03` and `adv-custodians-06` through the pipeline, in that order (execution SUCCEEDED, one
+  load, the custodians started 9 s after `gleif` ended): each ended "0 documents loaded, 1 already loaded before", so the
+  Change Journal skipped all three; `gleif` read its source for 11 min 36 s before it skipped, 2026-11-23 22:03 ET
+- [x] `gleif`: the read-only check found 1 bundle, 1 document, 0 fresh, so it was safe to load, 2026-11-23 22:03 ET
+- [ ] The exporter runs in the pipeline (PR 2090): it served from a deleted checkout and reported `load_monitor_up 0`, and a
+  host `ps` cannot see a container's load. Live check after the merge: stop the old host exporter, `load_monitor_up 1`,
+  and the running step shows in Grafana
+- [x] A source holds its own input files. Operator, 2026-11-23: "list every delivery by name in source.yaml, update the skill
+  data onboarding and data operation should use it" (after "this cannot be on load-chain they are attached to the source
+  and the input files for the source"). The file is `sources/<source>/inputs.yaml`, beside `source.yaml`, because only
+  `source.yaml` is a registered rules document and a change to it changes what readiness and the Change Journal compare.
+  Tests failed first: `chain_steps() takes 1 positional argument` (the resolution), and the chain file held `capture:` lines;
+  all 43 steps resolve to the folders they had before, 2026-11-23 22:03 ET
 - [x] Skills: data-operations names the pipeline as the only way to start a load, with lanes, waits and failure
   (`HOSTED-LOADS.md`, "Where a load runs"); pipeline-orchestration's AWS page holds what the old state machines and Step
   Functions Local taught; aws-snowflake-operations says the account holds no old state machine and how one is deleted, 2026-11-23 21:05 ET
 - [x] Learning → skill: the three skill changes above, 2026-11-23 21:05 ET
+- [x] Learning → skill: data-operations and data-onboarding point at `sources/<source>/inputs.yaml` for a source's deliveries, 2026-11-23 22:03 ET

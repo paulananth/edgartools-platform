@@ -76,10 +76,30 @@ def worker_env() -> dict:
     return load_env(path) if path.exists() else {}
 
 
-def chain_steps(path: Path = ROOT / "rules/load-chain.yaml") -> list[dict]:
-    """The chain's steps, each with the chain's `defaults` for what it does not say itself."""
+def resolve_input(step: dict, sources: Path) -> dict:
+    """The step with its `capture` folder and `capture_root`, read from its source's `inputs.yaml`: the source holds the
+    folders of its deliveries by name, and the step names one (or none, when the source has one)."""
+    if "source" not in step:
+        return step
+    path = sources / step["source"] / "inputs.yaml"
+    held = (yaml.safe_load(path.read_text()) or {}).get("inputs") or {} if path.exists() else {}
+    name = step.get("input") or (next(iter(held)) if len(held) == 1 else None)
+    if name is None:
+        raise ValueError(f"{step['name']}: names no input, and {step['source']} holds {sorted(held) or 'none'}")
+    if name not in held:
+        raise ValueError(f"{step['name']}: {step['source']} has no input {name!r} (it holds {sorted(held)})")
+    folder, root = held[name].get("folder"), held[name].get("root", "captures")
+    if not isinstance(folder, str) or not folder or folder.startswith("/") or ".." in Path(folder).parts:
+        raise ValueError(f"{step['name']}: input {name!r} needs a folder under its root, not {folder!r}")
+    if root not in ROOTS:
+        raise ValueError(f"{step['name']}: input {name!r} has root {root!r}, not one of {sorted(ROOTS)}")
+    return {**step, "capture": folder, **({"capture_root": root} if root != "captures" else {})}
+
+
+def chain_steps(path: Path = ROOT / "rules/load-chain.yaml", sources: Path = ROOT / "sources") -> list[dict]:
+    """The chain's steps, each with the chain's `defaults` for what it does not say itself and its input's folder."""
     chain = yaml.safe_load(path.read_text())
-    steps = [{**(chain.get("defaults") or {}), "capture_run": f"{chain['capture_label']}-{step['name']}", **step}
+    steps = [resolve_input({**(chain.get("defaults") or {}), "capture_run": f"{chain['capture_label']}-{step['name']}", **step}, sources)
              for step in chain["steps"]]
     for step in steps:
         priority = step.get("priority", 3)

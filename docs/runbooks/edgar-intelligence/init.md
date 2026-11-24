@@ -129,7 +129,7 @@ A missing grant or login that a command names is a gap to fix through the centra
 
 ## Load a fresh store
 
-`rules/load-chain.yaml` holds the order of every source and target, each one's capture, workers and the facts and revision no capture states, and
+`rules/load-chain.yaml` holds the order of every source and target, each one's input (its source names the folder in `sources/<source>/inputs.yaml`), workers and the facts and revision no capture states, and
 `scripts/load_chain.py` runs it, so a store is loaded the same way every time and nobody rewrites the list:
 
 A load runs only in the loader image CI built from `main`, started by `infra/load-pipeline/load.sh [--plan] [--finish] <step>...`

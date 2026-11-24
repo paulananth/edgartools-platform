@@ -1641,3 +1641,52 @@ def test_a_load_started_by_the_loader_image_is_read_from_its_command_line(monkey
     monkeypatch.setattr(chain.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": line + "\n"})())
     assert chain.external_loads() == {("one", "mastering")}
     assert chain.load_workers(f"4 1 0:01 100 {line}", "one", "mastering") == 3
+
+def _chain_with_sources(tmp_path, steps, inputs):
+    """A chain file and a sources folder whose `<source>/inputs.yaml` hold the named deliveries."""
+    (tmp_path / "chain.yaml").write_text(yaml.safe_dump({"capture_label": "l", "steps": steps}))
+    for source, body in inputs.items():
+        (tmp_path / "sources" / source).mkdir(parents=True)
+        (tmp_path / "sources" / source / "inputs.yaml").write_text(yaml.safe_dump(body))
+    return tmp_path / "chain.yaml", tmp_path / "sources"
+
+
+def test_a_step_names_its_input_and_the_source_holds_the_folder_and_its_root(tmp_path):
+    path, sources = _chain_with_sources(tmp_path, [
+        {"name": "a", "source": "s", "target": "t", "input": "d2", "minutes": 1},
+        {"name": "b", "source": "s", "target": "t", "input": "d1", "minutes": 1},
+        {"name": "c", "source": "p", "target": "t", "minutes": 1}], {
+        "s": {"inputs": {"d1": {"folder": "s/d1"}, "d2": {"folder": "s/d2", "root": "proving"}}},
+        "p": {"inputs": {"only": {"folder": "p/only"}}}})
+    got = {s["name"]: (s["capture"], s.get("capture_root", "captures")) for s in chain.chain_steps(path, sources)}
+    assert got == {"a": ("s/d2", "proving"), "b": ("s/d1", "captures"), "c": ("p/only", "captures")}
+
+
+@pytest.mark.parametrize("step, inputs, words", [
+    ({"input": "nope"}, {"d1": {"folder": "s/d1"}}, "no input"),
+    ({}, {"d1": {"folder": "s/d1"}, "d2": {"folder": "s/d2"}}, "names no input"),
+    ({"input": "d1"}, {"d1": {"folder": "s/d1", "root": "elsewhere"}}, "root"),
+    ({"input": "d1"}, {"d1": {"folder": "/abs/path"}}, "folder")])
+def test_an_input_that_cannot_be_resolved_is_refused_by_name(tmp_path, step, inputs, words):
+    path, sources = _chain_with_sources(tmp_path, [{"name": "a", "source": "s", "target": "t", "minutes": 1, **step}],
+                                        {"s": {"inputs": inputs}})
+    with pytest.raises(ValueError, match=words):
+        chain.chain_steps(path, sources)
+
+
+def test_the_chain_file_holds_no_capture_folder_and_every_source_holds_its_own_inputs():
+    text = (ROOT / "rules/load-chain.yaml").read_text()
+    assert not re.search(r"^\s*capture(_root)?:", text, re.M)
+    assert all((ROOT / "sources" / s["source"] / "inputs.yaml").exists() for s in STEPS)
+
+
+def test_each_step_resolves_to_the_folder_its_source_names():
+    got = {name: (BY_NAME[name]["capture"], BY_NAME[name].get("capture_root", "captures")) for name in (
+        "gleif", "gleif-pairs", "adv-custodians-03", "ncen-fund-2026q1", "company-facts", "person", "company", "ipo")}
+    assert got == {"gleif": ("gleif/20260911-1600-publisher", "captures"), "gleif-pairs": ("gleif/20260911-1600", "captures"),
+                   "adv-custodians-03": ("iapd.adv/p07-2026-03", "captures"),
+                   "ncen-fund-2026q1": ("sec.ncen-datasets/2026q1", "captures"),
+                   "company-facts": ("company-facts/cohort-json", "proving"),
+                   "person": ("sec.submissions.company/all-76230", "captures"),
+                   "company": ("sec.submissions.company/all-76230", "captures"),
+                   "ipo": ("sec.submissions.company/all-76230", "captures")}
