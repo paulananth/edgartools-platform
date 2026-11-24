@@ -90,6 +90,7 @@ No scenario or test code is approved by creating these tickets. Proposed Givenâ€
 - [Capability gap: the profiler reads some numbers through floating point](issues/gap-data-profiling-exact-numbers.md): exact decimal scale and long integer identifiers now survive through the generic reader; invented regression tests and the affected checks pass, in [fix(data-profiling): preserve exact numeric values](https://github.com/paulananth/edgartools-platform/pull/2015).
 - [Capability gap: the data-platform route is not executable](issues/gap-data-platform-route.md): Added a source-neutral route command over configuration and retained resume evidence; conflicting change signals stop for operator clarification.
 - [data-quality: Reconcile shared rules](issues/26-data-quality-consistent-rules.md): Shared approval and access gates stay with their authoritative owners; Data Quality owns check/fix meaning, measured counts and row dispositions.
+- [data-quality: Make the entrypoint executable](issues/27-data-quality-entrypoint.md): A concise Start here route covers new/live MDM checks, silver specs, audits, supported commands, owners and stops.
 
 ## Not yet specified
 
