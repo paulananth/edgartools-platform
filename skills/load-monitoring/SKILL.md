@@ -1,13 +1,13 @@
 ---
 name: load-monitoring
-description: Watch a platform load in Grafana - one dashboard of lanes, steps, stalls and restarts fed by the load jobs's own status. Use when asked to monitor, watch or dashboard a load, to bring the monitor up or down, or to change what it shows. The load itself is data-operations'; this skill only reads it.
+description: Watch a platform load in Grafana - one dashboard of lanes, steps, stalls and restarts fed by the load jobs' own status. Use when asked to monitor, watch or dashboard a load, to bring the monitor up or down, or to change what it shows. The load itself is data-operations'; this skill only reads it.
 ---
 
 # Load monitoring
 
 The dashboard answers two questions at a glance: **is the load healthy, and why
 is a step not running?** Colour carries the answer; numbers back it. It reads the
-load jobs's own status (`load_jobs.py --status --json`) and changes nothing: the
+load jobs' own status (`load_jobs.py --status --json`) and changes nothing: the
 reader login, the process list and the log files only.
 
 ```

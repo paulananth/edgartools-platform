@@ -883,7 +883,7 @@ def status_lines(snapshot: dict) -> list[str]:
         lines.append(f"  {row['name']} (lane {row['lane']}, attempt {row['attempt']}, {row['workers']} workers): {row['elapsed']:.0f} min of {row['bound']}; "
                      f"{shown}; {row['processes']} processes, {row['cpu']:.0f}% CPU, {row['memory_mb']:,.0f} MB; wrote {wrote}; log {row['log_age']:.0f} min old; "
                      + row["verdict"] + (f"; {row['warning']}" if row["warning"] else ""))
-        if row["kind"] != "progressing" or row["elapsed"] > row["bound"]:  # something is wrong: all the load jobs of whys
+        if row["kind"] != "progressing" or row["elapsed"] > row["bound"]:  # something is wrong: every why, symptom to cause
             lines += [f"      why {number}: {words}" for number, words in enumerate(row["why"], 1)]
         elif row["evidence"]:
             lines.append(f"      {row['why'][1]}; {row['why'][2]}")

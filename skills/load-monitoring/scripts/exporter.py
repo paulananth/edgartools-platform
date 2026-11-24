@@ -1,5 +1,5 @@
 #!/usr/bin/env -S uv run --no-sync python
-"""Serve the load jobs's status as Prometheus metrics: counts, states and times only, never a row or an address.
+"""Serve the load jobs' status as Prometheus metrics: counts, states and times only, never a row or an address.
 
     uv run --no-sync python exporter.py serve [--port 9108] [--interval 30] [--sample 10]
     uv run --no-sync python exporter.py print        one reading, written as metrics, then exit
@@ -22,7 +22,7 @@ sys.path.insert(0, str(HERE))
 import design  # noqa: E402
 
 
-def load_jobs():
+def jobs_module():
     spec = importlib.util.spec_from_file_location("load_jobs", ROOT / "skills/data-operations/scripts/load_jobs.py")
     module = importlib.util.module_from_spec(spec)
     sys.path.insert(0, str(ROOT / "skills/data-operations/scripts"))
@@ -81,12 +81,12 @@ class Reading:
 
     def __init__(self, interval: int, sample_seconds: int):
         self.text, self.at, self.interval, self.sample = down(), 0.0, interval, sample_seconds
-        self.chain = load_jobs()
+        self.jobs = jobs_module()
 
     def refresh(self) -> None:
-        steps = self.chain.load_jobs()
-        counted, reader_url, _ = self.chain.status_inputs()
-        shot = self.chain.status_snapshot(steps, counted, reader_url, self.sample)
+        steps = self.jobs.load_jobs()
+        counted, reader_url, _ = self.jobs.status_inputs()
+        shot = self.jobs.status_snapshot(steps, counted, reader_url, self.sample)
         self.text, self.at = render(shot), time.time()
 
     def loop(self) -> None:

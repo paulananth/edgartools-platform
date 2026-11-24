@@ -157,7 +157,7 @@ def ancestors(name):
 
 
 def steps_of(source, like=None):
-    """The chain steps of one source that master (a target with a kind of its own). A step of a quarterly delivery needs
+    """The load jobs of one source that master (a target with a kind of its own). A step of a quarterly delivery needs
     only the same delivery's steps of another source that has one (the same capture folder name), else all of them."""
     found = [s for s in STEPS if s["source"] == source and INFERRED[key(s)]["kinds"]]
     same = [s for s in found if like and s["capture"].split("/")[-1] == like["capture"].split("/")[-1]]
@@ -1329,7 +1329,7 @@ def test_the_runbook_names_exactly_the_steps_the_chain_file_gives_priority_one_a
 
 
 def test_a_marker_with_no_generation_is_from_before_generations_and_does_not_survive_a_reset():
-    """A store made again inherited 59 done steps from a file whose marker named no generation, and the chain ended at once."""
+    """A store made again inherited 59 done steps from a file whose marker named no generation, and the run ended at once."""
     legacy = "11-18 06:00:00 ET chain store aaaa1111\n11-18 06:40:00 ET company done: Done\n"
     assert chain.state_verdict(legacy, "aaaa1111", "7") == "set aside"
     assert chain.state_verdict(legacy, "aaaa1111", "") == "same"  # nothing readable to compare: nothing is thrown away
@@ -1546,7 +1546,7 @@ def test_a_lane_that_stops_marks_its_later_steps_failed_so_no_other_lane_waits_o
 
 
 def test_a_failure_of_an_earlier_load_does_not_stop_a_step_of_this_one(tmp_path):
-    """A rerun reuses the chain state file: a step that failed before and is about to run again is no failure of this load."""
+    """A rerun reuses the run's state file: a step that failed before and is about to run again is no failure of this load."""
     state = tmp_path / "state.log"
     state.write_text("11-23 07:00:00 ET a1 attempt 1 start\n11-23 07:02:00 ET a1 stopped: the same failure came back\n")
     chain.begin_load(state)
@@ -1731,10 +1731,13 @@ def test_each_step_resolves_to_the_folder_its_source_names():
 
 
 def test_the_load_jobs_are_named_load_jobs_everywhere_a_reader_looks():
-    """What the load runs is its load jobs: no live file names the old `load chain` (tickets keep their history)."""
-    old = re.compile(r"load[-_ ]chain|chain_steps")
-    folders = ["skills", "rules", "docs", "infra", ".github", "tests", "sources"]
-    named = [str(p.relative_to(ROOT)) for folder in folders for p in (ROOT / folder).rglob("*")
-             if p.is_file() and p.suffix in {".py", ".md", ".yaml", ".yml", ".sh", ".json"} and p != Path(__file__)
-             and old.search(p.read_text(errors="ignore"))]
+    """What the load runs is its load jobs: no tracked file names the old `load chain` or speaks of its chain, file or steps (tickets keep
+    their history; the `chain-<RUN>.log` state files and `chain store` / `chain done` lines keep theirs, since a store's state is read by them)."""
+    import subprocess
+
+    old = re.compile(r"load[-_ ]chain|chain_steps|chain file|chain steps?\b|the chain's|chain state|whole chain|runs the chain|chain ended|chain stops|jobs's")
+    tracked = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.split("\n")
+    named = [name for name in tracked if name and not name.startswith((".scratch/", "crates/")) and name != "uv.lock"
+             and name != "tests/unit/test_load_jobs.py" and (ROOT / name).is_file()
+             and old.search((ROOT / name).read_text(errors="ignore"))]
     assert named == []
