@@ -10,7 +10,7 @@
 # Runs on this machine's AWS Step Functions Local. It refuses when main's newest commit has no loader image yet (CI has not
 # passed on it, or the image is still building), and while another execution runs (one load at a time). It waits, up to
 # LOAD_DEADLINE_HOURS (default 2: the operator's window; a miss is reported once and the load goes on), and exits 0 only when the execution succeeded.
-# RUN, STORES, CAPTURES, PROVING and LOGS pass through to the worker, with load_jobs.py's defaults.
+# RUN, STORES, CAPTURES, PROVING, LOGS and MANIFESTS pass through to the worker, with load_jobs.py's defaults.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 plan=false finish=false force=false
@@ -33,6 +33,12 @@ export CAPTURES="${CAPTURES:-$HOME/.local/share/edgartools/mdm/captures}"
 export PROVING="${PROVING:-$HOME/.local/share/edgartools/mdm/proving}"
 export LOGS="${LOGS:-$HOME/.local/share/edgartools/load-logs}"
 mkdir -p "$LOGS"
+# The run documents (frozen rules, input manifests) sit where worker.env names BOOKKEEPING_MANIFEST_ROOT. A run driven again reads them,
+# so the worker mounts that folder at the same path; without it a resumed run's document is "missing".
+MANIFESTS="$(sed -n 's/^export BOOKKEEPING_MANIFEST_ROOT=//p' "$STORES/worker.env" 2>/dev/null | tail -1 | tr -d "\"'")"
+MANIFESTS="${MANIFESTS#file://}"
+case "$MANIFESTS" in /*) ;; *) echo "worker.env in $STORES must set BOOKKEEPING_MANIFEST_ROOT to a local folder" >&2; exit 2 ;; esac
+mkdir -p "$MANIFESTS"; export MANIFESTS
 lock="$LOGS/load.sh.lock"  # one load.sh at a time: the running check and the activity's replacement must not interleave
 mkdir "$lock" 2>/dev/null || { echo "another load.sh holds $lock (remove it if none runs)" >&2; exit 2; }
 trap 'rmdir "$lock"' EXIT

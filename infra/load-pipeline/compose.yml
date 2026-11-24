@@ -25,10 +25,11 @@ services:
       AWS_ACCESS_KEY_ID: local
       AWS_SECRET_ACCESS_KEY: local
     volumes:
-      # Read: the logins and identity files, the captures. Written: the stores folder (the readiness record), the run's state and logs.
+      # Read: the logins and identity files, the captures. Written: the stores folder (the readiness record), the run documents, the run's state and logs.
       - ${HOME}/.config/edgartools:${HOME}/.config/edgartools:ro
       - ${STORES}:${STORES}
       - ${LOGS}:${LOGS}
+      - ${MANIFESTS:?load.sh names the run documents' folder}:${MANIFESTS}
       - ${CAPTURES}:${CAPTURES}:ro
       - ${PROVING}:${PROVING}:ro
 

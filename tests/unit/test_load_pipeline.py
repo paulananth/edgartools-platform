@@ -292,3 +292,13 @@ def test_a_load_that_outlasts_its_window_reports_the_miss_and_goes_on():
     script = (MACHINE.parent / "load.sh").read_text()
     assert "LOAD_DEADLINE_HOURS:-2" in script and "DEADLINE MISSED" in script
     assert "stop-execution" not in script
+
+
+def test_the_worker_mounts_the_folder_of_the_run_documents_that_worker_env_names():
+    """A run driven again reads its frozen rules from the manifest root; with that folder not mounted, the worker saw the file
+    as missing and reported a corrupt control document."""
+    compose = yaml.safe_load((MACHINE.parent / "compose.yml").read_text())
+    mounts = [v for v in compose["services"]["worker"]["volumes"] if "MANIFESTS" in v]
+    assert len(mounts) == 1 and mounts[0].endswith(":${MANIFESTS}") and not mounts[0].endswith(":ro")
+    script = (MACHINE.parent / "load.sh").read_text()
+    assert "BOOKKEEPING_MANIFEST_ROOT" in script and 'export MANIFESTS' in script
