@@ -148,6 +148,10 @@ no account). For the image, "GitHub Container Registry (Recommended)".
 - [x] Skills: data-operations names the pipeline as the only way to start a load, with lanes, waits and failure
   (`HOSTED-LOADS.md`, "Where a load runs"); pipeline-orchestration's AWS page holds what the old state machines and Step
   Functions Local taught; aws-snowflake-operations says the account holds no old state machine and how one is deleted, 2026-11-23 21:05 ET
+- [x] No application lock (operator, 2026-11-24: "There should be no application triggered lock"): `load.sh` kept a lock folder that a dead run left
+  behind and that refused the next start twice; the execution check against Step Functions already enforces one load at a time, so the
+  lock is gone. `test_one_load_at_a_time_is_the_state_machines_own_record_and_load_sh_keeps_no_lock_file` failed first (`.lock` found in
+  the script), 2026-11-24 14:15 ET
 - [x] Learning → skill: the three skill changes above, 2026-11-23 21:05 ET
 - [x] The load chain is named load jobs. Operator, 2026-11-23: "no load chain its load jobs"; scope chosen: "Everything live".
   `rules/load-jobs.yaml`, `load_jobs.py`, `test_load_jobs.py`, `chain_steps` → `load_jobs()`, and the text of skills, runbooks,
