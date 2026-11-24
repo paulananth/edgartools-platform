@@ -1777,3 +1777,17 @@ def test_a_forced_load_is_a_new_publication_with_a_revision_above_the_one_the_fi
     monkeypatch.setenv(chain.FORCE, "2026-11-24T12:19:19Z")
     args = chain.arguments(step)
     assert args.count("--revision") == 1 and args[args.index("--revision") + 1] == "20261124121919"
+
+
+@pytest.mark.parametrize("cores, widest, expected", [(8, 4, 2), (8, 2, 4), (8, 8, 1), (2, 4, 1), (16, 2, 8)])
+def test_a_machine_carries_its_cores_over_the_widest_first_step_lanes_at_once(cores, widest, expected):
+    steps = [{"name": "a1", "lane": "A", "workers": 2}, {"name": "a2", "lane": "A", "workers": 8},
+             {"name": "b1", "lane": "B", "workers": widest}, {"name": "c1", "lane": "C", "workers": 1}]
+    assert chain.lanes_at_once(steps, cores) == expected  # a lane's later step (a2) never counts: it starts after the first
+
+
+def test_lanes_at_once_is_read_from_the_real_load_jobs_and_load_sh_sets_it_in_the_definition(capsys, monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["load_jobs.py", "--lanes-at-once"])
+    assert chain.main() == 0 and int(capsys.readouterr().out) >= 1
+    script = (ROOT / "infra/load-pipeline/load.sh").read_text()
+    assert "--lanes-at-once" in script and 'MaxConcurrency = $n' in script

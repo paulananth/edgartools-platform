@@ -919,6 +919,16 @@ def forced_at() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def lanes_at_once(steps: list[dict], cores: int | None = None) -> int:
+    """How many lanes the machine carries at once: its cores over the workers of the widest first step of a lane. The one budget:
+    a lane's size is its steps' `workers`, and the pipeline's state machine starts no more lanes than fit (the lanes queue)."""
+    heads = {}
+    for step in steps:
+        heads.setdefault(step["lane"], step)
+    widest = max((head["workers"] for head in heads.values()), default=1)
+    return max(1, (cores or os.cpu_count() or 1) // widest)
+
+
 def arguments(step: dict) -> list[str]:
     capture = ROOTS[step.get("capture_root", "captures")] / step["capture"]
     args = ["--source", step["source"], "--target", step["target"], "--capture", str(capture),
@@ -1496,6 +1506,8 @@ def main() -> int:
         parser.add_argument(f"--{flag}", action="store_true")
     parser.add_argument("--from", dest="start")
     parser.add_argument("--only")
+    parser.add_argument("--lanes-at-once", action="store_true",
+                        help="print how many lanes this machine carries at once (its cores over the widest first step's workers)")
     parser.add_argument("--force", action="store_true",
                         help="force publish: every load of this run ignores the Change Journal and processes every document of its source again")
     parser.add_argument("--lane")
@@ -1540,6 +1552,9 @@ def main() -> int:
     if args.lookups and (args.only or args.lane or not args.finish and (args.list or args.plan)):
         print("--lookups goes with --finish (or all the load jobs), never a partial run that does not reach the finish", file=sys.stderr)
         return 2
+    if args.lanes_at_once:
+        print(lanes_at_once(steps))
+        return 0
     if args.list:
         for step in steps:
             print(f"{step['lane']} p{step.get('priority', 3)} {step['name']:30} {step['source']} {step['target']} {step['capture']}")

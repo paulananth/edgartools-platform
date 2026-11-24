@@ -174,7 +174,7 @@ def test_without_steps_the_state_machine_runs_every_lane_at_once_and_a_failed_la
     assert states["Mode"]["Choices"] == [{"Variable": "$.steps", "IsPresent": True, "Next": "Begin"}]
     assert states["Mode"]["Default"] == "Lanes" and states["Lanes"]["Parameters"] == {"action": "lanes", "plan.$": "$.plan", "force.$": "$.force"}
     run = states["Run lanes"]
-    assert run["Type"] == "Map" and run["ItemsPath"] == "$.lanes.names" and run["MaxConcurrency"] == 0
+    assert run["Type"] == "Map" and run["ItemsPath"] == "$.lanes.names" and run["MaxConcurrency"] == 1
     lane = run["Iterator"]["States"]["Lane"]
     assert lane["Parameters"] == {"action": "lane", "lane.$": "$.lane", "plan.$": "$.plan", "force.$": "$.force"} and "Retry" not in lane
     assert lane["Catch"] == [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "Lane failed"}]

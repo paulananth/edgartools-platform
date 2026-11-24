@@ -57,7 +57,7 @@
     "Run lanes": {
       "Type": "Map",
       "ItemsPath": "$.lanes.names",
-      "MaxConcurrency": 0,
+      "MaxConcurrency": 1,
       "Parameters": {
         "lane.$": "$$.Map.Item.Value",
         "plan.$": "$.plan",
