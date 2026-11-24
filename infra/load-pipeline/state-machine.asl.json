@@ -1,0 +1,40 @@
+{
+  "Comment": "A load: readiness, then each step of the input's list in order, each run by the loader image's worker; the first step that fails ends the load, so no step runs after it. The chain file keeps the steps' order and dependencies; the input names which to run. Input: {\"steps\": [<name>, ...], \"plan\": false}.",
+  "StartAt": "Readiness",
+  "States": {
+    "Readiness": {
+      "Type": "Task",
+      "Resource": "${activity}",
+      "Parameters": {"action": "readiness"},
+      "HeartbeatSeconds": 300,
+      "TimeoutSeconds": 1800,
+      "ResultPath": null,
+      "Next": "Start"
+    },
+    "Start": {
+      "Type": "Pass",
+      "Parameters": {"steps.$": "$.steps", "plan.$": "$.plan", "count.$": "States.ArrayLength($.steps)", "next": 0},
+      "Next": "More"
+    },
+    "More": {
+      "Type": "Choice",
+      "Choices": [{"Variable": "$.next", "NumericLessThanPath": "$.count", "Next": "Step"}],
+      "Default": "Done"
+    },
+    "Step": {
+      "Type": "Task",
+      "Resource": "${activity}",
+      "Parameters": {"action": "step", "step.$": "States.ArrayGetItem($.steps, $.next)", "plan.$": "$.plan"},
+      "HeartbeatSeconds": 300,
+      "TimeoutSeconds": 172800,
+      "ResultPath": null,
+      "Next": "Advance"
+    },
+    "Advance": {
+      "Type": "Pass",
+      "Parameters": {"steps.$": "$.steps", "plan.$": "$.plan", "count.$": "$.count", "next.$": "States.MathAdd($.next, 1)"},
+      "Next": "More"
+    },
+    "Done": {"Type": "Succeed"}
+  }
+}

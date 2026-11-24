@@ -1,0 +1,24 @@
+# The loader: runs a load's tasks (readiness, then chain steps) from a commit that passed CI on main.
+# Built only by .github/workflows/loader-image.yml, on the warehouse dependency image, which compiles the engine.
+ARG DEPENDENCY_IMAGE
+FROM ${DEPENDENCY_IMAGE}
+
+ARG COMMIT
+RUN test -n "${COMMIT}" \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends procps \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY edgar_warehouse /app/edgar_warehouse
+COPY rules /app/rules
+COPY sources /app/sources
+COPY skills /app/skills
+
+# The commit the image was built from, which readiness and the gate read in place of git.
+RUN echo "${COMMIT}" > /app/COMMIT \
+    && printf '#!/bin/sh\nexec python -m edgar_warehouse "$@"\n' > /usr/local/bin/edgar-warehouse \
+    && chmod +x /usr/local/bin/edgar-warehouse
+ENV PYTHONPATH=/app EDGAR_WAREHOUSE=/usr/local/bin/edgar-warehouse
+
+ENTRYPOINT ["python", "/app/skills/data-operations/scripts/activity_worker.py"]
