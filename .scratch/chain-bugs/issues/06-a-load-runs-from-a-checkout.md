@@ -120,6 +120,14 @@ no account). For the image, "GitHub Container Registry (Recommended)".
   `AttributeError: module 'load_chain' has no attribute 'wait_problems'`, then passes. The real 8-step run is refused
   ("adv-custodians-03 needs gleif: not done, and not before it in this run"); with `gleif` first it passes; the chain file
   has no problem. On Step Functions Local a refused begin ends the execution before any step, 2026-11-23 21:24 ET
+- [x] Review of the wait check (Standards, Spec, GoF): fixed a killed lane leaving its waiters (the worker records its
+  steps not done: `test_a_lane_that_ends_without_success_has_its_unfinished_steps_recorded` failed with
+  `assert [['--lane', 'A']] == [...]`), a step done by an earlier load satisfying a step while this load runs it again
+  (`test_a_step_this_load_runs_is_done_only_once_this_load_finishes_it` failed with `TypeError: begin_load() takes 1
+  positional argument`), the whole chain in file order checked like named steps; the lanes check derived from the one
+  rule of what a step follows (`needs`), and the test that copied the scheduler now calls the check. Rejected: lane runs
+  outside the pipeline (a checkout refuses them, the pipeline runs every lane); a store lease for two loads of one source
+  and target (no such pair in the chain file); another store's state file (set aside by design, a rerun skips), 2026-11-23 21:28 ET
 - [ ] Run `adv-custodians-03` and `adv-custodians-06` after `gleif`: `nport-registrant`, `nport-fund`,
   `adv-mastering-03`, `adv-mastering-06`, `adv-silver-03`, `adv-silver-06`, `adv-custodians-03`, `adv-custodians-06`
 - [ ] `gleif`: a read-only check of how many of its documents the Change Journal calls new; load it only at 0

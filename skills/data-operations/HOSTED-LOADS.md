@@ -34,7 +34,8 @@ CODE read it in place of git, and ENGINE does not apply (the image compiles its 
 - **A load never waits on what cannot come.** Before the first step, `load_chain.py --begin` refuses the load when a
   step waits on a step that does not exist, on lanes that cannot finish, or, for named steps, on a step neither done
   nor earlier in the run (name it first). A plan runs the same check. While running, a needed step that failed, or a
-  lane that stopped or broke, stops what waits on it at once.
+  lane that stopped, broke or was killed, stops what waits on it at once. A step this load runs is done only once this
+  load finishes it; one it does not run counts as done by an earlier load.
 - **A failure stops only what depends on it.** A step that fails stops its lane and records the lane's later steps as not
   started; a step of another lane that needs one of them stops at once, never waiting on work that cannot come. The other
   lanes go on, and the execution fails at the end, with no finish. Fix, merge, and start again: done steps cost one call each.

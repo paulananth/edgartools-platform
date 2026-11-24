@@ -56,7 +56,7 @@ def run_task(client, token: str, task: dict, start=subprocess.Popen, every: floa
     if task.get("action") == "lanes":  # read from the chain file in this image: the state machine names no lane
         code = start(begin_command(task)).wait()
         if code:
-            client.send_task_failure(taskToken=token, error=f"Exit{code}", cause="a wait could never end: read the worker's log")
+            client.send_task_failure(taskToken=token, error=f"Exit{code}", cause="load_chain.py --begin refused or failed: read the worker's log")
         else:
             client.send_task_success(taskToken=token, output=json.dumps({"lanes": lanes()}))
         return code
@@ -76,6 +76,8 @@ def run_task(client, token: str, task: dict, start=subprocess.Popen, every: floa
             except client.exceptions.TaskTimedOut:  # the execution gave up on this task: stop the work it no longer waits for
                 process.terminate()
                 return process.wait()
+    if code and task.get("action") == "lane" and not task.get("plan"):  # ended without its notes, perhaps: record them
+        start([sys.executable, str(HERE / "load_chain.py"), "--lane", task["lane"], "--mark-stopped"]).wait()
     if code == 0:
         client.send_task_success(taskToken=token, output=json.dumps({"exit": 0, **task}))
     else:

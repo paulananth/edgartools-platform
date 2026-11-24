@@ -238,3 +238,12 @@ def test_named_steps_are_checked_in_their_order_before_the_first_runs_and_a_refu
     begin = states["Begin"]
     assert begin["Parameters"] == {"action": "begin", "steps.$": "$.steps", "plan.$": "$.plan"} and begin["Next"] == "Start"
     assert "Catch" not in begin and "Retry" not in begin  # a refusal ends the execution before any step
+
+
+def test_a_lane_that_ends_without_success_has_its_unfinished_steps_recorded():
+    started = []
+    codes = iter([Process(-9), Process(0)])
+    client = Client([{"action": "lane", "lane": "A"}])
+    activity_worker.work(client, "arn", lambda argv: started.append(argv[2:]) or next(codes), tasks=1)
+    assert started == [["--lane", "A"], ["--lane", "A", "--mark-stopped"]]
+    assert client.reports == [("failure", "t0", "Exit-9")]
