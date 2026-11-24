@@ -80,7 +80,15 @@ no account). For the image, "GitHub Container Registry (Recommended)".
   session's attribution), the token on pull requests (a fork's token is read-only), typed times (stamped by the script),
   a pinned digest (a rebuild of one commit is that commit's code), 2026-11-23 20:05 ET
 - [ ] PR, merge on green
-- [ ] Live check: the image is published for the merged commit, and an execution on the emulator passes readiness
+- [x] Live check: the image for main's commit pulled with no login (the package is public); the first execution found two
+  faults only a live run shows, each fixed with a test that failed first. `load.sh` set the worker's activity only after the
+  emulator's `compose up`, which reads every service's variables
+  (`test_every_variable_the_compose_file_requires_is_set_before_load_sh_first_runs_compose` failed with
+  `AssertionError: ['ACTIVITY_ARN']`). The worker's endpoint variable was named for "stepfunctions", but boto3 reads
+  `AWS_ENDPOINT_URL_SFN`, so the worker called real AWS with the placeholder login and was refused
+  (`test_the_worker_s_client_points_at_the_emulator_the_compose_file_names` failed with
+  `assert 'https://stat...amazonaws.com' == 'http://localhost:8083'`). With both fixed, an execution in the image passed all
+  13 readiness checks and planned `nport-registrant` (1 document, 1 bundle, no open runs): `SUCCEEDED` in about a minute, 2026-11-23 20:42 ET
 - [ ] Rerun the 8 steps left after `company` through the pipeline: `nport-registrant`, `nport-fund`,
   `adv-mastering-03`, `adv-mastering-06`, `adv-silver-03`, `adv-silver-06`, `adv-custodians-03`, `adv-custodians-06`
 - [ ] `gleif`: a read-only check of how many of its documents the Change Journal calls new; load it only at 0
