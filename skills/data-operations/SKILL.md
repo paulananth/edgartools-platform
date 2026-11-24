@@ -19,18 +19,17 @@ cause by the [five whys](../data-platform/ROOT-CAUSE.md) before acting or report
 
 ## Publish a step's status to the catalog
 
-The catalog describes the load; it never starts, resumes or decides one (the
-[openmetadata skill's pipeline execution boundary](../openmetadata/SKILL.md#pipeline-execution-boundary)). After a step is done,
-`load_jobs.py` publishes its latest Bookkeeping run as the target Pipeline's status (`rules catalog status --bookkeeping-run`)
-when the catalog's address and token are in its private file (`OPENMETADATA_ENV_FILE`, else
-`~/.config/edgartools/openmetadata.env`, else the checkout's `.env`); `--catalog-status` does it for every step already done.
-A status that cannot be published (no catalog configured, the endpoint down, the Pipeline not published yet) is a note in the
-run's state file, never a failed load. Report it with the step: published, or not and why. Initializing the catalog's
-credentials is the openmetadata skill's, never done in a load.
+The catalog describes the load; it takes no part in one (the
+[openmetadata skill's pipeline execution boundary](../openmetadata/SKILL.md#pipeline-execution-boundary)). A load neither reads
+nor writes it: readiness has no catalog check and a finished step publishes nothing. The catalog's server need not run. After
+a load, `load_jobs.py --catalog-status` publishes each done step's latest Bookkeeping run as the target Pipeline's status
+(`rules catalog status --bookkeeping-run`), when the catalog's address and token are in its private file (`OPENMETADATA_ENV_FILE`,
+else `~/.config/edgartools/openmetadata.env`, else the checkout's `.env`). A status that cannot be published is a note in the run's
+state file. Initializing the catalog's credentials is the openmetadata skill's.
 
 After a reset the catalog still says "Successful" for each step from before: history, which each step's new run supersedes. Read a status
 with its run's time, never delete the old ones without the operator's word, and bring the catalog's text up to the rules once the stores
-are initialized, before the load (the init runbook's catalog step, `docs/runbooks/edgar-intelligence/init.md`, owns the commands).
+are initialized, on its own (the init runbook's catalog step, `docs/runbooks/edgar-intelligence/init.md`, owns the commands).
 
 ## Report a running load from its evidence
 

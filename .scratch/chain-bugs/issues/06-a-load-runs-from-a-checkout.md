@@ -186,4 +186,8 @@ no account). For the image, "GitHub Container Registry (Recommended)".
   `assert (0 == 1)` (no such mount), 2026-11-24 11:28 ET
 - [ ] The engine's message: a missing artifact is reported as a corrupt control document (`Artifacts.json` wraps the missing-file
   error); name it a missing artifact
+- [x] OpenMetadata decoupled from loads (operator, 2026-11-24: "Decouple open metadata from loads"): the CATALOG readiness check is gone
+  (a stopped or drifted catalog twice held a load for an hour, and the stack's memory starved the Docker engine), and a finished step no
+  longer publishes its status (`--catalog-status` does it after a load). `test_a_state_file_that_will_be_set_aside_is_shown_and_a_catalog_that_drifted_or_is_down_never_closes_the_gate`
+  failed first with `KeyError: 'catalog'` on the old gate, 2026-11-24 13:07 ET
 - [x] Learning → skill: data-operations and data-onboarding point at `sources/<source>/inputs.yaml` for a source's deliveries, 2026-11-23 22:03 ET

@@ -117,13 +117,13 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    ```
    Done when `doctor` prints `"ok": true` under `worker.env` (it checks MDM, Rules, Bookkeeping and the Change Journal; steps
    4 and 6 prove RDM and Silver) and `load --plan` reads a capture.
-8. **Catalog.** A catalog (the [openmetadata skill](../../../skills/openmetadata/SKILL.md)) describes the rules, so a reset of the stores
+8. **Catalog (its own step, no gate of a load).** A catalog (the [openmetadata skill](../../../skills/openmetadata/SKILL.md)) describes the rules, so a reset of the stores
    changes none of it, but its text may have moved since it was last published. With the catalog's private file sourced:
    `edgar-warehouse rules catalog --root rules publish`, then `... check`. Done when `check` prints `confirmed` with no differences.
    The statuses it already holds for the steps are the previous load's history; the new load's statuses supersede them (see
    [data-operations](../../../skills/data-operations/SKILL.md#publish-a-steps-status-to-the-catalog)).
 
-9. **Ready.** `python <data-operations skill>/scripts/readiness.py` reads the infrastructure and writes `readiness.json` only when every check passes (code with green CI, engine built from this source, `doctor`, guards, reference data, captures, quiet instance, room, audit, each duty file's login, the run's state file, the catalog). Done when it prints `READY` (thirteen checks, the last `REGISTERED`: the merge policy, the Dataset Contracts and every worker profile). The gate is not this runbook: say which steps ran and which did not before a load starts. A load does not start without it, and any reset of the databases or new commit closes it again.
+9. **Ready.** `python <data-operations skill>/scripts/readiness.py` reads the infrastructure and writes `readiness.json` only when every check passes (code with green CI, engine built from this source, `doctor`, guards, reference data, captures, quiet instance, room, audit, each duty file's login, the run's state file). Done when it prints `READY` (twelve checks, the last `REGISTERED`: the merge policy, the Dataset Contracts and every worker profile). The gate is not this runbook: say which steps ran and which did not before a load starts. A load does not start without it, and any reset of the databases or new commit closes it again.
 
 A missing grant or login that a command names is a gap to fix through the central connection section, not to work around.
 

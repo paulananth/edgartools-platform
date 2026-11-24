@@ -57,7 +57,7 @@ def facts(**changes):
             "doctor": True, "loader": {"limit": 300, "settings": {"work_mem": "64MB", "statement_timeout": "4h", "idle_in_transaction_session_timeout": "10min"}},
             "reference": {"codes": 7000, "specs": 20, "silver_tables": 20}, "plan_missing": 0, "loads_running": 0, "loader_sessions": 0,
             "disk_gib": 500, "load1": 1.0, "cores": 8, "audit": [],
-            "logins": {"worker.env": "answers", "reader.env": "answers"}, "state": {"verdict": "fresh", "done_steps": 0}, "catalog": "confirmed",
+            "logins": {"worker.env": "answers", "reader.env": "answers"}, "state": {"verdict": "fresh", "done_steps": 0},
             "registered": {"policies": 1, "datasets": 18, "profiles": 10, "profiles_granted": 10}}
     base.update(changes)
     return base
@@ -151,15 +151,14 @@ def test_the_audit_runs_with_the_readers_login_so_it_can_read_the_database(monke
     {"logins": {}},
     {"state": None},
     {"state": {"verdict": "adopted", "done_steps": 59}},
-    {"catalog": "drift"},
-    {"catalog": "unreadable"},
 ])
-def test_a_login_that_fails_a_state_file_unread_or_a_catalog_that_drifted_closes_the_gate(change):
-    assert {"LOGINS", "STATE", "CATALOG"} & failed(facts(**change))
+def test_a_login_that_fails_or_a_state_file_unread_closes_the_gate(change):
+    assert {"LOGINS", "STATE"} & failed(facts(**change))
 
 
-def test_no_catalog_configured_is_not_a_failure_and_a_state_file_that_will_be_set_aside_is_shown():
-    assert failed(facts(catalog="not configured", state={"verdict": "set aside", "done_steps": 59})) == set()
+def test_a_state_file_that_will_be_set_aside_is_shown_and_a_catalog_that_drifted_or_is_down_never_closes_the_gate():
+    assert failed(facts(state={"verdict": "set aside", "done_steps": 59})) == set()
+    assert failed(facts(catalog="drift")) == set() and "CATALOG" not in readiness.CHECKS
 
 
 def results(**failing):

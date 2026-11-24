@@ -3,7 +3,7 @@
 Read before starting or resuming a load on the hosted instance. Each item is a cause met on a real load and its rule.
 
 ## The gate: nothing loads until the infrastructure is ready and tested
-`scripts/readiness.py` reads thirteen facts and writes `readiness.json` in the stores folder only on a full pass; `load_jobs.py`
+`scripts/readiness.py` reads twelve facts and writes `readiness.json` in the stores folder only on a full pass; `load_jobs.py`
 refuses to start, resume or finish a load without it (the read-only `--plan`, `--list`, `--status` and `--catalog-status` still
 run). A pass belongs to one store generation (a reset of the databases closes the gate), one commit (any new commit closes it)
 and one day. Each check reads only what it asks (a capture is its folder's receipts file), never a plan of
@@ -12,7 +12,7 @@ alone); the compiled engine was built from this checkout's source (`readiness.py
 and timeouts; RDM holds its codes and silver a table per spec; every step has a capture; no load runs and the loader has no
 session; disk and load average have room; the access audit of the database has no failing control; every duty file's login connects to the databases of its duty (names only, a
 driver's text is never kept); the run's state file is this store's, or is shown as one that will be set aside, with its count of done
-steps; the catalog, when one is configured, matches the rules; and the merge policy, every Dataset Contract and every worker profile are registered and granted (init steps 5 to 7). The gate is not the init runbook: after a reset, walk every runbook step,
+steps; and the merge policy, every Dataset Contract and every worker profile are registered and granted (init steps 5 to 7). The gate is not the init runbook: after a reset, walk every runbook step,
 say in the report which ran and which did not, and never write a step off without reading why (a catalog step was once called
 unconfigured when its file existed). A fact that cannot be
 read is a failure. Fix what it names and run it again; there is no switch to skip it. A rehearsal of the first lane on a
@@ -40,11 +40,9 @@ CODE read it in place of git, and ENGINE does not apply (the image compiles its 
 - **A failure stops only what depends on it.** A step that fails stops its lane and records the lane's later steps as not
   started; a step of another lane that needs one of them stops at once, never waiting on work that cannot come. The other
   lanes go on, and the execution fails at the end, with no finish. Fix, merge, and start again: done steps cost one call each.
-- **A catalog that has moved fails readiness, so publish it first.** The CATALOG check compares the catalog's text with the
-  `rules/` folder of the image's commit; any change under `rules/` (a file renamed, a rule edited) makes it `partial`, and
-  the first task stops with `NOT READY`. Before `load.sh`, with the catalog's private file sourced: `edgar-warehouse rules
-  catalog --root rules publish`, then `check` until it says `confirmed` (the init runbook's catalog step). A source's
-  `inputs.yaml` is no rules version, so adding a delivery needs none.
+- **The catalog takes no part in a load.** Readiness has no catalog check, a finished step publishes nothing to it, and its server
+  (OpenMetadata) stays stopped during a load: it holds memory the lanes need. Publish its text after a change under `rules/` and its
+  step statuses after the load (`--catalog-status`), each on its own.
 - **Force publish is a whole-run act with one time.** `load.sh --force` (never with `--plan`) gives every load job of the run
   `--force`, and the engine names a forced run by its time: `load_jobs.py` takes that time once, so an attempt stopped at its
   `minutes` bound carries on in the same run instead of starting another. Use a new `RUN`, say the estimate against the 2-hour window before

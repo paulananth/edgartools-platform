@@ -1037,20 +1037,11 @@ def test_the_catalogs_answer_is_read_as_published_or_not_with_its_cause_and_neve
     assert chain.catalog_outcome(confirmed + "\n}") == "confirmed as Successful"  # a stray brace after the answer
 
 
-def test_a_steps_catalog_status_is_published_after_it_finishes_and_a_failure_never_fails_the_step(monkeypatch, tmp_path):
-    asked = []
-    monkeypatch.setattr(chain, "publish_catalog_status", lambda step: asked.append(step["name"]) or "published to svc.t")
-    steps = [_step("a1", "A")]
-    state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=10)
-    log = tmp_path / "log"
-    log.write_text(STEP_LOG)
-    notes = []
-    monkeypatch.setattr(chain, "note", lambda message, path: notes.append(message))
-    chain.after_done(steps[0], state)
-    assert asked == ["a1"] and any("catalog status" in n and "published to svc.t" in n for n in notes)
-    monkeypatch.setattr(chain, "publish_catalog_status", lambda step: (_ for _ in ()).throw(RuntimeError("boom")))
-    chain.after_done(steps[0], state)  # raises nothing: the load is done whatever the catalog says
-    assert any("not published" in n for n in notes)
+def test_a_finished_step_never_calls_the_catalog_and_a_catch_up_is_its_own_command():
+    """The catalog describes a load and takes no part in it: the step loop names no catalog, and `--catalog-status` publishes later."""
+    import inspect
+    assert "catalog" not in inspect.getsource(chain.attempt_loop).lower() and not hasattr(chain, "after_done")
+    assert "--catalog-status" in inspect.getsource(chain.main)
 
 
 def test_a_catch_up_publishes_the_status_of_every_step_already_done_from_its_own_log(monkeypatch, tmp_path):
