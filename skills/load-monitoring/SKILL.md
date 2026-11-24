@@ -40,6 +40,11 @@ checkout is deleted (`load_monitor_up 0`): stop it, never repair it, and let the
 A container runtime that stops answering blinds the exporter and freezes the load behind it: test the runtime first (a bounded
 `docker version`), and restart it before looking at anything else (HOSTED-LOADS, "The shortest time to load everything").
 
+The monitor shows the lane budget beside the lanes and workers running (`load_lane_budget`, `load_worker_budget`, `load_lanes_running`,
+`load_workers_running`): the budget is data-operations' `lane_budget`, the number `load.sh` applied, and its `limit` label names what sets it
+(memory or vcpu). Lanes running below the budget while lanes wait is a defect to explain; lanes at the budget with CPU idle means the limit
+is memory, not a setting.
+
 A watcher reads the log of the run label it watches, never "the newest log": the newest one replays an old run's events as if they
 were new. After the runtime restarts, an execution it held no longer exists (`ExecutionDoesNotExist`): that is the restart, not a
 failed load; read the new execution and the run's state file.

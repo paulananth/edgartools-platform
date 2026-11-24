@@ -51,9 +51,12 @@ CODE read it in place of git, and ENGINE does not apply (the image compiles its 
 - **Read a load in the container, not on the host.** The load runs in the worker, so a host `ps` shows nothing of it: use
   `docker exec <worker> ps`, the worker's `/proc/<pid>/io` (bytes read and written between two readings show a step that
   works while its log is still empty), and the run's state file. The step's own log fills only when an attempt ends.
-- **One budget: vCPUs over workers, in no platform's terms.** A job's size is its `workers` (the load jobs file) and how many lanes
-  run at once is the compute's vCPUs (`--capacity`: `local`, this machine, or a profile of the file such as `aws-large`) over the
-  widest first job of a lane (`load_jobs.py --lanes-at-once`). The number lives in the loader; whatever starts the lanes only
+- **One budget: the workers a compute carries over a job's workers, in no platform's terms.** A job's size is its `workers` (the load
+  jobs file) and how many lanes run at once is the workers the compute carries (`--capacity`: `local`, this machine, or a profile of the
+  file such as `aws-large`; its memory in worker-sized shares, at most four to a vCPU, the range a job's workers follow) over the
+  widest first job of a lane (`load_jobs.py --lanes-at-once`; `lane_budget` adds what limits it, memory or vcpu, for the load monitor,
+  which shows lanes and workers running against the same numbers). If lanes wait while CPU idles, memory is the limit: more lanes need
+  more of it (a larger container-runtime ceiling or compute), never a larger number in the state machine. The number lives in the loader; whatever starts the lanes only
   applies it: `load.sh` sets it as the state machine's lanes `MaxConcurrency` (`CAPACITY=<profile>` for another compute), the
   local scheduler (`--auto`) uses the same capacity, and the rest of the lanes queue. Two knobs for one limit is waste, and the state machine takes
   no computed value (`MaxConcurrencyPath` is refused by the emulator), while a lane queued in the worker times out on its
@@ -67,8 +70,8 @@ CODE read it in place of git, and ENGINE does not apply (the image compiles its 
 
 ## The shortest time to load everything
 The goal is every document loaded in the least wall-clock time. Each rule below removed a wait or a restart.
-- **The longest chain of steps sets the time, so every lane starts at once.** The lane count is the compute's vCPUs over the widest
-  first step's workers: more lanes than that were killed by memory and cost a rerun.
+- **The longest chain of steps sets the time, so every lane starts at once.** The lane count is the workers the compute carries over the
+  widest first step's workers: more lanes than that were killed by memory and cost a rerun.
 - **Nothing runs beside a load that it does not need.** The catalog (OpenMetadata) takes no part in a load: no readiness check, no
   per-step publish, and its stack stays stopped, because its memory starves the container runtime. A plan or smoke run before a
   load repeats readiness and is skipped.

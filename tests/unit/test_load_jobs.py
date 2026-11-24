@@ -1770,13 +1770,17 @@ def test_a_forced_load_is_a_new_publication_with_a_revision_above_the_one_the_fi
     assert args.count("--revision") == 1 and args[args.index("--revision") + 1] == "20261124121919"
 
 
-@pytest.mark.parametrize("capacity, widest, expected", [("local", 2, None), ("aws-large", 2, 1), ("aws-medium", 4, 1), ("aws-small", 1, 1)])
-def test_a_compute_carries_its_vcpus_over_the_widest_first_step_lanes_at_once(monkeypatch, capacity, widest, expected):
+@pytest.mark.parametrize("capacity, widest, carried, lanes, limit", [("local", 2, 8, 4, "memory"), ("aws-large", 2, 8, 4, "vcpu"),
+                                                                     ("aws-medium", 4, 4, 1, "vcpu"), ("aws-small", 1, 2, 1, "memory")])
+def test_a_compute_carries_the_workers_a_step_is_sized_by_over_the_widest_first_step_lanes_at_once(monkeypatch, capacity, widest, carried, lanes, limit):
     monkeypatch.setattr(chain.os, "cpu_count", lambda: 8)
+    monkeypatch.setattr(chain, "physical_gb", lambda: 8.0)  # `local` carries half of it: 4 GB, so 8 workers of half a gigabyte
     steps = [{"name": "a1", "lane": "A", "workers": 2}, {"name": "a2", "lane": "A", "workers": 8},
              {"name": "b1", "lane": "B", "workers": widest}, {"name": "c1", "lane": "C", "workers": 1}]
-    # `local` is this machine (8 cores, so 8 // widest 2 = 4); a profile of the file is its own vCPUs; a later step of a lane (a2) never counts
-    assert chain.lanes_at_once(steps, capacity) == (4 if capacity == "local" else expected)
+    # the workers a compute carries are its memory in worker-sized shares, at most four to a vCPU (the range a step's workers follow);
+    # a later step of a lane (a2) never counts: the widest first step is 2 (or 4 for aws-medium's b1), so lanes = carried // widest
+    assert chain.lane_budget(steps, capacity) == {"lanes": lanes, "workers": carried, "limit": limit}
+    assert chain.lanes_at_once(steps, capacity) == lanes
 
 
 def test_lanes_at_once_is_read_from_the_real_load_jobs_and_load_sh_sets_it_in_the_definition(capsys, monkeypatch):

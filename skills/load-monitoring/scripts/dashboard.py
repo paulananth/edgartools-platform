@@ -18,7 +18,7 @@ def target(expr: str, ref: str = "A", legend: str = "", fmt: str = "time_series"
 def stat(title: str, description: str, expr: str, x: int, thresholds: dict, unit: str = "none", decimals: int = 0,
          graph: str = "area") -> dict:
     return {"type": "stat", "title": title, "description": description, "datasource": SOURCE,
-            "gridPos": {"h": 4, "w": 4, "x": x, "y": 0}, "targets": [target(expr)],
+            "gridPos": {"h": 4, "w": 3, "x": x, "y": 0}, "targets": [target(expr)],
             "fieldConfig": {"defaults": {"thresholds": thresholds, "color": {"mode": "thresholds"}, "unit": unit,
                                          "decimals": decimals, "mappings": []}, "overrides": []},
             "options": {"colorMode": "background", "graphMode": graph, "textMode": "value", "justifyMode": "center",
@@ -32,16 +32,22 @@ def header() -> list[dict]:
         stat("Done", "Steps finished. The number ticks up when a step's block turns blue on the lanes below.",
              'load_steps{state="done"}', 0, steps((None, d.NEUTRAL), (1, d.BLUE))),
         stat("Running", "Steps with a process now: progressing, stalled or locked.",
-             'sum(load_steps{state=~"progressing|stalled|locked"})', 4, steps((None, d.NEUTRAL), (1, d.GREEN))),
+             'sum(load_steps{state=~"progressing|stalled|locked"})', 3, steps((None, d.NEUTRAL), (1, d.GREEN))),
         stat("Failed", "Steps the scheduler gave up on. Any is red: a retry cannot change a repeated failure.",
-             'load_steps{state="failed"}', 8, zero_green(d.RED), graph="none"),
+             'load_steps{state="failed"}', 6, zero_green(d.RED), graph="none"),
         stat("Stalled or locked", "Running steps with no sign of work, or waiting on database locks. Orange from one.",
-             'sum(load_steps{state=~"stalled|locked"})', 12, zero_green(d.ORANGE), graph="none"),
+             'sum(load_steps{state=~"stalled|locked"})', 9, zero_green(d.ORANGE), graph="none"),
         stat("Lock waiters", "Sessions waiting on database locks: one is normal (amber), three is the scheduler's limit (red).",
-             "load_lock_waiters", 16, steps((None, d.GREEN), (d.LOCK_WAITERS[0], d.AMBER), (d.LOCK_WAITERS[1], d.RED)), graph="none"),
+             "load_lock_waiters", 12, steps((None, d.GREEN), (d.LOCK_WAITERS[0], d.AMBER), (d.LOCK_WAITERS[1], d.RED)), graph="none"),
         stat("Memory free", "Share of memory free. Short under a quarter (orange), pressed under a tenth (red): the controller holds lanes back.",
-             "load_machine_memory_free_ratio", 20,
+             "load_machine_memory_free_ratio", 15,
              steps((None, d.RED), (d.MEMORY_FREE[0], d.ORANGE), (d.MEMORY_FREE[1], d.GREEN)), unit="percentunit"),
+        stat("Lanes running", "Lanes with a step running now. It should sit at the lane budget beside it while lanes wait: a lower number "
+             "with lanes waiting means the budget is not being used.",
+             "count(count by (lane) (load_step_workers)) or vector(0)", 18, steps((None, d.NEUTRAL), (1, d.GREEN))),
+        stat("Lane budget", "The lanes the compute carries at once, from the workers it carries over the widest first step of a lane "
+             "(data-operations `lane_budget`). Its legend names the limit: memory or vcpu. More lanes need more of that limit.",
+             "load_lane_budget", 21, steps((None, d.NEUTRAL)), graph="none"),
     ]
 
 
