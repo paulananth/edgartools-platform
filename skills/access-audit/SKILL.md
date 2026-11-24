@@ -218,4 +218,4 @@ is absent or outside its recorded window, resume is blocked pending valid eviden
 
 ## Handshake
 
-Its findings feed [data-operations](../data-operations/SKILL.md) readiness (AUDIT); fixes to a platform's access go to [aws-snowflake-operations](../aws-snowflake-operations/SKILL.md). The table of who owns what and hands off to whom is [OWNERSHIP.md](../OWNERSHIP.md).
+Its findings feed [data-operations](../data-operations/SKILL.md) readiness (AUDIT); fixes to a platform's access go to [aws-snowflake-operations](../aws-snowflake-operations/SKILL.md). The table of who owns what and hands off to whom is [OWNERSHIP.md](../data-platform/OWNERSHIP.md).

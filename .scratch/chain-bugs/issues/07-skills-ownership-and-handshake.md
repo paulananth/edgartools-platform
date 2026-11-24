@@ -28,7 +28,7 @@ work together an have handshake and regular touch point especially monitoring an
 ## Parts
 
 - [x] Read every skill's description and link the operations group's mentions of one another: 15 one-way mentions found, 2026-11-24 14:42 ET
-- [x] `skills/OWNERSHIP.md`: the contract table (29 skills), the SIPOC of a load, the regular touch points, the rules of the handshake, 2026-11-24 14:42 ET
+- [x] `skills/data-platform/OWNERSHIP.md` (inside a skill folder: an installed bundle copies skill folders only, and a link to a file outside one did not resolve): the contract table (29 skills), the SIPOC of a load, the regular touch points, the rules of the handshake, 2026-11-24 14:42 ET
 - [x] Failing test first: `tests/unit/test_skill_ownership.py` fails on a one-sided hand-off (`load-monitoring receives from data-operations, which does not
   hand off to it`) and passes with both sides written; it also holds one row per skill and that the four operations and monitoring skills touch, 2026-11-24 14:42 ET
 - [x] A Handshake section in each operations and monitoring skill (data-operations, load-monitoring, database-monitoring, production-support,

@@ -100,4 +100,4 @@ dependency lines need a custom panel plugin, which is a separate decision.
 
 ## Handshake
 
-Reads and shows; changes nothing. Tells [data-operations](../data-operations/SKILL.md) what stalls (the runtime first, then lanes against the budget), sends a lock or slow statement to [database-monitoring](../database-monitoring/SKILL.md) and an unexplained failure to [production-support](../production-support/SKILL.md). Its numbers come from data-operations' `lane_budget`; the two change together. The table of who owns what and hands off to whom is [OWNERSHIP.md](../OWNERSHIP.md).
+Reads and shows; changes nothing. Tells [data-operations](../data-operations/SKILL.md) what stalls (the runtime first, then lanes against the budget), sends a lock or slow statement to [database-monitoring](../database-monitoring/SKILL.md) and an unexplained failure to [production-support](../production-support/SKILL.md). Its numbers come from data-operations' `lane_budget`; the two change together. The table of who owns what and hands off to whom is [OWNERSHIP.md](../data-platform/OWNERSHIP.md).

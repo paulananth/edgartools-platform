@@ -10,11 +10,11 @@ COLUMNS = ["skill", "owns", "inputs", "outputs", "hands off to", "receives from"
 
 
 def table() -> dict[str, dict[str, str]]:
-    text = (SKILLS / "OWNERSHIP.md").read_text()
+    text = (SKILLS / "data-platform" / "OWNERSHIP.md").read_text()
     section = text.split("## The contract", 1)[1].split("\n## ", 1)[0]
     rows = {}
     for line in section.splitlines():
-        match = re.match(r"\| \[([a-z0-9-]+)\]\(([a-z0-9-]+)/SKILL\.md\) \|(.*)\|\s*$", line)
+        match = re.match(r"\| \[([a-z0-9-]+)\]\(\.\./([a-z0-9-]+)/SKILL\.md\) \|(.*)\|\s*$", line)
         if match:
             cells = [c.strip() for c in match.group(3).split("|")]
             assert match.group(1) == match.group(2) and len(cells) == len(COLUMNS) - 1, line[:80]

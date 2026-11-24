@@ -68,4 +68,4 @@ preflight is what keeps that true.
 
 ## Handshake
 
-Starts and stops the local catalog server for [openmetadata](../openmetadata/SKILL.md); the server stays stopped during a load, since a load never reads or writes the catalog. The table of who owns what and hands off to whom is [OWNERSHIP.md](../OWNERSHIP.md).
+Starts and stops the local catalog server for [openmetadata](../openmetadata/SKILL.md); the server stays stopped during a load, since a load never reads or writes the catalog. The table of who owns what and hands off to whom is [OWNERSHIP.md](../data-platform/OWNERSHIP.md).

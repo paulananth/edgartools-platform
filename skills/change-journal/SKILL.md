@@ -185,4 +185,4 @@ assignment exists without an explicit operator instruction.
 
 ## Handshake
 
-Owns the processed-files contract. [data-operations](../data-operations/SKILL.md) acts on its receipts and force publish; [production-support](../production-support/SKILL.md) reads its evidence. The table of who owns what and hands off to whom is [OWNERSHIP.md](../OWNERSHIP.md).
+Owns the processed-files contract. [data-operations](../data-operations/SKILL.md) acts on its receipts and force publish; [production-support](../production-support/SKILL.md) reads its evidence. The table of who owns what and hands off to whom is [OWNERSHIP.md](../data-platform/OWNERSHIP.md).
