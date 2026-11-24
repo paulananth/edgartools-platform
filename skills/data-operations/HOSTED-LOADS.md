@@ -26,7 +26,8 @@ CODE read it in place of git, and ENGINE does not apply (the image compiles its 
 - **Start:** `infra/load-pipeline/load.sh [--plan]` pulls the image of `main`'s newest commit (it refuses while that image
   is not built), starts AWS Step Functions Local and one worker from the image, runs readiness, then every lane of the load jobs
   file at once and the finish. `load.sh [--plan] [--finish] <step>...` runs only those steps, in order. It waits and exits 0
-  only on success. Try a new image with `--plan` first: read-only, seconds a step. `--force` (never with `--plan`) is force
+  only on success. A load runs no plan: its first state is readiness, which refuses a load that cannot start. `--plan` is for a
+  changed pipeline or a doubt about one step, never a standing step before a load (it repeats readiness). `--force` (never with `--plan`) is force
   publish for every load of the run; `LOAD_DEADLINE_HOURS` is the operator's window (default 2): a miss is reported once, never a stop.
 - **The load jobs file alone decides what runs.** The state machine names no lane and no step: its first task asks the loader for
   the lanes, and each lane runs its steps in order, each with the workers the load jobs file gives it, each holding until the
