@@ -176,3 +176,19 @@ def test_a_run_that_fails_only_because_a_load_runs_leaves_the_passing_record_for
         assert written is not None and written["passed"] is False
     assert readiness.next_record(None, results(QUIET=1), "g1", "abc", NOW)["passed"] is False
     assert readiness.next_record(previous, results(), "g1", "abc", NOW)["passed"] is True
+
+
+def test_a_step_has_a_capture_when_its_folder_holds_receipts_and_the_check_plans_no_load(monkeypatch, tmp_path):
+    """The check planned all 43 loads (174 s of a 201 s readiness pass) to learn whether each capture exists."""
+    import load_chain
+    from tests.support.patching import checked
+
+    (tmp_path / "here" / "c1").mkdir(parents=True)
+    (tmp_path / "here" / "c1" / "receipts.jsonl").write_text("")
+    (tmp_path / "here" / "c2").mkdir()  # a capture without its receipts cannot be loaded
+    steps = [{"name": "a", "capture": "c1"}, {"name": "b", "capture": "c2"}, {"name": "c", "capture": "c3"},
+             {"name": "d", "capture": "c1", "capture_root": "proving"}]
+    checked(monkeypatch, load_chain, "chain_steps", lambda *a, **k: steps)
+    monkeypatch.setattr(load_chain, "ROOTS", {"captures": tmp_path / "here", "proving": tmp_path / "there"})
+    checked(monkeypatch, readiness.subprocess, "run", lambda *a, **k: pytest.fail("a capture check runs no command"))
+    assert readiness.plan_missing({}) == 3

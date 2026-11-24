@@ -247,8 +247,13 @@ def loads_running() -> int:
 
 
 def plan_missing(env: dict) -> int:
-    done = subprocess.run([sys.executable, str(HERE / "load_chain.py"), "--plan"], capture_output=True, text=True, env=env, check=False, timeout=900)
-    return sum(1 for line in done.stdout.splitlines() if "no plan" in line) if done.returncode == 0 else 99
+    """The steps whose capture folder holds no receipts file, which a load reads first: a look at each folder, never a
+    plan of each load (that took most of a readiness pass)."""
+    sys.path.insert(0, str(HERE))
+    import load_chain
+
+    return sum(1 for step in load_chain.chain_steps()
+               if not (load_chain.ROOTS[step.get("capture_root", "captures")] / step["capture"] / "receipts.jsonl").is_file())
 
 
 def audit_failures(env: dict | None = None) -> list[str] | None:
