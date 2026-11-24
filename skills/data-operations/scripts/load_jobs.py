@@ -102,8 +102,8 @@ def resolve_input(step: dict, sources: Path) -> dict:
 def load_jobs(path: Path = ROOT / "rules/load-jobs.yaml", sources: Path = ROOT / "sources") -> list[dict]:
     """The load jobs, each with the file's `defaults` for what it does not say itself and its input's folder."""
     chain = yaml.safe_load(path.read_text())
-    steps = [resolve_input({**(chain.get("defaults") or {}), "capture_run": f"{chain['capture_label']}-{step['name']}", **step}, sources)
-             for step in chain["steps"]]
+    steps = [resolve_input({**(chain.get("defaults") or {}), "capture_run": f"{chain['capture_label']}-{step['name']}", "position": place, **step}, sources)
+             for place, step in enumerate(chain["steps"])]
     for step in steps:
         priority = step.get("priority", 3)
         if type(priority) is not int or priority not in (1, 2, 3):  # `true` and `2.0` are not tiers
@@ -954,8 +954,11 @@ def arguments(step: dict) -> list[str]:
         # The engine names a forced run `<run>+force-<its time>`: one time for every attempt, so an attempt that is stopped
         # at its bound carries on in the same run, as an unforced one does, instead of starting a run of its own.
         # A forced load is a new publication: the engine refuses the same revision with other content (the run name changed), so
-        # its revision is the forced time as digits (YYYYMMDDHHMMSS): above every delivery date and every earlier forced run.
-        args += ["--force", "--as-of", os.environ[FORCE], "--revision", re.sub(r"[^0-9]", "", os.environ[FORCE])]
+        # its revision is the forced time as digits (YYYYMMDDHHMMSS) and the job's place: above every delivery date and every earlier forced run.
+        # The engine refuses one revision with other content, and a source's jobs (its quarters) each publish their own: so each job's
+        # revision is the forced time's digits, then its place in the file in three digits (monotonic with the file's order).
+        args += ["--force", "--as-of", os.environ[FORCE],
+                 "--revision", re.sub(r"[^0-9]", "", os.environ[FORCE]) + f"{step.get('position', 0):03d}"]
     return args
 
 

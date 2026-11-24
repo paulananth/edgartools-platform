@@ -46,7 +46,8 @@ CODE read it in place of git, and ENGINE does not apply (the image compiles its 
   step statuses after the load (`--catalog-status`), each on its own.
 - **Force publish is a whole-run act with one time.** `load.sh --force` (never with `--plan`) gives every load job of the run
   `--force`, and the engine names a forced run by its time: `load_jobs.py` takes that time once, so an attempt stopped at its
-  `minutes` bound carries on in the same run instead of starting another. Use a new `RUN`, say the estimate against the 2-hour window before
+  `minutes` bound carries on in the same run instead of starting another. Each job publishes its own revision (the time's digits, then its
+  place in the file): a source's quarters carrying one revision stopped the second with "contradictory publications". Use a new `RUN`, say the estimate against the 2-hour window before
   starting.
 - **Read a load in the container, not on the host.** The load runs in the worker, so a host `ps` shows nothing of it: use
   `docker exec <worker> ps`, the worker's `/proc/<pid>/io` (bytes read and written between two readings show a step that
