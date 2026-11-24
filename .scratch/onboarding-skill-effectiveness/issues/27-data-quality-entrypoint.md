@@ -1,7 +1,7 @@
 # data-quality: Make the entrypoint executable
 
 Type: task
-Status: open
+Status: claimed
 Priority: P0
 Blocked by: 03, 09, 15, 26
 Labels: wayfinder:task
@@ -33,12 +33,26 @@ These blockers order skill-improvement work. They do not activate optional sourc
 
 ## Acceptance checklist
 
-- [ ] Produce an entrypoint that consumes profiling quality findings, mapped fields and the existing quality grammar and yields quality.yaml or table checks, measured failure counts and explicit row dispositions.
-- [ ] Verify referenced paths and supported commands; retain mandatory stops and discoverability of optional detail.
-- [ ] Walk one applicable example to its handoff without loading unrelated references or repeating another skill's procedure.
+- [x] Produce a concise entrypoint that consumes approved profiling findings and mapped fields and routes MDM checks versus silver table checks; verified in [Start here](../../../skills/data-quality/SKILL.md#start-here-route-a-quality-phase) (2026-11-24 07:52 ET).
+- [x] Verify referenced paths and supported commands; retain mandatory stops and discoverability of optional detail. `draft --help` and `measure --help` show the documented arguments; the guide-path and skill-size checks pass (2026-11-24 07:52 ET).
+- [x] Walk an invented code-list finding through `in_set@1`, measurement and the Data Onboarding handoff; documented in the answer. No source data or load was used (2026-11-24 07:52 ET).
 - [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md.
-- [ ] Learning → skill: name the verified reusable lesson and its owning skill section, or record none.
+- [x] Learning → skill: the entrypoint routes new versus live feed quality phases to their existing owner; recorded in Data Quality's [Start here](../../../skills/data-quality/SKILL.md#start-here-route-a-quality-phase) (2026-11-24 07:52 ET).
 
 ## Completion evidence
 
 Record the answer and artifact links under `## Answer` when resolved. Keep private values out of the public record. A not-applicable phase needs evidence and an explicit applicability disposition, not a false PASS. Do not mark this ticket resolved while a checklist item remains open.
+
+## Answer
+
+Data Quality now starts with a short route for new-feed MDM quality work, live-feed measurement, silver-spec checks, and read-only mastered-entity audits. The exact supported `draft` and `measure` command forms are in the entrypoint; detailed check, disposition, row-marking and publication rules remain in their existing sections. Hard stops remain required.
+
+Static walkthrough (invented): an approved new-feed `code_list` finding maps to a record field; `draft` proposes `in_set@1`, `quality.yaml`, `expected.yaml` and `QUALITY.md`; `measure` checks JSON Lines records and verifies a planted failing value. Data Quality applies the `decide` table and records any hierarchy row disposition; the resulting artifacts go to Data Onboarding. This is a document trace, not a source run or new test scenario.
+
+The [Data Quality skill](../../../skills/data-quality/SKILL.md#start-here-route-a-quality-phase) distinguishes MDM quality from silver checks, new-feed Data Onboarding from live-feed Refining Rules, and optional audits/catalog publication from the main path. Its installed copy differs; it was read for provenance and left unchanged.
+
+## Validation
+
+- `quality_plan.py --help`, `draft --help` and `measure --help` confirmed the referenced command names and options.
+- `tests/unit/test_profiling_genericity.py`, `tests/unit/test_guides_name_existing_paths.py`, and the Data Quality skill-size check: **158 passed**.
+- `git diff --check`: clean.

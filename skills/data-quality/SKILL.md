@@ -22,6 +22,27 @@ writes them once the operator decides. For an existing-data audit, it can also
 produce a read-only analysis of a mastered entity and its downstream fields;
 that analysis does not itself change quality configuration.
 
+## Start here: route a quality phase
+
+1. **Choose the owner.** With no approved `findings.yaml`, return to [Data Profiling](../data-profiling/SKILL.md). For a new feed, [Data Onboarding](../data-onboarding/SKILL.md) owns the quality step; for a live feed, [Refining Rules](../refining-rules/SKILL.md) owns change-quality. Existing mastered-entity audits use [Trace a mastered entity through downstream data](#trace-a-mastered-entity-through-downstream-data).
+2. **Read [Hard stops](#hard-stops).** New-feed planning needs approved findings and a Dataset Contract field map; live-feed measurement starts from its current `quality.yaml` and one pinned capture.
+   MDM checks/fixes use `quality.yaml`; silver checks belong in the contract/spec, written by the configuration owner. Stop if required evidence is missing or a check is unsupported; ticket new evaluator behavior.
+3. **Draft a new-feed MDM plan** with:
+   ```sh
+   uv run python <this skill's folder>/scripts/quality_plan.py draft \
+     --findings <folder>/findings.yaml --part <part> --map <map.yaml> \
+     --version <name>-quality-v1 --source-code <code> --out <folder>
+   ```
+   This proposes `quality.yaml`, `expected.yaml` and `QUALITY.md`; it does not approve or activate rules.
+4. **Measure.** Build JSON Lines records with `fields` and `matching` using [Data Onboarding](../data-onboarding/SKILL.md)'s test procedure for new feeds or [Refining Rules](../refining-rules/SKILL.md)' change-quality procedure on one pinned capture:
+   ```sh
+   uv run python <this skill's folder>/scripts/quality_plan.py measure \
+     --quality <folder>/quality.yaml --source-code <code> --records <records.jsonl> \
+     [--expected <folder>/expected.yaml]
+   ```
+   It reports fix/check counts, compares expected profiling counts when supplied, and fires one planted record per check. A mismatch or non-firing planted record is a stop, not a pass.
+5. **Decide and hand off.** Use the `decide` table for `on_fail`; ask only when it cannot settle the decision. Keep every invalid hierarchy row in `invalid_rows.jsonl` with an evidence-backed fix or `needs_steward`. Hand new-feed artifacts to [Data Onboarding](../data-onboarding/SKILL.md) or live-feed artifacts to [Refining Rules](../refining-rules/SKILL.md). [Data Catalog](../data-catalog/SKILL.md) owns business definitions and publication, which requires genuine execution evidence. Open [Existing master projections](#existing-master-projections), [Cross-store pointers](#cross-store-pointers) or [Publish quality meaning to the business catalog](#publish-quality-meaning-to-the-business-catalog) only for those cases.
+
 ## Decisions, artifacts and handoffs
 
 Data Quality translates measured defects and governed requirements into
@@ -208,12 +229,7 @@ column the items name to the record path a check reads (`fields.<name>`,
 Dataset Contract: the field each column fills, as its reading's `fields` and
 `matching` columns state it.
 
-```
-uv run python <this skill's folder>/scripts/quality_plan.py draft \
-  --findings <folder>/findings.yaml --part <part> --map <map.yaml> \
-  --version <name>-quality-v1 --source-code <code> --out <folder>
-```
-
+The exact `draft` command is in [Start here](#start-here-route-a-quality-phase); this section explains its inputs and outputs.
 It writes `quality.yaml` (checked by the engine's own `check_quality`),
 `expected.yaml` (profiling's count per check) and `QUALITY.md`:
 
@@ -239,11 +255,7 @@ Build the records the checks read, one JSON object per line with its
 - a live feed: as in refining-rules **change-quality**, "Build the records
   the checks read", on one pinned capture.
 
-```
-uv run python <this skill's folder>/scripts/quality_plan.py measure \
-  --quality <folder>/quality.yaml --source-code <code> --records <records.jsonl> \
-  [--expected <folder>/expected.yaml]
-```
+The exact `measure` command is in [Start here](#start-here-route-a-quality-phase); this section explains how to interpret its counts.
 
 It checks the file as the rules loader and registration do (and names the
 `exception` reasons the contract must list as non-blocking), prints how many
