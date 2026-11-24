@@ -23,15 +23,22 @@ A load runs in the loader image, never in a checkout: a checkout's code can diff
 rebuilt, an edit), and a deleted worktree stops its load. `.github/workflows/loader-image.yml` builds the image only from a
 `main` commit that passed CI (`loader-sha-<commit>` on ghcr.io) and writes that commit into it; in the image the gate and
 CODE read it in place of git, and ENGINE does not apply (the image compiles its own engine).
-- **Start:** `infra/load-pipeline/load.sh [--plan] <step>...` pulls the image of `main`'s newest commit (it refuses while that
-  image is not built), starts AWS Step Functions Local and one worker from the image, and runs readiness, then each step in
-  the given order. It waits and exits 0 only on success. Try a new image with `--plan` first: read-only, seconds.
-- **The steps are the input**, in the chain file's dependency order; the state machine names none. The first step that fails
-  ends the execution, so nothing after it starts. Fix, merge, and start again from that step: the chain's state and logs stay in `LOGS`.
-- **One worker takes one task at a time.** Its `ps` sees only its container, so QUIET's process count no longer covers the
-  Mac; the loader's database sessions still do. Never start `load_chain.py` on the Mac beside it.
-- **Mounts:** the logins and stores folder and `LOGS` are written (the readiness record, the chain's state); the captures are
-  read-only. Host networking lets the worker reach the stores and the catalog as the Mac does.
+- **Start:** `infra/load-pipeline/load.sh [--plan]` pulls the image of `main`'s newest commit (it refuses while that image
+  is not built), starts AWS Step Functions Local and one worker from the image, runs readiness, then every lane of the chain
+  file at once and the finish. `load.sh [--plan] [--finish] <step>...` runs only those steps, in order. It waits and exits 0
+  only on success. Try a new image with `--plan` first: read-only, seconds a step.
+- **The chain file alone decides what runs.** The state machine names no lane and no step: its first task asks the loader for
+  the lanes, and each lane runs its steps in order, each with the workers the chain file gives it, each holding until the
+  steps it needs (in any lane) are done. Every lane runs at once: a cap would let a lane hold a slot while it waits
+  on a lane still queued. A step named alone never waits: a needed step not done stops it. A failure belongs to
+  its load: each load of every lane marks its start (`load_chain.py --begin`), and a stop before it is not counted.
+- **A failure stops only what depends on it.** A step that fails stops its lane and records the lane's later steps as not
+  started; a step of another lane that needs one of them stops at once, never waiting on work that cannot come. The other
+  lanes go on, and the execution fails at the end, with no finish. Fix, merge, and start again: done steps cost one call each.
+- **One task per poller.** The worker's `ps` sees only its container, so QUIET's process count no longer covers the Mac; the
+  loader's database sessions still do. Never start `load_chain.py` on the Mac beside it.
+- **Mounts:** the logins and the captures are read-only; the stores folder and `LOGS` are written (the readiness record,
+  the chain's state). Host networking lets the worker reach the stores and the catalog as the Mac does.
 
 ## Before a load starts
 - **Role guards first.** `infra/scripts/harden-hosted-roles.py --confirm` (owner login) gives every login a connection limit,
