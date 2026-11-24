@@ -167,9 +167,15 @@ no account). For the image, "GitHub Container Registry (Recommended)".
   Operator, 2026-11-24: "Fix item 3 build a new image". A forced load now gives each job one revision of its own, the forced time as
   digits (YYYYMMDDHHMMSS: above every delivery date and every earlier forced run). Tests failed first
   (`--revision` was the file's `1`, not the forced time), 2026-11-24 08:09 ET
+- [x] Lanes and workers are one budget. Operator, 2026-11-24: "Make the skills and scripts understand MaxConcurrency and workers" (after
+  "They are doing the same thing"). The 7-wastes analysis: 11 lanes at once asked for 26 workers on 8 cores, load average 20, two
+  N-PORT jobs killed (status -9, OOMKilled). `load.sh` now sets the lanes step's `MaxConcurrency` to the machine's cores over the widest
+  first job's workers (`load_jobs.py --lanes-at-once`); measured: the emulator refuses `MaxConcurrencyPath`, and a lane queued in
+  the worker times out on its heartbeat (task 2 and 3 of 3 `TaskTimedOut`). Tests failed first (`lanes_at_once` and the flag
+  did not exist), 2026-11-24 08:19 ET
+- [ ] ~~The worker's memory limit~~ covered by the lanes budget above; remeasure on the next load
 - [x] The mount gap: `gleif-pairs` read capture files that are symlinks into a folder the worker does not mount. Codex's change reads the
   publisher input, whose three payload files are regular files (PR 2100); Claude took the branch over on the operator's word ("Take
   over codex/gleif-worker-input-20261124") and updated the one expectation, `test_each_step_resolves_to_the_folder_its_source_names`
   (it still named the symlinked input; failed first on the new config), 2026-11-24 09:51 ET
-  handoff addendum
 - [x] Learning → skill: data-operations and data-onboarding point at `sources/<source>/inputs.yaml` for a source's deliveries, 2026-11-23 22:03 ET

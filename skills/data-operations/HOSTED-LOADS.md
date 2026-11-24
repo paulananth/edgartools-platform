@@ -52,6 +52,14 @@ CODE read it in place of git, and ENGINE does not apply (the image compiles its 
 - **Read a load in the container, not on the host.** The load runs in the worker, so a host `ps` shows nothing of it: use
   `docker exec <worker> ps`, the worker's `/proc/<pid>/io` (bytes read and written between two readings show a step that
   works while its log is still empty), and the run's state file. The step's own log fills only when an attempt ends.
+- **One budget: vCPUs over workers, in no platform's terms.** A job's size is its `workers` (the load jobs file) and how many lanes
+  run at once is the compute's vCPUs (`--capacity`: `local`, this machine, or a profile of the file such as `aws-large`) over the
+  widest first job of a lane (`load_jobs.py --lanes-at-once`). The number lives in the loader; whatever starts the lanes only
+  applies it: `load.sh` sets it as the state machine's lanes `MaxConcurrency` (`CAPACITY=<profile>` for another compute), the
+  local scheduler (`--auto`) uses the same capacity, and the rest of the lanes queue. Two knobs for one limit is waste, and the state machine takes
+  no computed value (`MaxConcurrencyPath` is refused by the emulator), while a lane queued in the worker times out on its
+  heartbeat. Without it every lane starts at once: on 8 cores the first jobs asked for 26 workers, the load average passed 20
+  and the heaviest merges were killed (status -9).
 - **One task per poller.** The worker's `ps` sees only its container, so QUIET's process count no longer covers the Mac; the
   loader's database sessions still do. Never start `load_jobs.py` on the Mac beside it.
 - **Mounts:** the logins and the captures are read-only; the stores folder and `LOGS` are written (the readiness record,

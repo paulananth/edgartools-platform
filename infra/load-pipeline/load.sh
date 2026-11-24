@@ -55,7 +55,11 @@ while IFS= read -r old; do
 done < <(sfn list-activities | jq -r '.activities[] | select(.name | startswith("edgartools-load")) | .activityArn')
 ACTIVITY_ARN="$(sfn create-activity --name "edgartools-load-$(date +%Y%m%d%H%M%S)-$$" | jq -r .activityArn)"
 export ACTIVITY_ARN
-definition="$(sed "s|\${activity}|${ACTIVITY_ARN}|g" "$here/state-machine.asl.json")"
+# The lanes the compute carries at once (load_jobs.py owns the number, in no platform's terms; this script only applies it to the
+# state machine): its vCPUs over the widest first step's workers, read from the load jobs file in the image
+# (the emulator takes no computed value, and a lane queued in the worker times out on its heartbeat).
+at_once="$(docker run --rm --network none --entrypoint python "$image" /app/skills/data-operations/scripts/load_jobs.py --lanes-at-once --capacity "${CAPACITY:-local}")"
+definition="$(sed "s|\${activity}|${ACTIVITY_ARN}|g" "$here/state-machine.asl.json" | jq -c --argjson n "$at_once" '.States["Run lanes"].MaxConcurrency = $n')"
 if [ -n "$machine" ]; then
   sfn update-state-machine --state-machine-arn "$machine" --definition "$definition" >/dev/null
 else
@@ -72,7 +76,7 @@ else
   input="{\"plan\": ${plan}, \"force\": ${force}, \"finish\": ${finish}}"
 fi
 execution="$(sfn start-execution --state-machine-arn "$machine" --input "$input" | jq -r .executionArn)"
-echo "started ${execution##*:} on commit ${commit:0:8}: steps ${steps}, plan ${plan}, force ${force}, finish ${finish}, run ${RUN}"
+echo "started ${execution##*:} on commit ${commit:0:8}: ${at_once} lanes at once, steps ${steps}, plan ${plan}, force ${force}, finish ${finish}, run ${RUN}"
 
 caffeinate -dimsu -w $$ 2>/dev/null &
 deadline=$(( $(date +%s) + ${LOAD_DEADLINE_HOURS:-2} * 3600 )) missed=false  # the operator's window: a miss is reported, never a stop
