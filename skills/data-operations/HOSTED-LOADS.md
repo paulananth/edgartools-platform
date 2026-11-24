@@ -64,6 +64,23 @@ CODE read it in place of git, and ENGINE does not apply (the image compiles its 
   (`BOOKKEEPING_MANIFEST_ROOT` in `worker.env`, read by `load.sh`) are written (the readiness record, the run's state, each run's
   frozen rules and input manifests; a folder the worker does not mount reads as a missing file, and a run driven again stops). Host networking lets the worker reach the stores and the catalog as the Mac does.
 
+## The shortest time to load everything
+The goal is every document loaded in the least wall-clock time. Each rule below removed a wait or a restart.
+- **The longest chain of steps sets the time, so every lane starts at once.** The lane count is the compute's vCPUs over the widest
+  first step's workers: more lanes than that were killed by memory and cost a rerun.
+- **Nothing runs beside a load that it does not need.** The catalog (OpenMetadata) takes no part in a load: no readiness check, no
+  per-step publish, and its stack stays stopped, because its memory starves the container runtime. A plan or smoke run before a
+  load repeats readiness and is skipped.
+- **A container runtime that stops answering freezes the worker and its load.** Test it every two minutes with a bounded
+  `docker version` while a load runs, and restart the runtime the moment it stops answering: waiting on a hung engine costs more
+  than any step, and a restart loses only the step in flight (done steps cost one call each). Check the VM's memory ceiling against
+  what runs in it, and turn off pausing the VM on sleep. A slow image pull is rarely the cause: pull the image ahead (it takes seconds
+  once the runtime is healthy).
+- **Mount every folder a run's documents live in.** A run driven again reads its frozen rules and input manifests from the manifest
+  root; unmounted, the file is missing and the engine says "Corrupt control document". On that message, check the mounts first.
+- **A forced or killed load leaves unfinished runs, and the next default load drives them first.** They need the same mounts.
+- **One start script at a time.** A dead run's wrapper that is still alive holds the load's lock: stop it before starting again.
+
 ## Before a load starts
 - **Role guards first.** `infra/scripts/harden-hosted-roles.py --confirm` (owner login) gives every login a connection limit,
   statement and idle-transaction timeouts, a `work_mem` ceiling for the loader and the audit classes. A load with the
