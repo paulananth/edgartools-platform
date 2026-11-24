@@ -3,7 +3,7 @@
 Read before starting or resuming a load on the hosted instance. Each item is a cause met on a real load and its rule.
 
 ## The gate: nothing loads until the infrastructure is ready and tested
-`scripts/readiness.py` reads thirteen facts and writes `readiness.json` in the stores folder only on a full pass; `load_chain.py`
+`scripts/readiness.py` reads thirteen facts and writes `readiness.json` in the stores folder only on a full pass; `load_jobs.py`
 refuses to start, resume or finish a load without it (the read-only `--plan`, `--list`, `--status` and `--catalog-status` still
 run). A pass belongs to one store generation (a reset of the databases closes the gate), one commit (any new commit closes it)
 and one day. Each check reads only what it asks (a capture is its folder's receipts file), never a plan of
@@ -11,7 +11,7 @@ the work. The checks: the code is committed, contains `main` and its commit has 
 alone); the compiled engine was built from this checkout's source (`readiness.py --build-engine` rebuilds it and records a hash of what it was built from); `doctor` is ready; the loader holds its connection limit, memory ceiling
 and timeouts; RDM holds its codes and silver a table per spec; every step has a capture; no load runs and the loader has no
 session; disk and load average have room; the access audit of the database has no failing control; every duty file's login connects to the databases of its duty (names only, a
-driver's text is never kept); the chain's state file is this store's, or is shown as one that will be set aside, with its count of done
+driver's text is never kept); the run's state file is this store's, or is shown as one that will be set aside, with its count of done
 steps; the catalog, when one is configured, matches the rules; and the merge policy, every Dataset Contract and every worker profile are registered and granted (init steps 5 to 7). The gate is not the init runbook: after a reset, walk every runbook step,
 say in the report which ran and which did not, and never write a step off without reading why (a catalog step was once called
 unconfigured when its file existed). A fact that cannot be
@@ -24,14 +24,14 @@ rebuilt, an edit), and a deleted worktree stops its load. `.github/workflows/loa
 `main` commit that passed CI (`loader-sha-<commit>` on ghcr.io) and writes that commit into it; in the image the gate and
 CODE read it in place of git, and ENGINE does not apply (the image compiles its own engine).
 - **Start:** `infra/load-pipeline/load.sh [--plan]` pulls the image of `main`'s newest commit (it refuses while that image
-  is not built), starts AWS Step Functions Local and one worker from the image, runs readiness, then every lane of the chain
+  is not built), starts AWS Step Functions Local and one worker from the image, runs readiness, then every lane of the load jobs
   file at once and the finish. `load.sh [--plan] [--finish] <step>...` runs only those steps, in order. It waits and exits 0
   only on success. Try a new image with `--plan` first: read-only, seconds a step.
-- **The chain file alone decides what runs.** The state machine names no lane and no step: its first task asks the loader for
-  the lanes, and each lane runs its steps in order, each with the workers the chain file gives it, each holding until the
+- **The load jobs file alone decides what runs.** The state machine names no lane and no step: its first task asks the loader for
+  the lanes, and each lane runs its steps in order, each with the workers the load jobs file gives it, each holding until the
   steps it needs (in any lane) are done. Every lane runs at once: a cap would let a lane hold a slot while it waits
   on a lane still queued. A failure belongs to its load: a stop before the load's start is not counted.
-- **A load never waits on what cannot come.** Before the first step, `load_chain.py --begin` refuses the load when a
+- **A load never waits on what cannot come.** Before the first step, `load_jobs.py --begin` refuses the load when a
   step waits on a step that does not exist, on lanes that cannot finish, or, for named steps, on a step neither done
   nor earlier in the run (name it first). A plan runs the same check. While running, a needed step that failed, or a
   lane that stopped, broke or was killed, stops what waits on it at once. A step this load runs is done only once this
@@ -40,9 +40,9 @@ CODE read it in place of git, and ENGINE does not apply (the image compiles its 
   started; a step of another lane that needs one of them stops at once, never waiting on work that cannot come. The other
   lanes go on, and the execution fails at the end, with no finish. Fix, merge, and start again: done steps cost one call each.
 - **One task per poller.** The worker's `ps` sees only its container, so QUIET's process count no longer covers the Mac; the
-  loader's database sessions still do. Never start `load_chain.py` on the Mac beside it.
+  loader's database sessions still do. Never start `load_jobs.py` on the Mac beside it.
 - **Mounts:** the logins and the captures are read-only; the stores folder and `LOGS` are written (the readiness record,
-  the chain's state). Host networking lets the worker reach the stores and the catalog as the Mac does.
+  the run's state). Host networking lets the worker reach the stores and the catalog as the Mac does.
 
 ## Before a load starts
 - **Role guards first.** `infra/scripts/harden-hosted-roles.py --confirm` (owner login) gives every login a connection limit,
@@ -52,18 +52,18 @@ CODE read it in place of git, and ENGINE does not apply (the image compiles its 
 - **The engine must match the code.** A Rust change reaches a load only after the engine is rebuilt into the environment that
   runs it: `readiness.py --build-engine`. A step that fails with a missing method or an unknown normalizer on today's `main` is
   a stale engine, not a data fault: rebuild, then run the gate again.
-- **A chain that ends at once after a reset has read a stale state file.** The state file's `chain store` line names the store and
+- **A load that ends at once after a reset has read a stale state file.** The state file's `chain store` line names the store and
   the database's generation; a line with no generation comes from before generations were recorded and cannot show the store was not
-  made again, so it is set aside (kept, renamed). A chain that ran no step and printed `chain done` is the sign: look at the file's
+  made again, so it is set aside (kept, renamed). A load that ran no step and printed `chain done` is the sign: look at the file's
   marker, set a file with an old marker aside, and start again. Done steps cost one call each, so setting a file aside loses little.
 - **`EDGAR_WAREHOUSE` names the executable** (`.venv/bin/edgar-warehouse`), never its folder: a folder fails with
   "Permission denied" on every step.
 
 ## While a load runs
-- **One scheduler per run label.** A second `load_chain.py --auto` on the same label doubles every step. Look for a running
+- **One scheduler per run label.** A second `load_jobs.py --auto` on the same label doubles every step. Look for a running
   scheduler (`ps`) before starting one, and stop the scheduler before its steps.
 - **A run label names the state and logs, never an input.** A new `RUN` gives a fresh state file and loads the same
-  records: the capture runs are the chain file's `capture_label` and a fact is written as its value. Changing either is a
+  records: the capture runs are the load jobs file's `capture_label` and a fact is written as its value. Changing either is a
   new input of every record it reaches: the Change Journal processes those files again and the Stage refuses them under
   the same revision, so it needs `--revision` above the last load's.
 - **Plan one step with `--plan --only <step>`** (or `--lane`): it prints the documents, the bundles, and the open runs a load
@@ -123,7 +123,7 @@ a batch before changing its size: the writer made three a batch (70 ms each) and
 - Before a hosted reset, follow the quiesce and drain procedure in the repository's Edgar Intelligence initialize
   runbook: stop clients that can reconnect, confirm no open Bookkeeping runs or leases, resolve managed mirrors under
   their own approval, restart the PostgreSQL service, wait for `READY`, and rerun the read-only reset preflight. An
-  empty load-chain status alone does not prove that the databases have no sessions. The preflight must find no client
+  empty load-jobs status alone does not prove that the databases have no sessions. The preflight must find no client
   sessions or active transactions. It reports idle PostgreSQL extension workers separately; the approved reset records
   and disconnects those with `DROP DATABASE ... WITH (FORCE)`. Stop for any client session or extension worker with an
   open transaction; never terminate internal sessions directly or bypass the reset script's classification.

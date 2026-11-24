@@ -73,7 +73,7 @@ def test_the_worker_runs_readiness_then_a_step_and_reports_each_end():
         return next(codes)
     client = Client([{"action": "readiness"}, {"action": "step", "step": "company", "plan": True}, {"action": "finish"}])
     activity_worker.work(client, "arn", start, tasks=3)
-    assert started == [["readiness.py"], ["load_chain.py", "--only", "company", "--plan"], ["load_chain.py", "--finish"]]
+    assert started == [["readiness.py"], ["load_jobs.py", "--only", "company", "--plan"], ["load_jobs.py", "--finish"]]
     assert client.beats == 2
     assert client.reports == [("success", "t0", {"exit": 0, "action": "readiness"}), ("failure", "t1", "Exit2"),
                               ("success", "t2", {"exit": 0, "action": "finish"})]
@@ -112,7 +112,7 @@ def test_the_state_machine_runs_readiness_then_the_given_steps_in_order_and_stop
     assert states["Finish"]["Parameters"] == {"action": "finish"} and states["Finish"]["Next"] == "Done"
     for task in (states["Readiness"], step, states["Finish"]):
         assert task["Resource"] == "${activity}" and task["HeartbeatSeconds"] > 2 * activity_worker.HEARTBEAT_SECONDS
-    chain = yaml.safe_load((REPO / "rules" / "load-chain.yaml").read_text())
+    chain = yaml.safe_load((REPO / "rules" / "load-jobs.yaml").read_text())
     assert not [s["name"] for s in chain["steps"] if f'"{s["name"]}"' in MACHINE.read_text()]
 
 
@@ -141,12 +141,12 @@ def test_the_worker_s_client_points_at_the_emulator_the_compose_file_names(monke
     assert boto3.client("stepfunctions").meta.endpoint_url == "http://localhost:8083"
 
 
-def test_the_worker_runs_a_lane_and_reads_the_lanes_from_the_chain_file_in_order(monkeypatch):
+def test_the_worker_runs_a_lane_and_reads_the_lanes_from_the_load_jobs_file_in_order(monkeypatch):
     client = Client([{"action": "lanes"}, {"action": "lane", "lane": "A", "plan": True}])
     started = []
     activity_worker.work(client, "arn", lambda argv: started.append(argv[2:]) or Process(0), tasks=2)
     assert started.pop(0) == ["--begin"]  # every wait checked and the start marked before the lanes
-    chain = yaml.safe_load((REPO / "rules" / "load-chain.yaml").read_text())
+    chain = yaml.safe_load((REPO / "rules" / "load-jobs.yaml").read_text())
     lanes = list(dict.fromkeys(step["lane"] for step in chain["steps"]))
     assert client.reports[0] == ("success", "t0", {"lanes": lanes}) and len(lanes) > 1
     assert started == [["--lane", "A", "--plan"]]
@@ -185,11 +185,11 @@ def test_without_steps_the_state_machine_runs_every_lane_at_once_and_a_failed_la
         assert task["Resource"] == "${activity}" and task["HeartbeatSeconds"] > 2 * activity_worker.HEARTBEAT_SECONDS
 
 
-def test_the_state_machine_names_no_lane_and_no_step_so_the_chain_file_alone_decides_what_runs():
+def test_the_state_machine_names_no_lane_and_no_step_so_the_load_jobs_file_alone_decides_what_runs():
     """What a lane runs is never fixed in the state machine: the loader reads the lanes, their steps, order and waits from
-    the chain file in the image at run time."""
+    the load jobs file in the image at run time."""
     text = MACHINE.read_text()
-    chain = yaml.safe_load((REPO / "rules" / "load-chain.yaml").read_text())
+    chain = yaml.safe_load((REPO / "rules" / "load-jobs.yaml").read_text())
     names = {s["name"] for s in chain["steps"]} | {s["lane"] for s in chain["steps"]}
     assert not sorted(n for n in names if f'"{n}"' in text)
 

@@ -1,27 +1,27 @@
 #!/usr/bin/env python3
-"""Load every captured source into one store, in the order rules/load-chain.yaml gives.
+"""Load every captured source into one store, in the order rules/load-jobs.yaml gives.
 
-    python load_chain.py --list               the steps, in order
-    python load_chain.py --plan               what each step would load (documents and bundles); writes nothing
-    python load_chain.py                      the whole chain, then the links tables and master_binding
-    python load_chain.py --from <step>        carry on from a step (a done step costs one call: nothing is loaded twice)
-    python load_chain.py --only <step>        one step
-    python load_chain.py --lane <name>        the steps of one lane; run several lanes at once (see the chain file)
-    python load_chain.py --begin              mark a load's start in the chain state, before its lanes start
-    python load_chain.py --finish             only what follows the loads, once every lane is done
-    python load_chain.py --catalog-status     publish the catalog status of every step already done (a catch-up)
-    python load_chain.py --finish --lookups   the same, with the name-search lookups built first (only the context search needs them)
-    python load_chain.py --status             what each running step is doing: progress, rate, processes, a verdict
-    python load_chain.py --status --json      the same as one JSON document: every step's state, the running steps, the stores and the machine
-    python load_chain.py --auto [--slots N] [--hours H | --deadline HH:MM]
+    python load_jobs.py --list               the steps, in order
+    python load_jobs.py --plan               what each step would load (documents and bundles); writes nothing
+    python load_jobs.py                      all the load jobs, then the links tables and master_binding
+    python load_jobs.py --from <step>        carry on from a step (a done step costs one call: nothing is loaded twice)
+    python load_jobs.py --only <step>        one step
+    python load_jobs.py --lane <name>        the steps of one lane; run several lanes at once (see the load jobs file)
+    python load_jobs.py --begin              mark a load's start in the load jobs state, before its lanes start
+    python load_jobs.py --finish             only what follows the loads, once every lane is done
+    python load_jobs.py --catalog-status     publish the catalog status of every step already done (a catch-up)
+    python load_jobs.py --finish --lookups   the same, with the name-search lookups built first (only the context search needs them)
+    python load_jobs.py --status             what each running step is doing: progress, rate, processes, a verdict
+    python load_jobs.py --status --json      the same as one JSON document: every step's state, the running steps, the stores and the machine
+    python load_jobs.py --auto [--slots N] [--hours H | --deadline HH:MM]
                                               watch the loads: start each step when its lane is free, move its
                                               workers (within --capacity) with the machine, report a missed deadline and go on (see `auto`)
 
 Each step is the same resumable `load` command, run again until it finishes (a stopped attempt names why in its log and
-the next carries on from where it stopped). The chain stops at the first step that does not finish in its attempts.
+the next carries on from where it stopped). The load stops at the first step that does not finish in its attempts.
 STORES (default ~/.config/edgartools/hosted) is the stores folder, whose worker.env holds the logins; CAPTURES, PROVING
-and LOGS name the captured files and the logs; RUN names the chain's state and log files, never a load's inputs (the
-capture runs are the chain file's `capture_label`). The machine stays awake for the whole chain
+and LOGS name the captured files and the logs; RUN names the run's state and log files, never a load's inputs (the
+capture runs are the load jobs file's `capture_label`). The machine stays awake for all the load jobs
 (a sleep once dropped a hosted connection and lost 74 minutes). Run it from the checkout whose code should load.
 """
 import argparse
@@ -98,8 +98,8 @@ def resolve_input(step: dict, sources: Path) -> dict:
     return {**step, "capture": folder, **({"capture_root": root} if root != "captures" else {})}
 
 
-def chain_steps(path: Path = ROOT / "rules/load-chain.yaml", sources: Path = ROOT / "sources") -> list[dict]:
-    """The chain's steps, each with the chain's `defaults` for what it does not say itself and its input's folder."""
+def load_jobs(path: Path = ROOT / "rules/load-jobs.yaml", sources: Path = ROOT / "sources") -> list[dict]:
+    """The load jobs, each with the file's `defaults` for what it does not say itself and its input's folder."""
     chain = yaml.safe_load(path.read_text())
     steps = [resolve_input({**(chain.get("defaults") or {}), "capture_run": f"{chain['capture_label']}-{step['name']}", **step}, sources)
              for step in chain["steps"]]
@@ -157,7 +157,7 @@ def chain_length(steps: list[dict], minutes: dict[str, float] | None = None) -> 
 
 
 def measured(text: str) -> dict[str, float]:
-    """Each done step's minutes, from its first `attempt 1 start` to its `done:` line in the chain's state file."""
+    """Each done step's minutes, from its first `attempt 1 start` to its `done:` line in the run's state file."""
     start, took = {}, {}
     for found in re.finditer(r"^(\d\d-\d\d \d\d:\d\d:\d\d) ET (\S+) (attempt \d+ start|done:)", text, re.M):
         when = datetime.strptime(found.group(1), "%m-%d %H:%M:%S")
@@ -209,7 +209,7 @@ def room(level: str, connections: int, target: int) -> str:
 def ready(steps: list[dict], done: set[str], running: set[str], failed: set[str], free: int,
           busy: frozenset | set = frozenset(), estimate: dict[str, float] | None = None) -> list[str]:
     """The steps to start now: each follows only done steps, is not blocked by a failure, and does not share its source
-    and target with a load already running (two loads of one pair write the same outputs). The chain file's `priority` first
+    and target with a load already running (two loads of one pair write the same outputs). The load jobs file's `priority` first
     (1 before 2 before 3), then the longest chain (see `chain_length`); at most `free`."""
     follows, stuck = needs(steps), blocked(steps, failed)
     length = chain_length(steps, estimate)
@@ -247,8 +247,8 @@ def workers_range(vcpu: float, memory_gb: float, worker_gb: float = WORKER_GB) -
     return 1, max(1, min(int(memory_gb / worker_gb + 1e-9), int(vcpu * WORKERS_PER_VCPU)))
 
 
-def capacity_profiles(path: Path = ROOT / "rules/load-chain.yaml") -> dict[str, dict]:
-    """The named compute sizes of the chain file (the AWS ECS task sizes the state machines run on)."""
+def capacity_profiles(path: Path = ROOT / "rules/load-jobs.yaml") -> dict[str, dict]:
+    """The named compute sizes of the load jobs file (the AWS ECS task sizes the state machines run on)."""
     return yaml.safe_load(path.read_text()).get("capacity") or {}
 
 
@@ -257,7 +257,7 @@ def physical_gb() -> float:
 
 
 def capacity_of(name: str) -> tuple[float, float]:
-    """The vCPUs and gigabytes of a capacity: a profile of the chain file, or `local`, this machine measured (half its
+    """The vCPUs and gigabytes of a capacity: a profile of the load jobs file, or `local`, this machine measured (half its
     memory, the rest being the operator's other work)."""
     if name == "local":
         return os.cpu_count() or 1, physical_gb() / 2
@@ -301,9 +301,9 @@ def machine_pressure(relaxed: bool = False) -> str:
 
 
 def clamped(steps: list[dict], name: str, capacity: tuple[float, float] | None = None) -> list[dict]:
-    """The steps with each one's workers held to the named capacity's range, whatever the run mode: the chain file asks
+    """The steps with each one's workers held to the named capacity's range, whatever the run mode: the load jobs file asks
     for what a step wants, the compute says what a task carries. Each step's range uses its own measured `worker_gb`
-    where the chain file has one (`capacity` replaces the named compute, for a test)."""
+    where the load jobs file has one (`capacity` replaces the named compute, for a test)."""
     held = []
     for step in steps:
         low, top = workers_range(*(capacity or capacity_of(name)), step.get("worker_gb", WORKER_GB))
@@ -390,7 +390,7 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
          capacity: str = "local") -> int:
     """Watch the loads and start the next ready step whenever a slot is free and the machine is not pressed. One start
     a cycle: the load average lags, so a started step is counted running before the next is judged. Each step runs as
-    `load_chain.py --only <step> --workers <n>` (the attempt loop). The workers follow the machine within the capacity's
+    `load_jobs.py --only <step> --workers <n>` (the attempt loop). The workers follow the machine within the capacity's
     range (`bounds`; the machine's own when not given): with room
     the step with the longest chain behind it doubles, when pressed the step with the shortest halves, one change a
     cycle, by stopping the step's load and starting it again (a load resumes where it stopped). With a `deadline`, a run
@@ -631,7 +631,7 @@ def summarize_sessions(rows) -> dict[str, dict]:
 
 
 def step_sessions(reader_url: str) -> dict[str, dict]:
-    """The sessions of every chain step, read as the diagnostic login (state, wait and statement shape, never a value)."""
+    """The sessions of every load job, read as the diagnostic login (state, wait and statement shape, never a value)."""
     import psycopg2
 
     try:
@@ -883,7 +883,7 @@ def status_lines(snapshot: dict) -> list[str]:
         lines.append(f"  {row['name']} (lane {row['lane']}, attempt {row['attempt']}, {row['workers']} workers): {row['elapsed']:.0f} min of {row['bound']}; "
                      f"{shown}; {row['processes']} processes, {row['cpu']:.0f}% CPU, {row['memory_mb']:,.0f} MB; wrote {wrote}; log {row['log_age']:.0f} min old; "
                      + row["verdict"] + (f"; {row['warning']}" if row["warning"] else ""))
-        if row["kind"] != "progressing" or row["elapsed"] > row["bound"]:  # something is wrong: the whole chain of whys
+        if row["kind"] != "progressing" or row["elapsed"] > row["bound"]:  # something is wrong: all the load jobs of whys
             lines += [f"      why {number}: {words}" for number, words in enumerate(row["why"], 1)]
         elif row["evidence"]:
             lines.append(f"      {row['why'][1]}; {row['why'][2]}")
@@ -1045,7 +1045,7 @@ def ensure_store(state: Path, store: str, adopt: bool = False, generation: str =
         verdict = state_verdict(text, store, generation, adopt)
         if verdict == "same":
             if generation and found[-1][1] == UNREAD:
-                with state.open("a") as handle:  # appended, as the chain's own lines are
+                with state.open("a") as handle:  # appended, as the run's own lines are
                     handle.write(stamp)
             return "same"
         if verdict == "adopted":
@@ -1440,7 +1440,7 @@ def attempt_loop(step: dict, env: dict, state: Path, others_run: bool = True) ->
 
 def out_of_attempts(name: str, attempts: int) -> str:
     """The note of a step that used every attempt: a `stopped:` line, so the steps that need it stop instead of waiting."""
-    return f"{name} stopped: did not finish in {attempts} attempts: the chain stops here"
+    return f"{name} stopped: did not finish in {attempts} attempts: the load stops here"
 
 
 def run_steps(steps: list[dict], env: dict, state: Path, lane: str | None = None, only: str | None = None,
@@ -1486,15 +1486,15 @@ def main() -> int:
     parser.add_argument("--only")
     parser.add_argument("--lane")
     parser.add_argument("--adopt-state", action="store_true",
-                        help="keep a chain state file that has done lines and no store marker, as this store's (otherwise it is set aside)")
+                        help="keep a run state file that has done lines and no store marker, as this store's (otherwise it is set aside)")
     parser.add_argument("--catalog-status", action="store_true",
                         help="publish the catalog status of every step already done (a catch-up); needs the catalog configured")
     parser.add_argument("--status", action="store_true",
                         help="one line a running step: progress, rate, processes, database writes and a verdict")
     parser.add_argument("--json", action="store_true", help="with --status: the same readings as one JSON document (counts, states and times only)")
-    parser.add_argument("--workers", type=int, help="with --only: the step's workers, within the capacity's range, instead of the chain file's")
+    parser.add_argument("--workers", type=int, help="with --only: the step's workers, within the capacity's range, instead of the load jobs file's")
     parser.add_argument("--capacity", default="local",
-                        help="the compute: local (this machine, measured) or a profile of the chain file (aws-small, aws-medium, aws-large)")
+                        help="the compute: local (this machine, measured) or a profile of the load jobs file (aws-small, aws-medium, aws-large)")
     parser.add_argument("--connections", type=int, default=250,
                         help="with --auto: the database connections to aim for; workers rise until they are used")
     parser.add_argument("--deadline", help="with --auto: HH:MM ET today, the run's schedule: a miss is reported once and the loads go on")
@@ -1509,7 +1509,7 @@ def main() -> int:
     parser.add_argument("--slots", type=int, default=max(2, min(os.cpu_count() or 2, int(
         os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") / 2**30 // 2))), help="loads running at once")
     args = parser.parse_args()
-    steps = clamped(chain_steps(), args.capacity)
+    steps = clamped(load_jobs(), args.capacity)
     names = [step["name"] for step in steps]
     for chosen in (args.start, args.only):
         if chosen and chosen not in names:
@@ -1519,7 +1519,7 @@ def main() -> int:
         print(f"No lane named {args.lane}", file=sys.stderr)
         return 2
     if args.lookups and (args.only or args.lane or not args.finish and (args.list or args.plan)):
-        print("--lookups goes with --finish (or the whole chain), never a partial run that does not reach the finish", file=sys.stderr)
+        print("--lookups goes with --finish (or all the load jobs), never a partial run that does not reach the finish", file=sys.stderr)
         return 2
     if args.list:
         for step in steps:
@@ -1570,7 +1570,7 @@ def main() -> int:
             return 2
         if outcome == "set aside":
             print(f"{state.name} was not written for this store (another store, a database made again, or no marker): set aside "
-                  "and kept beside it, and this store starts a fresh chain state", flush=True)
+                  "and kept beside it, and this store starts a fresh run state", flush=True)
         elif outcome == "adopted":
             print(f"{state.name} adopted as this store's, on your word", flush=True)
     if args.begin:  # once, before the first step: every wait can end, and a failure before this line is an earlier load's
@@ -1601,7 +1601,7 @@ def main() -> int:
         finish(env, state, args.lookups)
         return 0
     if not args.finish:
-        if not (args.lane or args.only):  # the whole chain, one step after another in file order
+        if not (args.lane or args.only):  # all the load jobs, one step after another in file order
             order = [step["name"] for step in steps]
             if begin(steps, state, order[order.index(args.start):] if args.start in order else order):
                 return 2

@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Start a load on the pipeline: the loader image CI built for the newest main commit runs readiness, then the load.
 #
-#   infra/load-pipeline/load.sh [--plan]                        every lane of the chain file at once, then the finish
+#   infra/load-pipeline/load.sh [--plan]                        every lane of the load jobs file at once, then the finish
 #   infra/load-pipeline/load.sh [--plan] [--finish] <step>...   only those steps, in order
 #
-# The lanes, their steps, order and waits come from the chain file in the image: every lane runs at once, and each step
-# with the workers the chain file gives it.
+# The lanes, their steps, order and waits come from the load jobs file in the image: every lane runs at once, and each step
+# with the workers the load jobs file gives it.
 # Runs on this machine's AWS Step Functions Local. It refuses when main's newest commit has no loader image yet (CI has not
 # passed on it, or the image is still building), and while another execution runs (one load at a time). It waits, up to
 # LOAD_DEADLINE_HOURS (default 72; then it stops the execution), and exits 0 only when the execution succeeded.
-# RUN, STORES, CAPTURES, PROVING and LOGS pass through to the worker, with load_chain.py's defaults.
+# RUN, STORES, CAPTURES, PROVING and LOGS pass through to the worker, with load_jobs.py's defaults.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 plan=false finish=false

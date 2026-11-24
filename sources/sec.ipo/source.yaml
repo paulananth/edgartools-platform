@@ -13,7 +13,7 @@ execution: {profile: source.read, workers: 1, max_artifacts: 512}
 bookkeeping:
   version: 2
   targets:
-    # Facts: observed_at, the moment the submissions capture was taken (the load chain states it, as for
+    # Facts: observed_at, the moment the submissions capture was taken (the load jobs states it, as for
     # sec.company).
     silver:
       grain: run

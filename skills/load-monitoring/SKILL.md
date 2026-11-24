@@ -1,13 +1,13 @@
 ---
 name: load-monitoring
-description: Watch a platform load in Grafana - one dashboard of lanes, steps, stalls and restarts fed by the load chain's own status. Use when asked to monitor, watch or dashboard a load, to bring the monitor up or down, or to change what it shows. The load itself is data-operations'; this skill only reads it.
+description: Watch a platform load in Grafana - one dashboard of lanes, steps, stalls and restarts fed by the load jobs's own status. Use when asked to monitor, watch or dashboard a load, to bring the monitor up or down, or to change what it shows. The load itself is data-operations'; this skill only reads it.
 ---
 
 # Load monitoring
 
 The dashboard answers two questions at a glance: **is the load healthy, and why
 is a step not running?** Colour carries the answer; numbers back it. It reads the
-load chain's own status (`load_chain.py --status --json`) and changes nothing: the
+load jobs's own status (`load_jobs.py --status --json`) and changes nothing: the
 reader login, the process list and the log files only.
 
 ```
@@ -63,7 +63,7 @@ dependency lines need a custom panel plugin, which is a separate decision.
   colour and limits from there. No colour or threshold is typed in a panel.
 - **Every panel says in its description which interaction it carries and what a
   reading means.** A test holds this.
-- **The same limits as the chain.** Thresholds are the verdict's and the
+- **The same limits as the load jobs.** Thresholds are the verdict's and the
   controller's own, so the dashboard and `--status` never disagree.
 - **Counts, states and times only.** Never a row value, a name from the data, an
   address or a login in a metric or a panel: the repository is public.
@@ -75,7 +75,7 @@ dependency lines need a custom panel plugin, which is a separate decision.
 
 ## Not built yet
 
-- A step's projected end and the deadline rail (the chain computes both in its
+- A step's projected end and the deadline rail (the load jobs script computes both in its
   log; the status does not return them yet).
 - Alert rules (a stall or a failure notifying someone) need a contact point.
 - Animation (see above).
