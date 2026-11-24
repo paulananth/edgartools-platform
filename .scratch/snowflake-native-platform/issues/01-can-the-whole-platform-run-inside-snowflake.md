@@ -82,17 +82,17 @@ Answered as the research needs them, one at a time, with a recommendation:
 
 ## Checklist
 
-- [ ] R1 Compute (container service): item 1 answered in `research/r1.md`, with its documentation pages
-- [ ] R2 Databases (Snowflake Postgres): item 2 answered in `research/r2.md`, with its documentation pages
-- [ ] R3 Provider access and captured files: item 3 answered in `research/r3.md`, with its documentation pages
-- [ ] R4 Catalog duties (Horizon against OpenMetadata): item 4 answered in `research/r4.md`, with its documentation pages
-- [ ] R5 Ontology (business ontology against AutoOntology): item 5 answered in `research/r5.md`, with its documentation pages
-- [ ] R6 AI native (Cortex): item 6 answered in `research/r6.md`, with its documentation pages
-- [ ] R7 Monitoring: item 7 answered in `research/r7.md`, with its documentation pages
-- [ ] R8 Multi-platform seam in the engine: item 8 answered in `research/r8.md`, with its documentation pages
-- [ ] R9 Cost and latency: item 9 answered in `research/r9.md`, with its documentation pages
-- [ ] R10 Governance: item 10 answered in `research/r10.md`, with its documentation pages
-- [ ] R11 Synthesis (needs R1 to R10): the covered, partial or missing table for catalog and ontology, and a recommendation (whole, by duty, or not yet) with cost and order
+- [x] R1 Compute (container service): item 1 answered in `research/r1.md`, with its documentation pages
+- [x] R2 Databases (Snowflake Postgres): item 2 answered in `research/r2.md`, with its documentation pages
+- [x] R3 Provider access and captured files: item 3 answered in `research/r3.md`, with its documentation pages
+- [x] R4 Catalog duties (Horizon against OpenMetadata): item 4 answered in `research/r4.md`, with its documentation pages
+- [x] R5 Ontology (business ontology against AutoOntology): item 5 answered in `research/r5.md`, with its documentation pages
+- [x] R6 AI native (Cortex): item 6 answered in `research/r6.md`, with its documentation pages
+- [x] R7 Monitoring: item 7 answered in `research/r7.md`, with its documentation pages
+- [x] R8 Multi-platform seam in the engine: item 8 answered in `research/r8.md`, with its documentation pages
+- [x] R9 Cost and latency: item 9 answered in `research/r9.md`, with its documentation pages
+- [x] R10 Governance: item 10 answered in `research/r10.md`, with its documentation pages
+- [x] R11 Synthesis (needs R1 to R10): written in `research/r11.md`, claims marked check need an owner probe; the covered, partial or missing table for catalog and ontology, and a recommendation (whole, by duty, or not yet) with cost and order
 - [ ] Follow-up tickets for each duty the recommendation keeps (the map's Not yet specified graduates)
 - [ ] Learning → skill: name the skill line changed (aws-snowflake-operations or data-catalog), or write "none"
 
@@ -101,3 +101,5 @@ Answered as the research needs them, one at a time, with a recommendation:
 (open)
 
 ## Comments
+
+- 2026-11-24 17:30 ET: R1 to R10 run by ten Haiku subagents (Snowflake documentation, and a code read for R8); each file cites its pages and labels claims. Ticks mean the findings file exists, not a second reader: the two claims marked check in `research/r11.md` need an owner probe. Follow-up tickets and the learning part stay open.
