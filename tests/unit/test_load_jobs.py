@@ -1741,3 +1741,19 @@ def test_the_load_jobs_are_named_load_jobs_everywhere_a_reader_looks():
              and name != "tests/unit/test_load_jobs.py" and (ROOT / name).is_file()
              and old.search((ROOT / name).read_text(errors="ignore"))]
     assert named == []
+
+
+def test_a_forced_run_gives_every_load_force_publish_and_an_ordinary_run_gives_none(monkeypatch):
+    step = {"name": "x", "source": "s", "target": "t", "capture": "a/b", "workers": 2, "bundles": 3, "minutes": 5, "capture_run": "l-x"}
+    monkeypatch.delenv(chain.FORCE, raising=False)
+    assert "--force" not in chain.arguments(step)
+    monkeypatch.setenv(chain.FORCE, "1")
+    assert chain.arguments(step)[-1] == "--force"
+
+
+@pytest.mark.parametrize("flag", ["--finish", "--list", "--status", "--begin"])
+def test_force_is_refused_where_there_is_no_document_to_force(monkeypatch, capsys, flag):
+    monkeypatch.setattr(sys, "argv", ["load_jobs.py", "--force", flag])
+    monkeypatch.delenv(chain.FORCE, raising=False)
+    assert chain.main() == 2
+    assert "--force goes with loads" in capsys.readouterr().err

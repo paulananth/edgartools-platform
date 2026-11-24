@@ -241,7 +241,8 @@ What it does, in order:
    **Force publish** (`load --force`) is the explicit exception: it ignores the Change Journal and processes every
    document of the source again, as a new publication of the capture run (`<run>+force-<time>`); the journal records
    it as forced. Use it when the result must be made again whatever the journal holds (after `mdm clear-source`,
-   or to rebuild from retained files). Never for a daily run.
+   or to rebuild from retained files). Never for a daily run. Through the pipeline: `RUN=<new label> infra/load-pipeline/load.sh --force`
+   (every load job, or the named ones); a new `RUN` keeps the forced load's state apart from the earlier one.
 
 It prints one line per bundle as it goes. At the end it prints a JSON
 summary: documents loaded, documents already loaded, and each run's id and

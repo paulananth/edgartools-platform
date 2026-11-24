@@ -28,6 +28,11 @@ HEARTBEAT_SECONDS = 60
 RETRY_POLL_SECONDS = 5
 
 
+def forced(task: dict) -> list[str]:
+    """`--force`: the task's load ignores the Change Journal and processes every document again (a plan has none to force)."""
+    return ["--force"] if task.get("force") and not task.get("plan") else []
+
+
 def begin_command(task: dict) -> list[str]:
     """Before a load's first step: every wait must be able to end (named steps in their order), then the start is marked."""
     named = task.get("steps")
@@ -43,11 +48,11 @@ def command(task: dict) -> list[str]:
     if task.get("action") == "readiness":
         return [sys.executable, str(HERE / "readiness.py")]
     if task.get("action") == "lane" and isinstance(task.get("lane"), str) and task["lane"]:
-        return [sys.executable, str(HERE / "load_jobs.py"), "--lane", task["lane"], *(["--plan"] if task.get("plan") else [])]
+        return [sys.executable, str(HERE / "load_jobs.py"), "--lane", task["lane"], *(["--plan"] if task.get("plan") else []), *forced(task)]
     if task.get("action") == "finish":
         return [sys.executable, str(HERE / "load_jobs.py"), "--finish"]
     if task.get("action") == "step" and isinstance(task.get("step"), str) and task["step"]:
-        return [sys.executable, str(HERE / "load_jobs.py"), "--only", task["step"], *(["--plan"] if task.get("plan") else [])]
+        return [sys.executable, str(HERE / "load_jobs.py"), "--only", task["step"], *(["--plan"] if task.get("plan") else []), *forced(task)]
     raise ValueError(f"a task is readiness, begin with its steps, lanes, a lane or a step with its name, or finish, not {sorted(task)}")
 
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Start a load on the pipeline: the loader image CI built for the newest main commit runs readiness, then the load.
 #
-#   infra/load-pipeline/load.sh [--plan]                        every lane of the load jobs file at once, then the finish
+#   infra/load-pipeline/load.sh [--plan|--force]                every lane of the load jobs file at once, then the finish
+#   --force: force publish: each load ignores the Change Journal and processes every document of its source again (use a new RUN)
 #   infra/load-pipeline/load.sh [--plan] [--finish] <step>...   only those steps, in order
 #
 # The lanes, their steps, order and waits come from the load jobs file in the image: every lane runs at once, and each step
@@ -12,11 +13,12 @@
 # RUN, STORES, CAPTURES, PROVING and LOGS pass through to the worker, with load_jobs.py's defaults.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
-plan=false finish=false
-while [ "${1:-}" = "--plan" ] || [ "${1:-}" = "--finish" ]; do
-  if [ "$1" = "--plan" ]; then plan=true; else finish=true; fi
+plan=false finish=false force=false
+while [ "${1:-}" = "--plan" ] || [ "${1:-}" = "--finish" ] || [ "${1:-}" = "--force" ]; do
+  case "$1" in --plan) plan=true ;; --finish) finish=true ;; --force) force=true ;; esac
   shift
 done
+[ "$force" = false ] || [ "$plan" = false ] || { echo "--force makes a publication again: a plan has none to make" >&2; exit 2; }
 [ "$plan" = false ] || [ "$finish" = false ] || { echo "--finish writes the links tables: it has no plan" >&2; exit 2; }
 if [ "$#" -eq 0 ] && [ "$plan" = false ]; then finish=true; fi  # a load of every lane ends with the finish
 
@@ -64,13 +66,13 @@ fi
 
 if [ "$#" -gt 0 ]; then
   steps="$(printf '%s\n' "$@" | jq -R 'select(length > 0)' | jq -sc .)"
-  input="{\"steps\": ${steps}, \"plan\": ${plan}, \"finish\": ${finish}}"
+  input="{\"steps\": ${steps}, \"plan\": ${plan}, \"force\": ${force}, \"finish\": ${finish}}"
 else
   steps="every lane"
-  input="{\"plan\": ${plan}, \"finish\": ${finish}}"
+  input="{\"plan\": ${plan}, \"force\": ${force}, \"finish\": ${finish}}"
 fi
 execution="$(sfn start-execution --state-machine-arn "$machine" --input "$input" | jq -r .executionArn)"
-echo "started ${execution##*:} on commit ${commit:0:8}: steps ${steps}, plan ${plan}, finish ${finish}, run ${RUN}"
+echo "started ${execution##*:} on commit ${commit:0:8}: steps ${steps}, plan ${plan}, force ${force}, finish ${finish}, run ${RUN}"
 
 caffeinate -dimsu -w $$ 2>/dev/null &
 deadline=$(( $(date +%s) + ${LOAD_DEADLINE_HOURS:-72} * 3600 ))
