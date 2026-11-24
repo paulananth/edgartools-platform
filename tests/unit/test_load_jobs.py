@@ -1715,7 +1715,7 @@ def test_each_step_resolves_to_the_folder_its_source_names():
         'ncen-class-2026q2': ('sec.ncen-datasets/2026q2', 'captures'),
         'ncen-class-2026q3': ('sec.ncen-datasets/2026q3', 'captures'),
         'nport-security-silver': ('sec.nport-datasets/2026q2', 'captures'),
-        'gleif-pairs': ('gleif/20260911-1600', 'captures'),
+        'gleif-pairs': ('gleif/20260911-1600-publisher', 'captures'),
         'gleif': ('gleif/20260911-1600-publisher', 'captures'),
         'adv-custodians-06': ('iapd.adv/p07-2026-06', 'captures'),
         'adv-custodians-03': ('iapd.adv/p07-2026-03', 'captures'),

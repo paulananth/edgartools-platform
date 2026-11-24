@@ -167,6 +167,9 @@ no account). For the image, "GitHub Container Registry (Recommended)".
   Operator, 2026-11-24: "Fix item 3 build a new image". A forced load now gives each job one revision of its own, the forced time as
   digits (YYYYMMDDHHMMSS: above every delivery date and every earlier forced run). Tests failed first
   (`--revision` was the file's `1`, not the forced time), 2026-11-24 08:09 ET
-- [ ] The mount gap (symlinked captures) and the worker's memory limit (two N-PORT jobs killed, `OOMKilled`): for Codex, see the
+- [x] The mount gap: `gleif-pairs` read capture files that are symlinks into a folder the worker does not mount. Codex's change reads the
+  publisher input, whose three payload files are regular files (PR 2100); Claude took the branch over on the operator's word ("Take
+  over codex/gleif-worker-input-20261124") and updated the one expectation, `test_each_step_resolves_to_the_folder_its_source_names`
+  (it still named the symlinked input; failed first on the new config), 2026-11-24 09:51 ET
   handoff addendum
 - [x] Learning → skill: data-operations and data-onboarding point at `sources/<source>/inputs.yaml` for a source's deliveries, 2026-11-23 22:03 ET
