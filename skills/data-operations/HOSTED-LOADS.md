@@ -62,8 +62,9 @@ CODE read it in place of git, and ENGINE does not apply (the image compiles its 
   and the heaviest merges were killed (status -9).
 - **One task per poller.** The worker's `ps` sees only its container, so QUIET's process count no longer covers the Mac; the
   loader's database sessions still do. Never start `load_jobs.py` on the Mac beside it.
-- **Mounts:** the logins and the captures are read-only; the stores folder and `LOGS` are written (the readiness record,
-  the run's state). Host networking lets the worker reach the stores and the catalog as the Mac does.
+- **Mounts:** the logins and the captures are read-only; the stores folder, `LOGS` and the run documents' folder
+  (`BOOKKEEPING_MANIFEST_ROOT` in `worker.env`, read by `load.sh`) are written (the readiness record, the run's state, each run's
+  frozen rules and input manifests; a folder the worker does not mount reads as a missing file, and a run driven again stops). Host networking lets the worker reach the stores and the catalog as the Mac does.
 
 ## Before a load starts
 - **Role guards first.** `infra/scripts/harden-hosted-roles.py --confirm` (owner login) gives every login a connection limit,

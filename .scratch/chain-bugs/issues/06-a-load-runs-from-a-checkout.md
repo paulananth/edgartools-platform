@@ -178,4 +178,12 @@ no account). For the image, "GitHub Container Registry (Recommended)".
   publisher input, whose three payload files are regular files (PR 2100); Claude took the branch over on the operator's word ("Take
   over codex/gleif-worker-input-20261124") and updated the one expectation, `test_each_step_resolves_to_the_folder_its_source_names`
   (it still named the symlinked input; failed first on the new config), 2026-11-24 09:51 ET
+- [x] The second mount gap: the default load's `company`, `person` and `openfigi-answers` stopped with "Corrupt control document". The
+  forced load had left runs unfinished, the default load drives them again, and the worker reads each run's frozen rules from the
+  folder `BOOKKEEPING_MANIFEST_ROOT` names, which it does not mount (in the container the file did not exist; the engine reports a
+  missing file as a corrupt control document, a misleading message). `load.sh` reads the folder from `worker.env` and the compose
+  file mounts it writable. `test_the_worker_mounts_the_folder_of_the_run_documents_that_worker_env_names` failed first with
+  `assert (0 == 1)` (no such mount), 2026-11-24 11:28 ET
+- [ ] The engine's message: a missing artifact is reported as a corrupt control document (`Artifacts.json` wraps the missing-file
+  error); name it a missing artifact
 - [x] Learning → skill: data-operations and data-onboarding point at `sources/<source>/inputs.yaml` for a source's deliveries, 2026-11-23 22:03 ET
