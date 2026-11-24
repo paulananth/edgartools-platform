@@ -268,7 +268,7 @@ steps:
     priority: 1
     source: gleif
     target: subfund-pairs
-    input: 20260911-1600
+    input: 20260911-1600-publisher
     minutes: 60
     attempts: 3
   - name: gleif
