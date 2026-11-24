@@ -37,6 +37,9 @@ host exporter only when nothing answers on the port (a load run by hand, outside
 exporter is not answering, then `load_monitor_up 1`. A host exporter served from a checkout goes blind when that
 checkout is deleted (`load_monitor_up 0`): stop it, never repair it, and let the pipeline's exporter take the port.
 
+A container runtime that stops answering blinds the exporter and freezes the load behind it: test the runtime first (a bounded
+`docker version`), and restart it before looking at anything else (HOSTED-LOADS, "The shortest time to load everything").
+
 ## The design
 
 A step has one of six states (the codes are never renumbered: Prometheus keeps what it stored, and a changed number repaints history; code 2, once `unclear`, stays unused), each with one colour that means the same on every
