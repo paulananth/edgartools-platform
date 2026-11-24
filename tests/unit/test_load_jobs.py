@@ -1779,11 +1779,13 @@ def test_a_forced_load_is_a_new_publication_with_a_revision_above_the_one_the_fi
     assert args.count("--revision") == 1 and args[args.index("--revision") + 1] == "20261124121919"
 
 
-@pytest.mark.parametrize("cores, widest, expected", [(8, 4, 2), (8, 2, 4), (8, 8, 1), (2, 4, 1), (16, 2, 8)])
-def test_a_machine_carries_its_cores_over_the_widest_first_step_lanes_at_once(cores, widest, expected):
+@pytest.mark.parametrize("capacity, widest, expected", [("local", 2, None), ("aws-large", 2, 1), ("aws-medium", 4, 1), ("aws-small", 1, 1)])
+def test_a_compute_carries_its_vcpus_over_the_widest_first_step_lanes_at_once(monkeypatch, capacity, widest, expected):
+    monkeypatch.setattr(chain.os, "cpu_count", lambda: 8)
     steps = [{"name": "a1", "lane": "A", "workers": 2}, {"name": "a2", "lane": "A", "workers": 8},
              {"name": "b1", "lane": "B", "workers": widest}, {"name": "c1", "lane": "C", "workers": 1}]
-    assert chain.lanes_at_once(steps, cores) == expected  # a lane's later step (a2) never counts: it starts after the first
+    # `local` is this machine (8 cores, so 8 // widest 2 = 4); a profile of the file is its own vCPUs; a later step of a lane (a2) never counts
+    assert chain.lanes_at_once(steps, capacity) == (4 if capacity == "local" else expected)
 
 
 def test_lanes_at_once_is_read_from_the_real_load_jobs_and_load_sh_sets_it_in_the_definition(capsys, monkeypatch):
