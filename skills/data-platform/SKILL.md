@@ -35,8 +35,9 @@ and the environment checks it needs. A route grants no approval, provider reques
 1. **Find the state.** With no `edgar-warehouse` on the path, the next action is [Setup](#0-setup), step 1. A source is
    configured when the rules folder (`EDGAR_RULES_ROOT`, else the bundle's read-only copy) holds `sources/<source>/source.yaml`;
    a run id with Bookkeeping status is retained run evidence; a log's `## Resume` record is checked by [Resume](RESUME.md).
-2. **Pick the owner** in [Decisions, artifacts and handoffs](#decisions-artifacts-and-handoffs) whose row fits that state; its
-   handoff names the artifact to carry. Open no other reference to choose.
+2. **Route from that evidence** with `edgar-warehouse plan route --request <file>` (or `--request -` for stdin). Supply `source_configured`, `delivery_changed` and `live_rules_changed` as booleans derived from the rules configuration and retained processing evidence. No `source.yaml` routes to Data Onboarding; otherwise live-rule changes route to Refining Rules, changed deliveries to Data Operations, and unchanged inputs to the repeat-run check. If both change flags are true, Data Platform asks the operator to disambiguate before handoff.
+   For `resume`, also include `resume_phases` in recorded order, each with `owner`, `action`, `complete` and `hashes_match`. The command skips matching completed phases and selects the first unfinished or invalidated phase; when all recorded phases are current, it routes to Data Operations.
+   The command only selects a route; it performs no load, provider request, approval or switch-on. Use the returned owner/action with the matching row in [Decisions, artifacts and handoffs](#decisions-artifacts-and-handoffs); never include identifiers, data values or secrets.
 3. **Name the duty** in the [duty table](CONNECTIONS.md#database-connections-and-duties) (none to read captured files; a load
    or a worker: Loader, `worker.env`). Check, without printing a value, that its file exists and sets `DATA_URL` and `CONTROL_URL`.
 4. **Run `edgar-warehouse doctor`**, with that file, if any, sourced in a command-scoped subshell. Expected: exit 0 with `"ok": true`,
