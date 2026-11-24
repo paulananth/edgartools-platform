@@ -211,8 +211,8 @@ edgar-warehouse load \
   load prints, else 0). A changed input (a new Name Matching, say) changes a record under the
   same revision, and the Stage refuses it ("Source native revision has
   contradictory publications"): pass a revision higher than the last load's.
-- **Plan first.** Add `--plan` (no `--capture-run` needed) before claiming or
-  starting a load. It changes nothing and prints which open runs `load` would
+- **Plan when in doubt.** Add `--plan` (no `--capture-run` needed) before claiming or
+  starting a load you doubt (a changed rule or capture); a routine load needs none. It changes nothing and prints which open runs `load` would
   finish, which it would leave and why (a run pinned to old worker code is
   left, and its documents load again in a new run), a blocked run that would
   stop it, and the documents and bundles.
