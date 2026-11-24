@@ -82,7 +82,9 @@ def resolve_input(step: dict, sources: Path) -> dict:
     if "source" not in step:
         return step
     path = sources / step["source"] / "inputs.yaml"
-    held = (yaml.safe_load(path.read_text()) or {}).get("inputs") or {} if path.exists() else {}
+    held = {}
+    if path.exists():
+        held = (yaml.safe_load(path.read_text()) or {}).get("inputs") or {}
     name = step.get("input") or (next(iter(held)) if len(held) == 1 else None)
     if name is None:
         raise ValueError(f"{step['name']}: names no input, and {step['source']} holds {sorted(held) or 'none'}")
