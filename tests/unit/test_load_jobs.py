@@ -1749,7 +1749,7 @@ def test_a_forced_run_gives_every_load_force_publish_and_an_ordinary_run_gives_n
     assert "--force" not in chain.arguments(step)
     monkeypatch.setenv(chain.FORCE, "2026-11-23T20:00:00Z")
     forced = chain.arguments(step)
-    assert forced[-3:] == ["--force", "--as-of", "2026-11-23T20:00:00Z"]
+    assert forced[-5:] == ["--force", "--as-of", "2026-11-23T20:00:00Z", "--revision", "20261123200000"]
     assert chain.arguments(step) == forced  # an attempt that follows one stopped at its bound names the same run
 
 
@@ -1765,3 +1765,15 @@ def test_force_is_refused_where_there_is_no_document_to_force(monkeypatch, capsy
     monkeypatch.delenv(chain.FORCE, raising=False)
     assert chain.main() == 2
     assert "--force goes with loads" in capsys.readouterr().err
+
+
+def test_a_forced_load_is_a_new_publication_with_a_revision_above_the_one_the_file_gives(monkeypatch):
+    """The first forced load of a store stopped 3 of its first jobs with "Source native revision has contradictory publications":
+    the run name changed under the revision the file (or the delivery's date) gave. A forced load gives one revision of its own."""
+    step = {"name": "x", "source": "s", "target": "t", "capture": "a/b", "workers": 2, "bundles": 3, "minutes": 5,
+            "capture_run": "l-x", "revision": 1}
+    monkeypatch.delenv(chain.FORCE, raising=False)
+    assert chain.arguments(step)[chain.arguments(step).index("--revision") + 1] == "1"
+    monkeypatch.setenv(chain.FORCE, "2026-11-24T12:19:19Z")
+    args = chain.arguments(step)
+    assert args.count("--revision") == 1 and args[args.index("--revision") + 1] == "20261124121919"
