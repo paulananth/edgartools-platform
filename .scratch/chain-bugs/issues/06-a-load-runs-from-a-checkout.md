@@ -162,4 +162,11 @@ no account). For the image, "GitHub Container Registry (Recommended)".
   and `--begin` refuse it). Tests failed first: 8 (the worker's commands, the machine's tasks, the arguments, the refusals), 2026-11-23 22:32 ET
 - [ ] Load all 43 load jobs again with force publish: `RUN=<new label> LOAD_DEADLINE_HOURS=<hours> load.sh --force`; the time
   is said before it starts, then checked every 30 minutes
+- [x] A forced load is a new publication. The first forced load (execution 49827879) stopped `ownership`, `ncen-registrant-2025q4` and
+  `ncen-fund-2025q4` with "Source native revision has contradictory publications" (the run name changed under the revision).
+  Operator, 2026-11-24: "Fix item 3 build a new image". A forced load now gives each job one revision of its own, the forced time as
+  digits (YYYYMMDDHHMMSS: above every delivery date and every earlier forced run). Tests failed first
+  (`--revision` was the file's `1`, not the forced time), 2026-11-24 08:09 ET
+- [ ] The mount gap (symlinked captures) and the worker's memory limit (two N-PORT jobs killed, `OOMKilled`): for Codex, see the
+  handoff addendum
 - [x] Learning → skill: data-operations and data-onboarding point at `sources/<source>/inputs.yaml` for a source's deliveries, 2026-11-23 22:03 ET

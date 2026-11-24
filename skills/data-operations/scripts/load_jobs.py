@@ -925,14 +925,16 @@ def arguments(step: dict) -> list[str]:
             "--capture-run", step["capture_run"], "--stores", str(STORES),
             "--workers", str(step["workers"]), "--bundles", str(step["bundles"]), "--minutes", str(step["minutes"]),
             "--no-links"]  # the links table is built once, in `finish`
-    if "revision" in step:
+    if "revision" in step and not os.environ.get(FORCE):
         args += ["--revision", str(step["revision"])]
     for name, value in (step.get("facts") or {}).items():
         args += ["--fact", f"{name}={value}"]
     if os.environ.get(FORCE):  # a forced load: the Change Journal is ignored and every document is processed again
         # The engine names a forced run `<run>+force-<its time>`: one time for every attempt, so an attempt that is stopped
         # at its bound carries on in the same run, as an unforced one does, instead of starting a run of its own.
-        args += ["--force", "--as-of", os.environ[FORCE]]
+        # A forced load is a new publication: the engine refuses the same revision with other content (the run name changed), so
+        # its revision is the forced time as digits (YYYYMMDDHHMMSS): above every delivery date and every earlier forced run.
+        args += ["--force", "--as-of", os.environ[FORCE], "--revision", re.sub(r"[^0-9]", "", os.environ[FORCE])]
     return args
 
 
