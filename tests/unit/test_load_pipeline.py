@@ -256,5 +256,6 @@ def test_the_exporter_runs_in_the_pipeline_from_the_same_image_and_sees_the_work
     exporter, worker = compose["exporter"], compose["worker"]
     assert exporter["image"] == worker["image"] and exporter["pid"] == "service:worker"
     assert exporter["entrypoint"][1].endswith("load-monitoring/scripts/exporter.py") and exporter["entrypoint"][-1] == "serve"
-    assert all(v.endswith(":ro") for v in exporter["volumes"] if "${LOGS}" in v or "${STORES}" in v)
+    assert exporter["volumes"] == ["${STORES}:${STORES}:ro", "${LOGS}:${LOGS}:ro"]  # never the logins folder: it holds other private files
+    assert exporter["depends_on"]["worker"]["restart"] is True
     assert "up -d worker exporter" in (MACHINE.parent / "load.sh").read_text()

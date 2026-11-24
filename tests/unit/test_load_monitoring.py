@@ -120,3 +120,14 @@ def test_the_monitor_starts_no_host_exporter_while_the_pipelines_exporter_answer
     monkeypatch.setattr(monitoring, "exporter_answer", lambda: "up")
     monkeypatch.setattr(monitoring.subprocess, "Popen", lambda *a, **k: pytest.fail("a second exporter was started"))
     monitoring.start_exporter()
+
+
+def test_the_monitor_starts_a_host_exporter_when_nothing_answers(monkeypatch, tmp_path):
+    started = []
+    monkeypatch.setattr(monitoring, "exporter_pid", lambda: None)
+    monkeypatch.setattr(monitoring, "exporter_answer", lambda: "not answering")
+    monkeypatch.setattr(monitoring, "STATE", tmp_path)
+    monkeypatch.setattr(monitoring, "PID", tmp_path / "exporter.pid")
+    monkeypatch.setattr(monitoring.subprocess, "Popen", lambda argv, **k: started.append(argv) or type("P", (), {"pid": 1})())
+    monitoring.start_exporter()
+    assert len(started) == 1 and started[0][-2:] == [str(monitoring.HERE / "exporter.py"), "serve"][-2:]

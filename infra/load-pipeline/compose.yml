@@ -40,13 +40,12 @@ services:
     network_mode: host
     pid: "service:worker"
     restart: unless-stopped
-    depends_on: [worker]
+    depends_on:
+      worker: {condition: service_started, restart: true}  # a restarted worker has a new process space: the exporter follows it
     environment:
-      HOME: ${HOME}
       STORES: ${STORES:?}
       LOGS: ${LOGS:?}
       RUN: ${RUN:?}
-    volumes:
-      - ${HOME}/.config/edgartools:${HOME}/.config/edgartools:ro
+    volumes:  # only the reader login (in STORES) and the chain's logs: not the logins folder, which holds other private files
       - ${STORES}:${STORES}:ro
       - ${LOGS}:${LOGS}:ro

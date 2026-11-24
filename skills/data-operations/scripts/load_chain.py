@@ -343,6 +343,11 @@ def clock() -> datetime:
     return datetime.now(ZoneInfo("America/New_York"))
 
 
+# The `load` command as a process line shows it: `edgar-warehouse load`, or, in the loader image, the same command written as
+# a python one-liner (`from edgar_warehouse.cli import main; sys.exit(main()) load`).
+LOAD_COMMAND = re.compile(r"edgar[-_]warehouse(?:\.cli import main; sys\.exit\(main\(\)\))? load ")
+
+
 def external_loads() -> set[tuple[str, str]]:
     """The (source, target) of every `load` running on this machine, whoever started it."""
     listing = subprocess.run(["ps", "-Ao", "args"], check=False, capture_output=True, text=True).stdout
@@ -722,11 +727,6 @@ def window_cpu(before: dict[int, float], after: dict[int, float]) -> float:
     """CPU seconds used in a window by the processes present in both readings: one that began in the window has only
     its lifetime to show, which is not the window's."""
     return sum(max(after[pid] - used, 0.0) for pid, used in before.items() if pid in after)
-
-
-# The `load` command as a process line shows it: `edgar-warehouse load`, or, in the loader image, the same command written as
-# a python one-liner (`from edgar_warehouse.cli import main; sys.exit(main()) load`).
-LOAD_COMMAND = re.compile(r"edgar[-_]warehouse(?:\.cli import main; sys\.exit\(main\(\)\))? load ")
 
 
 def is_load_process(args: str, source: str, target: str) -> bool:
