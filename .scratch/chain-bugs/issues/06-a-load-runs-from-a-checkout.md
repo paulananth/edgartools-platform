@@ -156,4 +156,10 @@ no account). For the image, "GitHub Container Registry (Recommended)".
   fails on main (it names the files holding the old name), 2026-11-23 22:18 ET
 - [ ] ~~Rename `step` to `job` in the file keys, flags and worker input~~ deferred: `steps`, `--only` and the task input are the
   worker's and state machine's contract; changing them is its own change
+- [x] Force publish through the pipeline. Operator, 2026-11-23: "once done load all again with force publish flag so it ignores
+  change journal". `load.sh --force` puts `force` in the execution's input, the machine hands it to every lane and step task,
+  the worker adds `--force`, and `load_jobs.py` gives it to every load (a plan never has it; `--finish`, `--list`, `--status`
+  and `--begin` refuse it). Tests failed first: 8 (the worker's commands, the machine's tasks, the arguments, the refusals), 2026-11-23 22:32 ET
+- [ ] Load all 43 load jobs again with force publish: `RUN=<new label> LOAD_DEADLINE_HOURS=<hours> load.sh --force`; the time
+  is said before it starts, then checked every 30 minutes
 - [x] Learning → skill: data-operations and data-onboarding point at `sources/<source>/inputs.yaml` for a source's deliveries, 2026-11-23 22:03 ET

@@ -1741,3 +1741,27 @@ def test_the_load_jobs_are_named_load_jobs_everywhere_a_reader_looks():
              and name != "tests/unit/test_load_jobs.py" and (ROOT / name).is_file()
              and old.search((ROOT / name).read_text(errors="ignore"))]
     assert named == []
+
+
+def test_a_forced_run_gives_every_load_force_publish_and_an_ordinary_run_gives_none(monkeypatch):
+    step = {"name": "x", "source": "s", "target": "t", "capture": "a/b", "workers": 2, "bundles": 3, "minutes": 5, "capture_run": "l-x"}
+    monkeypatch.delenv(chain.FORCE, raising=False)
+    assert "--force" not in chain.arguments(step)
+    monkeypatch.setenv(chain.FORCE, "2026-11-23T20:00:00Z")
+    forced = chain.arguments(step)
+    assert forced[-3:] == ["--force", "--as-of", "2026-11-23T20:00:00Z"]
+    assert chain.arguments(step) == forced  # an attempt that follows one stopped at its bound names the same run
+
+
+def test_a_forced_load_is_named_by_a_time_in_the_form_the_engine_reads():
+    """The engine names a forced run `<run>+force-<digits of its time>`: one time for all attempts, so an attempt stopped at its
+    bound (`minutes`) carries on in the same run instead of starting a run of its own."""
+    assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", chain.forced_at())
+
+
+@pytest.mark.parametrize("flag", ["--finish", "--list", "--status", "--begin", "--plan"])
+def test_force_is_refused_where_there_is_no_document_to_force(monkeypatch, capsys, flag):
+    monkeypatch.setattr(sys, "argv", ["load_jobs.py", "--force", flag])
+    monkeypatch.delenv(chain.FORCE, raising=False)
+    assert chain.main() == 2
+    assert "--force goes with loads" in capsys.readouterr().err

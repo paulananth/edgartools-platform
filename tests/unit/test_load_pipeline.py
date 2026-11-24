@@ -104,7 +104,7 @@ def test_the_state_machine_runs_readiness_then_the_given_steps_in_order_and_stop
     assert states["Start"]["Parameters"]["next"] == 0 and states["Start"]["Next"] == "More"
     assert states["More"]["Choices"] == [{"Variable": "$.next", "NumericLessThanPath": "$.count", "Next": "Step"}]
     step = states["Step"]
-    assert step["Parameters"] == {"action": "step", "step.$": "States.ArrayGetItem($.steps, $.next)", "plan.$": "$.plan"}
+    assert step["Parameters"] == {"action": "step", "step.$": "States.ArrayGetItem($.steps, $.next)", "plan.$": "$.plan", "force.$": "$.force"}
     assert step["Next"] == "Advance" and "Catch" not in step and "Retry" not in step
     assert states["Advance"]["Parameters"]["next.$"] == "States.MathAdd($.next, 1)" and states["Advance"]["Next"] == "More"
     assert states["More"]["Default"] == "Finish?" and states["Finish?"]["Default"] == "Done"
@@ -172,11 +172,11 @@ def test_without_steps_the_state_machine_runs_every_lane_at_once_and_a_failed_la
     to their end, then the execution failed and the finish did not run."""
     states = json.loads(MACHINE.read_text())["States"]
     assert states["Mode"]["Choices"] == [{"Variable": "$.steps", "IsPresent": True, "Next": "Begin"}]
-    assert states["Mode"]["Default"] == "Lanes" and states["Lanes"]["Parameters"] == {"action": "lanes", "plan.$": "$.plan"}
+    assert states["Mode"]["Default"] == "Lanes" and states["Lanes"]["Parameters"] == {"action": "lanes", "plan.$": "$.plan", "force.$": "$.force"}
     run = states["Run lanes"]
     assert run["Type"] == "Map" and run["ItemsPath"] == "$.lanes.names" and run["MaxConcurrency"] == 0
     lane = run["Iterator"]["States"]["Lane"]
-    assert lane["Parameters"] == {"action": "lane", "lane.$": "$.lane", "plan.$": "$.plan"} and "Retry" not in lane
+    assert lane["Parameters"] == {"action": "lane", "lane.$": "$.lane", "plan.$": "$.plan", "force.$": "$.force"} and "Retry" not in lane
     assert lane["Catch"] == [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "Lane failed"}]
     assert run["Iterator"]["States"]["Lane failed"]["Parameters"]["failed"] is True
     assert states["Count"]["Parameters"]["failed.$"] == "States.ArrayContains($.results[*].failed, true)"
@@ -236,7 +236,7 @@ def test_named_steps_are_checked_in_their_order_before_the_first_runs_and_a_refu
     assert [r[0] for r in client.reports] == ["failure", "failure"]
     states = json.loads(MACHINE.read_text())["States"]
     begin = states["Begin"]
-    assert begin["Parameters"] == {"action": "begin", "steps.$": "$.steps", "plan.$": "$.plan"} and begin["Next"] == "Start"
+    assert begin["Parameters"] == {"action": "begin", "steps.$": "$.steps", "plan.$": "$.plan", "force.$": "$.force"} and begin["Next"] == "Start"
     assert "Catch" not in begin and "Retry" not in begin  # a refusal ends the execution before any step
 
 
@@ -259,3 +259,29 @@ def test_the_exporter_runs_in_the_pipeline_from_the_same_image_and_sees_the_work
     assert exporter["volumes"] == ["${STORES}:${STORES}:ro", "${LOGS}:${LOGS}:ro"]  # never the logins folder: it holds other private files
     assert exporter["depends_on"]["worker"]["restart"] is True
     assert "up -d worker exporter" in (MACHINE.parent / "load.sh").read_text()
+
+
+@pytest.mark.parametrize("task, forced", [
+    ({"action": "step", "step": "company", "plan": False, "force": True}, True),
+    ({"action": "lane", "lane": "A", "plan": False, "force": True}, True),
+    ({"action": "step", "step": "company", "plan": False, "force": False}, False),
+    ({"action": "step", "step": "company", "plan": False}, False),
+    ({"action": "step", "step": "company", "plan": True, "force": True}, False)])
+def test_a_forced_task_runs_its_load_with_force_publish_and_a_plan_never_does(task, forced):
+    assert ("--force" in activity_worker.command(task)) is forced
+
+
+def test_every_task_that_carries_the_plan_carries_the_force_the_execution_started_with():
+    machine = json.loads(MACHINE.read_text())
+
+    def walk(node):
+        if isinstance(node, dict):
+            if "plan.$" in node:
+                yield node
+            for value in node.values():
+                yield from walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                yield from walk(value)
+    carriers = list(walk(machine))
+    assert len(carriers) >= 6 and all(c.get("force.$") == "$.force" for c in carriers)

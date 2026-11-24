@@ -37,7 +37,7 @@ import statistics
 import subprocess
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
@@ -51,6 +51,7 @@ ROOTS = {"captures": Path(os.environ.get("CAPTURES") or HOME / ".local/share/edg
          "proving": Path(os.environ.get("PROVING") or HOME / ".local/share/edgartools/mdm/proving")}
 LOGS = Path(os.environ.get("LOGS") or HOME / ".local/share/edgartools/load-logs")
 RUN = os.environ.get("RUN", "fresh-v1")
+FORCE = "LOAD_FORCE"  # set by `--force` to the load's time (UTC) for this process and the steps it starts: a load is forced as a whole
 def engine_command(environ: dict) -> list[str]:
     """The command that runs `edgar-warehouse`: the executable `EDGAR_WAREHOUSE` names (a checkout whose environment is
     built elsewhere), else `uv run --no-sync` in the checkout."""
@@ -913,6 +914,11 @@ def status_inputs() -> tuple[Path, str | None, str]:
     return state, reader_url, notice
 
 
+def forced_at() -> str:
+    """The time (UTC, the engine's `--as-of` form) a forced load is named by: taken once, so every attempt of it names one run."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def arguments(step: dict) -> list[str]:
     capture = ROOTS[step.get("capture_root", "captures")] / step["capture"]
     args = ["--source", step["source"], "--target", step["target"], "--capture", str(capture),
@@ -923,6 +929,10 @@ def arguments(step: dict) -> list[str]:
         args += ["--revision", str(step["revision"])]
     for name, value in (step.get("facts") or {}).items():
         args += ["--fact", f"{name}={value}"]
+    if os.environ.get(FORCE):  # a forced load: the Change Journal is ignored and every document is processed again
+        # The engine names a forced run `<run>+force-<its time>`: one time for every attempt, so an attempt that is stopped
+        # at its bound carries on in the same run, as an unforced one does, instead of starting a run of its own.
+        args += ["--force", "--as-of", os.environ[FORCE]]
     return args
 
 
@@ -1484,6 +1494,8 @@ def main() -> int:
         parser.add_argument(f"--{flag}", action="store_true")
     parser.add_argument("--from", dest="start")
     parser.add_argument("--only")
+    parser.add_argument("--force", action="store_true",
+                        help="force publish: every load of this run ignores the Change Journal and processes every document of its source again")
     parser.add_argument("--lane")
     parser.add_argument("--adopt-state", action="store_true",
                         help="keep a run state file that has done lines and no store marker, as this store's (otherwise it is set aside)")
@@ -1509,6 +1521,11 @@ def main() -> int:
     parser.add_argument("--slots", type=int, default=max(2, min(os.cpu_count() or 2, int(
         os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") / 2**30 // 2))), help="loads running at once")
     args = parser.parse_args()
+    if args.force:
+        if args.finish or args.list or args.status or args.begin or args.plan:
+            print("--force goes with loads (the whole run, --lane, --only or --auto): the rest has no document to force", file=sys.stderr)
+            return 2
+        os.environ[FORCE] = forced_at()
     steps = clamped(load_jobs(), args.capacity)
     names = [step["name"] for step in steps]
     for chosen in (args.start, args.only):

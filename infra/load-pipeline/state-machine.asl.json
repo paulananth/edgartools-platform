@@ -32,7 +32,8 @@
       "Parameters": {
         "action": "begin",
         "steps.$": "$.steps",
-        "plan.$": "$.plan"
+        "plan.$": "$.plan",
+        "force.$": "$.force"
       },
       "ResultPath": null,
       "Next": "Start"
@@ -43,7 +44,8 @@
       "HeartbeatSeconds": 300,
       "Parameters": {
         "action": "lanes",
-        "plan.$": "$.plan"
+        "plan.$": "$.plan",
+        "force.$": "$.force"
       },
       "TimeoutSeconds": 600,
       "ResultSelector": {
@@ -58,7 +60,8 @@
       "MaxConcurrency": 0,
       "Parameters": {
         "lane.$": "$$.Map.Item.Value",
-        "plan.$": "$.plan"
+        "plan.$": "$.plan",
+        "force.$": "$.force"
       },
       "Iterator": {
         "StartAt": "Lane",
@@ -70,7 +73,8 @@
             "Parameters": {
               "action": "lane",
               "lane.$": "$.lane",
-              "plan.$": "$.plan"
+              "plan.$": "$.plan",
+              "force.$": "$.force"
             },
             "TimeoutSeconds": 604800,
             "Catch": [
@@ -134,6 +138,7 @@
       "Parameters": {
         "steps.$": "$.steps",
         "plan.$": "$.plan",
+        "force.$": "$.force",
         "count.$": "States.ArrayLength($.steps)",
         "next": 0,
         "finish.$": "$.finish"
@@ -157,7 +162,8 @@
       "Parameters": {
         "action": "step",
         "step.$": "States.ArrayGetItem($.steps, $.next)",
-        "plan.$": "$.plan"
+        "plan.$": "$.plan",
+        "force.$": "$.force"
       },
       "HeartbeatSeconds": 300,
       "TimeoutSeconds": 172800,
@@ -169,6 +175,7 @@
       "Parameters": {
         "steps.$": "$.steps",
         "plan.$": "$.plan",
+        "force.$": "$.force",
         "count.$": "$.count",
         "next.$": "States.MathAdd($.next, 1)",
         "finish.$": "$.finish"
