@@ -1,6 +1,6 @@
 # Skills: who owns what, and how they hand off
 
-One owner for each decision and artifact; every hand-off names what travels and who receives it. [the skills README](../README.md) says which skill
+One owner for each decision and artifact; every hand-off names what travels and who receives it. the skills README (`skills/README.md`) says which skill
 to open; this page says what each skill **owns, takes in, gives out and hands to**, so skills work together instead of beside each other.
 A test (`tests/unit/test_skill_ownership.py`) holds the table: every skill has a row, every name exists, and a hand-off is written on both
 sides (A hands off to B only if B lists A under "Receives from").

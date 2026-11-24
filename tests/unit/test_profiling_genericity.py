@@ -29,6 +29,8 @@ EXEMPT = {
     # a skill or rules file").
     "aws-snowflake-operations",
 }
+# The ownership table names every skill, and two skills carry a source's or a kind's name: the page is a list of skill names, not a how-to.
+EXEMPT_FILES = {"skills/data-platform/OWNERSHIP.md"}
 SCOPE = tuple(
     f"skills/{d.name}" for d in sorted((ROOT / "skills").iterdir()) if d.is_dir() and d.name not in EXEMPT
 ) + ("docs/specs/rdm", "docs/specs/agent-context", "docs/specs/profiling")
@@ -54,7 +56,7 @@ def _files() -> list[Path]:
     for folder in SCOPE:
         base = ROOT / folder
         if base.is_dir():
-            found += [p for p in sorted(base.rglob("*")) if p.suffix in {".md", ".py", ".yaml", ".sh"}]
+            found += [p for p in sorted(base.rglob("*")) if p.suffix in {".md", ".py", ".yaml", ".sh"} and str(p.relative_to(ROOT)) not in EXEMPT_FILES]
         elif base.is_file():
             found.append(base)
     return found
