@@ -56,9 +56,10 @@ def now() -> datetime:
 
 
 def image_commit(repo: Path) -> str:
-    """The commit a loader image was built from, written by CI into the image; "" outside an image."""
+    """The commit a loader image was built from, written by CI into the image; "" outside an image. A folder with `.git`
+    is a checkout whatever files it holds, so a stray `COMMIT` file never stands in for git."""
     path = repo / IMAGE_COMMIT
-    return path.read_text().strip() if path.is_file() else ""
+    return path.read_text().strip() if path.is_file() and not (repo / ".git").exists() else ""
 
 
 def current_sha(repo: Path = REPO) -> str:

@@ -35,7 +35,7 @@ jobs:
         id: names
         run: |
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          deps=$(cat Dockerfile.warehouse-deps pyproject.toml uv.lock $(git ls-files crates/source-contract crates/control-contract | sort) | sha256sum | cut -c1-16)
+          deps=$({ cat Dockerfile.warehouse-deps pyproject.toml uv.lock; git ls-files -z crates/source-contract crates/control-contract | sort -z | xargs -0 cat; } | sha256sum | cut -c1-16)
           echo "deps=${IMAGE}:loader-deps-${deps}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/login-action@v3
@@ -62,7 +62,10 @@ jobs:
             --build-arg COMMIT="${{ steps.names.outputs.commit }}" \
             -t "${IMAGE}:loader-sha-${{ steps.names.outputs.commit }}" .
           docker run --rm --entrypoint sh "${IMAGE}:loader-sha-${{ steps.names.outputs.commit }}" -c \
-            'test "$(cat /app/COMMIT)" = "${{ steps.names.outputs.commit }}" && edgar-warehouse --help >/dev/null && python -c "import source_contract, psycopg2, boto3" && ps -o pid= -p 1 >/dev/null'
+            'set -e; test "$(cat /app/COMMIT)" = "${{ steps.names.outputs.commit }}"; edgar-warehouse --help >/dev/null
+             python -c "import source_contract, psycopg2, boto3, edgar_warehouse.mdm.raw_capture, edgar_warehouse.rules.files, edgar_warehouse.workers"
+             cd /app/skills/data-operations/scripts; python readiness.py --list >/dev/null; python load_chain.py --list >/dev/null
+             ps -o pid= -p 1 >/dev/null; pgrep -f . >/dev/null'
 
       - name: Push the loader image
         if: github.event_name != 'pull_request'

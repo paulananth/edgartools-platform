@@ -52,8 +52,9 @@ no account). For the image, "GitHub Container Registry (Recommended)".
   passes on it without `git` or `gh`; ENGINE does not apply. `test_an_image_names_the_commit_ci_built_it_from_for_the_gate_and_the_code_check`
   failed with `AttributeError: module 'readiness' has no attribute 'IMAGE_COMMIT'`, then passes; ENGINE is covered by
   `test_an_installed_bundle_has_no_engine_source_to_compare`, 2026-11-23 19:57 ET
-- [ ] ~~Failing test: the chain runs where `caffeinate`, `memory_pressure`, `footprint` and `sysctl` are missing~~ not needed: each call
-  is already behind `sys.platform == "darwin"` (load_chain.py); `ps` and `pgrep` come from procps in the image
+- [ ] ~~Failing test: the chain runs where `caffeinate`, `memory_pressure`, `footprint` and `sysctl` are missing~~ deferred to
+  none: each call is already behind `sys.platform == "darwin"` (load_chain.py), so there is nothing to fix; `ps` and `pgrep`
+  come from procps in the image
 - [x] The worker runs a readiness task and a step task, heartbeats, reports success and failure, refuses a bad input and
   stops a task the execution gave up on: `tests/unit/test_load_pipeline.py` (6 tests), 2026-11-23 19:57 ET
 - [x] The state machine runs readiness, then the execution's `steps` in order, and holds no step names. Measured on Step
@@ -64,10 +65,21 @@ no account). For the image, "GitHub Container Registry (Recommended)".
   side (the loader's sessions) still covers the host
 - [ ] Mounts: stores and logs writable (readiness record, chain state), captures and proving read-only, at the paths
   `STORES`, `LOGS`, `CAPTURES`, `PROVING` name
-- [ ] `Dockerfile.loader` (procps, the whole `skills/` folder for the access audit, `edgar-warehouse` command, the commit)
+- [ ] `Dockerfile.loader` (procps, the whole `skills/` folder for the access audit, `edgar-warehouse` command, the commit): proved by the PR's image build
 - [ ] `loader-image.yml` pushes `loader-sha-<commit>` after green CI on `main`
 - [ ] The state machine, the activity worker, the compose file and the start script
-- [ ] Review (Standards, Spec, GoF), PR, merge on green
+- [x] Failing test: a load started from a checkout is refused before the gate, and a `COMMIT` file in a checkout is no
+  image. `test_a_load_started_from_a_checkout_is_refused_before_the_gate` failed with `Failed: a checkout is refused before
+  the gate` (3 cases) and `test_a_checkout_holding_a_commit_file_is_still_a_checkout` with `assert 'abc123' == ''`; both
+  pass, 2026-11-23 20:05 ET
+- [x] The finish (links and lookups) runs after the steps when asked; probed on Step Functions Local: finish runs after the
+  last step, never after a failed one, and is skipped when not asked, 2026-11-23 20:05 ET
+- [x] Review: GoF none; Standards and Spec fixed (refuse a checkout, `.git` beats a `COMMIT` file, one execution at a time,
+  a deadline that stops the execution, every failed outcome named, logins mounted read-only, paths and run label passed
+  through, the image check runs the chain's scripts, the init runbook points at the pipeline); rejected: the trailer (the
+  session's attribution), the token on pull requests (a fork's token is read-only), typed times (stamped by the script),
+  a pinned digest (a rebuild of one commit is that commit's code), 2026-11-23 20:05 ET
+- [ ] PR, merge on green
 - [ ] Live check: the image is published for the merged commit, and an execution on the emulator passes readiness
 - [ ] Rerun the 8 steps left after `company` through the pipeline: `nport-registrant`, `nport-fund`,
   `adv-mastering-03`, `adv-mastering-06`, `adv-silver-03`, `adv-silver-06`, `adv-custodians-03`, `adv-custodians-06`

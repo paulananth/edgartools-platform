@@ -1,21 +1,32 @@
 #!/usr/bin/env bash
 # Start a load on the pipeline: the loader image CI built for the newest main commit runs readiness, then each step.
 #
-#   infra/load-pipeline/load.sh [--plan] <step> [<step> ...]
+#   infra/load-pipeline/load.sh [--plan] [--finish] <step> [<step> ...]
 #
 # Runs on this machine's AWS Step Functions Local. It refuses when main's newest commit has no loader image yet (CI has not
-# passed on it, or the image is still building). It waits for the execution and exits 0 only when it succeeded.
+# passed on it, or the image is still building), and while another execution runs (one load at a time). It waits, up to
+# LOAD_DEADLINE_HOURS (default 72; then it stops the execution), and exits 0 only when the execution succeeded.
+# RUN, STORES, CAPTURES, PROVING and LOGS pass through to the worker, with load_chain.py's defaults.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
-plan=false
-if [ "${1:-}" = "--plan" ]; then plan=true; shift; fi
-[ "$#" -gt 0 ] || { echo "name at least one step" >&2; exit 2; }
+plan=false finish=false
+while [ "${1:-}" = "--plan" ] || [ "${1:-}" = "--finish" ]; do
+  if [ "$1" = "--plan" ]; then plan=true; else finish=true; fi
+  shift
+done
+[ "$#" -gt 0 ] || [ "$finish" = true ] || { echo "name at least one step, or --finish" >&2; exit 2; }
 
 commit="$(git ls-remote https://github.com/paulananth/edgartools-platform.git refs/heads/main | cut -f1)"
 image="ghcr.io/paulananth/edgartools-platform:loader-sha-${commit}"
 docker pull -q "$image" >/dev/null || {
   echo "no loader image for main's commit ${commit:0:8} yet: wait for CI and the Loader image workflow on it" >&2; exit 2; }
-export COMMIT="$commit"
+
+export COMMIT="$commit" RUN="${RUN:-fresh-v1}"
+export STORES="${STORES:-$HOME/.config/edgartools/hosted}"
+export CAPTURES="${CAPTURES:-$HOME/.local/share/edgartools/mdm/captures}"
+export PROVING="${PROVING:-$HOME/.local/share/edgartools/mdm/proving}"
+export LOGS="${LOGS:-$HOME/.local/share/edgartools/load-logs}"
+mkdir -p "$LOGS"
 
 endpoint=http://localhost:8083
 sfn() { AWS_ACCESS_KEY_ID=local AWS_SECRET_ACCESS_KEY=local aws stepfunctions --region us-east-1 --endpoint-url "$endpoint" --output json "$@"; }
@@ -23,29 +34,39 @@ compose=(docker compose -f "$here/compose.yml")
 
 "${compose[@]}" up -d stepfunctions >/dev/null
 for _ in $(seq 30); do sfn list-activities >/dev/null 2>&1 && break; sleep 1; done
-activity="$(sfn create-activity --name edgartools-load | jq -r .activityArn)"
-definition="$(sed "s|\${activity}|${activity}|g" "$here/state-machine.asl.json")"
-machine="arn:aws:states:us-east-1:123456789012:stateMachine:edgartools-load"
-if sfn describe-state-machine --state-machine-arn "$machine" >/dev/null 2>&1; then
+ACTIVITY_ARN="$(sfn create-activity --name edgartools-load | jq -r .activityArn)"
+export ACTIVITY_ARN
+definition="$(sed "s|\${activity}|${ACTIVITY_ARN}|g" "$here/state-machine.asl.json")"
+machine="$(sfn list-state-machines | jq -r '.stateMachines[] | select(.name == "edgartools-load") | .stateMachineArn')"
+if [ -n "$machine" ]; then
+  running="$(sfn list-executions --state-machine-arn "$machine" --status-filter RUNNING | jq -r '.executions | length')"
+  [ "$running" = 0 ] || { echo "an execution is still running: one load at a time" >&2; exit 2; }
   sfn update-state-machine --state-machine-arn "$machine" --definition "$definition" >/dev/null
 else
-  sfn create-state-machine --name edgartools-load --definition "$definition" \
-    --role-arn arn:aws:iam::123456789012:role/edgartools-load >/dev/null
+  machine="$(sfn create-state-machine --name edgartools-load --definition "$definition" \
+    --role-arn arn:aws:iam::123456789012:role/edgartools-load | jq -r .stateMachineArn)"
 fi
 "${compose[@]}" up -d worker >/dev/null
 
-steps="$(printf '%s\n' "$@" | jq -R . | jq -sc .)"
-execution="$(sfn start-execution --state-machine-arn "$machine" --input "{\"steps\": ${steps}, \"plan\": ${plan}}" | jq -r .executionArn)"
-echo "started ${execution##*:} on commit ${commit:0:8}: steps ${steps}, plan ${plan}"
+steps="$(printf '%s\n' "$@" | jq -R 'select(length > 0)' | jq -sc .)"
+execution="$(sfn start-execution --state-machine-arn "$machine" \
+  --input "{\"steps\": ${steps}, \"plan\": ${plan}, \"finish\": ${finish}}" | jq -r .executionArn)"
+echo "started ${execution##*:} on commit ${commit:0:8}: steps ${steps}, plan ${plan}, finish ${finish}, run ${RUN}"
 
 caffeinate -dimsu -w $$ 2>/dev/null &
-while :; do
-  status="$(sfn describe-execution --execution-arn "$execution" | jq -r .status)"
-  [ "$status" = RUNNING ] || break
+deadline=$(( $(date +%s) + ${LOAD_DEADLINE_HOURS:-72} * 3600 ))
+status=RUNNING
+while [ "$status" = RUNNING ]; do
+  if [ "$(date +%s)" -ge "$deadline" ]; then
+    sfn stop-execution --execution-arn "$execution" --error Deadline --cause "load.sh waited ${LOAD_DEADLINE_HOURS:-72} h" >/dev/null
+    echo "execution ${execution##*:} stopped at the deadline" >&2; exit 1
+  fi
   sleep 60
+  status="$(sfn describe-execution --execution-arn "$execution" | jq -r .status)" || status=RUNNING  # a missed reading waits a minute
 done
-echo "execution ${status}"
+echo "execution ${execution##*:} ${status}"
 [ "$status" = SUCCEEDED ] || {
-  sfn get-execution-history --execution-arn "$execution" --reverse-order --max-results 10 \
-    | jq -r '.events[] | (.taskFailedEventDetails // .executionFailedEventDetails // empty) | "\(.error): \(.cause)"' | head -3
+  sfn get-execution-history --execution-arn "$execution" --reverse-order --max-results 20 | jq -r '.events[]
+    | (.taskFailedEventDetails // .taskTimedOutEventDetails // .executionFailedEventDetails
+       // .executionTimedOutEventDetails // .executionAbortedEventDetails // empty) | "\(.error // "-"): \(.cause // "-")"' | head -3
   exit 1; }

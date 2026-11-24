@@ -1,11 +1,13 @@
 {
-  "Comment": "A load: readiness, then each step of the input's list in order, each run by the loader image's worker; the first step that fails ends the load, so no step runs after it. The chain file keeps the steps' order and dependencies; the input names which to run. Input: {\"steps\": [<name>, ...], \"plan\": false}.",
+  "Comment": "A load: readiness, then each step of the input's list in order, each run by the loader image's worker; the first step that fails ends the load, so no step runs after it. Then, when asked, the chain's finish. The chain file keeps the steps' order and dependencies; the input names which to run. Input: {\"steps\": [<name>, ...], \"plan\": false, \"finish\": false}.",
   "StartAt": "Readiness",
   "States": {
     "Readiness": {
       "Type": "Task",
       "Resource": "${activity}",
-      "Parameters": {"action": "readiness"},
+      "Parameters": {
+        "action": "readiness"
+      },
       "HeartbeatSeconds": 300,
       "TimeoutSeconds": 1800,
       "ResultPath": null,
@@ -13,18 +15,34 @@
     },
     "Start": {
       "Type": "Pass",
-      "Parameters": {"steps.$": "$.steps", "plan.$": "$.plan", "count.$": "States.ArrayLength($.steps)", "next": 0},
+      "Parameters": {
+        "steps.$": "$.steps",
+        "plan.$": "$.plan",
+        "count.$": "States.ArrayLength($.steps)",
+        "next": 0,
+        "finish.$": "$.finish"
+      },
       "Next": "More"
     },
     "More": {
       "Type": "Choice",
-      "Choices": [{"Variable": "$.next", "NumericLessThanPath": "$.count", "Next": "Step"}],
-      "Default": "Done"
+      "Choices": [
+        {
+          "Variable": "$.next",
+          "NumericLessThanPath": "$.count",
+          "Next": "Step"
+        }
+      ],
+      "Default": "Finish?"
     },
     "Step": {
       "Type": "Task",
       "Resource": "${activity}",
-      "Parameters": {"action": "step", "step.$": "States.ArrayGetItem($.steps, $.next)", "plan.$": "$.plan"},
+      "Parameters": {
+        "action": "step",
+        "step.$": "States.ArrayGetItem($.steps, $.next)",
+        "plan.$": "$.plan"
+      },
       "HeartbeatSeconds": 300,
       "TimeoutSeconds": 172800,
       "ResultPath": null,
@@ -32,9 +50,39 @@
     },
     "Advance": {
       "Type": "Pass",
-      "Parameters": {"steps.$": "$.steps", "plan.$": "$.plan", "count.$": "$.count", "next.$": "States.MathAdd($.next, 1)"},
+      "Parameters": {
+        "steps.$": "$.steps",
+        "plan.$": "$.plan",
+        "count.$": "$.count",
+        "next.$": "States.MathAdd($.next, 1)",
+        "finish.$": "$.finish"
+      },
       "Next": "More"
     },
-    "Done": {"Type": "Succeed"}
+    "Finish?": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.finish",
+          "BooleanEquals": true,
+          "Next": "Finish"
+        }
+      ],
+      "Default": "Done"
+    },
+    "Finish": {
+      "Type": "Task",
+      "Resource": "${activity}",
+      "Parameters": {
+        "action": "finish"
+      },
+      "HeartbeatSeconds": 300,
+      "TimeoutSeconds": 86400,
+      "ResultPath": null,
+      "Next": "Done"
+    },
+    "Done": {
+      "Type": "Succeed"
+    }
   }
 }

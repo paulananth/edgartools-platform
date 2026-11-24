@@ -3,7 +3,8 @@
 
     ACTIVITY_ARN=<arn> AWS_ENDPOINT_URL_STEPFUNCTIONS=<url> python activity_worker.py
 
-A task's input says what to run: `{"action": "readiness"}`, or `{"action": "step", "step": "<name>", "plan": false}`. The
+A task's input says what to run: `{"action": "readiness"}`, `{"action": "step", "step": "<name>", "plan": false}`, or
+`{"action": "finish"}` (what follows the loads: links and lookups). The
 worker takes one task at a time, so one load runs at once. It sends a heartbeat while the task runs, so the state machine
 learns of a worker that died. Each task's output goes to this container's log; the chain's own logs stay in `LOGS`.
 """
@@ -24,9 +25,11 @@ def command(task: dict) -> list[str]:
     """The command a task runs. An input of any other shape is refused, never guessed."""
     if task.get("action") == "readiness":
         return [sys.executable, str(HERE / "readiness.py")]
+    if task.get("action") == "finish":
+        return [sys.executable, str(HERE / "load_chain.py"), "--finish"]
     if task.get("action") == "step" and isinstance(task.get("step"), str) and task["step"]:
         return [sys.executable, str(HERE / "load_chain.py"), "--only", task["step"], *(["--plan"] if task.get("plan") else [])]
-    raise ValueError(f"a task is {{'action': 'readiness'}} or {{'action': 'step', 'step': <name>}}, not {sorted(task)}")
+    raise ValueError(f"a task is readiness, a step with its name, or finish, not {sorted(task)}")
 
 
 def run_task(client, token: str, task: dict, start=subprocess.Popen, every: float = HEARTBEAT_SECONDS) -> int:

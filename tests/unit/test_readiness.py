@@ -213,3 +213,10 @@ def test_an_image_names_the_commit_ci_built_it_from_for_the_gate_and_the_code_ch
 
 def test_a_folder_with_neither_a_checkout_nor_an_image_commit_has_no_commit(tmp_path):
     assert readiness.current_sha(tmp_path) == ""
+
+
+def test_a_checkout_holding_a_commit_file_is_still_a_checkout(tmp_path):
+    """A `COMMIT` file committed or left in a checkout must not stand in for git: only a folder without `.git` is an image."""
+    (tmp_path / readiness.IMAGE_COMMIT).write_text("abc123\n")
+    (tmp_path / ".git").write_text("gitdir: elsewhere\n")  # a worktree's .git is a file
+    assert readiness.image_commit(tmp_path) == ""

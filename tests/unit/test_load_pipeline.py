@@ -66,16 +66,17 @@ class Process:
 
 def test_the_worker_runs_readiness_then_a_step_and_reports_each_end():
     started = []
-    codes = iter([Process(0, waits=2), Process(2)])
+    codes = iter([Process(0, waits=2), Process(2), Process(0)])
 
     def start(argv):
         started.append([Path(a).name if a.endswith(".py") else a for a in argv[1:]])
         return next(codes)
-    client = Client([{"action": "readiness"}, {"action": "step", "step": "company", "plan": True}])
-    activity_worker.work(client, "arn", start, tasks=2)
-    assert started == [["readiness.py"], ["load_chain.py", "--only", "company", "--plan"]]
+    client = Client([{"action": "readiness"}, {"action": "step", "step": "company", "plan": True}, {"action": "finish"}])
+    activity_worker.work(client, "arn", start, tasks=3)
+    assert started == [["readiness.py"], ["load_chain.py", "--only", "company", "--plan"], ["load_chain.py", "--finish"]]
     assert client.beats == 2
-    assert client.reports == [("success", "t0", {"exit": 0, "action": "readiness"}), ("failure", "t1", "Exit2")]
+    assert client.reports == [("success", "t0", {"exit": 0, "action": "readiness"}), ("failure", "t1", "Exit2"),
+                              ("success", "t2", {"exit": 0, "action": "finish"})]
 
 
 @pytest.mark.parametrize("task", [{}, {"action": "step"}, {"action": "step", "step": ""}, {"action": "load", "step": "x"}])
@@ -106,7 +107,10 @@ def test_the_state_machine_runs_readiness_then_the_given_steps_in_order_and_stop
     assert step["Parameters"] == {"action": "step", "step.$": "States.ArrayGetItem($.steps, $.next)", "plan.$": "$.plan"}
     assert step["Next"] == "Advance" and "Catch" not in step and "Retry" not in step
     assert states["Advance"]["Parameters"]["next.$"] == "States.MathAdd($.next, 1)" and states["Advance"]["Next"] == "More"
-    for task in (states["Readiness"], step):
+    assert states["More"]["Default"] == "Finish?" and states["Finish?"]["Default"] == "Done"
+    assert states["Finish?"]["Choices"] == [{"Variable": "$.finish", "BooleanEquals": True, "Next": "Finish"}]
+    assert states["Finish"]["Parameters"] == {"action": "finish"} and states["Finish"]["Next"] == "Done"
+    for task in (states["Readiness"], step, states["Finish"]):
         assert task["Resource"] == "${activity}" and task["HeartbeatSeconds"] > 2 * activity_worker.HEARTBEAT_SECONDS
     chain = yaml.safe_load((REPO / "rules" / "load-chain.yaml").read_text())
     assert not [s["name"] for s in chain["steps"] if f'"{s["name"]}"' in MACHINE.read_text()]

@@ -1390,6 +1390,10 @@ def main() -> int:
         # Every other path starts a load, resumes one or writes the finish: the infrastructure must have passed its checks.
         import readiness
 
+        if not readiness.image_commit(ROOT):
+            print("Not started: a load runs only in the loader image CI built from main, never from a checkout: "
+                  "infra/load-pipeline/load.sh <step>...", file=sys.stderr)
+            return 2
         refused = readiness.gate(STORES, database_generation(data_url(env)) if data_url(env) else "",
                                  readiness.current_sha())
         if refused:

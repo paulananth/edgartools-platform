@@ -132,6 +132,10 @@ A missing grant or login that a command names is a gap to fix through the centra
 `rules/load-chain.yaml` holds the order of every source and target, each one's capture, workers and the facts and revision no capture states, and
 `scripts/load_chain.py` runs it, so a store is loaded the same way every time and nobody rewrites the list:
 
+A load runs only in the loader image CI built from `main`, started by `infra/load-pipeline/load.sh [--plan] [--finish] <step>...`
+(data-operations, HOSTED-LOADS.md, "Where a load runs"). In a checkout `load_chain.py` reads (`--plan`, `--list`, `--status`) and
+refuses to start, resume or finish a load. The commands below are what the image's worker runs:
+
 ```bash
 python <data-operations skill>/scripts/load_chain.py --plan     # documents and bundles per step; writes nothing
 python <data-operations skill>/scripts/load_chain.py --auto      # watch the loads; start each step when its lane is free
