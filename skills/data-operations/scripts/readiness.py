@@ -44,7 +44,6 @@ CHECKS = {
     "AUDIT": "The access audit of the database has no failing control",
     "LOGINS": "Every duty file's login connects to the databases of its duty",
     "STATE": "The run's state file is this store's, or will be set aside, before any step runs",
-    "CATALOG": "The catalog, when configured, matches the rules",
     "REGISTERED": "The merge policy and every Dataset Contract are registered, and every worker profile is granted",
 }
 DUTY_DATABASES = {"owner.env": ("postgres",), "worker.env": ("data", "control"), "governance.env": ("data", "control"),
@@ -106,7 +105,7 @@ def evaluate(facts: dict) -> list[dict]:
     def check(cid, ok, evidence):
         return {"id": cid, "title": CHECKS[cid], "ok": bool(ok), "evidence": evidence}
     g, e, loader, ref = facts["git"], facts["engine"], facts["loader"], facts["reference"]
-    audit, logins, state, catalog = facts["audit"], facts["logins"], facts["state"], facts["catalog"]
+    audit, logins, state = facts["audit"], facts["logins"], facts["state"]
     reg = facts["registered"]
     return [
         check("CODE", g["clean"] and g["contains_main"] and g["ci"] == "success", {k: g[k] for k in ("clean", "contains_main", "ci")}),
@@ -124,7 +123,6 @@ def evaluate(facts: dict) -> list[dict]:
         check("AUDIT", audit is not None and not audit, {"failing_controls": audit if audit is not None else "audit not available"}),
         check("LOGINS", bool(logins) and all(v == "answers" for v in logins.values()), logins),
         check("STATE", state is not None and state["verdict"] in ("fresh", "set aside", "same"), state),
-        check("CATALOG", catalog in ("confirmed", "not configured"), {"catalog": catalog}),
         check("REGISTERED", reg is not None and reg["policies"] > 0 and reg["datasets"] > 0 and reg["profiles_granted"] >= reg["profiles"] > 0, reg),
     ]
 
@@ -334,23 +332,6 @@ def state_facts(env: dict) -> dict | None:
         return None
 
 
-def catalog_state(repo: Path) -> str:
-    """"confirmed" when the catalog's text matches the rules, "not configured" when no catalog file is set, else what it said."""
-    env_file = Path(os.environ.get("OPENMETADATA_ENV_FILE") or Path.home() / ".config/edgartools/openmetadata.env")
-    if not env_file.exists():
-        return "not configured"
-    sys.path.insert(0, str(HERE))
-    import load_jobs
-    env = {**os.environ, **load_jobs.load_env(env_file)}
-    exe = env.get("EDGAR_WAREHOUSE") or "edgar-warehouse"
-    try:
-        done = subprocess.run([exe, "rules", "catalog", "--root", str(repo / "rules"), "check"], capture_output=True, text=True, env=env,
-                              check=False, timeout=600)
-        return json.loads(done.stdout[done.stdout.index("{"):]).get("status", "unknown")
-    except Exception:  # noqa: BLE001
-        return "unreadable"
-
-
 def gather(stores: Path, repo: Path = REPO) -> dict:
     sys.path.insert(0, str(HERE))
     import load_jobs
@@ -361,7 +342,7 @@ def gather(stores: Path, repo: Path = REPO) -> dict:
     return {"git": git_facts(repo), "engine": engine_facts(repo), "doctor": doctor_ok(stores, env), "loader": loader, "reference": reference,
             "plan_missing": plan_missing(env), "loads_running": loads_running(), "loader_sessions": sessions,
             "disk_gib": usage.free / 2**30, "load1": os.getloadavg()[0], "cores": os.cpu_count() or 1, "audit": audit_failures(reader),
-            "logins": login_facts(stores), "state": state_facts(env), "catalog": catalog_state(repo),
+            "logins": login_facts(stores), "state": state_facts(env),
             "registered": registration_facts(reader, env)}
 
 

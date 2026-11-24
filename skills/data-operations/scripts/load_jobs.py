@@ -1410,11 +1410,6 @@ def tell_catalog(step: dict, state: Path) -> str:
     return outcome
 
 
-def after_done(step: dict, state: Path) -> None:
-    """After a step is done: tell the catalog."""
-    tell_catalog(step, state)
-
-
 def catch_up(steps: list[dict], state: Path) -> dict[str, str | None]:
     """Publish the status of every step already done, from the step's own log (a step done before the catalog was configured,
     or while it was unreachable). None for a step not done; a step with no run in any attempt's log is not published."""
@@ -1442,7 +1437,6 @@ def attempt_loop(step: dict, env: dict, state: Path, others_run: bool = True) ->
         if code == 0 and "Load stopped" not in text:
             done = [line for line in text.splitlines() if line.startswith("Done: ")]
             note(f"{name} done: {done[-1][:200] if done else ''}", state)
-            after_done(step, state)
             return True
         why = [line for line in text.splitlines() if re.search(r"stopped|did not finish|Error", line)]
         note(f"{name} attempt {attempt} stopped rc={code}: "
