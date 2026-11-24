@@ -1,4 +1,4 @@
-# Handoff to Codex: run the force publish of every load job
+# Handoff to Codex: run the load jobs
 
 Operator, 2026-11-24: "can you hand off to codex to run the force publish" (after "once done load all again with force
 publish flag so it ignores change journal"). Claude does not start it; Codex owns the run from here.
@@ -11,11 +11,17 @@ publish flag so it ignores change journal"). Claude does not start it; Codex own
 - The pipeline's exporter serves the monitor (`load_monitor_up 1`); the old host exporter is stopped.
 - The run label `force-1124` is unused: its state file starts fresh.
 
+## Operator's latest word (2026-11-24)
+"fix all skills and load with the default load time linit of 2 h max": run the **default load** (no `--force`): every lane,
+then the finish, the Change Journal skipping what is loaded, 2 hours at most. The force publish below stays available only
+if the operator says so again. Claude ran the default load for one minute by mistake and stopped it (nothing loaded):
+use a fresh run label, not `load-1124`.
+
 ## Run it
 1. `git worktree add ../edgartools-platform-force-run -b codex/force-run origin/main`, source nothing by hand: `load.sh`
    reads the stores, captures and logs from its defaults.
-2. Smoke first, read-only: `RUN=force-1124 infra/load-pipeline/load.sh --plan` must exit 0 (readiness passes, 43 jobs).
-3. Then, in the background: `RUN=force-1124 infra/load-pipeline/load.sh --force`.
+2. Smoke first, read-only: `RUN=load-1124b infra/load-pipeline/load.sh --plan` must exit 0 (readiness passes, 43 jobs).
+3. Then, in the background: `RUN=load-1124b infra/load-pipeline/load.sh --force`.
    The window is 2 hours (operator, 2026-11-24: "do not stop at 2 hours but report the miss"): `load.sh` prints
    `DEADLINE MISSED` once and the load goes on; report the miss with each job's time. It refuses while another execution runs, pulls the image of `main`'s newest commit, and exits 0 only when the
    execution succeeded. Every load job of the run ignores the Change Journal and processes its documents again.
