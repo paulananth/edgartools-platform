@@ -10,6 +10,7 @@ Run it from the checkout whose code should be read, with the repository's enviro
 """
 import argparse
 import importlib.util
+import os
 import sys
 import threading
 import time
@@ -65,6 +66,12 @@ def render(snapshot: dict, age: float = 0.0) -> str:
     lines.append(sample("load_lock_waiters", snapshot["lock_waiters"]))
     for database, counts_ in snapshot["sessions"].items():
         lines += [sample("load_sessions", n, database=database, state=state) for state, n in counts_.items()]
+    budget = snapshot.get("budget")
+    if budget:  # the same budget data-operations gives load.sh: lanes at once, the workers the compute carries, and what limits it
+        running = snapshot["running"]
+        lines += [sample("load_lane_budget", budget["lanes"], limit=budget["limit"]), sample("load_worker_budget", budget["workers"]),
+                  sample("load_lanes_running", len({row["lane"] for row in running})),
+                  sample("load_workers_running", sum(row["workers"] for row in running))]
     machine = snapshot["machine"]
     lines.append(sample("load_machine_load_per_core", machine["load"] / machine["cores"]))
     if machine["memory_free"] is not None:
@@ -87,6 +94,7 @@ class Reading:
         steps = self.jobs.load_jobs()
         counted, reader_url, _ = self.jobs.status_inputs()
         shot = self.jobs.status_snapshot(steps, counted, reader_url, self.sample)
+        shot["budget"] = self.jobs.lane_budget(steps, os.environ.get("CAPACITY") or "local")
         self.text, self.at = render(shot), time.time()
 
     def loop(self) -> None:

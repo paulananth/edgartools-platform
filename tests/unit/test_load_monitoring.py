@@ -131,3 +131,11 @@ def test_the_monitor_starts_a_host_exporter_when_nothing_answers(monkeypatch, tm
     monkeypatch.setattr(monitoring.subprocess, "Popen", lambda argv, **k: started.append(argv) or type("P", (), {"pid": 1})())
     monitoring.start_exporter()
     assert len(started) == 1 and started[0][-2:] == [str(monitoring.HERE / "exporter.py"), "serve"][-2:]
+
+
+def test_the_exporter_shows_the_lane_budget_beside_the_lanes_and_workers_running():
+    """The monitor and data-operations share one budget: the number load.sh applied, what limits it, and what runs against it."""
+    text = exporter.render({**SNAPSHOT, "budget": {"lanes": 2, "workers": 8, "limit": "memory"}})
+    assert 'load_lane_budget{limit="memory"} 2' in text and "load_worker_budget 8" in text
+    assert "load_lanes_running 1" in text and "load_workers_running 2" in text
+    assert "load_lane_budget" not in exporter.render(SNAPSHOT)  # a reading with no budget shows none, never a guess

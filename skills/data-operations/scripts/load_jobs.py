@@ -920,14 +920,24 @@ def forced_at() -> str:
 
 
 def lanes_at_once(steps: list[dict], capacity: str = "local") -> int:
-    """How many lanes a compute carries at once: its vCPUs (a capacity of this file, or `local`, this machine) over the workers of
-    the widest first step of a lane. The one budget, in no platform's terms: a lane's size is its steps' `workers`; whatever
-    starts the lanes (a state machine, the local scheduler) starts no more than this and queues the rest."""
+    """How many lanes a compute carries at once: the workers it carries (`workers_range`: its memory in worker-sized shares, at most
+    four to a vCPU, the same sizing a step's workers follow) over the workers of the widest first step of a lane. The one budget, in
+    no platform's terms: whatever starts the lanes (a state machine, the local scheduler) starts no more than this and queues the
+    rest, and the load monitor reads this same number."""
     heads = {}
     for step in steps:
         heads.setdefault(step["lane"], step)
     widest = max((head["workers"] for head in heads.values()), default=1)
-    return max(1, int(capacity_of(capacity)[0]) // widest)
+    return max(1, bounds_for(capacity)[1] // widest)
+
+
+def lane_budget(steps: list[dict], capacity: str = "local") -> dict:
+    """The lane budget with what sets it, for the monitor: lanes at once, the workers the compute carries, and its limit
+    (`memory` when worker-sized shares of memory carry fewer workers than the vCPUs allow, else `vcpu`)."""
+    vcpu, memory_gb = capacity_of(capacity)
+    by_memory, by_vcpu = int(memory_gb / WORKER_GB + 1e-9), int(vcpu * WORKERS_PER_VCPU)
+    return {"lanes": lanes_at_once(steps, capacity), "workers": max(1, min(by_memory, by_vcpu)),
+            "limit": "memory" if by_memory <= by_vcpu else "vcpu"}
 
 
 def arguments(step: dict) -> list[str]:

@@ -152,6 +152,13 @@ no account). For the image, "GitHub Container Registry (Recommended)".
   behind and that refused the next start twice; the execution check against Step Functions already enforces one load at a time, so the
   lock is gone. `test_one_load_at_a_time_is_the_state_machines_own_record_and_load_sh_keeps_no_lock_file` failed first (`.lock` found in
   the script), 2026-11-24 14:15 ET
+- [x] Lanes and the monitor agree (operator, 2026-11-24: "Why are we not using all the lanes fix the skill load monitor and data operations they must
+  work together"): measured, two lanes already held 2.45 of the container runtime's 3.9 GiB (about 0.4 GiB a worker) with CPU at 1.7 of 8 cores, so
+  memory limits the lanes. The lane budget now uses the workers a compute carries (the range a step's workers follow, not vCPUs alone), and
+  `lane_budget` names the limit; the exporter shows lanes and workers running against it and the dashboard has Lanes running and Lane budget.
+  `test_the_exporter_shows_the_lane_budget_beside_the_lanes_and_workers_running` failed first, 2026-11-24 14:36 ET
+- [ ] More lanes at once on this machine need more container-runtime memory or narrower first steps (the widest, 4 workers, sets 2 lanes): decide
+  with the next measured load
 - [x] Learning → skill (operator, 2026-11-24: "Update skills from learning"): HOSTED-LOADS names how to restart the runtime (`orbctl stop`, `orbctl start`) and what a forced load costs; load-monitoring says a watcher reads its own run label's log and an execution lost to a restart is not a failure, 2026-11-24 14:26 ET
 - [x] Learning → skill: the three skill changes above, 2026-11-23 21:05 ET
 - [x] The load chain is named load jobs. Operator, 2026-11-23: "no load chain its load jobs"; scope chosen: "Everything live".

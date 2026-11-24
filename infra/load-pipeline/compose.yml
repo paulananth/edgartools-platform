@@ -47,6 +47,7 @@ services:
       STORES: ${STORES:?}
       LOGS: ${LOGS:?}
       RUN: ${RUN:?}
+      CAPACITY: ${CAPACITY:-local}  # the compute whose lane budget it shows, the one load.sh applied
     volumes:  # only the reader login (in STORES) and the run's logs: not the logins folder, which holds other private files
       - ${STORES}:${STORES}:ro
       - ${LOGS}:${LOGS}:ro
