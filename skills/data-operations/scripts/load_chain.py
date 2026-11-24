@@ -346,7 +346,7 @@ def clock() -> datetime:
 def external_loads() -> set[tuple[str, str]]:
     """The (source, target) of every `load` running on this machine, whoever started it."""
     listing = subprocess.run(["ps", "-Ao", "args"], check=False, capture_output=True, text=True).stdout
-    return {(m.group(1), m.group(2)) for line in listing.splitlines() if "edgar-warehouse load " in line
+    return {(m.group(1), m.group(2)) for line in listing.splitlines() if LOAD_COMMAND.search(line)
             for m in [re.search(r"--source (\S+) --target (\S+)", line)] if m}
 
 
@@ -724,6 +724,11 @@ def window_cpu(before: dict[int, float], after: dict[int, float]) -> float:
     return sum(max(after[pid] - used, 0.0) for pid, used in before.items() if pid in after)
 
 
+# The `load` command as a process line shows it: `edgar-warehouse load`, or, in the loader image, the same command written as
+# a python one-liner (`from edgar_warehouse.cli import main; sys.exit(main()) load`).
+LOAD_COMMAND = re.compile(r"edgar[-_]warehouse(?:\.cli import main; sys\.exit\(main\(\)\))? load ")
+
+
 def is_load_process(args: str, source: str, target: str) -> bool:
     """A process of the platform's load of one source and target: its driver or a worker, never another command that
     happens to carry the same words."""
@@ -754,7 +759,7 @@ def load_workers(listing: str, source: str, target: str) -> int | None:
     """The `--workers` the running load of one source and target was started with, from its driver's command line."""
     for line in listing.splitlines():
         parts = line.split(None, 4)
-        if len(parts) == 5 and re.search(r"edgar[-_]warehouse load ", parts[4]) and is_load_process(parts[4], source, target):
+        if len(parts) == 5 and LOAD_COMMAND.search(parts[4]) and is_load_process(parts[4], source, target):
             found = re.search(r"--workers (\d+)", parts[4])
             return int(found.group(1)) if found else None
     return None

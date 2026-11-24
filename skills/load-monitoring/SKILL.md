@@ -15,7 +15,7 @@ uv run --no-sync python <this skill>/scripts/monitoring.py <up|status|stop>
 ```
 
 Run it from a checkout at current `origin/main`, in the repository's environment.
-It starts the exporter on the host and Prometheus and Grafana in the
+It starts Prometheus and Grafana in the
 `edgartools-monitoring` Compose project, pushes the data source and the dashboard,
 and reads them back. Do not run `docker` for this work: if the script cannot do a
 step, say so and fix the script. The viewer is `http://127.0.0.1:3001/d/load-monitor`
@@ -26,6 +26,12 @@ and needs no login; the admin login is generated into a private file and never p
 | Bring it up | `up` | Containers healthy, exporter up, Prometheus scraping it, dashboard present. Exit 0 only when all are |
 | Is it working? | `status` | The same readback; every `PROBLEM:` line says what is wrong |
 | Take it down | `stop` | Stops the exporter and the containers; Grafana's and Prometheus's data stay |
+
+## Where the exporter runs
+
+The load pipeline's Compose project (`infra/load-pipeline`) runs the exporter from the loader image, beside the worker,
+sharing its process space, so it needs no checkout and sees a load that runs in a container. `monitoring.py up` starts a
+host exporter only when nothing answers on the port (a load run by hand, outside the pipeline).
 
 ## The design
 
@@ -73,5 +79,5 @@ dependency lines need a custom panel plugin, which is a separate decision.
   log; the status does not return them yet).
 - Alert rules (a stall or a failure notifying someone) need a contact point.
 - Animation (see above).
-- Reading a hosted load run elsewhere: the exporter reads the local process list,
-  so it sees only loads started on this machine.
+- Reading a hosted load run elsewhere: the exporter reads the process list of the
+  worker it shares a process space with, so it sees only loads of this machine's pipeline.
