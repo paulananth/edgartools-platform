@@ -1,7 +1,7 @@
 # data-quality: Make the entrypoint executable
 
 Type: task
-Status: claimed
+Status: resolved
 Priority: P0
 Blocked by: 03, 09, 15, 26
 Labels: wayfinder:task
@@ -36,7 +36,7 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] Produce a concise entrypoint that consumes approved profiling findings and mapped fields and routes MDM checks versus silver table checks; verified in [Start here](../../../skills/data-quality/SKILL.md#start-here-route-a-quality-phase) (2026-11-24 07:52 ET).
 - [x] Verify referenced paths and supported commands; retain mandatory stops and discoverability of optional detail. `draft --help` and `measure --help` show the documented arguments; the guide-path and skill-size checks pass (2026-11-24 07:52 ET).
 - [x] Walk an invented code-list finding through `in_set@1`, measurement and the Data Onboarding handoff; documented in the answer. No source data or load was used (2026-11-24 07:52 ET).
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md.
+- [x] Publish the scoped change and evidence in its own branch and PR; local affected checks **158 passed**. [docs(data-quality): make the entrypoint executable](https://github.com/paulananth/edgartools-platform/pull/2096) (2026-11-24 07:56 ET).
 - [x] Learning → skill: the entrypoint routes new versus live feed quality phases to their existing owner; recorded in Data Quality's [Start here](../../../skills/data-quality/SKILL.md#start-here-route-a-quality-phase) (2026-11-24 07:52 ET).
 
 ## Completion evidence
