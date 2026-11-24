@@ -79,7 +79,8 @@ The goal is every document loaded in the least wall-clock time. Each rule below 
 - **Mount every folder a run's documents live in.** A run driven again reads its frozen rules and input manifests from the manifest
   root; unmounted, the file is missing and the engine says "Corrupt control document". On that message, check the mounts first.
 - **A forced or killed load leaves unfinished runs, and the next default load drives them first.** They need the same mounts.
-- **One start script at a time.** A dead run's wrapper that is still alive holds the load's lock: stop it before starting again.
+- **One load at a time is Step Functions' own record** (`load.sh` refuses while an execution is running) and no lock file: a lock a dead run left
+  refused the next start. A dead run's wrapper that is still alive keeps waiting on the old execution: stop it before starting again.
 
 ## Before a load starts
 - **Role guards first.** `infra/scripts/harden-hosted-roles.py --confirm` (owner login) gives every login a connection limit,

@@ -39,9 +39,6 @@ MANIFESTS="$(sed -n 's/^export BOOKKEEPING_MANIFEST_ROOT=//p' "$STORES/worker.en
 MANIFESTS="${MANIFESTS#file://}"
 case "$MANIFESTS" in /*) ;; *) echo "worker.env in $STORES must set BOOKKEEPING_MANIFEST_ROOT to a local folder" >&2; exit 2 ;; esac
 mkdir -p "$MANIFESTS"; export MANIFESTS
-lock="$LOGS/load.sh.lock"  # one load.sh at a time: the running check and the activity's replacement must not interleave
-mkdir "$lock" 2>/dev/null || { echo "another load.sh holds $lock (remove it if none runs)" >&2; exit 2; }
-trap 'rmdir "$lock"' EXIT
 
 endpoint=http://localhost:8083
 sfn() { AWS_ACCESS_KEY_ID=local AWS_SECRET_ACCESS_KEY=local aws stepfunctions --region us-east-1 --endpoint-url "$endpoint" --output json "$@"; }
@@ -53,7 +50,7 @@ for _ in $(seq 30); do sfn list-activities >/dev/null 2>&1 && break; sleep 1; do
 machine="$(sfn list-state-machines | jq -r '.stateMachines[] | select(.name == "edgartools-load") | .stateMachineArn')"
 if [ -n "$machine" ]; then
   running="$(sfn list-executions --state-machine-arn "$machine" --status-filter RUNNING | jq -r '.executions | length')"
-  [ "$running" = 0 ] || { echo "an execution is still running: one load at a time" >&2; exit 2; }
+  [ "$running" = 0 ] || { echo "an execution is still running: one load at a time (Step Functions' own record, no lock file)" >&2; exit 2; }
 fi
 # A new activity per load: a long poll an older worker still holds would take the task and lose it.
 while IFS= read -r old; do

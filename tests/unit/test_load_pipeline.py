@@ -302,3 +302,11 @@ def test_the_worker_mounts_the_folder_of_the_run_documents_that_worker_env_names
     assert len(mounts) == 1 and mounts[0].endswith(":${MANIFESTS}") and not mounts[0].endswith(":ro")
     script = (MACHINE.parent / "load.sh").read_text()
     assert "BOOKKEEPING_MANIFEST_ROOT" in script and 'export MANIFESTS' in script
+
+
+def test_one_load_at_a_time_is_the_state_machines_own_record_and_load_sh_keeps_no_lock_file():
+    """A lock file left by a dead run refused the next start twice (operator, 2026-11-24: "There should be no application triggered
+    lock"); Step Functions already says whether an execution is running."""
+    script = (MACHINE.parent / "load.sh").read_text()
+    assert "mkdir \"$lock\"" not in script and ".lock" not in script and "rmdir" not in script
+    assert "--status-filter RUNNING" in script and "one load at a time" in script
