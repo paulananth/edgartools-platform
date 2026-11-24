@@ -4,6 +4,9 @@ Each skill's own description says when it applies; this page shows how they fit
 together. Start at **data-platform** when the task is data work and you do not
 yet know which step you are on.
 
+Who owns what, what each takes in and gives out, and how skills hand off (the SIPOC of a load and its regular touch points) is
+[OWNERSHIP.md](OWNERSHIP.md); a test holds it.
+
 Install every skill for Claude, Codex and Grok from this checkout with
 `bash skills/link.sh`, or name the skills to link. An installed command line
 copies them instead: `edgar-warehouse skill install`.

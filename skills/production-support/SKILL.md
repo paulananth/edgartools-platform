@@ -107,3 +107,7 @@ expected benefit/cost and risk; exact action authority or pending decision;
 verification/recovery outcome and remaining owner. Report no action when it is
 the best supported result. Stop when the question is answered or budget/deadline
 is reached; future checks belong to the configured monitor, not an LLM poll loop.
+
+## Handshake
+
+Diagnoses from evidence: Bookkeeping, Change Journal, [load-monitoring](../load-monitoring/SKILL.md) readings and [database-monitoring](../database-monitoring/SKILL.md) findings. Hands a recommendation to [data-operations](../data-operations/SKILL.md) (recovery), [mdm-engineering](../mdm-engineering/SKILL.md) (a code fix) or [aws-snowflake-operations](../aws-snowflake-operations/SKILL.md) (infrastructure). It runs nothing itself. The table of who owns what and hands off to whom is [OWNERSHIP.md](../OWNERSHIP.md).

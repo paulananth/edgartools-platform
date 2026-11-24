@@ -393,3 +393,7 @@ Report mode, source, feed, resolved target, bundle/run references, commands,
 verification and concrete remaining gaps. Record unsupported commands and
 operational assumptions in the current workstream's log. Never present a plan
 as validation, or isolated validation as a completed live run.
+
+## Handshake
+
+Owns the run-control contract. [data-operations](../data-operations/SKILL.md) runs and recovers through it; [production-support](../production-support/SKILL.md) reads its evidence. The table of who owns what and hands off to whom is [OWNERSHIP.md](../OWNERSHIP.md).

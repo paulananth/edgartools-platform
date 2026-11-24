@@ -65,3 +65,7 @@ A container that mounts a path inside a worktree is tied to that worktree's
 life. Deployable infrastructure mounts nothing from a checkout: use inline
 Compose `configs`, or a path under the user's data folder. The script's
 preflight is what keeps that true.
+
+## Handshake
+
+Starts and stops the local catalog server for [openmetadata](../openmetadata/SKILL.md); the server stays stopped during a load, since a load never reads or writes the catalog. The table of who owns what and hands off to whom is [OWNERSHIP.md](../OWNERSHIP.md).

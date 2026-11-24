@@ -119,3 +119,7 @@ python scripts/db_monitor.py budget --rate <cost per hour of the instance> --lim
 - The login sees sessions of every store on the instance; `pg_monitor` shows no table rows.
 - `logs` lags a few minutes and needs the read-only role; without it every other reading still works.
 - A reading is a moment: a lock held for a second does not show. Repeat before concluding anything.
+
+## Handshake
+
+Reads the instance, changes nothing. Receives a stalled or locked step from [load-monitoring](../load-monitoring/SKILL.md) and hands its findings (blockers, long transactions, costly statements) to [production-support](../production-support/SKILL.md) and [data-operations](../data-operations/SKILL.md), which act. The table of who owns what and hands off to whom is [OWNERSHIP.md](../OWNERSHIP.md).

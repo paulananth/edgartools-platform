@@ -215,3 +215,7 @@ is absent or outside its recorded window, resume is blocked pending valid eviden
 - Snowflake `ACCOUNT_USAGE` and AWS's credential report lag by minutes to hours; a principal made a moment ago may not show.
 - CHG finds only the principals an adapter names (Snowflake users and roles starting `EDGARTOOLS`, plus `--principal`).
 - The controls are evidence of design and operation on the day read, and say nothing of another day.
+
+## Handshake
+
+Its findings feed [data-operations](../data-operations/SKILL.md) readiness (AUDIT); fixes to a platform's access go to [aws-snowflake-operations](../aws-snowflake-operations/SKILL.md). The table of who owns what and hands off to whom is [OWNERSHIP.md](../OWNERSHIP.md).

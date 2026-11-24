@@ -182,3 +182,7 @@ remaining gaps. Receipt delivery proves durable journal storage, not business
 completion. Keep skill validation, isolated journal qualification, owner
 integration and live deployment separate. Codex owns this work; no Claude
 assignment exists without an explicit operator instruction.
+
+## Handshake
+
+Owns the processed-files contract. [data-operations](../data-operations/SKILL.md) acts on its receipts and force publish; [production-support](../production-support/SKILL.md) reads its evidence. The table of who owns what and hands off to whom is [OWNERSHIP.md](../OWNERSHIP.md).
