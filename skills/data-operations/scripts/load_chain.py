@@ -1103,19 +1103,25 @@ def failed_steps(state: Path) -> set[str]:
     return {name for name, event in last.items() if event == "stopped"}
 
 
-def wait_for(step: dict, state: Path, poll: int = 30) -> None:
+def wait_for(step: dict, state: Path, poll: int = 30) -> set[str]:
     """Hold a step until the steps of other lanes it needs are done, and until no other load of its target is running
-    (two loads of one source and target at once write the same outputs)."""
+    (two loads of one source and target at once write the same outputs). Returns the needed steps that failed: then the
+    step stops at once, recorded as failed so the steps that need it stop too, and never waits on work that cannot come."""
     needed = set(step.get("waits_for") or [])
     if needed - done_steps(state):
         note(f"{step['name']} waits for {', '.join(sorted(needed - done_steps(state)))}", state)
     while needed - done_steps(state):
+        blocked = needed & failed_steps(state)
+        if blocked:
+            note(f"{step['name']} stopped: blocked by {', '.join(sorted(blocked))}", state)
+            return blocked
         time.sleep(poll)
     pattern = f"edgar-warehouse load .*--source {re.escape(step['source'])} --target {re.escape(step['target'])}( |$)"
     if subprocess.run(["pgrep", "-f", pattern], capture_output=True).returncode == 0:
         note(f"{step['name']} waits for another load of its source and target to end", state)
         while subprocess.run(["pgrep", "-f", pattern], capture_output=True).returncode == 0:
             time.sleep(poll)
+    return set()
 
 
 CATALOG_KEYS = ("OPENMETADATA_URL", "OPENMETADATA_TOKEN")
@@ -1289,7 +1295,8 @@ def catch_up(steps: list[dict], state: Path) -> dict[str, str | None]:
 
 def attempt_loop(step: dict, env: dict, state: Path) -> bool:
     name, log = step["name"], LOGS / f"chain-{RUN}-{step['name']}.log"
-    wait_for(step, state)
+    if wait_for(step, state):
+        return False
     from edgar_warehouse.rules import error_log
 
     errors, offset, previous = STORES / "load-errors.log", (0, 0), ""
@@ -1316,8 +1323,29 @@ def attempt_loop(step: dict, env: dict, state: Path) -> bool:
                  f"{log.name}.attempt-{attempt}.errors)", state)
             return False
         previous = current
-    note(f"{name} did not finish in {step['attempts']} attempts: the chain stops here", state)
+    note(out_of_attempts(name, step["attempts"]), state)
     return False
+
+
+def out_of_attempts(name: str, attempts: int) -> str:
+    """The note of a step that used every attempt: a `stopped:` line, so the steps that need it stop instead of waiting."""
+    return f"{name} stopped: did not finish in {attempts} attempts: the chain stops here"
+
+
+def run_steps(steps: list[dict], env: dict, state: Path, lane: str | None = None, only: str | None = None,
+              start: str | None = None) -> bool:
+    """Run the steps in file order (one lane's, one step, or all from `start`), each through its attempts. A lane that stops
+    records its later steps as not started, so a step of another lane that needs one stops instead of waiting for it."""
+    chosen = [step for step in steps if (not only or step["name"] == only) and (not lane or step["lane"] == lane)]
+    if start is not None:
+        chosen = chosen[next((i for i, step in enumerate(chosen) if step["name"] == start), len(chosen)):]
+    for i, step in enumerate(chosen):
+        if not attempt_loop(step, env, state):
+            if lane:
+                for later in chosen[i + 1:]:
+                    note(f"{later['name']} stopped: not started, its lane stopped at {step['name']}", state)
+            return False
+    return True
 
 
 def finish(env: dict, state: Path, lookups: bool = False) -> None:
@@ -1444,13 +1472,8 @@ def main() -> int:
         finish(env, state, args.lookups)
         return 0
     if not args.finish:
-        started = args.start is None
-        for step in steps:
-            started = started or step["name"] == args.start
-            if not started or (args.only and step["name"] != args.only) or (args.lane and step["lane"] != args.lane):
-                continue
-            if not attempt_loop(step, env, state):
-                return 1
+        if not run_steps(steps, env, state, lane=args.lane, only=args.only, start=args.start):
+            return 1
         if args.only or args.lane:
             return 0
     finish(env, state, args.lookups)

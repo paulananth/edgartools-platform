@@ -36,6 +36,33 @@ retry/dead-letter handling and missed-trigger policy against the configured
 business schedule. Do not promise second-level timing from a minute-precision
 scheduler. See [schedule types](https://docs.aws.amazon.com/scheduler/latest/UserGuide/schedule-types.html).
 
+## What the old state machines taught
+
+Each is a rule now; the evidence is the old pipeline's deployed definitions.
+
+| Rule | Why |
+|---|---|
+| One generic state machine; the data's own configuration (the chain file) names the work, and the definition names no step, lane or source | Many machines, each built by hand, drifted: shared stages were copied into several machines and changed apart, and many machines never ran |
+| Every Task has `TimeoutSeconds` and `HeartbeatSeconds` | The language sets no timeout by default: a lost task waits forever |
+| Retries live in one place: the worker's own attempts. The state machine retries nothing, or only a dead worker (`States.HeartbeatTimeout`), once | A state-machine `Retry` on `States.TaskFailed` around a command that retries multiplies the attempts |
+| The task contract is the same locally and on AWS: an activity task here, an ECS `runTask.sync` there, the same input and the same command | Only the `Resource` changes, so the local run proves the definition |
+| The image is pinned by commit, and the gate checks the running code is that commit | A machine left on an old image gave a false positive |
+| Parallel work stays bounded inside the worker (its bundles, its workers); the machine runs only independent units in parallel | Many concurrent copies of one stage collided on the same files |
+| A failure in one parallel branch is caught there, so the others go on; the execution fails at the end | An inline `Map` stops every branch when one fails |
+
+## Step Functions Local
+
+AWS calls it unsupported, with no feature parity: a local pass proves the definition's shape on this machine, never AWS
+behaviour (check that with the TestState API or on AWS). Measured on it:
+
+- A `Map` with a concurrency of one still started the next item after a failed one: run steps that must stop at the first
+  failure as a Choice loop, not a `Map`.
+- boto3 reads its address from `AWS_ENDPOINT_URL_SFN` (the service's id), never `AWS_ENDPOINT_URL_STEPFUNCTIONS`; a
+  wrong name sends the client to real AWS with the placeholder login. A test asserts the client's `endpoint_url`.
+- A long poll still held by a worker that was replaced takes the next task and loses it (it timed out on its heartbeat,
+  3 ms after it was scheduled). Make a new activity for each execution and delete the older ones, after checking nothing runs.
+- `docker compose up` of one service reads every service's variables: set each the file requires before the first `up`.
+
 ## Evidence and release
 
 Validate the rendered ASL with the supported definition validator before creating

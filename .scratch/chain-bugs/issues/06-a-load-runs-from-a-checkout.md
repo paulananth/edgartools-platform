@@ -89,8 +89,27 @@ no account). For the image, "GitHub Container Registry (Recommended)".
   (`test_the_worker_s_client_points_at_the_emulator_the_compose_file_names` failed with
   `assert 'https://stat...amazonaws.com' == 'http://localhost:8083'`). With both fixed, an execution in the image passed all
   13 readiness checks and planned `nport-registrant` (1 document, 1 bundle, no open runs): `SUCCEEDED` in about a minute, 2026-11-23 20:42 ET
+- [x] The leftover state machines of the old pipeline are deleted from the AWS account (operator, 2026-11-23: "need to
+  cleanup aws step functions"): 27 (12 `edgartools-prod-*`, 15 cost-sizing canaries), none run since 2026-09-21, no
+  running execution, schedule or event-rule target; each definition and its tags saved outside the repository first;
+  `list-state-machines` then listed none, 2026-11-23 21:05 ET
+- [x] Lanes, several workers and waits (operator, 2026-11-23: "must be able to run lanes and multiple workers and
+  dependency"; "what runs on the lane is never fixed for the step function"). Without named steps the state machine asks
+  the loader for the chain file's lanes and runs them all at once, each lane's steps with their own workers. A failed lane
+  is caught, so the others go on, and the execution fails at the end. A step whose needed step failed waited forever: it
+  now stops at once (`test_a_step_whose_needed_step_failed_in_another_lane_stops_at_once_and_never_waits`, which failed
+  with `AttributeError: ... no attribute 'out_of_attempts'` before the fix, its two neighbours alike). Probed on Step
+  Functions Local: the 3 lanes started in the same second; with `B` failing, `A` and `C` ran to their end and the
+  execution failed with no finish, 2026-11-23 21:05 ET
+- [x] A load's tasks were lost to an older worker's poll: the 8-step execution failed with `States.Timeout` before any
+  step, its readiness task taken 3 ms after it was scheduled by a long poll of the worker compose had just replaced. Each
+  load now gets a new activity, the older ones deleted after the check that nothing runs
+  (`test_each_load_gets_its_own_activity_so_no_poller_of_an_older_worker_takes_its_tasks` failed with
+  `assert '$' in 'edgartools-load'`, then passes), 2026-11-23 21:05 ET
 - [ ] Rerun the 8 steps left after `company` through the pipeline: `nport-registrant`, `nport-fund`,
   `adv-mastering-03`, `adv-mastering-06`, `adv-silver-03`, `adv-silver-06`, `adv-custodians-03`, `adv-custodians-06`
 - [ ] `gleif`: a read-only check of how many of its documents the Change Journal calls new; load it only at 0
-- [ ] Skills: data-operations names the pipeline as the only way to start a load
-- [ ] Learning → skill
+- [x] Skills: data-operations names the pipeline as the only way to start a load, with lanes, waits and failure
+  (`HOSTED-LOADS.md`, "Where a load runs"); pipeline-orchestration's AWS page holds what the old state machines and Step
+  Functions Local taught; aws-snowflake-operations says the account holds no old state machine and how one is deleted, 2026-11-23 21:05 ET
+- [x] Learning → skill: the three skill changes above, 2026-11-23 21:05 ET

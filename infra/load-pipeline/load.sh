@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# Start a load on the pipeline: the loader image CI built for the newest main commit runs readiness, then each step.
+# Start a load on the pipeline: the loader image CI built for the newest main commit runs readiness, then the load.
 #
-#   infra/load-pipeline/load.sh [--plan] [--finish] <step> [<step> ...]
+#   infra/load-pipeline/load.sh [--plan]                        every lane of the chain file at once, then the finish
+#   infra/load-pipeline/load.sh [--plan] [--finish] <step>...   only those steps, in order
 #
+# The lanes, their steps, order and waits come from the chain file in the image; WORKER_TASKS caps the lanes running at
+# once (default: every lane), and each step runs with the workers the chain file gives it.
 # Runs on this machine's AWS Step Functions Local. It refuses when main's newest commit has no loader image yet (CI has not
 # passed on it, or the image is still building), and while another execution runs (one load at a time). It waits, up to
 # LOAD_DEADLINE_HOURS (default 72; then it stops the execution), and exits 0 only when the execution succeeded.
@@ -14,7 +17,7 @@ while [ "${1:-}" = "--plan" ] || [ "${1:-}" = "--finish" ]; do
   if [ "$1" = "--plan" ]; then plan=true; else finish=true; fi
   shift
 done
-[ "$#" -gt 0 ] || [ "$finish" = true ] || { echo "name at least one step, or --finish" >&2; exit 2; }
+if [ "$#" -eq 0 ] && [ "$plan" = false ]; then finish=true; fi  # a load of every lane ends with the finish
 
 commit="$(git ls-remote https://github.com/paulananth/edgartools-platform.git refs/heads/main | cut -f1)"
 image="ghcr.io/paulananth/edgartools-platform:loader-sha-${commit}"
@@ -35,13 +38,19 @@ compose=(docker compose -f "$here/compose.yml")
 export ACTIVITY_ARN=pending  # compose reads the worker's variables on any `up`; the real one is set once the emulator answers
 "${compose[@]}" up -d stepfunctions >/dev/null
 for _ in $(seq 30); do sfn list-activities >/dev/null 2>&1 && break; sleep 1; done
-ACTIVITY_ARN="$(sfn create-activity --name edgartools-load | jq -r .activityArn)"
-export ACTIVITY_ARN
-definition="$(sed "s|\${activity}|${ACTIVITY_ARN}|g" "$here/state-machine.asl.json")"
 machine="$(sfn list-state-machines | jq -r '.stateMachines[] | select(.name == "edgartools-load") | .stateMachineArn')"
 if [ -n "$machine" ]; then
   running="$(sfn list-executions --state-machine-arn "$machine" --status-filter RUNNING | jq -r '.executions | length')"
   [ "$running" = 0 ] || { echo "an execution is still running: one load at a time" >&2; exit 2; }
+fi
+# A new activity per load: a long poll an older worker still holds would take the task and lose it.
+for old in $(sfn list-activities | jq -r '.activities[] | select(.name | startswith("edgartools-load")) | .activityArn'); do
+  sfn delete-activity --activity-arn "$old" >/dev/null
+done
+ACTIVITY_ARN="$(sfn create-activity --name "edgartools-load-$(date +%Y%m%d%H%M%S)" | jq -r .activityArn)"
+export ACTIVITY_ARN
+definition="$(sed "s|\${activity}|${ACTIVITY_ARN}|g" "$here/state-machine.asl.json")"
+if [ -n "$machine" ]; then
   sfn update-state-machine --state-machine-arn "$machine" --definition "$definition" >/dev/null
 else
   machine="$(sfn create-state-machine --name edgartools-load --definition "$definition" \
@@ -49,9 +58,14 @@ else
 fi
 "${compose[@]}" up -d worker >/dev/null
 
-steps="$(printf '%s\n' "$@" | jq -R 'select(length > 0)' | jq -sc .)"
-execution="$(sfn start-execution --state-machine-arn "$machine" \
-  --input "{\"steps\": ${steps}, \"plan\": ${plan}, \"finish\": ${finish}}" | jq -r .executionArn)"
+if [ "$#" -gt 0 ]; then
+  steps="$(printf '%s\n' "$@" | jq -R 'select(length > 0)' | jq -sc .)"
+  input="{\"steps\": ${steps}, \"plan\": ${plan}, \"finish\": ${finish}}"
+else
+  steps="every lane"
+  input="{\"plan\": ${plan}, \"finish\": ${finish}}"
+fi
+execution="$(sfn start-execution --state-machine-arn "$machine" --input "$input" | jq -r .executionArn)"
 echo "started ${execution##*:} on commit ${commit:0:8}: steps ${steps}, plan ${plan}, finish ${finish}, run ${RUN}"
 
 caffeinate -dimsu -w $$ 2>/dev/null &

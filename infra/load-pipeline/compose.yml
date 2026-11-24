@@ -19,6 +19,7 @@ services:
       PROVING: ${PROVING:?}
       LOGS: ${LOGS:?}
       RUN: ${RUN:?}
+      WORKER_TASKS: ${WORKER_TASKS:-}
       ACTIVITY_ARN: ${ACTIVITY_ARN:?load.sh creates the activity}
       AWS_ENDPOINT_URL_SFN: http://localhost:8083
       AWS_DEFAULT_REGION: us-east-1

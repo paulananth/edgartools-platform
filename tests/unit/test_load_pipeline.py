@@ -98,9 +98,9 @@ def test_the_state_machine_runs_readiness_then_the_given_steps_in_order_and_stop
     are a loop, and a failed step (no Catch, no Retry) ends the execution before the next starts."""
     machine = json.loads(MACHINE.read_text())
     states = machine["States"]
-    assert machine["StartAt"] == "Readiness" and states["Readiness"]["Next"] == "Start"
+    assert machine["StartAt"] == "Readiness" and states["Readiness"]["Next"] == "Mode"
     assert states["Readiness"]["Parameters"] == {"action": "readiness"}
-    assert not [s for s in states.values() if s["Type"] in ("Map", "Parallel")]
+    assert not [s for s in (states["Start"], states["More"], states["Step"], states["Advance"]) if s["Type"] in ("Map", "Parallel")]
     assert states["Start"]["Parameters"]["next"] == 0 and states["Start"]["Next"] == "More"
     assert states["More"]["Choices"] == [{"Variable": "$.next", "NumericLessThanPath": "$.count", "Next": "Step"}]
     step = states["Step"]
@@ -139,3 +139,73 @@ def test_the_worker_s_client_points_at_the_emulator_the_compose_file_names(monke
         if name.startswith("AWS_") and "$" not in str(value):
             monkeypatch.setenv(name, str(value))
     assert boto3.client("stepfunctions").meta.endpoint_url == "http://localhost:8083"
+
+
+def test_the_worker_runs_a_lane_and_reads_the_lanes_from_the_chain_file_in_order(monkeypatch):
+    client = Client([{"action": "lanes"}, {"action": "lane", "lane": "A", "plan": True}])
+    started = []
+    activity_worker.work(client, "arn", lambda argv: started.append(argv[2:]) or Process(0), tasks=2)
+    chain = yaml.safe_load((REPO / "rules" / "load-chain.yaml").read_text())
+    lanes = list(dict.fromkeys(step["lane"] for step in chain["steps"]))
+    assert client.reports[0] == ("success", "t0", {"lanes": lanes}) and len(lanes) > 1
+    assert started == [["--lane", "A", "--plan"]]
+
+
+def test_the_worker_runs_as_many_tasks_at_once_as_it_has_pollers():
+    """Every lane runs at once: one poller per lane, each running its task while the others run theirs."""
+    import threading
+
+    running, most, lock = [0], [0], threading.Lock()
+
+    class Slow(Process):
+        def wait(self, timeout=None):
+            with lock:
+                running[0] += 1
+                most[0] = max(most[0], running[0])
+            threading.Event().wait(0.2)
+            with lock:
+                running[0] -= 1
+            return 0
+    clients = [Client([{"action": "lane", "lane": lane}]) for lane in "ABC"]
+    activity_worker.work_at_once(clients, "arn", lambda argv: Slow(0), tasks=1)
+    assert most[0] == 3 and [c.reports[0][0] for c in clients] == ["success"] * 3
+
+
+def test_without_steps_the_state_machine_runs_every_lane_at_once_and_a_failed_lane_stops_no_other():
+    """Measured on Step Functions Local: the three lanes started in the same second; with one failing, the other two ran
+    to their end, then the execution failed and the finish did not run."""
+    states = json.loads(MACHINE.read_text())["States"]
+    assert states["Mode"]["Choices"] == [{"Variable": "$.steps", "IsPresent": True, "Next": "Start"}]
+    assert states["Mode"]["Default"] == "Lanes" and states["Lanes"]["Parameters"] == {"action": "lanes"}
+    run = states["Run lanes"]
+    assert run["Type"] == "Map" and run["ItemsPath"] == "$.lanes.names" and run["MaxConcurrency"] == 0
+    lane = run["Iterator"]["States"]["Lane"]
+    assert lane["Parameters"] == {"action": "lane", "lane.$": "$.lane", "plan.$": "$.plan"} and "Retry" not in lane
+    assert lane["Catch"] == [{"ErrorEquals": ["States.ALL"], "ResultPath": None, "Next": "Lane failed"}]
+    assert run["Iterator"]["States"]["Lane failed"]["Parameters"]["failed"] is True
+    assert states["Count"]["Parameters"]["failed.$"] == "States.ArrayContains($.results[*].failed, true)"
+    assert states["Lanes ended"]["Choices"][0]["Next"] == "A lane failed" and states["Lanes ended"]["Default"] == "Finish?"
+    for task in (states["Lanes"], lane):
+        assert task["Resource"] == "${activity}" and task["HeartbeatSeconds"] > 2 * activity_worker.HEARTBEAT_SECONDS
+
+
+def test_the_state_machine_names_no_lane_and_no_step_so_the_chain_file_alone_decides_what_runs():
+    """What a lane runs is never fixed in the state machine: the loader reads the lanes, their steps, order and waits from
+    the chain file in the image at run time."""
+    text = MACHINE.read_text()
+    chain = yaml.safe_load((REPO / "rules" / "load-chain.yaml").read_text())
+    names = {s["name"] for s in chain["steps"]} | {s["lane"] for s in chain["steps"]}
+    assert not sorted(n for n in names if f'"{n}"' in text)
+
+
+def test_each_load_gets_its_own_activity_so_no_poller_of_an_older_worker_takes_its_tasks():
+    """Measured: a long poll still held by the worker compose had just replaced took the readiness task 3 ms after it was
+    scheduled; that poller was gone, so the task never ran and timed out on its heartbeat. A new activity per load is polled
+    only by the worker started with it; the older activities are deleted."""
+    import re
+
+    script = (MACHINE.parent / "load.sh").read_text()
+    (name,) = re.findall(r"create-activity --name (\S+)", script)
+    assert "$" in name, name
+    assert "delete-activity" in script
+    assert script.index("delete-activity") < script.index("create-activity") < script.index('up -d worker')

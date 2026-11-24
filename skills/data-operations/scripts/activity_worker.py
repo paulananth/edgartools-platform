@@ -3,10 +3,12 @@
 
     ACTIVITY_ARN=<arn> AWS_ENDPOINT_URL_SFN=<url> python activity_worker.py
 
-A task's input says what to run: `{"action": "readiness"}`, `{"action": "step", "step": "<name>", "plan": false}`, or
-`{"action": "finish"}` (what follows the loads: links and lookups). The
-worker takes one task at a time, so one load runs at once. It sends a heartbeat while the task runs, so the state machine
-learns of a worker that died. Each task's output goes to this container's log; the chain's own logs stay in `LOGS`.
+A task's input says what to run: `{"action": "readiness"}`, `{"action": "lanes"}` (the chain file's lanes, in order, as the
+task's output), `{"action": "lane", "lane": "<name>", "plan": false}`, `{"action": "step", "step": "<name>", "plan": false}`,
+or `{"action": "finish"}` (what follows the loads: links and lookups). The worker runs up to `WORKER_TASKS` tasks at once, one
+per lane, each with the workers its step declares; the chain file's waits hold a step until the steps it needs are done. It
+sends a heartbeat while a task runs, so the state machine learns of a worker that died. Each task's output goes to this
+container's log; the chain's own logs stay in `LOGS`.
 """
 from __future__ import annotations
 
@@ -15,6 +17,7 @@ import os
 import socket
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -25,15 +28,20 @@ def command(task: dict) -> list[str]:
     """The command a task runs. An input of any other shape is refused, never guessed."""
     if task.get("action") == "readiness":
         return [sys.executable, str(HERE / "readiness.py")]
+    if task.get("action") == "lane" and isinstance(task.get("lane"), str) and task["lane"]:
+        return [sys.executable, str(HERE / "load_chain.py"), "--lane", task["lane"], *(["--plan"] if task.get("plan") else [])]
     if task.get("action") == "finish":
         return [sys.executable, str(HERE / "load_chain.py"), "--finish"]
     if task.get("action") == "step" and isinstance(task.get("step"), str) and task["step"]:
         return [sys.executable, str(HERE / "load_chain.py"), "--only", task["step"], *(["--plan"] if task.get("plan") else [])]
-    raise ValueError(f"a task is readiness, a step with its name, or finish, not {sorted(task)}")
+    raise ValueError(f"a task is readiness, lanes, a lane or a step with its name, or finish, not {sorted(task)}")
 
 
 def run_task(client, token: str, task: dict, start=subprocess.Popen, every: float = HEARTBEAT_SECONDS) -> int:
     """Run one task to its end and report it. Returns the exit code (-1 when the input was refused)."""
+    if task.get("action") == "lanes":  # read from the chain file in this image: the state machine names no lane
+        client.send_task_success(taskToken=token, output=json.dumps({"lanes": lanes()}))
+        return 0
     try:
         argv = command(task)
     except ValueError as refused:
@@ -58,9 +66,18 @@ def run_task(client, token: str, task: dict, start=subprocess.Popen, every: floa
     return code
 
 
+def lanes() -> list[str]:
+    """The chain file's lanes, in the order their first step appears."""
+    sys.path.insert(0, str(HERE))
+    import load_chain
+
+    return list(dict.fromkeys(step["lane"] for step in load_chain.chain_steps()))
+
+
 def work(client, activity: str, start=subprocess.Popen, tasks: int | None = None) -> None:
-    """Take tasks until stopped (or `tasks` of them, for a test). A poll that finds none returns empty and polls again."""
-    name = socket.gethostname()
+    """Take tasks until stopped (or `tasks` of them, for a test), one at a time. A poll that finds none returns empty and
+    polls again."""
+    name = f"{socket.gethostname()}-{threading.get_ident()}"
     taken = 0
     while tasks is None or taken < tasks:
         task = client.get_activity_task(activityArn=activity, workerName=name)
@@ -71,10 +88,20 @@ def work(client, activity: str, start=subprocess.Popen, tasks: int | None = None
         run_task(client, task["taskToken"], json.loads(task["input"]), start)
 
 
+def work_at_once(clients: list, activity: str, start=subprocess.Popen, tasks: int | None = None) -> None:
+    """One poller per client, each taking one task at a time: as many tasks run at once as there are clients."""
+    pollers = [threading.Thread(target=work, args=(client, activity, start, tasks), daemon=True) for client in clients]
+    for poller in pollers:
+        poller.start()
+    for poller in pollers:
+        poller.join()
+
+
 def main() -> int:
     import boto3
 
-    work(boto3.client("stepfunctions"), os.environ["ACTIVITY_ARN"])
+    slots = int(os.environ.get("WORKER_TASKS") or len(lanes()))
+    work_at_once([boto3.client("stepfunctions") for _ in range(slots)], os.environ["ACTIVITY_ARN"])
     return 0
 
 

@@ -207,6 +207,11 @@ notes is not the live one. The order:
   needs tens of rows; only estimating full-run cost needs the whole table.
 - Before running a multi-step workflow step by step by hand, look for the one already built (a
   Bookkeeping run, a committed script).
+- **The account holds no state machine of the old pipeline.** A load's one state machine is
+  `infra/load-pipeline/state-machine.asl.json`, run by the data-operations skill's pipeline. Before a state
+  machine is deleted, its definition and tags are saved outside the repository (`describe-state-machine`,
+  `list-tags-for-resource`), and the check is that nothing runs it: no running execution, no schedule, no
+  event-rule target. The two event rules Step Functions keeps for its own `.sync` tasks are its own; leave them.
 - Provisioning that isn't Terraform or a committed script does not survive an account rebuild, however
   carefully a runbook describes it. And when one stage turns out to have been an uncommitted manual step,
   assume every later stage in the same family is too.

@@ -1,5 +1,5 @@
 {
-  "Comment": "A load: readiness, then each step of the input's list in order, each run by the loader image's worker; the first step that fails ends the load, so no step runs after it. Then, when asked, the chain's finish. The chain file keeps the steps' order and dependencies; the input names which to run. Input: {\"steps\": [<name>, ...], \"plan\": false, \"finish\": false}.",
+  "Comment": "A load. With `steps`, readiness then those steps in order, the first failure ending it. Without, readiness then every lane of the chain file at once, each lane's steps in order, each step holding until the steps it needs (in any lane) are done; a lane that fails is caught so the other lanes go on, a step that needs its failed step stops, and the load fails at the end if any lane failed. Then, when asked, the chain's finish. The loader names the lanes and steps; this file names none. Input: {\"steps\": [<name>, ...] (optional), \"plan\": false, \"finish\": false}.",
   "StartAt": "Readiness",
   "States": {
     "Readiness": {
@@ -11,7 +11,109 @@
       "HeartbeatSeconds": 300,
       "TimeoutSeconds": 1800,
       "ResultPath": null,
-      "Next": "Start"
+      "Next": "Mode"
+    },
+    "Mode": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.steps",
+          "IsPresent": true,
+          "Next": "Start"
+        }
+      ],
+      "Default": "Lanes"
+    },
+    "Lanes": {
+      "Type": "Task",
+      "Resource": "${activity}",
+      "HeartbeatSeconds": 300,
+      "Parameters": {
+        "action": "lanes"
+      },
+      "TimeoutSeconds": 600,
+      "ResultSelector": {
+        "names.$": "$.lanes"
+      },
+      "ResultPath": "$.lanes",
+      "Next": "Run lanes"
+    },
+    "Run lanes": {
+      "Type": "Map",
+      "ItemsPath": "$.lanes.names",
+      "MaxConcurrency": 0,
+      "Parameters": {
+        "lane.$": "$$.Map.Item.Value",
+        "plan.$": "$.plan"
+      },
+      "Iterator": {
+        "StartAt": "Lane",
+        "States": {
+          "Lane": {
+            "Type": "Task",
+            "Resource": "${activity}",
+            "HeartbeatSeconds": 300,
+            "Parameters": {
+              "action": "lane",
+              "lane.$": "$.lane",
+              "plan.$": "$.plan"
+            },
+            "TimeoutSeconds": 604800,
+            "Catch": [
+              {
+                "ErrorEquals": [
+                  "States.ALL"
+                ],
+                "ResultPath": null,
+                "Next": "Lane failed"
+              }
+            ],
+            "Next": "Lane done"
+          },
+          "Lane done": {
+            "Type": "Pass",
+            "Parameters": {
+              "lane.$": "$.lane",
+              "failed": false
+            },
+            "End": true
+          },
+          "Lane failed": {
+            "Type": "Pass",
+            "Parameters": {
+              "lane.$": "$.lane",
+              "failed": true
+            },
+            "End": true
+          }
+        }
+      },
+      "ResultPath": "$.results",
+      "Next": "Count"
+    },
+    "Count": {
+      "Type": "Pass",
+      "Parameters": {
+        "failed.$": "States.ArrayContains($.results[*].failed, true)",
+        "finish.$": "$.finish"
+      },
+      "Next": "Lanes ended"
+    },
+    "Lanes ended": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.failed",
+          "BooleanEquals": true,
+          "Next": "A lane failed"
+        }
+      ],
+      "Default": "Finish?"
+    },
+    "A lane failed": {
+      "Type": "Fail",
+      "Error": "LaneFailed",
+      "Cause": "a lane failed: its steps and the steps that needed them stopped; the chain's state file names each"
     },
     "Start": {
       "Type": "Pass",
