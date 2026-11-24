@@ -111,7 +111,16 @@ no account). For the image, "GitHub Container Registry (Recommended)".
   queued one), `--plan --finish` refused, `load.sh` holds a lock, a failed poll keeps its poller, tighter tests. Each new
   case failed first (`AttributeError: ... 'begin_load'`, `TypeError: ... 'others_run'`, `assert set() == {'a1', 'a2'}`).
   Rejected: typed times (stamped by the script); a lock for two lanes of one source and target (none in the chain file), 2026-11-23 21:12 ET
-- [ ] Rerun the 8 steps left after `company` through the pipeline: `nport-registrant`, `nport-fund`,
+- [x] Six of the 8 steps ran through the pipeline, each skipped in about 20 s (0 documents loaded); `adv-custodians-03`
+  then waited on `gleif`, which was not in the run, and the execution was stopped after 12 min, 2026-11-23 21:24 ET
+- [x] A load never waits on what cannot come (operator, 2026-11-23: "load must never confuse itself on waiting for
+  others"): before the first step, the loader refuses a load when a step needs a step that does not exist, lanes that
+  cannot finish, or, for named steps, a step neither done nor earlier in the run.
+  `test_a_load_whose_step_would_wait_on_what_cannot_come_is_refused_before_any_step_runs` failed with
+  `AttributeError: module 'load_chain' has no attribute 'wait_problems'`, then passes. The real 8-step run is refused
+  ("adv-custodians-03 needs gleif: not done, and not before it in this run"); with `gleif` first it passes; the chain file
+  has no problem. On Step Functions Local a refused begin ends the execution before any step, 2026-11-23 21:24 ET
+- [ ] Run `adv-custodians-03` and `adv-custodians-06` after `gleif`: `nport-registrant`, `nport-fund`,
   `adv-mastering-03`, `adv-mastering-06`, `adv-silver-03`, `adv-silver-06`, `adv-custodians-03`, `adv-custodians-06`
 - [ ] `gleif`: a read-only check of how many of its documents the Change Journal calls new; load it only at 0
 - [x] Skills: data-operations names the pipeline as the only way to start a load, with lanes, waits and failure

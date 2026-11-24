@@ -1101,6 +1101,52 @@ def begin_load(state: Path) -> None:
     note(LOAD_BEGINS, state)
 
 
+def wait_problems(steps: list[dict], named: list[str] | None = None, done: set[str] = frozenset()) -> list[str]:
+    """Every wait that could never end, before any step runs: a needed step that does not exist; lanes that cannot finish
+    (a step waiting, through other lanes, on a later step of its own lane); and, for named steps run in order, a needed step
+    neither done nor earlier in the run. Empty when every wait can end."""
+    by_name = {step["name"]: step for step in steps}
+    problems = [f"{step['name']} needs {need}: no such step" for step in steps
+                for need in step.get("waits_for") or [] if need not in by_name]
+    if problems:
+        return problems
+    if named is not None:
+        earlier = set(done)
+        for name in named:
+            if name not in by_name:
+                problems.append(f"{name}: no such step")
+                continue
+            problems += [f"{name} needs {need}: not done, and not before it in this run"
+                         for need in by_name[name].get("waits_for") or [] if need not in earlier]
+            earlier.add(name)
+        return problems
+    lanes: dict[str, list[dict]] = {}
+    for step in steps:
+        lanes.setdefault(step["lane"], []).append(step)
+    finished = set(done)
+    while any(lanes.values()):
+        moved = False
+        for queue in lanes.values():
+            while queue and set(queue[0].get("waits_for") or []) <= finished:
+                finished.add(queue.pop(0)["name"])
+                moved = True
+        if not moved:
+            stuck = sorted(queue[0]["name"] for queue in lanes.values() if queue)
+            return [f"the lanes cannot finish: {', '.join(stuck)} wait on each other's lanes"]
+    return []
+
+
+def begin(steps: list[dict], state: Path, named: list[str] | None = None, plan: bool = False) -> int:
+    """Before a load's first step: refuse it when a wait could never end, else mark its start (a plan checks, writes nothing)."""
+    problems = wait_problems(steps, named, done_steps(state))
+    if problems:
+        print("Not started: a step would wait for what cannot come: " + "; ".join(problems), file=sys.stderr)
+        return 2
+    if not plan:
+        begin_load(state)
+    return 0
+
+
 def failed_steps(state: Path) -> set[str]:
     """The steps this load gave up on: a step-level `stopped:` line (not an attempt's) with no later attempt or finish,
     after the last `load begins` line."""
@@ -1402,7 +1448,9 @@ def main() -> int:
     parser.add_argument("--deadline", help="with --auto: HH:MM ET today, the run's schedule: a miss is reported once and the loads go on")
     parser.add_argument("--hours", type=float, help="with --auto: a deadline this many hours from now")
     parser.add_argument("--begin", action="store_true",
-                        help="mark this load's start in the chain state, before its lanes start (the pipeline runs it)")
+                        help="before a load's first step: refuse it when a wait could never end, else mark its start (the "
+                             "pipeline runs it; with --plan it only checks)")
+    parser.add_argument("--steps", help="with --begin: the named steps of the load, in order, comma-separated")
     parser.add_argument("--auto", action="store_true", help="watch the loads and start each step when its lane is free")
     parser.add_argument("--slots", type=int, default=max(2, min(os.cpu_count() or 2, int(
         os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") / 2**30 // 2))), help="loads running at once")
@@ -1471,9 +1519,8 @@ def main() -> int:
                   "and kept beside it, and this store starts a fresh chain state", flush=True)
         elif outcome == "adopted":
             print(f"{state.name} adopted as this store's, on your word", flush=True)
-    if args.begin:  # once, before the lanes start: a failure recorded before this line belongs to an earlier load
-        begin_load(state)
-        return 0
+    if args.begin:  # once, before the first step: every wait can end, and a failure before this line is an earlier load's
+        return begin(steps, state, args.steps.split(",") if args.steps else None, plan=args.plan)
     if args.plan:
         for step in steps:
             if (args.only and step["name"] != args.only) or (args.lane and step["lane"] != args.lane):

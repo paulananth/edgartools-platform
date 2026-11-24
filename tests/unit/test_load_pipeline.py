@@ -145,7 +145,7 @@ def test_the_worker_runs_a_lane_and_reads_the_lanes_from_the_chain_file_in_order
     client = Client([{"action": "lanes"}, {"action": "lane", "lane": "A", "plan": True}])
     started = []
     activity_worker.work(client, "arn", lambda argv: started.append(argv[2:]) or Process(0), tasks=2)
-    assert started.pop(0) == ["--begin"]  # the load's start is marked before its lanes, so a failure before it is not this load's
+    assert started.pop(0) == ["--begin"]  # every wait checked and the start marked before the lanes
     chain = yaml.safe_load((REPO / "rules" / "load-chain.yaml").read_text())
     lanes = list(dict.fromkeys(step["lane"] for step in chain["steps"]))
     assert client.reports[0] == ("success", "t0", {"lanes": lanes}) and len(lanes) > 1
@@ -171,7 +171,7 @@ def test_without_steps_the_state_machine_runs_every_lane_at_once_and_a_failed_la
     """Measured on Step Functions Local: the three lanes started in the same second; with one failing, the other two ran
     to their end, then the execution failed and the finish did not run."""
     states = json.loads(MACHINE.read_text())["States"]
-    assert states["Mode"]["Choices"] == [{"Variable": "$.steps", "IsPresent": True, "Next": "Start"}]
+    assert states["Mode"]["Choices"] == [{"Variable": "$.steps", "IsPresent": True, "Next": "Begin"}]
     assert states["Mode"]["Default"] == "Lanes" and states["Lanes"]["Parameters"] == {"action": "lanes", "plan.$": "$.plan"}
     run = states["Run lanes"]
     assert run["Type"] == "Map" and run["ItemsPath"] == "$.lanes.names" and run["MaxConcurrency"] == 0
@@ -220,7 +220,21 @@ def test_a_poll_that_fails_costs_the_poller_a_moment_never_its_slot(monkeypatch)
     assert client.reports[0][0] == "success"
 
 
-def test_a_plan_of_every_lane_marks_no_load_start():
+def test_a_plan_of_every_lane_checks_the_waits_and_marks_no_load_start():
+    started = []
     client = Client([{"action": "lanes", "plan": True}])
-    activity_worker.work(client, "arn", lambda argv: pytest.fail("a plan writes nothing"), tasks=1)
-    assert client.reports[0][0] == "success"
+    activity_worker.work(client, "arn", lambda argv: started.append(argv[2:]) or Process(0), tasks=1)
+    assert started == [["--begin", "--plan"]] and client.reports[0][0] == "success"
+
+
+def test_named_steps_are_checked_in_their_order_before_the_first_runs_and_a_refusal_stops_the_load():
+    """Measured: six named steps loaded, then the seventh waited on a step not in the run. The check runs first."""
+    started = []
+    client = Client([{"action": "begin", "steps": ["a1", "b1"], "plan": False}, {"action": "lanes"}])
+    activity_worker.work(client, "arn", lambda argv: started.append(argv[2:]) or Process(2), tasks=2)
+    assert started == [["--begin", "--steps", "a1,b1"], ["--begin"]]
+    assert [r[0] for r in client.reports] == ["failure", "failure"]
+    states = json.loads(MACHINE.read_text())["States"]
+    begin = states["Begin"]
+    assert begin["Parameters"] == {"action": "begin", "steps.$": "$.steps", "plan.$": "$.plan"} and begin["Next"] == "Start"
+    assert "Catch" not in begin and "Retry" not in begin  # a refusal ends the execution before any step

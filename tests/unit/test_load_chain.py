@@ -1586,3 +1586,34 @@ def test_a_lane_that_breaks_records_its_steps_not_done_as_stopped(tmp_path, monk
     with pytest.raises(RuntimeError):
         chain.run_steps(steps, {}, state, lane="A")
     assert chain.failed_steps(state) == {"a1", "a2"}
+
+
+def test_a_load_whose_step_would_wait_on_what_cannot_come_is_refused_before_any_step_runs():
+    """Measured: named steps ran six loads, then one waited on a step not in the run, and would have until its timeout.
+    Every wait is checked before the first step: a needed step that does not exist, a later step of its own lane, or, for
+    named steps, a step neither done nor earlier in the run."""
+    steps = [_step("a1", "A"), _step("a2", "A"), _step("b1", "B", waits=["a2"]), _step("c1", "C", waits=["b1"])]
+    assert chain.wait_problems(steps) == []
+    assert chain.wait_problems(steps, named=["a1", "a2", "b1"]) == []
+    assert chain.wait_problems(steps, named=["b1"], done={"a2"}) == []
+    assert chain.wait_problems(steps, named=["a1", "c1"]) == ["c1 needs b1: not done, and not before it in this run"]
+    assert chain.wait_problems(steps, named=["b1", "a2"]) == ["b1 needs a2: not done, and not before it in this run"]
+    assert chain.wait_problems(steps, named=["x9"]) == ["x9: no such step"]
+    ghost = [*steps, _step("d1", "D", waits=["nope"])]
+    assert chain.wait_problems(ghost) == ["d1 needs nope: no such step"]
+    deadlock = [_step("a1", "A", waits=["b1"]), _step("b1", "B", waits=["a2"]), _step("a2", "A")]
+    assert chain.wait_problems(deadlock) == ["the lanes cannot finish: a1, b1 wait on each other's lanes"]
+
+
+def test_the_chain_file_has_no_wait_problem():
+    assert chain.wait_problems(STEPS) == []
+
+
+def test_begin_refuses_a_load_with_a_wait_problem_and_marks_no_start(tmp_path, monkeypatch, capsys):
+    state = tmp_path / "state.log"
+    steps = [_step("a1", "A"), _step("b1", "B", waits=["a1"])]
+    assert chain.begin(steps, state, named=["b1"]) == 2
+    assert "b1 needs a1" in capsys.readouterr().err and not state.exists()
+    assert chain.begin(steps, state, named=["a1", "b1"]) == 0 and chain.LOAD_BEGINS in state.read_text()
+    state.unlink()
+    assert chain.begin(steps, state, named=["a1", "b1"], plan=True) == 0 and not state.exists()  # a plan writes nothing
