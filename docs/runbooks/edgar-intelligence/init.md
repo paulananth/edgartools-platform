@@ -132,7 +132,7 @@ A missing grant or login that a command names is a gap to fix through the centra
 `rules/load-jobs.yaml` holds the order of every source and target, each one's input (its source names the folder in `sources/<source>/inputs.yaml`), workers and the facts and revision no capture states, and
 `scripts/load_jobs.py` runs it, so a store is loaded the same way every time and nobody rewrites the list:
 
-A load runs only in the loader image CI built from `main`, started by `infra/load-pipeline/load.sh [--plan] [--finish] <step>...`
+A load runs only in the loader image CI built from `main`, started by `infra/load-pipeline/load.sh [--plan|--force] [--finish] <step>...`
 (data-operations, HOSTED-LOADS.md, "Where a load runs"). In a checkout `load_jobs.py` reads (`--plan`, `--list`, `--status`) and
 refuses to start, resume or finish a load. The commands below are what the image's worker runs:
 
@@ -143,7 +143,7 @@ python <data-operations skill>/scripts/load_jobs.py            # one process, th
 python <data-operations skill>/scripts/load_jobs.py --from <step>   # carry on; a step that is done costs one call
 ```
 
-**`--auto` is the way to load a store.** It starts the step at the head of every lane whose dependencies are done, longest
+**`load.sh` is the way to load a store**: the state machine runs every lane at once, each lane's steps in order, and a step waits for the steps it needs. `load_jobs.py --auto` is the scheduler for a machine that cannot run every lane at once (the command above, in the image). It starts the step at the head of every lane whose dependencies are done, longest
 first, while a slot is free (`--slots`, by default half the machine's gigabytes, at most its cores, at least two) and the machine has
 headroom (a load average under one and a half times the cores, and memory not short: swap over three quarters used counts only while less than a quarter of memory is free, since the system keeps swap long after the load that filled it; under a tenth of memory free presses on its own, and an unreadable memory counts as short); it also reads the database as the reader login (a step starts only while fewer than three sessions wait on locks, none for a minute, and
 less than four fifths of its connections are in use), and it starts one step a

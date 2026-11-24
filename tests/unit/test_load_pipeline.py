@@ -285,3 +285,10 @@ def test_every_task_that_carries_the_plan_carries_the_force_the_execution_starte
                 yield from walk(value)
     carriers = list(walk(machine))
     assert len(carriers) >= 6 and all(c.get("force.$") == "$.force" for c in carriers)
+
+
+def test_a_load_that_outlasts_its_window_reports_the_miss_and_goes_on():
+    """Operator, 2026-11-24: "do not stop at 2 hours but report the miss": the window is 2 hours, and nothing stops the execution."""
+    script = (MACHINE.parent / "load.sh").read_text()
+    assert "LOAD_DEADLINE_HOURS:-2" in script and "DEADLINE MISSED" in script
+    assert "stop-execution" not in script

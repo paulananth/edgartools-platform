@@ -9,7 +9,7 @@
 # with the workers the load jobs file gives it.
 # Runs on this machine's AWS Step Functions Local. It refuses when main's newest commit has no loader image yet (CI has not
 # passed on it, or the image is still building), and while another execution runs (one load at a time). It waits, up to
-# LOAD_DEADLINE_HOURS (default 72; then it stops the execution), and exits 0 only when the execution succeeded.
+# LOAD_DEADLINE_HOURS (default 2: the operator's window; a miss is reported once and the load goes on), and exits 0 only when the execution succeeded.
 # RUN, STORES, CAPTURES, PROVING and LOGS pass through to the worker, with load_jobs.py's defaults.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -75,12 +75,12 @@ execution="$(sfn start-execution --state-machine-arn "$machine" --input "$input"
 echo "started ${execution##*:} on commit ${commit:0:8}: steps ${steps}, plan ${plan}, force ${force}, finish ${finish}, run ${RUN}"
 
 caffeinate -dimsu -w $$ 2>/dev/null &
-deadline=$(( $(date +%s) + ${LOAD_DEADLINE_HOURS:-72} * 3600 ))
+deadline=$(( $(date +%s) + ${LOAD_DEADLINE_HOURS:-2} * 3600 )) missed=false  # the operator's window: a miss is reported, never a stop
 status=RUNNING
 while [ "$status" = RUNNING ]; do
-  if [ "$(date +%s)" -ge "$deadline" ]; then
-    sfn stop-execution --execution-arn "$execution" --error Deadline --cause "load.sh waited ${LOAD_DEADLINE_HOURS:-72} h" >/dev/null
-    echo "execution ${execution##*:} stopped at the deadline" >&2; exit 1
+  if [ "$missed" = false ] && [ "$(date +%s)" -ge "$deadline" ]; then
+    missed=true
+    echo "DEADLINE MISSED: execution ${execution##*:} still runs after ${LOAD_DEADLINE_HOURS:-2} h; it goes on (read each job's time in the state file)" >&2
   fi
   sleep 60
   status="$(sfn describe-execution --execution-arn "$execution" | jq -r .status)" || status=RUNNING  # a missed reading waits a minute

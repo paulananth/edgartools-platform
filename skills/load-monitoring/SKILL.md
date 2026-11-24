@@ -33,6 +33,10 @@ The load pipeline's Compose project (`infra/load-pipeline`) runs the exporter fr
 sharing its process space, so it needs no checkout and sees a load that runs in a container. `monitoring.py up` starts a
 host exporter only when nothing answers on the port (a load run by hand, outside the pipeline).
 
+`load.sh` recreates the worker, and the exporter with it, at every start: for a minute `monitoring.py status` says the
+exporter is not answering, then `load_monitor_up 1`. A host exporter served from a checkout goes blind when that
+checkout is deleted (`load_monitor_up 0`): stop it, never repair it, and let the pipeline's exporter take the port.
+
 ## The design
 
 A step has one of six states (the codes are never renumbered: Prometheus keeps what it stored, and a changed number repaints history; code 2, once `unclear`, stays unused), each with one colour that means the same on every
