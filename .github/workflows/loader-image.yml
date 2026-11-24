@@ -1,0 +1,72 @@
+name: Loader image
+
+# Builds the loader image from a main commit once CI passed on it, and pushes it as loader-sha-<commit>.
+# On a pull request that changes the image, it builds without pushing, to test the build.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - Dockerfile.loader
+      - Dockerfile.warehouse-deps
+      - .github/workflows/loader-image.yml
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/paulananth/edgartools-platform
+
+jobs:
+  image:
+    if: github.event_name == 'pull_request' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Name the commit and the dependency image
+        id: names
+        run: |
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          deps=$({ cat Dockerfile.warehouse-deps pyproject.toml uv.lock; git ls-files -z crates/source-contract crates/control-contract | sort -z | xargs -0 cat; } | sha256sum | cut -c1-16)
+          echo "deps=${IMAGE}:loader-deps-${deps}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build the dependency image unless it exists
+        id: deps
+        run: |
+          if [ "${{ github.event_name }}" != pull_request ] && docker manifest inspect "${{ steps.names.outputs.deps }}" >/dev/null 2>&1; then
+            echo "reused ${{ steps.names.outputs.deps }}"
+          else
+            docker build -f Dockerfile.warehouse-deps -t "${{ steps.names.outputs.deps }}" .
+            if [ "${{ github.event_name }}" != pull_request ]; then docker push "${{ steps.names.outputs.deps }}"; fi
+          fi
+
+      - name: Build the loader image
+        run: |
+          docker build -f Dockerfile.loader \
+            --build-arg DEPENDENCY_IMAGE="${{ steps.names.outputs.deps }}" \
+            --build-arg COMMIT="${{ steps.names.outputs.commit }}" \
+            -t "${IMAGE}:loader-sha-${{ steps.names.outputs.commit }}" .
+          docker run --rm --entrypoint sh "${IMAGE}:loader-sha-${{ steps.names.outputs.commit }}" -c \
+            'set -e; test "$(cat /app/COMMIT)" = "${{ steps.names.outputs.commit }}"; edgar-warehouse --help >/dev/null
+             python -c "import source_contract, psycopg2, boto3, edgar_warehouse.mdm.raw_capture, edgar_warehouse.rules.files, edgar_warehouse.workers"
+             cd /app/skills/data-operations/scripts; python readiness.py --list >/dev/null; python load_chain.py --list >/dev/null
+             ps -o pid= -p 1 >/dev/null; pgrep -f . >/dev/null'
+
+      - name: Push the loader image
+        if: github.event_name != 'pull_request'
+        run: docker push "${IMAGE}:loader-sha-${{ steps.names.outputs.commit }}"

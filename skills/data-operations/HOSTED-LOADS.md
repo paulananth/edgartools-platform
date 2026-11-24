@@ -18,6 +18,21 @@ unconfigured when its file existed). A fact that cannot be
 read is a failure. Fix what it names and run it again; there is no switch to skip it. A rehearsal of the first lane on a
 disposable store is the next check to add.
 
+## Where a load runs
+A load runs in the loader image, never in a checkout: a checkout's code can differ from its tested commit (an engine not
+rebuilt, an edit), and a deleted worktree stops its load. `.github/workflows/loader-image.yml` builds the image only from a
+`main` commit that passed CI (`loader-sha-<commit>` on ghcr.io) and writes that commit into it; in the image the gate and
+CODE read it in place of git, and ENGINE does not apply (the image compiles its own engine).
+- **Start:** `infra/load-pipeline/load.sh [--plan] <step>...` pulls the image of `main`'s newest commit (it refuses while that
+  image is not built), starts AWS Step Functions Local and one worker from the image, and runs readiness, then each step in
+  the given order. It waits and exits 0 only on success. Try a new image with `--plan` first: read-only, seconds.
+- **The steps are the input**, in the chain file's dependency order; the state machine names none. The first step that fails
+  ends the execution, so nothing after it starts. Fix, merge, and start again from that step: the chain's state and logs stay in `LOGS`.
+- **One worker takes one task at a time.** Its `ps` sees only its container, so QUIET's process count no longer covers the
+  Mac; the loader's database sessions still do. Never start `load_chain.py` on the Mac beside it.
+- **Mounts:** the logins and stores folder and `LOGS` are written (the readiness record, the chain's state); the captures are
+  read-only. Host networking lets the worker reach the stores and the catalog as the Mac does.
+
 ## Before a load starts
 - **Role guards first.** `infra/scripts/harden-hosted-roles.py --confirm` (owner login) gives every login a connection limit,
   statement and idle-transaction timeouts, a `work_mem` ceiling for the loader and the audit classes. A load with the

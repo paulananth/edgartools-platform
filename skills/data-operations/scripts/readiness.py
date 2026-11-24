@@ -30,10 +30,11 @@ MIN_DISK_GIB = 100
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
 LOADER = "edgar_loader"
+IMAGE_COMMIT = "COMMIT"  # in a loader image: the commit CI built it from, only ever one that passed CI on main
 GUARDS = ("work_mem", "statement_timeout", "idle_in_transaction_session_timeout")
 CHECKS = {
     "CODE": "The code is committed, contains today's main, and its commit has green CI",
-    "ENGINE": "The compiled engine was built from the source of this checkout",
+    "ENGINE": "The compiled engine was built from the source of this checkout (an image carries its own)",
     "DOCTOR": "doctor reports the stores ready under the loader's files",
     "GUARDS": "The loader holds its connection limit, memory ceiling and timeouts",
     "REFERENCE": "RDM holds its published codes, and silver holds a table for every spec",
@@ -54,7 +55,16 @@ def now() -> datetime:
     return datetime.now(ZoneInfo("America/New_York"))
 
 
+def image_commit(repo: Path) -> str:
+    """The commit a loader image was built from, written by CI into the image; "" outside an image. A folder with `.git`
+    is a checkout whatever files it holds, so a stray `COMMIT` file never stands in for git."""
+    path = repo / IMAGE_COMMIT
+    return path.read_text().strip() if path.is_file() and not (repo / ".git").exists() else ""
+
+
 def current_sha(repo: Path = REPO) -> str:
+    if image_commit(repo):
+        return image_commit(repo)
     done = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True, check=False)
     return done.stdout.strip() if done.returncode == 0 else ""
 
@@ -121,6 +131,9 @@ def evaluate(facts: dict) -> list[dict]:
 
 # --- gathering: each reads one fact, prints nothing sensitive, and returns None or False when it cannot ----------------
 def git_facts(repo: Path) -> dict:
+    if image_commit(repo):  # CI builds the image only from a commit that passed CI on main, and nothing edits it after
+        return {"clean": True, "contains_main": True, "ci": "success", "image": image_commit(repo)}
+
     def run(*args):
         return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, check=False)
     sha = current_sha(repo)

@@ -1507,3 +1507,20 @@ def test_a_plan_names_the_open_runs_a_load_would_finish_and_those_it_would_leave
     body = '{"documents": 7, "bundles": 2, "blocked": null, "finishable_runs": ["a", "b"], "left_as_they_are": {"c": "why"}}'
     checked(monkeypatch, chain.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": body, "stderr": ""})())
     assert chain.plan(BY_NAME["company"], {}) == "documents 7 bundles 2 blocked None open runs: 2 to finish first, 1 left"
+
+
+@pytest.mark.parametrize("argv", [["--only", "company"], ["--finish"], ["--auto"]])
+def test_a_load_started_from_a_checkout_is_refused_before_the_gate(monkeypatch, tmp_path, capsys, argv):
+    """Operator: "we must not be run the next load from a worktree". Only the loader image, which carries the commit CI
+    built it from, starts, resumes or finishes a load; a plan still reads from anywhere."""
+    from tests.support.patching import checked
+
+    (tmp_path / "worker.env").write_text("")
+    monkeypatch.setattr(chain, "STORES", tmp_path)
+    monkeypatch.setattr(chain, "LOGS", tmp_path)
+    import readiness
+
+    checked(monkeypatch, readiness, "gate", lambda *a: pytest.fail("a checkout is refused before the gate"))
+    monkeypatch.setattr(sys, "argv", ["load_chain.py", *argv])
+    assert chain.main() == 2
+    assert "infra/load-pipeline/load.sh" in capsys.readouterr().err

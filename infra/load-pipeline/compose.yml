@@ -1,0 +1,33 @@
+# The load pipeline on this machine: AWS Step Functions Local, and one worker from the loader image CI built for COMMIT.
+# Started by load.sh, never by hand: it sets every variable below. Host networking lets the worker reach the stores and the catalog as the Mac does.
+name: edgartools-load
+services:
+  stepfunctions:
+    image: amazon/aws-stepfunctions-local@sha256:ea8de9d3c489f889582e8d84aab67031e613e055ff4b94ccc41aa3af681efce2
+    network_mode: host
+    restart: unless-stopped
+
+  worker:
+    image: ghcr.io/paulananth/edgartools-platform:loader-sha-${COMMIT:?load.sh names the commit}
+    network_mode: host
+    restart: unless-stopped
+    depends_on: [stepfunctions]
+    environment:
+      HOME: ${HOME}
+      STORES: ${STORES:?}
+      CAPTURES: ${CAPTURES:?}
+      PROVING: ${PROVING:?}
+      LOGS: ${LOGS:?}
+      RUN: ${RUN:?}
+      ACTIVITY_ARN: ${ACTIVITY_ARN:?load.sh creates the activity}
+      AWS_ENDPOINT_URL_STEPFUNCTIONS: http://localhost:8083
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+    volumes:
+      # Read: the logins and identity files, the captures. Written: the stores folder (the readiness record), the chain's state and logs.
+      - ${HOME}/.config/edgartools:${HOME}/.config/edgartools:ro
+      - ${STORES}:${STORES}
+      - ${LOGS}:${LOGS}
+      - ${CAPTURES}:${CAPTURES}:ro
+      - ${PROVING}:${PROVING}:ro

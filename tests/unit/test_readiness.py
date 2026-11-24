@@ -197,3 +197,26 @@ def test_a_step_has_a_capture_when_its_folder_holds_receipts_and_the_check_plans
     monkeypatch.setattr(load_chain, "ROOTS", {"captures": tmp_path / "here", "proving": tmp_path / "there"})
     checked(monkeypatch, readiness.subprocess, "run", lambda *a, **k: pytest.fail("a capture check runs no command"))
     assert readiness.plan_missing({}) == 6
+
+
+def test_an_image_names_the_commit_ci_built_it_from_for_the_gate_and_the_code_check(tmp_path, monkeypatch):
+    """A loader image has no git checkout: CI writes the commit it built from into the image, and only builds a commit
+    that passed CI on main. The gate and CODE read that commit and run neither git nor gh."""
+    (tmp_path / readiness.IMAGE_COMMIT).write_text("abc123\n")
+
+    def no_command(*args, **kwargs):
+        raise AssertionError("an image runs no git or gh")
+    monkeypatch.setattr(readiness.subprocess, "run", no_command)
+    assert readiness.current_sha(tmp_path) == "abc123"
+    assert readiness.git_facts(tmp_path) == {"clean": True, "contains_main": True, "ci": "success", "image": "abc123"}
+
+
+def test_a_folder_with_neither_a_checkout_nor_an_image_commit_has_no_commit(tmp_path):
+    assert readiness.current_sha(tmp_path) == ""
+
+
+def test_a_checkout_holding_a_commit_file_is_still_a_checkout(tmp_path):
+    """A `COMMIT` file committed or left in a checkout must not stand in for git: only a folder without `.git` is an image."""
+    (tmp_path / readiness.IMAGE_COMMIT).write_text("abc123\n")
+    (tmp_path / ".git").write_text("gitdir: elsewhere\n")  # a worktree's .git is a file
+    assert readiness.image_commit(tmp_path) == ""
