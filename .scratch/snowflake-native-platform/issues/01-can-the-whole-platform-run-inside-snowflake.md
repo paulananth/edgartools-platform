@@ -12,6 +12,16 @@ If the platform ran entirely inside one Snowflake account, what would it take,
 what would it cost, and what would it not do? The answer is an additional
 architecture beside the current ones; nothing existing is removed.
 
+## How several agents work on it
+
+Operator, 2026-11-24 17:22 ET: "Create the research ticket multiple agents will be working on completing it, so create pr".
+
+- **Claim a part** by writing `Claimed by: <runtime>/<branch>, <ET time from the clock>` under it before any work; a claimed part is not taken by another agent.
+- **One branch per agent**, cut off `origin/main` in its own worktree (`claude/`, `codex/`, `grok/`). Each agent writes its findings to its own file, `.scratch/snowflake-native-platform/research/<part>.md`, and ticks only its own part here; on a conflict keep both sides.
+- Parts R1 to R10 are the ten research items below and are independent; R11 (the synthesis) needs all of them.
+- Sources are Snowflake's own documentation only; no provider request. Each answer cites the page and says "measured" or "from the documentation". No account change, no object created.
+- Never print a secret, a password, a token or a database address; counts only.
+
 ## What the research answers
 
 Sources: Snowflake's own documentation only (no provider request). Each answer
@@ -72,10 +82,18 @@ Answered as the research needs them, one at a time, with a recommendation:
 
 ## Checklist
 
-- [ ] Research items 1 to 10 answered, each with its documentation page and "measured" or "from the documentation"
-- [ ] A covered, partial or missing table for the catalog and the ontology duties
-- [ ] A recommendation: whole, by duty, or not yet, with the cost and the order
-- [ ] Follow-up tickets written for each duty the recommendation keeps (the map's Not yet specified graduates)
+- [ ] R1 Compute (container service): item 1 answered in `research/r1.md`, with its documentation pages
+- [ ] R2 Databases (Snowflake Postgres): item 2 answered in `research/r2.md`, with its documentation pages
+- [ ] R3 Provider access and captured files: item 3 answered in `research/r3.md`, with its documentation pages
+- [ ] R4 Catalog duties (Horizon against OpenMetadata): item 4 answered in `research/r4.md`, with its documentation pages
+- [ ] R5 Ontology (business ontology against AutoOntology): item 5 answered in `research/r5.md`, with its documentation pages
+- [ ] R6 AI native (Cortex): item 6 answered in `research/r6.md`, with its documentation pages
+- [ ] R7 Monitoring: item 7 answered in `research/r7.md`, with its documentation pages
+- [ ] R8 Multi-platform seam in the engine: item 8 answered in `research/r8.md`, with its documentation pages
+- [ ] R9 Cost and latency: item 9 answered in `research/r9.md`, with its documentation pages
+- [ ] R10 Governance: item 10 answered in `research/r10.md`, with its documentation pages
+- [ ] R11 Synthesis (needs R1 to R10): the covered, partial or missing table for catalog and ontology, and a recommendation (whole, by duty, or not yet) with cost and order
+- [ ] Follow-up tickets for each duty the recommendation keeps (the map's Not yet specified graduates)
 - [ ] Learning → skill: name the skill line changed (aws-snowflake-operations or data-catalog), or write "none"
 
 ## Answer
