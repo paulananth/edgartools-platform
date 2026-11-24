@@ -104,9 +104,14 @@ def test_approve_records_exact_words(result):
 
 
 def test_the_catalog_summary_names_and_counts_but_never_a_value(result, tmp_path):
-    path, out = result["out"] / "findings.yaml", tmp_path / "sources" / "fixture" / "profile.yaml"
-    findings = yaml.safe_load(path.read_text())
-    assert findings["approval"]["status"] == "approved"  # approved by the test above
+    path = tmp_path / "findings.yaml"
+    path.write_text(yaml.safe_dump(result["findings"], sort_keys=False), encoding="utf-8")
+    assert profile_data.main([
+        "approve", "--findings", str(path), "--by", "operator", "--words", "approved as shown",
+    ]) == 0
+    out = tmp_path / "sources" / "fixture" / "profile.yaml"
+    findings = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert findings["approval"]["status"] == "approved"
     assert profile_data.main(["catalog", "--findings", str(path), "--out", str(out)]) == 0
     text, body = out.read_text(), yaml.safe_load(out.read_text())
     assert [p["part"] for p in body["parts"]] == [p["part"] for p in findings["parts"]]
