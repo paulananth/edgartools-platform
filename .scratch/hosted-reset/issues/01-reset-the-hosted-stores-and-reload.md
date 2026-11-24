@@ -2,10 +2,13 @@
 
 Status: open
 Type: task
+Owner: codex (operator, 2026-11-24 17:24 ET: "This is for codex")
 
 Operator, 2026-11-24 17:21 ET: "Create the reset ticket multiple agents will be working on completing it, so create pr". The reset is the hosted-store reset the platform runs after a schema or rule change that old stores cannot take (the last one: ticket 14 of `hosted-mirroring`, #2056). The operator did not name another reset; if a different reset was meant, say so on this ticket before any part is claimed.
 
 ## How several agents work on it
+
+Codex owns and runs this ticket; other agents take a part only when Codex hands it over, and Claude does not edit a part Codex has claimed.
 
 - **Claim a part** by writing `Claimed by: <runtime>/<branch>, <ET time from the clock>` under it before any work. A part with a claim is not taken by another agent.
 - **One branch per agent**, cut off `origin/main` in its own worktree (`claude/`, `codex/`, `grok/`); no agent edits another's branch or this file's claimed parts. An agent adds its own ticks and nothing else, and rebases on conflict (keep both sides).
