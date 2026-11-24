@@ -69,3 +69,30 @@ Failures, each with its root cause (all read from `chain-load-1124c.log` and the
 
 Then: run the default load (`RUN=<fresh label> infra/load-pipeline/load.sh`), 2 hours at most, report the miss (a default
 load should take minutes: the Change Journal skips what is loaded). Each fix is its own branch, PR and test that fails first.
+
+## Addendum 2 (Claude, 2026-11-24 ~08:30 ET): what changed since the first addendum
+
+Read this after the first addendum. The forced load `49827879` (`load-1124c`) was aborted at 08:20 ET; do not rerun it as it was.
+
+Merged to `main`:
+- **#2098: a forced load is a new publication.** `load_jobs.arguments()` gives a forced job `--revision <forced time as digits,
+  YYYYMMDDHHMMSS>`, replacing the file's revision. This was failure 2 of the first addendum (`ownership`, `ncen-*`,
+  "contradictory publications"). Side effect not tested: a default load after a forced one carries the delivery revision,
+  lower than the forced one; the engine may refuse it. Check before mixing the two on one store.
+
+In PR #2099 (open when written; merge on green, then wait for the Loader image on its commit):
+- **Lanes and workers are one budget.** `load_jobs.py --lanes-at-once [--capacity local|<profile>]` = the capacity's vCPUs over the
+  widest first job's workers (8 cores and 4 workers: 2). `load.sh` sets it as the lanes step's `MaxConcurrency` (it runs that
+  command in the loader image; `CAPACITY=<profile>` for another compute); the other lanes queue. This was failure 3 (the N-PORT
+  jobs killed with status -9, 26 workers on 8 cores, load average 20). Measured, do not retry: the emulator refuses
+  `MaxConcurrencyPath`, and a lane queued in the worker times out on its heartbeat. The first start with this code is the live
+  check: `load.sh` prints `<n> lanes at once`; expect 2 on this machine.
+- The number is platform-neutral (a capacity of `rules/load-jobs.yaml`); only `load.sh` and the state machine apply it.
+
+Still open, yours:
+- **The mount gap (failure 1):** `gleif-pairs` reads capture files that are symlinks into
+  `~/.local/share/edgartools/mdm/research/gleif-20260911-1600/`, not mounted in the worker. Fix and test that every file of
+  every input resolves inside the worker's mounts.
+- **Then the default load** (operator, 2026-11-24: "load with the default load time limit of 2 h max", and "do not stop at 2
+  hours but report the miss"): no `--force`, a fresh run label, `load.sh` from `main` with the new image. A default load should
+  take minutes: the Change Journal skips what is loaded.
