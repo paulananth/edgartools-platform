@@ -40,6 +40,10 @@ checkout is deleted (`load_monitor_up 0`): stop it, never repair it, and let the
 A container runtime that stops answering blinds the exporter and freezes the load behind it: test the runtime first (a bounded
 `docker version`), and restart it before looking at anything else (HOSTED-LOADS, "The shortest time to load everything").
 
+A watcher reads the log of the run label it watches, never "the newest log": the newest one replays an old run's events as if they
+were new. After the runtime restarts, an execution it held no longer exists (`ExecutionDoesNotExist`): that is the restart, not a
+failed load; read the new execution and the run's state file.
+
 ## The design
 
 A step has one of six states (the codes are never renumbered: Prometheus keeps what it stored, and a changed number repaints history; code 2, once `unclear`, stays unused), each with one colour that means the same on every

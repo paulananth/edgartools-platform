@@ -152,6 +152,7 @@ no account). For the image, "GitHub Container Registry (Recommended)".
   behind and that refused the next start twice; the execution check against Step Functions already enforces one load at a time, so the
   lock is gone. `test_one_load_at_a_time_is_the_state_machines_own_record_and_load_sh_keeps_no_lock_file` failed first (`.lock` found in
   the script), 2026-11-24 14:15 ET
+- [x] Learning → skill (operator, 2026-11-24: "Update skills from learning"): HOSTED-LOADS names how to restart the runtime (`orbctl stop`, `orbctl start`) and what a forced load costs; load-monitoring says a watcher reads its own run label's log and an execution lost to a restart is not a failure, 2026-11-24 14:26 ET
 - [x] Learning → skill: the three skill changes above, 2026-11-23 21:05 ET
 - [x] The load chain is named load jobs. Operator, 2026-11-23: "no load chain its load jobs"; scope chosen: "Everything live".
   `rules/load-jobs.yaml`, `load_jobs.py`, `test_load_jobs.py`, `chain_steps` → `load_jobs()`, and the text of skills, runbooks,
