@@ -35,8 +35,8 @@ and the environment checks it needs. A route grants no approval, provider reques
 1. **Find the state.** With no `edgar-warehouse` on the path, the next action is [Setup](#0-setup), step 1. A source is
    configured when the rules folder (`EDGAR_RULES_ROOT`, else the bundle's read-only copy) holds `sources/<source>/source.yaml`;
    a run id with Bookkeeping status is retained run evidence; a log's `## Resume` record is checked by [Resume](RESUME.md).
-2. **Pick the owner** in [Decisions, artifacts and handoffs](#decisions-artifacts-and-handoffs) whose row fits that state; its
-   handoff names the artifact to carry. Open no other reference to choose.
+2. **Route** with `edgar-warehouse plan route --request <file>` (or `--request -`). Supply booleans for source configuration, delivery change and live-rule change, derived from retained evidence. No config routes to Data Onboarding; for configured sources, a live-rule change routes to Refining Rules, a changed delivery or repeat run to Data Operations, and both change flags to operator clarification.
+   For `resume`, supply ordered phases (`owner`, `action`, `complete`, `hashes_match`); skip matching completed phases and choose the first unfinished/invalidated. The command only selects a route; it performs no load, provider request, approval or switch-on. Hand off to its owner/action; include no identifiers, data values or secrets.
 3. **Name the duty** in the [duty table](CONNECTIONS.md#database-connections-and-duties) (none to read captured files; a load
    or a worker: Loader, `worker.env`). Check, without printing a value, that its file exists and sets `DATA_URL` and `CONTROL_URL`.
 4. **Run `edgar-warehouse doctor`**, with that file, if any, sourced in a command-scoped subshell. Expected: exit 0 with `"ok": true`,
