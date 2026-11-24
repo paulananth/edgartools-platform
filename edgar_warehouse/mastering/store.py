@@ -455,6 +455,7 @@ class Store:
         return found
 
     def open_reviews(self, reason: str, rows: list) -> None:
+        rows = list(dict(rows).items())  # one review per (subject, reason): two rows of a subject in one command is an error, and the last assertion wins as it would one by one
         for block in blocks(rows):
             self.cursor.execute("insert into mastering_review(subject,reason,assertion_id,open_review) values "
                                 + ",".join(["(%s,%s,%s,1)"] * len(block)) + self.review_upsert,
