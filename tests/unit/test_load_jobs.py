@@ -1288,7 +1288,7 @@ def test_every_step_has_a_priority_of_one_two_or_three_and_the_chain_file_refuse
     text = (ROOT / "rules" / "load-jobs.yaml").read_text()
     for bad in ("4", "true", "2.0"):
         other = tmp_path / "load-jobs.yaml"
-        other.write_text(text.replace("defaults: {workers: 2, bundles: 1, priority: 3}", "defaults: {workers: 2, bundles: 1, priority: " + bad + "}"))
+        other.write_text(text.replace("bundles: 1, priority: 3,", "bundles: 1, priority: " + bad + ","))
         with pytest.raises(ValueError, match="priority"):
             chain.load_jobs(other)
 
@@ -1775,6 +1775,7 @@ def test_a_forced_load_is_a_new_publication_with_a_revision_above_the_one_the_fi
 def test_a_compute_carries_the_workers_a_step_is_sized_by_over_the_widest_first_step_lanes_at_once(monkeypatch, capacity, widest, carried, lanes, limit):
     monkeypatch.setattr(chain.os, "cpu_count", lambda: 8)
     monkeypatch.setattr(chain, "physical_gb", lambda: 8.0)  # `local` carries half of it: 4 GB, so 8 workers of half a gigabyte
+    monkeypatch.setattr(chain, "in_container", lambda: False)
     steps = [{"name": "a1", "lane": "A", "workers": 2}, {"name": "a2", "lane": "A", "workers": 8},
              {"name": "b1", "lane": "B", "workers": widest}, {"name": "c1", "lane": "C", "workers": 1}]
     # the workers a compute carries are its memory in worker-sized shares, at most four to a vCPU (the range a step's workers follow);
@@ -1799,3 +1800,16 @@ def test_each_job_of_a_forced_load_publishes_its_own_revision_so_a_sources_quart
     revisions = [a[a.index("--revision") + 1] for a in (chain.arguments(first), chain.arguments(second))]
     assert revisions == ["20261124121919011", "20261124121919012"] and revisions[0] < revisions[1]
     assert all(step["position"] == place for place, step in enumerate(chain.load_jobs()))
+
+
+def test_inside_the_loader_container_local_is_the_whole_memory_the_runtime_gives_and_the_measured_worker_size_sets_the_lanes(monkeypatch):
+    """The first memory-aware budget halved the container's memory (`local` is half a machine) and gave 1 lane where 2 had run:
+    inside a container the memory seen is the runtime's whole allotment. A measured worker of 0.4 GB, 3.9 GB: 9 workers, 2 lanes of 4."""
+    monkeypatch.setattr(chain.os, "cpu_count", lambda: 8)
+    monkeypatch.setattr(chain, "physical_gb", lambda: 3.9)
+    steps = [{"name": "a1", "lane": "A", "workers": 4, "worker_gb": 0.4}, {"name": "b1", "lane": "B", "workers": 2, "worker_gb": 0.4}]
+    monkeypatch.setattr(chain, "in_container", lambda: True)
+    assert chain.lane_budget(steps, "local") == {"lanes": 2, "workers": 9, "limit": "memory"}
+    monkeypatch.setattr(chain, "in_container", lambda: False)  # on the Mac itself half of it is the load's: 1.95 GB, 4 workers, 1 lane
+    assert chain.lane_budget(steps, "local")["lanes"] == 1
+    assert all(step["worker_gb"] == 0.4 for step in chain.load_jobs())  # the file's default is the measured size
