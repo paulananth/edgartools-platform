@@ -88,6 +88,7 @@ No scenario or test code is approved by creating these tickets. Proposed Givenâ€
 
 - [data-profiling: Make the entrypoint executable](issues/09-data-profiling-entrypoint.md): the repository skill now has a supported profiling entrypoint; its implementation and evidence are captured in [Ticket 09: add the data-profiling entrypoint](https://github.com/paulananth/edgartools-platform/pull/1980).
 - [Capability gap: the profiler reads some numbers through floating point](issues/gap-data-profiling-exact-numbers.md): exact decimal scale and long integer identifiers now survive through the generic reader; invented regression tests and the affected checks pass, in [fix(data-profiling): preserve exact numeric values](https://github.com/paulananth/edgartools-platform/pull/2015).
+- [Capability gap: the data-platform route is not executable](issues/gap-data-platform-route.md): Added a source-neutral route command over configuration and retained resume evidence; conflicting change signals stop for operator clarification.
 
 ## Not yet specified
 
