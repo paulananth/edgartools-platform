@@ -93,7 +93,7 @@ def fqn(*parts: str) -> str:
 def rules_digest(root: Path) -> str:
     """Which rules the catalog shows: one sha256 over every rules file."""
     digest = hashlib.sha256()
-    named = [(_location(root, path), path) for folder in (root, files.sources_root(root)) for path in folder.rglob("*.yaml")]
+    named = [(_location(root, path), path) for folder in (root, files.sources_root(root)) for path in folder.rglob("*.yaml") if path.name != files.INPUTS]
     for name, path in sorted(named):
         digest.update(name.encode() + b"\0" + path.read_bytes() + b"\0")
     return digest.hexdigest()

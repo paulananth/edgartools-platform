@@ -1,0 +1,6 @@
+# The files this source loads from: each delivery by name, its folder under the captures root (or `root: proving`).
+# A load step names one with `input:`, or none when this source has one. Read by the load only: no rules version holds it.
+inputs:
+  cohort-json:
+    folder: company-facts/cohort-json
+    root: proving

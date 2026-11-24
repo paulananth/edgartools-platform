@@ -1,0 +1,5 @@
+# The files this source loads from: each delivery by name, its folder under the captures root (or `root: proving`).
+# A load step names one with `input:`, or none when this source has one. Read by the load only: no rules version holds it.
+inputs:
+  first-424b4:
+    folder: sec.prospectus/first-424b4

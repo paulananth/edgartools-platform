@@ -1641,3 +1641,90 @@ def test_a_load_started_by_the_loader_image_is_read_from_its_command_line(monkey
     monkeypatch.setattr(chain.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": line + "\n"})())
     assert chain.external_loads() == {("one", "mastering")}
     assert chain.load_workers(f"4 1 0:01 100 {line}", "one", "mastering") == 3
+
+def _chain_with_sources(tmp_path, steps, inputs):
+    """A chain file and a sources folder whose `<source>/inputs.yaml` hold the named deliveries."""
+    (tmp_path / "chain.yaml").write_text(yaml.safe_dump({"capture_label": "l", "steps": steps}))
+    for source, body in inputs.items():
+        (tmp_path / "sources" / source).mkdir(parents=True)
+        (tmp_path / "sources" / source / "inputs.yaml").write_text(yaml.safe_dump(body))
+    return tmp_path / "chain.yaml", tmp_path / "sources"
+
+
+def test_a_step_names_its_input_and_the_source_holds_the_folder_and_its_root(tmp_path):
+    path, sources = _chain_with_sources(tmp_path, [
+        {"name": "a", "source": "s", "target": "t", "input": "d2", "minutes": 1},
+        {"name": "b", "source": "s", "target": "t", "input": "d1", "minutes": 1},
+        {"name": "c", "source": "p", "target": "t", "minutes": 1}], {
+        "s": {"inputs": {"d1": {"folder": "s/d1"}, "d2": {"folder": "s/d2", "root": "proving"}}},
+        "p": {"inputs": {"only": {"folder": "p/only"}}}})
+    got = {s["name"]: (s["capture"], s.get("capture_root", "captures")) for s in chain.chain_steps(path, sources)}
+    assert got == {"a": ("s/d2", "proving"), "b": ("s/d1", "captures"), "c": ("p/only", "captures")}
+
+
+@pytest.mark.parametrize("step, inputs, words", [
+    ({"input": "nope"}, {"d1": {"folder": "s/d1"}}, "no input"),
+    ({}, {"d1": {"folder": "s/d1"}, "d2": {"folder": "s/d2"}}, "names no input"),
+    ({"input": "d1"}, {"d1": {"folder": "s/d1", "root": "elsewhere"}}, "root"),
+    ({"input": "d1"}, {"d1": {"folder": "/abs/path"}}, "folder")])
+def test_an_input_that_cannot_be_resolved_is_refused_by_name(tmp_path, step, inputs, words):
+    path, sources = _chain_with_sources(tmp_path, [{"name": "a", "source": "s", "target": "t", "minutes": 1, **step}],
+                                        {"s": {"inputs": inputs}})
+    with pytest.raises(ValueError, match=words):
+        chain.chain_steps(path, sources)
+
+
+def test_the_chain_file_holds_no_capture_folder_and_every_source_holds_its_own_inputs():
+    text = (ROOT / "rules/load-chain.yaml").read_text()
+    assert not re.search(r"^\s*capture(_root)?:", text, re.M)
+    assert all((ROOT / "sources" / s["source"] / "inputs.yaml").exists() for s in STEPS)
+
+
+def test_each_step_resolves_to_the_folder_its_source_names():
+    """The answer of every step, written once while it agreed with the chain file as it was before inputs moved to the sources."""
+    got = {name: (BY_NAME[name]["capture"], BY_NAME[name].get("capture_root", "captures")) for name in BY_NAME}
+    assert got == {
+        'company': ('sec.submissions.company/all-76230', 'captures'),
+        'nport-registrant': ('sec.nport-datasets/2026q2', 'captures'),
+        'nport-fund': ('sec.nport-datasets/2026q2', 'captures'),
+        'person': ('sec.submissions.company/all-76230', 'captures'),
+        'openfigi-answers': ('openfigi/2026q2-nport', 'captures'),
+        'openfigi-tickers': ('openfigi/form4-tickers-20261109', 'captures'),
+        '13f-securities': ('sec.thirteenf.securities/p07-cohort', 'captures'),
+        '13f-securities-silver': ('sec.thirteenf.securities/p07-cohort', 'captures'),
+        'ncen-registrant-2025q4': ('sec.ncen-datasets/2025q4', 'captures'),
+        'ncen-registrant-2026q1': ('sec.ncen-datasets/2026q1', 'captures'),
+        'ncen-registrant-2026q2': ('sec.ncen-datasets/2026q2', 'captures'),
+        'ncen-registrant-2026q3': ('sec.ncen-datasets/2026q3', 'captures'),
+        'ncen-adviser-2025q4': ('sec.ncen-datasets/2025q4', 'captures'),
+        'ncen-adviser-2026q1': ('sec.ncen-datasets/2026q1', 'captures'),
+        'ncen-adviser-2026q2': ('sec.ncen-datasets/2026q2', 'captures'),
+        'ncen-adviser-2026q3': ('sec.ncen-datasets/2026q3', 'captures'),
+        'adv-mastering-03': ('iapd.adv/p07-2026-03', 'captures'),
+        'adv-mastering-06': ('iapd.adv/p07-2026-06', 'captures'),
+        'adv-silver-03': ('iapd.adv/p07-2026-03', 'captures'),
+        'adv-silver-06': ('iapd.adv/p07-2026-06', 'captures'),
+        'ncen-fund-2025q4': ('sec.ncen-datasets/2025q4', 'captures'),
+        'ncen-fund-2026q1': ('sec.ncen-datasets/2026q1', 'captures'),
+        'ncen-fund-2026q2': ('sec.ncen-datasets/2026q2', 'captures'),
+        'ncen-fund-2026q3': ('sec.ncen-datasets/2026q3', 'captures'),
+        'nport-security': ('sec.nport-datasets/2026q2', 'captures'),
+        'nport-security-other-keys': ('sec.nport-datasets/2026q2', 'captures'),
+        'ncen-class-2025q4': ('sec.ncen-datasets/2025q4', 'captures'),
+        'ncen-class-2026q1': ('sec.ncen-datasets/2026q1', 'captures'),
+        'ncen-class-2026q2': ('sec.ncen-datasets/2026q2', 'captures'),
+        'ncen-class-2026q3': ('sec.ncen-datasets/2026q3', 'captures'),
+        'nport-security-silver': ('sec.nport-datasets/2026q2', 'captures'),
+        'gleif-pairs': ('gleif/20260911-1600', 'captures'),
+        'gleif': ('gleif/20260911-1600-publisher', 'captures'),
+        'adv-custodians-06': ('iapd.adv/p07-2026-06', 'captures'),
+        'adv-custodians-03': ('iapd.adv/p07-2026-03', 'captures'),
+        'ownership': ('sec.ownership/p07-cohort', 'captures'),
+        'ownership-symbols': ('sec.ownership/p07-cohort', 'captures'),
+        'ownership-silver': ('sec.ownership/p07-cohort', 'captures'),
+        '13f-filings': ('sec.thirteenf.filings/p07-managers', 'captures'),
+        'company-facts': ('company-facts/cohort-json', 'proving'),
+        'registration': ('sec.registration/s1-f1-originals', 'captures'),
+        'ipo': ('sec.submissions.company/all-76230', 'captures'),
+        'prospectus': ('sec.prospectus/first-424b4', 'captures'),
+    }

@@ -32,6 +32,9 @@ ROOT = Path(os.environ.get("EDGAR_RULES_ROOT")
             or (BUNDLED if BUNDLED.is_dir() else Path(__file__).resolve().parents[2] / "rules"))
 
 
+INPUTS = "inputs.yaml"  # a source's deliveries by name: where its files are, not how they are read, so no rules version holds it
+
+
 def sources_root(root: Path | None = None) -> Path:
     """The sources folder: the folder `sources` beside the rules folder (the repository's `sources/`, the bundle's, or the
     one beside an `EDGAR_RULES_ROOT` or a root a caller passes). Sources and their mappings are not rules, so they live
