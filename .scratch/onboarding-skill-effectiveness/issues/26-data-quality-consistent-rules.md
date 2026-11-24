@@ -1,7 +1,7 @@
 # data-quality: Reconcile shared rules
 
 Type: task
-Status: open
+Status: resolved
 Priority: P0
 Blocked by: 02, 08, 14, 25
 Labels: wayfinder:task
@@ -36,7 +36,7 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] Inventory each duplicated or conflicting instruction with its authoritative source and proposed disposition. Verified by reconciling `CLAUDE.md`, Data Platform, Data Onboarding, Data Profiling, Data Modeling, Refining Rules, Business Catalog and Bookkeeping recovery; recorded under [Inventory and disposition](#inventory-and-disposition). (2026-11-20 20:01 ET)
 - [x] Align the local phase with the shared rule decision while preserving explicit operator boundaries. Verified in the Data Quality skill's [Shared rules and gates](../../../skills/data-quality/SKILL.md#shared-rules-and-gates) and its [decisions and handoffs](../../../skills/data-quality/SKILL.md#decisions-artifacts-and-handoffs): `quality.yaml` or silver table checks, measured counts, and explicit hierarchy-row dispositions remain distinct artifacts. (2026-11-20 20:01 ET)
 - [x] Trace a routine path and a blocked path; confirm no new approval, provider access or switch-on authority was inferred. Verified by static trace through the Data Quality modes and their owner handoffs; recorded under [Routine and blocked paths](#routine-and-blocked-paths). No workflow or source execution was run. (2026-11-20 20:01 ET)
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md. Remains unchecked because this request explicitly prohibits commit, push and PR creation.
+- [x] Publish the scoped reconciliation and evidence in its own branch and PR; the genericity check passed (**155 passed**). [docs(data-quality): close shared rules reconciliation](https://github.com/paulananth/edgartools-platform/pull/2095) (2026-11-24 06:53 ET).
 - [x] Learning → skill: Shared approval, access and completion rules stay at their authoritative repository or phase owner; Data Quality links to them and owns only check meaning, measured counts and row dispositions. Recorded in [Shared rules and gates](../../../skills/data-quality/SKILL.md#shared-rules-and-gates). (2026-11-20 20:01 ET)
 
 ## Completion evidence
@@ -79,7 +79,7 @@ switch-on is inferred. These are document traces, not behavioral execution.
 
 ## Validation
 
-- `UV_CACHE_DIR=/private/tmp/uv-cache-ticket26 uv run --no-project --with pytest -- pytest -q -p no:cacheprovider tests/unit/test_profiling_genericity.py` — **142 passed**. This checks source-neutral wording; it does not validate workflow behavior.
+- `uv run --no-project --with pytest -- pytest -q -p no:cacheprovider tests/unit/test_profiling_genericity.py` — **155 passed** in the closeout worktree. This checks source-neutral wording; it does not validate workflow behavior.
 - `git diff --check` — clean.
 - `gstack-skill-bill` on the edited skill — **28,088 bytes** (26,102 bytes at `HEAD` before the edit); the installed skill is a different copy and was not used as the edit source.
 
@@ -89,3 +89,11 @@ worktree were both at `d650395c6` before edits. The prerequisite commits are in
 the current history: tickets 25/#1984 (`d650395c6`), 37/#1981 (`51859666f`),
 and 61/#1982 (`fcd075b6c`). The separate installed checkout has unrelated
 dirty changes; it was left untouched. No other ticket files were edited.
+
+## Answer
+
+The repository Data Quality skill already points shared approval, provider-access, secret, testing and completion rules to `CLAUDE.md` or the owning phase. Its local contract remains check/fix meaning, measured counts, and evidence-backed invalid-row dispositions. The audit found no duplicate policy or owner requiring another skill edit.
+
+The installed Data Quality copy differs from the repository copy and was read for provenance only; it was not edited. This ticket reconciles the repository skill, not the installed tree.
+
+The relevant skill guidance was published in [Ticket 26: point data-quality rules at their homes](https://github.com/paulananth/edgartools-platform/pull/1989). The operator lifted the prior no-PR restriction on 2026-11-24. This closeout publishes the resolution and map index; it changes no source rules, loads no data, and adds no test scenarios.
