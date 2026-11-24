@@ -170,6 +170,11 @@ a batch before changing its size: the writer made three a batch (70 ms each) and
 
 ## Stopping loads
 - Stop the scheduler first (it would start the next step), then its step processes. The state file keeps every done step.
+- Aborting the Step Functions execution does not stop work already handed to the worker: the lane process
+  (`load_jobs.py`), the engine process of the running step and its pool workers keep running. After the abort, list
+  the worker container's processes, end the lane process and the engine process (`kill -9` when `TERM` is ignored),
+  and check the list is empty apart from the activity worker and exporter. Stop the watchers too. A step stopped
+  mid-bundle redoes that bundle on restart; keep the run's bundle folders, since the restart resumes from them.
 - Before a hosted reset, follow the quiesce and drain procedure in the repository's Edgar Intelligence initialize
   runbook: stop clients that can reconnect, confirm no open Bookkeeping runs or leases, resolve managed mirrors under
   their own approval, restart the PostgreSQL service, wait for `READY`, and rerun the read-only reset preflight. An

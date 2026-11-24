@@ -303,6 +303,10 @@ Hosted MDM connection setup belongs to
 
 Read [COMMANDS.md](COMMANDS.md) for the exact command before a setup, Terraform or deploy step.
 
+Before designing anything that runs inside Snowflake (a compute pool, a job service, a stage volume, Postgres reached
+from a service), read [CONTAINER-SERVICES.md](CONTAINER-SERVICES.md): what a trial account refuses, the no-always-on
+rule and the probe method.
+
 ## Image management
 
 Read [IMAGES.md](IMAGES.md) before building, tagging, publishing or pruning a container image, or changing an ECR repository.
