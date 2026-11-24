@@ -81,6 +81,10 @@ The goal is every document loaded in the least wall-clock time. Each rule below 
 - **A forced or killed load leaves unfinished runs, and the next default load drives them first.** They need the same mounts.
 - **One load at a time is Step Functions' own record** (`load.sh` refuses while an execution is running) and no lock file: a lock a dead run left
   refused the next start. A dead run's wrapper that is still alive keeps waiting on the old execution: stop it before starting again.
+- **Restart the runtime with `orbctl stop`, then `orbctl start`** (`orbctl restart` restarts Linux machines, not the Docker engine). A
+  restart clears the emulator's executions: start the load again with the same run label, and its done steps cost one call each.
+- **A forced load reprocesses every document of every job**, so its time is the whole of the lanes, not the changed part: start it
+  only when the operator names it, plan its window from the last forced run's longest chain, and give each forced load its own run label.
 
 ## Before a load starts
 - **Role guards first.** `infra/scripts/harden-hosted-roles.py --confirm` (owner login) gives every login a connection limit,
