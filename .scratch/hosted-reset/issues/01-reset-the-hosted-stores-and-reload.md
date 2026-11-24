@@ -7,7 +7,7 @@ Operator, 2026-11-24 17:21 ET: "Create the reset ticket multiple agents will be 
 
 ## How several agents work on it
 
-- **Claim a part** by writing `Claimed by: <runtime>/<branch>, 2026-11-24 17:21 ET` under it before any work. A part with a claim is not taken by another agent.
+- **Claim a part** by writing `Claimed by: <runtime>/<branch>, <ET time from the clock>` under it before any work. A part with a claim is not taken by another agent.
 - **One branch per agent**, cut off `origin/main` in its own worktree (`claude/`, `codex/`, `grok/`); no agent edits another's branch or this file's claimed parts. An agent adds its own ticks and nothing else, and rebases on conflict (keep both sides).
 - **Order**: part A first (it decides what is reset), B to D can run in parallel after A, E needs B to D, F needs E, G at the end.
 - **Live steps need the operator's words** (stop, restore or replace shared data): record them with the exact words and ET time; never run one on a store another agent is using (see CLAUDE.md, Shared local data).
