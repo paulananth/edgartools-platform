@@ -253,6 +253,10 @@ def capacity_profiles(path: Path = ROOT / "rules/load-jobs.yaml") -> dict[str, d
     return yaml.safe_load(path.read_text()).get("capacity") or {}
 
 
+def in_container() -> bool:
+    return Path("/.dockerenv").exists()
+
+
 def physical_gb() -> float:
     return os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") / 2**30
 
@@ -260,8 +264,8 @@ def physical_gb() -> float:
 def capacity_of(name: str) -> tuple[float, float]:
     """The vCPUs and gigabytes of a capacity: a profile of the load jobs file, or `local`, this machine measured (half its
     memory, the rest being the operator's other work)."""
-    if name == "local":
-        return os.cpu_count() or 1, physical_gb() / 2
+    if name == "local":  # in a container the memory seen is the whole allotment of the runtime: the operator's other work is outside it
+        return os.cpu_count() or 1, physical_gb() if in_container() else physical_gb() / 2
     profiles = capacity_profiles()
     if name not in profiles:
         raise SystemExit(f"No capacity named {name}: local or {', '.join(sorted(profiles))}")
@@ -919,25 +923,33 @@ def forced_at() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def lanes_at_once(steps: list[dict], capacity: str = "local") -> int:
-    """How many lanes a compute carries at once: the workers it carries (`workers_range`: its memory in worker-sized shares, at most
-    four to a vCPU, the same sizing a step's workers follow) over the workers of the widest first step of a lane. The one budget, in
-    no platform's terms: whatever starts the lanes (a state machine, the local scheduler) starts no more than this and queues the
-    rest, and the load monitor reads this same number."""
+def carried(steps: list[dict], capacity: str = "local") -> tuple[int, str, int]:
+    """The workers a compute carries, what limits them (`memory` when worker-sized shares of memory carry fewer than the vCPUs
+    allow, else `vcpu`), and the widest first step of a lane. A worker's size is the load jobs file's measured `worker_gb`
+    (the widest of the first steps), else half a gigabyte."""
     heads = {}
     for step in steps:
         heads.setdefault(step["lane"], step)
     widest = max((head["workers"] for head in heads.values()), default=1)
-    return max(1, bounds_for(capacity)[1] // widest)
+    worker_gb = max((head.get("worker_gb", WORKER_GB) for head in heads.values()), default=WORKER_GB)
+    vcpu, memory_gb = capacity_of(capacity)
+    workers = bounds_for(capacity, worker_gb)[1]
+    return workers, ("memory" if int(memory_gb / worker_gb + 1e-9) <= int(vcpu * WORKERS_PER_VCPU) else "vcpu"), widest
+
+
+def lanes_at_once(steps: list[dict], capacity: str = "local") -> int:
+    """How many lanes a compute carries at once: the workers it carries (its memory in worker-sized shares, at most four to a
+    vCPU, the same sizing a step's workers follow) over the workers of the widest first step of a lane. The one budget, in no
+    platform's terms: whatever starts the lanes (a state machine, the local scheduler) starts no more than this and queues the
+    rest, and the load monitor reads this same number."""
+    workers, _, widest = carried(steps, capacity)
+    return max(1, workers // widest)
 
 
 def lane_budget(steps: list[dict], capacity: str = "local") -> dict:
-    """The lane budget with what sets it, for the monitor: lanes at once, the workers the compute carries, and its limit
-    (`memory` when worker-sized shares of memory carry fewer workers than the vCPUs allow, else `vcpu`)."""
-    vcpu, memory_gb = capacity_of(capacity)
-    by_memory, by_vcpu = int(memory_gb / WORKER_GB + 1e-9), int(vcpu * WORKERS_PER_VCPU)
-    return {"lanes": lanes_at_once(steps, capacity), "workers": max(1, min(by_memory, by_vcpu)),
-            "limit": "memory" if by_memory <= by_vcpu else "vcpu"}
+    """The lane budget with what sets it, for the monitor: lanes at once, the workers the compute carries and its limit."""
+    workers, limit, _ = carried(steps, capacity)
+    return {"lanes": lanes_at_once(steps, capacity), "workers": max(1, workers), "limit": limit}
 
 
 def arguments(step: dict) -> list[str]:

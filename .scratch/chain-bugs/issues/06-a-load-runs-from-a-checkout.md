@@ -163,6 +163,10 @@ no account). For the image, "GitHub Container Registry (Recommended)".
   "contradictory publications", since every job carried the one forced revision. The revision is now the forced time's digits plus the job's place in
   the file (three digits). `test_each_job_of_a_forced_load_publishes_its_own_revision_so_a_sources_quarters_never_clash` failed first
   (`20261124121919` against `20261124121919011`), 2026-11-24 14:43 ET
+- [x] The memory-aware lane budget gave 1 lane where 2 had run: inside the loader container `local` halved the runtime's memory (1.95 GB), so
+  4 workers carried 1 lane of 4. Inside a container the memory seen is the runtime's whole allotment, and the worker is the measured 0.4 GB
+  (`defaults.worker_gb`): 9 workers, 2 lanes. The forced load ran at `CAPACITY=aws-large` meanwhile.
+  `test_inside_the_loader_container_local_is_the_whole_memory_the_runtime_gives_and_the_measured_worker_size_sets_the_lanes` failed first, 2026-11-24 15:27 ET
 - [x] Learning → skill (operator, 2026-11-24: "Update skills from learning"): HOSTED-LOADS names how to restart the runtime (`orbctl stop`, `orbctl start`) and what a forced load costs; load-monitoring says a watcher reads its own run label's log and an execution lost to a restart is not a failure, 2026-11-24 14:26 ET
 - [x] Learning → skill: the three skill changes above, 2026-11-23 21:05 ET
 - [x] The load chain is named load jobs. Operator, 2026-11-23: "no load chain its load jobs"; scope chosen: "Everything live".
