@@ -15,8 +15,9 @@ publish flag so it ignores change journal"). Claude does not start it; Codex own
 1. `git worktree add ../edgartools-platform-force-run -b codex/force-run origin/main`, source nothing by hand: `load.sh`
    reads the stores, captures and logs from its defaults.
 2. Smoke first, read-only: `RUN=force-1124 infra/load-pipeline/load.sh --plan` must exit 0 (readiness passes, 43 jobs).
-3. Then, in the background with a deadline: `RUN=force-1124 LOAD_DEADLINE_HOURS=48 infra/load-pipeline/load.sh --force`.
-   It refuses while another execution runs, pulls the image of `main`'s newest commit, and exits 0 only when the
+3. Then, in the background: `RUN=force-1124 infra/load-pipeline/load.sh --force`.
+   The window is 2 hours (operator, 2026-11-24: "do not stop at 2 hours but report the miss"): `load.sh` prints
+   `DEADLINE MISSED` once and the load goes on; report the miss with each job's time. It refuses while another execution runs, pulls the image of `main`'s newest commit, and exits 0 only when the
    execution succeeded. Every load job of the run ignores the Change Journal and processes its documents again.
 4. Estimate to say before starting: about 8 to 16 hours (the longest dependency path of the jobs' per-attempt bounds is
    16 hours; measured pieces: the GLEIF merge about 1.4 hours, N-PORT security about 1.7 hours).
@@ -32,4 +33,5 @@ publish flag so it ignores change journal"). Claude does not start it; Codex own
 ## Not decided here
 - A forced load that exceeds a job's `minutes` bound stops its attempt (attempts left carry on). Raise a bound only
   with a measured time.
+- The 2-hour window is the operator's; the estimate above says it will be missed, so say so before starting.
 - Never print a secret, a password, a token or a database address; no provider request.
