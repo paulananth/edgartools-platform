@@ -1813,3 +1813,20 @@ def test_inside_the_loader_container_local_is_the_whole_memory_the_runtime_gives
     monkeypatch.setattr(chain, "in_container", lambda: False)  # on the Mac itself half of it is the load's: 1.95 GB, 4 workers, 1 lane
     assert chain.lane_budget(steps, "local")["lanes"] == 1
     assert all(step["worker_gb"] == 0.4 for step in chain.load_jobs())  # the file's default is the measured size
+
+
+def test_a_lane_of_a_load_that_named_its_steps_runs_only_those_and_a_load_that_named_none_runs_them_all(tmp_path, monkeypatch):
+    """`--in-lanes` restarted a forced load, and every lane still ran its first steps again (company and person, a quarter of an hour
+    each): the begin recorded the named steps, but the lane ran every step it owns."""
+    from tests.support.patching import checked
+
+    steps = [_step("a1", "A"), _step("a2", "A"), _step("a3", "A"), _step("b1", "B")]
+    ran = []
+    checked(monkeypatch, chain, "attempt_loop", lambda step, env, state: ran.append(step["name"]) or True)
+    state = tmp_path / "named.log"
+    chain.begin_load(state, ["a2", "b1"])
+    assert chain.run_steps(steps, {}, state, lane="A") is True and ran == ["a2"]
+    ran.clear()
+    every = tmp_path / "every.log"
+    chain.begin_load(every)
+    assert chain.run_steps(steps, {}, every, lane="A") is True and ran == ["a1", "a2", "a3"]

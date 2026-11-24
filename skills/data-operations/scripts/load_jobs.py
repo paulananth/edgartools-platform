@@ -1490,6 +1490,9 @@ def run_steps(steps: list[dict], env: dict, state: Path, lane: str | None = None
     """Run the steps in file order (one lane's, one step, or all from `start`), each through its attempts. A lane that stops
     records its later steps as not started, so a step of another lane that needs one stops instead of waiting for it."""
     chosen = [step for step in steps if (not only or step["name"] == only) and (not lane or step["lane"] == lane)]
+    named = this_load(state.read_text().splitlines())[1] if lane and state.exists() else None
+    if named:  # a load that named its steps (`--in-lanes`) runs those in each lane; the rest were done by an earlier load
+        chosen = [step for step in chosen if step["name"] in named]
     if start is not None:
         chosen = chosen[next((i for i, step in enumerate(chosen) if step["name"] == start), len(chosen)):]
     for i, step in enumerate(chosen):

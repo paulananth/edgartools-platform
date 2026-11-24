@@ -171,6 +171,10 @@ no account). For the image, "GitHub Container Registry (Recommended)".
   again; `company` took 13 minutes twice): `load.sh --force --in-lanes <steps>` runs only the named steps, each in its lane, the lanes at once.
   `test_named_steps_with_in_lanes_run_in_their_lanes_at_once_and_a_restart_repeats_nothing_done` failed first; the emulator accepts the definition
   (a throwaway state machine created and deleted), 2026-11-24 15:55 ET
+- [x] `--in-lanes` ran every step of each lane anyway: the begin recorded the named steps (so waits counted the others as done), but `run_steps` ran every step
+  its lane owns, so `company` and `person` (a quarter of an hour each) ran again after the resume. A lane now runs only the steps its load named. My own
+  test of the first change read the begin note only, and the claim "the lane runner already reads it" was never run. `test_a_lane_of_a_load_that_named_its_steps_runs_only_those_and_a_load_that_named_none_runs_them_all` failed first
+  (`['a1', 'a2', 'a3']` against `['a2']`), 2026-11-24 16:27 ET
 - [x] Learning → skill (operator, 2026-11-24: "Update skills from learning"): HOSTED-LOADS names how to restart the runtime (`orbctl stop`, `orbctl start`) and what a forced load costs; load-monitoring says a watcher reads its own run label's log and an execution lost to a restart is not a failure, 2026-11-24 14:26 ET
 - [x] Learning → skill: the three skill changes above, 2026-11-23 21:05 ET
 - [x] The load chain is named load jobs. Operator, 2026-11-23: "no load chain its load jobs"; scope chosen: "Everything live".
