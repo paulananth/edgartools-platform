@@ -1632,3 +1632,12 @@ def test_the_whole_chain_in_file_order_is_refused_when_a_step_waits_on_a_later_o
     steps = [_step("a1", "A", waits=["b1"]), _step("b1", "B")]
     assert chain.wait_problems(steps, named=[s["name"] for s in steps]) == [
         "a1 needs b1: not done, and not before it in this run"]
+
+
+def test_a_load_started_by_the_loader_image_is_read_from_its_command_line(monkeypatch):
+    """In the image the command is `edgar-warehouse` written as a python one-liner, so no line holds `edgar-warehouse load `."""
+    line = ("python -c import sys; from edgar_warehouse.cli import main; sys.exit(main()) "
+            "load --source one --target mastering --workers 3 --capture /c")
+    monkeypatch.setattr(chain.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": line + "\n"})())
+    assert chain.external_loads() == {("one", "mastering")}
+    assert chain.load_workers(f"4 1 0:01 100 {line}", "one", "mastering") == 3

@@ -247,3 +247,15 @@ def test_a_lane_that_ends_without_success_has_its_unfinished_steps_recorded():
     activity_worker.work(client, "arn", lambda argv: started.append(argv[2:]) or next(codes), tasks=1)
     assert started == [["--lane", "A"], ["--lane", "A", "--mark-stopped"]]
     assert client.reports == [("failure", "t0", "Exit-9")]
+
+
+def test_the_exporter_runs_in_the_pipeline_from_the_same_image_and_sees_the_workers_processes():
+    """Measured: the exporter served from a deleted checkout reported `load_monitor_up 0`, and a host `ps` cannot see a load
+    that runs in a container; so the exporter shares the worker's process space and mounts only what it reads."""
+    compose = yaml.safe_load((MACHINE.parent / "compose.yml").read_text())["services"]
+    exporter, worker = compose["exporter"], compose["worker"]
+    assert exporter["image"] == worker["image"] and exporter["pid"] == "service:worker"
+    assert exporter["entrypoint"][1].endswith("load-monitoring/scripts/exporter.py") and exporter["entrypoint"][-1] == "serve"
+    assert exporter["volumes"] == ["${STORES}:${STORES}:ro", "${LOGS}:${LOGS}:ro"]  # never the logins folder: it holds other private files
+    assert exporter["depends_on"]["worker"]["restart"] is True
+    assert "up -d worker exporter" in (MACHINE.parent / "load.sh").read_text()

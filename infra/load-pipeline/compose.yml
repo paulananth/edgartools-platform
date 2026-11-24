@@ -31,3 +31,21 @@ services:
       - ${LOGS}:${LOGS}
       - ${CAPTURES}:${CAPTURES}:ro
       - ${PROVING}:${PROVING}:ro
+
+  # Reads the worker's processes and the chain's logs and serves them to Prometheus: Grafana shows the load with no checkout.
+  # It shares the worker's process space (a `ps` here lists the load) and mounts every folder it only reads.
+  exporter:
+    image: ghcr.io/paulananth/edgartools-platform:loader-sha-${COMMIT:?load.sh names the commit}
+    entrypoint: ["python", "/app/skills/load-monitoring/scripts/exporter.py", "serve"]
+    network_mode: host
+    pid: "service:worker"
+    restart: unless-stopped
+    depends_on:
+      worker: {condition: service_started, restart: true}  # a restarted worker has a new process space: the exporter follows it
+    environment:
+      STORES: ${STORES:?}
+      LOGS: ${LOGS:?}
+      RUN: ${RUN:?}
+    volumes:  # only the reader login (in STORES) and the chain's logs: not the logins folder, which holds other private files
+      - ${STORES}:${STORES}:ro
+      - ${LOGS}:${LOGS}:ro

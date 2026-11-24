@@ -60,7 +60,7 @@ else
   machine="$(sfn create-state-machine --name edgartools-load --definition "$definition" \
     --role-arn arn:aws:iam::123456789012:role/edgartools-load | jq -r .stateMachineArn)"
 fi
-"${compose[@]}" up -d worker >/dev/null
+"${compose[@]}" up -d worker exporter >/dev/null
 
 if [ "$#" -gt 0 ]; then
   steps="$(printf '%s\n' "$@" | jq -R 'select(length > 0)' | jq -sc .)"

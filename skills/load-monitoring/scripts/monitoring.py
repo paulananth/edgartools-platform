@@ -120,7 +120,7 @@ def exporter_pid() -> int | None:
 
 
 def start_exporter() -> None:
-    if exporter_pid():
+    if exporter_pid() or exporter_answer() != "not answering":  # the load pipeline's exporter already serves the port
         return
     STATE.mkdir(parents=True, exist_ok=True)
     log = (STATE / "exporter.log").open("a")

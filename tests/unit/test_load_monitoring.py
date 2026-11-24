@@ -113,3 +113,21 @@ def test_a_step_that_is_not_progressing_publishes_all_five_whys_and_a_panel_list
     panel = dashboard.whys_table()
     assert any("load_step_why" in t["expr"] for t in panel["targets"]) and "Because" in str(panel["transformations"])
     assert panel in dashboard.build()["panels"] and panel["description"]
+
+
+def test_the_monitor_starts_no_host_exporter_while_the_pipelines_exporter_answers(monkeypatch):
+    monkeypatch.setattr(monitoring, "exporter_pid", lambda: None)
+    monkeypatch.setattr(monitoring, "exporter_answer", lambda: "up")
+    monkeypatch.setattr(monitoring.subprocess, "Popen", lambda *a, **k: pytest.fail("a second exporter was started"))
+    monitoring.start_exporter()
+
+
+def test_the_monitor_starts_a_host_exporter_when_nothing_answers(monkeypatch, tmp_path):
+    started = []
+    monkeypatch.setattr(monitoring, "exporter_pid", lambda: None)
+    monkeypatch.setattr(monitoring, "exporter_answer", lambda: "not answering")
+    monkeypatch.setattr(monitoring, "STATE", tmp_path)
+    monkeypatch.setattr(monitoring, "PID", tmp_path / "exporter.pid")
+    monkeypatch.setattr(monitoring.subprocess, "Popen", lambda argv, **k: started.append(argv) or type("P", (), {"pid": 1})())
+    monitoring.start_exporter()
+    assert len(started) == 1 and started[0][-2:] == [str(monitoring.HERE / "exporter.py"), "serve"][-2:]
