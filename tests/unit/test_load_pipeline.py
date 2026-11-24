@@ -171,7 +171,7 @@ def test_without_steps_the_state_machine_runs_every_lane_at_once_and_a_failed_la
     """Measured on Step Functions Local: the three lanes started in the same second; with one failing, the other two ran
     to their end, then the execution failed and the finish did not run."""
     states = json.loads(MACHINE.read_text())["States"]
-    assert states["Mode"]["Choices"] == [{"Variable": "$.steps", "IsPresent": True, "Next": "Begin"}]
+    assert states["Mode"]["Choices"][1:] == [{"Variable": "$.steps", "IsPresent": True, "Next": "Begin"}]
     assert states["Mode"]["Default"] == "Lanes" and states["Lanes"]["Parameters"] == {"action": "lanes", "plan.$": "$.plan", "force.$": "$.force"}
     run = states["Run lanes"]
     assert run["Type"] == "Map" and run["ItemsPath"] == "$.lanes.names" and run["MaxConcurrency"] == 1
@@ -310,3 +310,19 @@ def test_one_load_at_a_time_is_the_state_machines_own_record_and_load_sh_keeps_n
     script = (MACHINE.parent / "load.sh").read_text()
     assert "mkdir \"$lock\"" not in script and ".lock" not in script and "rmdir" not in script
     assert "--status-filter RUNNING" in script and "one load at a time" in script
+
+
+def test_named_steps_with_in_lanes_run_in_their_lanes_at_once_and_a_restart_repeats_nothing_done():
+    """A forced load ignores the Change Journal, so a restart that runs every step repeats them all (it did: 13 minutes for one job).
+    `--in-lanes` names what is left, and the lanes run those steps at once, as a load does."""
+    states = json.loads(MACHINE.read_text())["States"]
+    assert states["Mode"]["Choices"][0] == {"And": [{"Variable": "$.steps", "IsPresent": True}, {"Variable": "$.inlanes", "IsPresent": True}],
+                                            "Next": "Lanes named"}
+    assert states["Lanes named"]["Parameters"] == {"action": "lanes", "steps.$": "$.steps", "plan.$": "$.plan", "force.$": "$.force"}
+    assert states["Lanes named"]["Next"] == "Run lanes" and states["Lanes named"]["ResultPath"] == states["Lanes"]["ResultPath"]
+    script = (MACHINE.parent / "load.sh").read_text()
+    assert "--in-lanes" in script and "inlanes" in script.split("input=", 1)[1]
+    client = Client([{"action": "lanes", "steps": ["a1", "b1"], "plan": False}])
+    started = []
+    activity_worker.work(client, "arn", lambda argv: started.append(argv[2:]) or Process(0), tasks=1)
+    assert started == [["--begin", "--steps", "a1,b1"]]  # the begin records the named steps, so each lane skips what is not named

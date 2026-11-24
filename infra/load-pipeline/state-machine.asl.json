@@ -1,5 +1,5 @@
 {
-  "Comment": "A load. Before any step, the loader refuses a load in which a step would wait for what cannot come. With `steps`, readiness then those steps in order, the first failure ending it. Without, readiness then every lane of the load jobs file at once, each lane's steps in order, each step holding until the steps it needs (in any lane) are done; a lane that fails is caught so the other lanes go on, a step that needs its failed step stops, and the load fails at the end if any lane failed. Then, when asked, the load's finish. The loader names the lanes and steps; this file names none. Input: {\"steps\": [<name>, ...] (optional), \"plan\": false, \"finish\": false}.",
+  "Comment": "A load. Before any step, the loader refuses a load in which a step would wait for what cannot come. With `steps`, readiness then those steps in order, the first failure ending it. Without, readiness then every lane of the load jobs file at once, each lane's steps in order, each step holding until the steps it needs (in any lane) are done; a lane that fails is caught so the other lanes go on, a step that needs its failed step stops, and the load fails at the end if any lane failed. Then, when asked, the load's finish. The loader names the lanes and steps; this file names none. With `steps` and `inlanes`, only those steps run, each in its lane, the lanes at once (a forced load restarts what is left without repeating what is done). Input: {\"steps\": [<name>, ...] (optional), \"inlanes\": true (optional, with steps), \"plan\": false, \"finish\": false}.",
   "StartAt": "Readiness",
   "States": {
     "Readiness": {
@@ -16,6 +16,19 @@
     "Mode": {
       "Type": "Choice",
       "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.steps",
+              "IsPresent": true
+            },
+            {
+              "Variable": "$.inlanes",
+              "IsPresent": true
+            }
+          ],
+          "Next": "Lanes named"
+        },
         {
           "Variable": "$.steps",
           "IsPresent": true,
@@ -46,6 +59,23 @@
         "action": "lanes",
         "plan.$": "$.plan",
         "force.$": "$.force"
+      },
+      "TimeoutSeconds": 600,
+      "ResultSelector": {
+        "names.$": "$.lanes"
+      },
+      "ResultPath": "$.lanes",
+      "Next": "Run lanes"
+    },
+    "Lanes named": {
+      "Type": "Task",
+      "Resource": "${activity}",
+      "HeartbeatSeconds": 300,
+      "Parameters": {
+        "action": "lanes",
+        "plan.$": "$.plan",
+        "force.$": "$.force",
+        "steps.$": "$.steps"
       },
       "TimeoutSeconds": 600,
       "ResultSelector": {
