@@ -159,6 +159,10 @@ no account). For the image, "GitHub Container Registry (Recommended)".
   `test_the_exporter_shows_the_lane_budget_beside_the_lanes_and_workers_running` failed first, 2026-11-24 14:36 ET
 - [ ] More lanes at once on this machine need more container-runtime memory or narrower first steps (the widest, 4 workers, sets 2 lanes): decide
   with the next measured load
+- [x] A forced load's revision is per job: the forced run stopped `ncen-registrant-2026q1` and `ncen-fund-2026q1` (the second quarter of a source) with
+  "contradictory publications", since every job carried the one forced revision. The revision is now the forced time's digits plus the job's place in
+  the file (three digits). `test_each_job_of_a_forced_load_publishes_its_own_revision_so_a_sources_quarters_never_clash` failed first
+  (`20261124121919` against `20261124121919011`), 2026-11-24 14:43 ET
 - [x] Learning → skill (operator, 2026-11-24: "Update skills from learning"): HOSTED-LOADS names how to restart the runtime (`orbctl stop`, `orbctl start`) and what a forced load costs; load-monitoring says a watcher reads its own run label's log and an execution lost to a restart is not a failure, 2026-11-24 14:26 ET
 - [x] Learning → skill: the three skill changes above, 2026-11-23 21:05 ET
 - [x] The load chain is named load jobs. Operator, 2026-11-23: "no load chain its load jobs"; scope chosen: "Everything live".

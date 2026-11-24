@@ -1740,7 +1740,7 @@ def test_a_forced_run_gives_every_load_force_publish_and_an_ordinary_run_gives_n
     assert "--force" not in chain.arguments(step)
     monkeypatch.setenv(chain.FORCE, "2026-11-23T20:00:00Z")
     forced = chain.arguments(step)
-    assert forced[-5:] == ["--force", "--as-of", "2026-11-23T20:00:00Z", "--revision", "20261123200000"]
+    assert forced[-5:] == ["--force", "--as-of", "2026-11-23T20:00:00Z", "--revision", "20261123200000000"]
     assert chain.arguments(step) == forced  # an attempt that follows one stopped at its bound names the same run
 
 
@@ -1767,7 +1767,7 @@ def test_a_forced_load_is_a_new_publication_with_a_revision_above_the_one_the_fi
     assert chain.arguments(step)[chain.arguments(step).index("--revision") + 1] == "1"
     monkeypatch.setenv(chain.FORCE, "2026-11-24T12:19:19Z")
     args = chain.arguments(step)
-    assert args.count("--revision") == 1 and args[args.index("--revision") + 1] == "20261124121919"
+    assert args.count("--revision") == 1 and args[args.index("--revision") + 1] == "20261124121919000"
 
 
 @pytest.mark.parametrize("capacity, widest, carried, lanes, limit", [("local", 2, 8, 4, "memory"), ("aws-large", 2, 8, 4, "vcpu"),
@@ -1788,3 +1788,14 @@ def test_lanes_at_once_is_read_from_the_real_load_jobs_and_load_sh_sets_it_in_th
     assert chain.main() == 0 and int(capsys.readouterr().out) >= 1
     script = (ROOT / "infra/load-pipeline/load.sh").read_text()
     assert "--lanes-at-once" in script and 'MaxConcurrency = $n' in script
+
+
+def test_each_job_of_a_forced_load_publishes_its_own_revision_so_a_sources_quarters_never_clash(monkeypatch):
+    """A forced load stopped `ncen-registrant-2026q1` and `ncen-fund-2026q1` with "contradictory publications": every job of the run
+    carried one revision, and the second quarter of a source published other content under the first quarter's revision."""
+    monkeypatch.setenv(chain.FORCE, "2026-11-24T12:19:19Z")
+    first = {"name": "q4", "source": "s", "target": "t", "capture": "a/b", "workers": 2, "bundles": 1, "minutes": 5, "capture_run": "l-q4", "position": 11}
+    second = {**first, "name": "q1", "capture_run": "l-q1", "position": 12}
+    revisions = [a[a.index("--revision") + 1] for a in (chain.arguments(first), chain.arguments(second))]
+    assert revisions == ["20261124121919011", "20261124121919012"] and revisions[0] < revisions[1]
+    assert all(step["position"] == place for place, step in enumerate(chain.load_jobs()))
