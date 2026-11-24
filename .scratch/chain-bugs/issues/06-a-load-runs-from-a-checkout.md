@@ -167,6 +167,10 @@ no account). For the image, "GitHub Container Registry (Recommended)".
   4 workers carried 1 lane of 4. Inside a container the memory seen is the runtime's whole allotment, and the worker is the measured 0.4 GB
   (`defaults.worker_gb`): 9 workers, 2 lanes. The forced load ran at `CAPACITY=aws-large` meanwhile.
   `test_inside_the_loader_container_local_is_the_whole_memory_the_runtime_gives_and_the_measured_worker_size_sets_the_lanes` failed first, 2026-11-24 15:27 ET
+- [x] A forced load restarted with no step names repeated every job in full (the Change Journal is ignored, and a load of every lane runs every step
+  again; `company` took 13 minutes twice): `load.sh --force --in-lanes <steps>` runs only the named steps, each in its lane, the lanes at once.
+  `test_named_steps_with_in_lanes_run_in_their_lanes_at_once_and_a_restart_repeats_nothing_done` failed first; the emulator accepts the definition
+  (a throwaway state machine created and deleted), 2026-11-24 15:55 ET
 - [x] Learning → skill (operator, 2026-11-24: "Update skills from learning"): HOSTED-LOADS names how to restart the runtime (`orbctl stop`, `orbctl start`) and what a forced load costs; load-monitoring says a watcher reads its own run label's log and an execution lost to a restart is not a failure, 2026-11-24 14:26 ET
 - [x] Learning → skill: the three skill changes above, 2026-11-23 21:05 ET
 - [x] The load chain is named load jobs. Operator, 2026-11-23: "no load chain its load jobs"; scope chosen: "Everything live".

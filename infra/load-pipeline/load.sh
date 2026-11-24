@@ -4,6 +4,7 @@
 #   infra/load-pipeline/load.sh [--plan|--force]                every lane of the load jobs file at once, then the finish
 #   --force: force publish: each load ignores the Change Journal and processes every document of its source again (use a new RUN)
 #   infra/load-pipeline/load.sh [--plan] [--finish] <step>...   only those steps, in order
+#   infra/load-pipeline/load.sh [--force] --in-lanes <step>...  only those steps, each in its lane, the lanes at once (restart what is left)
 #
 # The lanes, their steps, order and waits come from the load jobs file in the image: every lane runs at once, and each step
 # with the workers the load jobs file gives it.
@@ -13,13 +14,14 @@
 # RUN, STORES, CAPTURES, PROVING, LOGS and MANIFESTS pass through to the worker, with load_jobs.py's defaults.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
-plan=false finish=false force=false
-while [ "${1:-}" = "--plan" ] || [ "${1:-}" = "--finish" ] || [ "${1:-}" = "--force" ]; do
-  case "$1" in --plan) plan=true ;; --finish) finish=true ;; --force) force=true ;; esac
+plan=false finish=false force=false inlanes=false
+while [ "${1:-}" = "--plan" ] || [ "${1:-}" = "--finish" ] || [ "${1:-}" = "--force" ] || [ "${1:-}" = "--in-lanes" ]; do
+  case "$1" in --plan) plan=true ;; --finish) finish=true ;; --force) force=true ;; --in-lanes) inlanes=true ;; esac
   shift
 done
 [ "$force" = false ] || [ "$plan" = false ] || { echo "--force makes a publication again: a plan has none to make" >&2; exit 2; }
 [ "$plan" = false ] || [ "$finish" = false ] || { echo "--finish writes the links tables: it has no plan" >&2; exit 2; }
+[ "$inlanes" = false ] || [ "$#" -gt 0 ] || { echo "--in-lanes names the steps to run" >&2; exit 2; }
 if [ "$#" -eq 0 ] && [ "$plan" = false ]; then finish=true; fi  # a load of every lane ends with the finish
 
 commit="$(git ls-remote https://github.com/paulananth/edgartools-platform.git refs/heads/main | cut -f1)"
@@ -74,6 +76,7 @@ fi
 if [ "$#" -gt 0 ]; then
   steps="$(printf '%s\n' "$@" | jq -R 'select(length > 0)' | jq -sc .)"
   input="{\"steps\": ${steps}, \"plan\": ${plan}, \"force\": ${force}, \"finish\": ${finish}}"
+  [ "$inlanes" = false ] || input="${input%\}}, \"inlanes\": true}"
 else
   steps="every lane"
   input="{\"plan\": ${plan}, \"force\": ${force}, \"finish\": ${finish}}"
