@@ -40,6 +40,18 @@ CODE read it in place of git, and ENGINE does not apply (the image compiles its 
 - **A failure stops only what depends on it.** A step that fails stops its lane and records the lane's later steps as not
   started; a step of another lane that needs one of them stops at once, never waiting on work that cannot come. The other
   lanes go on, and the execution fails at the end, with no finish. Fix, merge, and start again: done steps cost one call each.
+- **A catalog that has moved fails readiness, so publish it first.** The CATALOG check compares the catalog's text with the
+  `rules/` folder of the image's commit; any change under `rules/` (a file renamed, a rule edited) makes it `partial`, and
+  the first task stops with `NOT READY`. Before `load.sh`, with the catalog's private file sourced: `edgar-warehouse rules
+  catalog --root rules publish`, then `check` until it says `confirmed` (the init runbook's catalog step). A source's
+  `inputs.yaml` is no rules version, so adding a delivery needs none.
+- **Force publish is a whole-run act with one time.** `load.sh --force` (never with `--plan`) gives every load job of the run
+  `--force`, and the engine names a forced run by its time: `load_jobs.py` takes that time once, so an attempt stopped at its
+  `minutes` bound carries on in the same run instead of starting another. Use a new `RUN`, set `LOAD_DEADLINE_HOURS` from
+  the sum of the longest path's bounds, and say the estimate before starting.
+- **Read a load in the container, not on the host.** The load runs in the worker, so a host `ps` shows nothing of it: use
+  `docker exec <worker> ps`, the worker's `/proc/<pid>/io` (bytes read and written between two readings show a step that
+  works while its log is still empty), and the run's state file. The step's own log fills only when an attempt ends.
 - **One task per poller.** The worker's `ps` sees only its container, so QUIET's process count no longer covers the Mac; the
   loader's database sessions still do. Never start `load_jobs.py` on the Mac beside it.
 - **Mounts:** the logins and the captures are read-only; the stores folder and `LOGS` are written (the readiness record,
