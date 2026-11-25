@@ -42,7 +42,7 @@ A container runtime that stops answering blinds the exporter and freezes the loa
 `docker version`), and restart it before looking at anything else (HOSTED-LOADS, "The shortest time to load everything").
 
 The monitor shows the lane budget beside the lanes and workers running (`load_lane_budget`, `load_worker_budget`, `load_lanes_running`,
-`load_workers_running`): the budget is data-operations' `lane_budget`, the number `load.sh` applied, and its `limit` label names what sets it
+`load_workers_running`): the budget is data-operations' `lane_budget`, the lanes the compute carries when every step runs its declared workers (every lane starts, and each step is admitted by the memory free then), and its `limit` label names what sets it
 (memory or vcpu). Lanes running below the budget while lanes wait is a defect to explain; lanes at the budget with CPU idle means the limit
 is memory, not a setting.
 

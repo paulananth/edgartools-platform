@@ -1868,11 +1868,11 @@ def test_a_compute_carries_the_workers_a_step_is_sized_by_over_the_widest_first_
     assert chain.lanes_at_once(steps, capacity) == lanes
 
 
-def test_lanes_at_once_is_read_from_the_real_load_jobs_and_load_sh_sets_it_in_the_definition(capsys, monkeypatch):
-    monkeypatch.setattr(sys, "argv", ["load_jobs.py", "--lanes-at-once"])
-    assert chain.main() == 0 and int(capsys.readouterr().out) >= 1
+def test_every_lane_of_the_real_load_jobs_is_started_and_load_sh_sets_that_number_in_the_definition(capsys, monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["load_jobs.py", "--lane-count"])
+    assert chain.main() == 0 and int(capsys.readouterr().out) == len({step["lane"] for step in STEPS})
     script = (ROOT / "infra/load-pipeline/load.sh").read_text()
-    assert "--lanes-at-once" in script and 'MaxConcurrency = $n' in script
+    assert "--lane-count" in script and 'MaxConcurrency = $n' in script
 
 
 def test_each_job_of_a_forced_load_publishes_its_own_revision_so_a_sources_quarters_never_clash(monkeypatch):
@@ -1924,3 +1924,52 @@ def test_a_step_with_one_session_waiting_on_a_lock_among_sessions_waiting_on_the
     assert mine["wait"] == "Client:ClientRead" and mine["lock_waiting"] == 1  # the commonest wait is not the one that locks
     assert chain.verdict_kind(log_age=120.0, cpu=0.0, lock_waiters=3, evidence=mine) == "locked"
     assert chain.verdict_kind(log_age=120.0, cpu=0.0, lock_waiters=2, evidence=mine) == "progressing"  # one or two waiters are normal
+
+
+def gate(tmp_path, want=4, free=None, running=lambda: True, sleeps=None, **more):
+    """`admit` with a memory reading from a list (one per look) and a sleep that records."""
+    looks = iter(free if isinstance(free, list) else [free])
+    return chain.admit(want, 0.4, tmp_path / "gate", free=lambda: next(looks), running=running,
+                       sleep=lambda seconds: sleeps.append(seconds) if sleeps is not None else None, settle=0, **more)
+
+
+def test_a_step_takes_its_declared_workers_when_the_memory_is_there_and_as_many_as_fit_when_it_is_not(tmp_path):
+    assert gate(tmp_path, free=3.0) == 4  # 7 workers fit: the step's own four
+    assert gate(tmp_path, free=1.3) == 3  # three at 0.4 GB
+    assert gate(tmp_path, free=0.85) == 2  # its floor, half of four
+    assert gate(tmp_path, want=1, free=0.1, running=lambda: False) == 1
+
+
+def test_a_step_waits_for_the_memory_of_its_floor_while_other_loads_run_and_starts_at_its_floor_when_none_runs(tmp_path):
+    waited = []
+    assert gate(tmp_path, free=[0.3, 0.5, 2.0], sleeps=waited) == 4  # 0.8 GB is the floor of two workers
+    assert waited == [chain.GATE_POLL_SECONDS] * 2
+    waited.clear()
+    assert gate(tmp_path, free=[0.1], running=lambda: False, sleeps=waited) == 2  # nothing runs: waiting would be forever
+    assert waited == []
+
+
+def test_a_container_with_no_memory_limit_to_read_gives_the_declared_workers_without_waiting(tmp_path):
+    waited = []
+    assert gate(tmp_path, free=None, sleeps=waited) == 4 and waited == []
+
+
+def test_the_free_memory_is_the_cgroup_limit_less_the_use_but_not_the_file_cache_and_the_machines_when_it_has_no_limit(tmp_path):
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text(f"MemTotal: {4 * 2**20} kB\nMemAvailable: {3 * 2**19} kB\n")  # 1.5 GB
+    (tmp_path / "memory.max").write_text(str(4 * 2**30))
+    (tmp_path / "memory.current").write_text(str(3 * 2**30))
+    (tmp_path / "memory.stat").write_text(f"anon 1\ninactive_file {2**29}\n")
+    assert chain.free_gb(tmp_path, tmp_path / "no-meminfo") == 1.5  # 4 - 3 + 0.5
+    (tmp_path / "memory.max").write_text("max\n")
+    assert chain.free_gb(tmp_path, meminfo) == 1.5  # no limit on the container: what the machine has available
+    assert chain.free_gb(tmp_path / "missing", tmp_path / "no-meminfo") is None
+
+
+def test_one_step_is_admitted_at_a_time_and_the_next_waits_until_the_first_has_settled(tmp_path):
+    import fcntl
+    first = chain.admit(4, 0.4, tmp_path / "gate", free=lambda: 3.0, running=lambda: True, sleep=lambda s: None, settle=3600)
+    other = (tmp_path / "gate").open("a")
+    with pytest.raises(BlockingIOError):  # the lock is held through the settle window
+        fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    assert first == 4
