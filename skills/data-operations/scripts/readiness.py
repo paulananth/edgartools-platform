@@ -244,7 +244,8 @@ def plan_missing(env: dict) -> int:
 
     def loadable(step: dict) -> bool:
         try:
-            raw_capture.receipts(load_jobs.ROOTS[step.get("capture_root", "captures")] / step["capture"])
+            for one in load_jobs.loads(step):
+                raw_capture.receipts(load_jobs.ROOTS[one.get("capture_root", "captures")] / one["capture"])
             return step["target"] in (rules_files.source(step["source"]).get("bookkeeping") or {}).get("targets", {})
         except Exception:  # noqa: BLE001  (missing, oversized or malformed receipts; an unknown source)
             return False

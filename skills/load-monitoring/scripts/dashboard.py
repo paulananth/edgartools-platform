@@ -29,14 +29,14 @@ def header() -> list[dict]:
     d = design
     zero_green = lambda colour: steps((None, d.GREEN), (1, colour))
     return [
-        stat("Done", "Steps finished. The number ticks up when a step's block turns blue on the lanes below.",
-             'load_steps{state="done"}', 0, steps((None, d.NEUTRAL), (1, d.BLUE))),
+        stat("Done", "Steps finished. The number ticks up when a step ends; its block stays green on the lanes below.",
+             'load_steps{state="done"}', 0, steps((None, d.NEUTRAL), (1, d.GREEN))),
         stat("Running", "Steps with a process now: progressing, stalled or locked.",
              'sum(load_steps{state=~"progressing|stalled|locked"})', 3, steps((None, d.NEUTRAL), (1, d.GREEN))),
         stat("Failed", "Steps the scheduler gave up on. Any is red: a retry cannot change a repeated failure.",
              'load_steps{state="failed"}', 6, zero_green(d.RED), graph="none"),
-        stat("Stalled or locked", "Running steps with no sign of work, or waiting on database locks. Orange from one.",
-             'sum(load_steps{state=~"stalled|locked"})', 9, zero_green(d.ORANGE), graph="none"),
+        stat("Stalled or locked", "Running steps with no sign of work, or waiting on database locks. Red from one.",
+             'sum(load_steps{state=~"stalled|locked"})', 9, zero_green(d.RED), graph="none"),
         stat("Lock waiters", "Sessions waiting on database locks: one is normal (amber), three is the scheduler's limit (red).",
              "load_lock_waiters", 12, steps((None, d.GREEN), (d.LOCK_WAITERS[0], d.AMBER), (d.LOCK_WAITERS[1], d.RED)), graph="none"),
         stat("Memory free", "Share of memory free. Short under a quarter (orange), pressed under a tenth (red): the controller holds lanes back.",
@@ -54,9 +54,8 @@ def header() -> list[dict]:
 def lanes() -> dict:
     mappings = {str(code): {"text": name, "color": colour, "index": code} for name, code, colour, _ in design.STATES}
     return {"type": "state-timeline", "title": "Lanes", "datasource": SOURCE,
-            "description": "One row a step, grouped by lane. A step is grey while it waits, green while it works, "
-                           "orange or red when it is stalled or locked, blue when done and dark red "
-                           "when it failed. A change of colour is the event; hover a bar for the step and its state. "
+            "description": "One row a step, grouped by lane. A step is grey while it is not running, green while it "
+                           "works and when it is done, red when it failed, stalled or locked. A change of colour is the event; hover a bar for the step and its state. "
                            + " ".join(f"{name}: {meaning}." for name, _, _, meaning in design.STATES),
             "gridPos": {"h": 16, "w": 24, "x": 0, "y": 4},
             "targets": [target("load_step_state", legend="{{lane}} · {{step}}")],

@@ -1,6 +1,8 @@
 # The files this source loads from: each delivery by name, its folder under the captures root (or `root: proving`).
-# A load step names one with `input:`, or none when this source has one. Read by the load only: no rules version holds it.
+# A load step loads them all, in this order, or the one it names with `input:`. Read by the load only: no rules version holds it.
+# `capture_name` is what the delivery is called in its capture run, an input of its records, so it stays as the store was loaded.
 inputs:
   cohort-json:
     folder: company-facts/cohort-json
     root: proving
+    capture_name: ""
