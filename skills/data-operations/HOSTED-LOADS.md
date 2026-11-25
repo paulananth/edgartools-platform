@@ -10,12 +10,12 @@ source the private hosted environment file in the same shell without printing it
 the hosted load itself still runs from the CI-built loader image below.
 
 ## The gate: nothing loads until the infrastructure is ready and tested
-`scripts/readiness.py` reads twelve facts and writes `readiness.json` in the stores folder only on a full pass; `load_jobs.py`
+`scripts/readiness.py` checks hosted readiness and writes `readiness.json` in the stores folder only on a full pass; `load_jobs.py`
 refuses to start, resume or finish a load without it (the read-only `--plan`, `--list`, `--status` and `--catalog-status` still
 run). A pass belongs to one store generation (a reset of the databases closes the gate), one commit (any new commit closes it)
 and one day. Each check reads only what it asks (a capture is its folder's receipts file), never a plan of
-the work. The checks: the code is committed, contains `main` and its commit has green CI (tested means CI, never a local run
-alone); the compiled engine was built from this checkout's source (`readiness.py --build-engine` rebuilds it and records a hash of what it was built from); `doctor` is ready; the loader holds its connection limit, memory ceiling
+the work. The checks: the code is committed and contains `main`;
+`doctor` is ready; the loader holds its connection limit, memory ceiling
 and timeouts; RDM holds its codes and silver a table per spec; every step has a capture; no load runs and the loader has no
 session; disk and load average have room; the access audit of the database has no failing control; every duty file's login connects to the databases of its duty (names only, a
 driver's text is never kept); the run's state file is this store's, or is shown as one that will be set aside, with its count of done
@@ -29,7 +29,7 @@ disposable store is the next check to add.
 A load runs in the loader image, never in a checkout: a checkout's code can differ from its tested commit (an engine not
 rebuilt, an edit), and a deleted worktree stops its load. `.github/workflows/loader-image.yml` builds the image only from a
 `main` commit that passed CI (`loader-sha-<commit>` on ghcr.io) and writes that commit into it; in the image the gate and
-CODE read it in place of git, and ENGINE does not apply (the image compiles its own engine).
+CODE read it in place of git.
 - **Start:** `infra/load-pipeline/load.sh [--plan]` pulls the image of `main`'s newest commit (it refuses while that image
   is not built), starts AWS Step Functions Local and one worker from the image, runs readiness, then every lane of the load jobs
   file at once and the finish. `load.sh [--plan] [--finish] <step>...` runs only those steps, in order. It waits and exits 0
