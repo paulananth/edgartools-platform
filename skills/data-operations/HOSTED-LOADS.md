@@ -204,6 +204,16 @@ a batch before changing its size: the writer made three a batch (70 ms each) and
   after any failure and reconcile the completed receipts before continuing. Run the affected store's normal
   `init`/table-deployment command after a drop; truncation retains the schema. Keep the captured extracts for reload.
 
+### Resetting the control stores
+
+A reset that includes Bookkeeping and Change Journal needs a backup of both
+stores and a verified way to rebuild the intended state. Bookkeeping retains
+run and checkpoint evidence. Change Journal retains publication receipts used
+to decide what to replay. Check the reload scope against retained captures
+before clearing either store. A run at run grain has no work items or leases,
+so zero leases does not establish that its run has finished. Record the run
+state separately and follow the recovery procedure for unresolved runs.
+
 ### Example: table reset manifest
 
 This invented example truncates one table while preserving its schema. A real manifest must list the exact tables chosen
