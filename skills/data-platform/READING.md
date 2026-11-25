@@ -1534,7 +1534,10 @@ profiling finds a few such lines in a publication that is otherwise sound,
 declare `read.on_wrong_width: set_aside` (CSV and TSV only, a whole-file
 reading): each such line is read as no record, and every table of the reading
 sets it aside in its deferred rows with the reason `wrong_width` and its
-ordinal, as a failed check does. Measure the count first; a file where many
+ordinal. Unlike a row a check sets aside, which waits for a steward and so
+refuses a combine, reduction or derived lookup over its reading, a wrong-width
+row can never be resolved: those steps use the reading as if the row were
+absent, and the reading keeps its count. Measure the count first; a file where many
 lines are the wrong width has the wrong delimiter or encoding, not a few bad
 rows. Every other malformed shape still refuses the artifact.
 

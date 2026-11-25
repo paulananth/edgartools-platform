@@ -35,6 +35,14 @@ DERIVED_INPUT_ROWS = 100_000_000
 MAX_ARTIFACTS = 512  # documents one reading may hold (`source.read`); byte and row budgets bound the rest
 # Readings one name may list (ticket 112), as many as a composed input lists.
 READINGS = 256
+# Rows a reading sets aside for good: a CSV or TSV line of the wrong width (`read.on_wrong_width: set_aside`) has
+# wrong bytes, so no steward can resolve it. Its reading is used as if the row were absent; the reading keeps its count.
+SET_ASIDE_FOR_GOOD = frozenset({"wrong_width"})
+
+
+def unresolved(deferred: list[dict]) -> list[dict]:
+    """The set-aside rows that still wait for a steward, so a reading holding any is not yet usable whole."""
+    return [row for row in deferred if row.get("reason") not in SET_ASIDE_FOR_GOOD]
 
 
 def _integer(value, minimum, maximum):
@@ -336,7 +344,7 @@ def _derived_sets(specs, declared, artifacts):
             for _, _, chunk, used in iter_load(
                     ref, artifacts, max_bytes=spec["max_input_bytes"] - consumed,
                     max_rows=spec["max_input_rows"] - rows, allow_lookup_receipts=True):
-                if chunk["deferred"] or spec["table"] not in chunk["tables"]:
+                if unresolved(chunk["deferred"]) or spec["table"] not in chunk["tables"]:
                     raise ValueError("Derived lookup requires resolved records and its declared table")
                 rows += sum(len(table) for table in chunk["tables"].values())
                 for row in chunk["tables"][spec["table"]]:

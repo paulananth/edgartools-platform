@@ -300,3 +300,18 @@ def test_a_reduction_streamed_in_batches_writes_the_bytes_of_its_whole_output(tm
     assert streamed == whole
     assert written == expected_pieces
     assert bool(written) == (index_bytes == 600)
+
+
+def test_a_row_set_aside_for_its_width_passes_and_any_other_set_aside_row_refuses(tmp_path):
+    """A CSV row of the wrong width (`read.on_wrong_width: set_aside`) can never be resolved: its bytes are wrong. Its
+    reading reduces as if the row were absent; a row a check set aside still waits for a steward, so it refuses."""
+    store = Artifacts()
+    rows = [{"key": "a", "holder": "A"}]
+    body = plan({"members": member("rows")})
+    wide = {"table": "rows", "ordinal": 2, "reason": "wrong_width", "raw": {"key": "b"}}
+    clean = source_combine.execute(envelope(store, tmp_path / "c", body, {"main": reading(store, tmp_path, {"rows": rows})}), store)
+    aside = source_combine.execute(envelope(store, tmp_path / "w", body, {"main": reading(store, tmp_path, {"rows": rows}, deferred=[wide])}), store)
+    assert store.json(aside)["artifacts"][0]["tables"] == store.json(clean)["artifacts"][0]["tables"]
+    mixed = {"main": reading(store, tmp_path, {"rows": rows}, deferred=[wide, {"reason": "unresolved"}])}
+    with pytest.raises(ValueError, match="resolved deferred"):
+        source_combine.execute(envelope(store, tmp_path / "m", body, mixed), store)

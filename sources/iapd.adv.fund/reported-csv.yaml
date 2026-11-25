@@ -19,6 +19,10 @@ read:
   container: zip
   member: "IA_Schedule_D_7B1_*.csv"
   encoding: [utf-8, windows-1252]
+  # March 2026's table has 3 rows of 68,256 that a stray quote mark leaves at 30 fields of 38: each is set
+  # aside (`wrong_width`), not read, so the other rows load (operator, 2026-11-24: "Code: set the row aside
+  # (Recommended)"; ticket 02 of hosted-adv-private-fund-ingestion). A quote left open across lines still refuses.
+  on_wrong_width: set_aside
   limits: {max_bytes: 33554432, max_member_bytes: 33554432, max_records: 100000}
   context:
     published: {type: text, max_bytes: 64}

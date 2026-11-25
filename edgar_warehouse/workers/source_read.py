@@ -211,7 +211,7 @@ def _derived_context(bound, artifacts):
     for _, _, chunk, _ in source_readings.iter_load(
             bound["reading"], artifacts, max_bytes=bound["max_bytes"],
             max_rows=bound["max_rows"], allow_lookup_receipts=True):
-        if chunk["deferred"] or bound["table"] not in chunk["tables"]:
+        if source_readings.unresolved(chunk["deferred"]) or bound["table"] not in chunk["tables"]:
             raise ValueError("Derived context requires resolved records and a declared metadata table")
         for row in chunk["tables"][bound["table"]]:
             for column, expected in checks.items():
