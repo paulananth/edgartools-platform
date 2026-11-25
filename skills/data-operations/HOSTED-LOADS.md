@@ -220,6 +220,23 @@ Recover missing metadata from a verified backup or evidence of the installed
 schema and specifications. Keep RDM reference data and Rules configuration for this
 reload. Run the hosted initialization and readiness checks before loading.
 
+### Recover missing deployment metadata
+
+Restore metadata from a verified backup when available. For Silver, the
+registration command writes the spec SHA-256 in each physical table's
+comment. If the registry is empty, compare the full deployed table inventory
+and its comment hashes with the configured specs. Restore registry entries
+only when the inventories and hashes agree, then verify every restored entry
+through Silver's spec check.
+
+For MDM, the migration checksum records what was installed. Verify the
+installed schema against deployment evidence before restoring a missing
+record. A checksum calculated from a checkout alone is insufficient proof.
+If the operator explicitly overrides that verification, record the override
+and checksum, take the migration locks for the repair, and run `mdm init`.
+A successful init after an override confirms the initializer accepted the
+record. Run hosted readiness before loading.
+
 ### Preserve Rules configuration
 
 Keep the Rules store out of hosted data reset manifests. It holds configuration
