@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "definitions": [
+    {
+      "external_id": "541c6799-6ec1-423f-92a3-87b392363e59",
+      "test_type": "Required",
+      "table_name": "quality_example",
+      "column_name": "label",
+      "test_description": "Completeness: a label cannot be null.",
+      "threshold_value": "0",
+      "export_to_observability": false
+    },
+    {
+      "external_id": "ae4f48bf-78be-45a4-b125-9afb22a49765",
+      "test_type": "LOV_Match",
+      "table_name": "quality_example",
+      "column_name": "state",
+      "test_description": "Validity: a populated state must be in the declared list. Missing states are outside this rule.",
+      "baseline_value": "('OPEN','CLOSED')",
+      "threshold_value": "0",
+      "export_to_observability": false
+    }
+  ]
+}
