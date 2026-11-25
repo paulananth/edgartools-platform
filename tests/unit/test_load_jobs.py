@@ -1994,11 +1994,11 @@ def test_a_step_says_once_that_it_waits_for_memory(tmp_path):
     assert len(said) == 1 and said[0].startswith("waits for 0.8 GB of free memory (0.1 GB now)")
 
 
-def test_a_load_of_another_lane_is_seen_by_its_command_line():
-    import subprocess
-    other = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)", "edgar-warehouse load --source x --target y "])
-    try:
-        assert chain.load_running()
-    finally:
-        other.kill()
-        other.wait()
+def test_a_load_of_another_lane_is_seen_by_its_command_line_in_either_form_the_loader_runs_it(monkeypatch):
+    def listing(text):
+        monkeypatch.setattr(chain.subprocess, "run", lambda *a, **k: type("Out", (), {"stdout": text})())
+        return chain.load_running()
+
+    assert listing("/sbin/init\nedgar-warehouse load --source a --target b --workers 2\n")
+    assert listing("python -c from edgar_warehouse.cli import main; sys.exit(main()) load --source a --target b --workers 2\n")
+    assert not listing("/sbin/init\npytest -k load\nedgar-warehouse silver links\n")
