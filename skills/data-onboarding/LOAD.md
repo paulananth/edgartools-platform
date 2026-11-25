@@ -30,6 +30,7 @@ only what is its own: the files, each artifact's context and lookups, and the pr
 
 ```bash
 uv run --extra mdm python infra/scripts/local-test-stores.py up <store name>   # a disposable store, first time
+bash infra/scripts/deploy-silver.sh <store name>   # its silver tables, first time: a load creates none
 edgar-warehouse load --source <name> --target <target> --capture <capture folder> \
   --capture-run <run> --as-of <time> \
   --stores ~/.local/share/edgartools/local-tests/environments/<store name>
@@ -50,6 +51,9 @@ seconds.
 - **Load every source that can bind the same entities.** A rule that creates entities shows a duplicate only
   when the other sources whose records can match the same entities (by an identifier or by name) are loaded
   too.
+- **A load that finds nothing to do builds no links.** Its links step runs only after it submits work, so a
+  rerun, or a load that stopped before its links step, leaves the links table as it was: build it with
+  `edgar-warehouse silver links` (the store's `worker.env` sourced) before counting links.
 - **Count the links MDM accepts, not the links a contract writes.** Only the Merge Stage shows that a link
   resolves. A link with no stated start, from a publication that states no effective time, goes to review.
 - **Configuration first.** Before proposing an engine change, find what the rules files already allow (a
