@@ -6,13 +6,13 @@ import re
 import subprocess
 import sys
 import threading
-import time
 from pathlib import Path
 
 import pytest
 import yaml
 
 from edgar_warehouse.rules import files
+from tests.support.patching import checked
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("load_jobs", ROOT / "skills/data-operations/scripts/load_jobs.py")
@@ -1492,8 +1492,6 @@ def test_a_loads_database_sessions_carry_the_step_name_as_their_application_name
 
 def test_a_plan_of_one_step_or_lane_plans_only_it(monkeypatch, tmp_path):
     """A plan of every step took over five minutes to answer for one."""
-    from tests.support.patching import checked
-
     (tmp_path / "worker.env").write_text("")
     monkeypatch.setattr(chain, "STORES", tmp_path)
     monkeypatch.setattr(chain, "LOGS", tmp_path)
@@ -1508,8 +1506,6 @@ def test_a_plan_of_one_step_or_lane_plans_only_it(monkeypatch, tmp_path):
 
 
 def test_a_plan_names_the_open_runs_a_load_would_finish_and_those_it_would_leave(monkeypatch):
-    from tests.support.patching import checked
-
     body = '{"documents": 7, "bundles": 2, "blocked": null, "finishable_runs": ["a", "b"], "left_as_they_are": {"c": "why"}}'
     checked(monkeypatch, chain.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": body, "stderr": ""})())
     assert chain.plan(BY_NAME["company"], {}) == "documents 7 bundles 2 blocked None open runs: 2 to finish first, 1 left"
@@ -1519,8 +1515,6 @@ def test_a_plan_names_the_open_runs_a_load_would_finish_and_those_it_would_leave
 def test_a_load_started_from_a_checkout_is_refused_before_the_gate(monkeypatch, tmp_path, capsys, argv):
     """Operator: "we must not be run the next load from a worktree". Only the loader image, which carries the commit CI
     built it from, starts, resumes or finishes a load; a plan still reads from anywhere."""
-    from tests.support.patching import checked
-
     (tmp_path / "worker.env").write_text("")
     monkeypatch.setattr(chain, "STORES", tmp_path)
     monkeypatch.setattr(chain, "LOGS", tmp_path)
@@ -1551,8 +1545,6 @@ def test_a_step_out_of_attempts_counts_as_failed_for_the_steps_that_need_it(tmp_
 
 
 def test_a_lane_that_stops_marks_its_later_steps_failed_so_no_other_lane_waits_on_them(tmp_path, monkeypatch):
-    from tests.support.patching import checked
-
     state = tmp_path / "state.log"
     steps = [_step("a1", "A"), _step("a2", "A"), _step("a3", "A"), _step("b1", "B")]
     ran = []
@@ -1581,8 +1573,6 @@ def test_a_named_step_whose_needed_step_is_not_done_stops_and_never_waits_for_a_
 
 
 def test_a_lane_that_breaks_records_its_steps_not_done_as_stopped(tmp_path, monkeypatch):
-    from tests.support.patching import checked
-
     state = tmp_path / "state.log"
     steps = [_step("a1", "A"), _step("a2", "A")]
 
@@ -1906,8 +1896,6 @@ def test_inside_the_loader_container_local_is_the_whole_memory_the_runtime_gives
 def test_a_lane_of_a_load_that_named_its_steps_runs_only_those_and_a_load_that_named_none_runs_them_all(tmp_path, monkeypatch):
     """`--in-lanes` restarted a forced load, and every lane still ran its first steps again (company and person, a quarter of an hour
     each): the begin recorded the named steps, but the lane ran every step it owns."""
-    from tests.support.patching import checked
-
     steps = [_step("a1", "A"), _step("a2", "A"), _step("a3", "A"), _step("b1", "B")]
     ran = []
     checked(monkeypatch, chain, "attempt_loop", lambda step, env, state: ran.append(step["name"]) or True)
@@ -2017,7 +2005,7 @@ def _engine(monkeypatch, tmp_path, body):
     monkeypatch.setattr(chain, "LOGS", tmp_path)
     monkeypatch.setattr(chain, "STORES", tmp_path)
     monkeypatch.setattr(chain, "ROOT", tmp_path)
-    monkeypatch.setattr(chain, "admit", lambda want, worker_gb, lock, say: want)
+    checked(monkeypatch, chain, "admit", lambda want, worker_gb, lock, say: want)
     return {**_step("a1", "A"), "attempts": 1, "workers": 8, "bundles": 1, "deliveries": [{"delivery": "d", "capture": "c", "capture_run": "r"}]}
 
 
@@ -2027,8 +2015,7 @@ count = sys.argv[sys.argv.index('--workers') + 1]
 open(folder + '/counts', 'a').write(count + ' ')
 if count == '8':
     worker = subprocess.Popen(['sleep', '300'])
-    open(folder + '/pids.part', 'w').write(f'{os.getpid()} {worker.pid}')
-    os.rename(folder + '/pids.part', folder + '/pids')
+    open(folder + '/pids', 'w').write(f'{os.getpid()} {worker.pid}')
     time.sleep(300)
 print('Done: 1 documents loaded, 0 already loaded before')
 """
@@ -2044,20 +2031,16 @@ def _alive(pid):
 
 def test_a_running_step_asked_to_move_ends_its_load_and_its_workers_and_goes_on_in_the_same_attempt(monkeypatch, tmp_path):
     step, state = _engine(monkeypatch, tmp_path, WORKS_THEN_FINISHES), tmp_path / "state.log"
+    os.mkfifo(tmp_path / "pids")  # a read of it ends when the load has written it
     ended = []
     lane = threading.Thread(target=lambda: ended.append(chain.attempt_loop(step, dict(os.environ), state, others_run=False)), daemon=True)
     lane.start()
-    until = time.monotonic() + 30
-    while not (tmp_path / "pids").exists() and time.monotonic() < until:
-        time.sleep(0.05)
     driver, worker = map(int, (tmp_path / "pids").read_text().split())
     listing = (f"{driver} 1 0:01 100 edgar-warehouse load --source a1 --target mastering --workers 8\n"
                f"{worker} {driver} 0:01 100 sleep 300\n")
-    real = subprocess.run
-    monkeypatch.setattr(chain.subprocess, "run", lambda args, *a, **k: type("R", (), {"stdout": listing})()
-                        if args[:2] == ["ps", "-Ao"] else real(args, *a, **k))
+    checked(monkeypatch, chain, "process_listing", lambda: listing)
     assert chain.ask_move(step, 4, state)
-    lane.join(30)
+    lane.join()
     assert ended == [True]  # its one attempt is not used up by the move
     assert (tmp_path / "counts").read_text().split() == ["8", "4"]
     assert not _alive(driver) and not _alive(worker)
@@ -2081,7 +2064,7 @@ def test_a_load_ended_by_a_signal_nobody_asked_for_is_a_failed_attempt_and_a_req
 
 
 def test_a_load_that_has_ended_is_asked_nothing(monkeypatch, tmp_path):
-    monkeypatch.setattr(chain.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": ""})())
+    checked(monkeypatch, chain, "process_listing", lambda: "")
     assert not chain.ask_move(_step("a1", "A"), 4, tmp_path / "state.log")
     assert list(tmp_path.iterdir()) == []
 
@@ -2116,15 +2099,15 @@ def _controlled(monkeypatch, tmp_path, free, load=0.2, started="15:00:00", count
     state.write_text("".join(f"11-25 {started} ET {s['name']} attempt 1 start\n" for s in steps))
     listing = "".join(f"{i} 1 0:01 100 edgar-warehouse load --source {s['source']} --target mastering --workers {n}\n"
                       for i, (s, n) in enumerate(zip(steps, counts), 10))
-    monkeypatch.setattr(chain.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": listing})())
-    monkeypatch.setattr(chain, "step_log_text", lambda name: LOG)
-    monkeypatch.setattr(chain, "free_gb", lambda: free)
+    checked(monkeypatch, chain, "process_listing", lambda: listing)
+    checked(monkeypatch, chain, "step_log_text", lambda name: LOG)
+    checked(monkeypatch, chain, "free_gb", lambda root=None, meminfo=None: free)
     monkeypatch.setattr(chain.os, "getloadavg", lambda: (load, load, load))
     monkeypatch.setattr(chain.os, "cpu_count", lambda: 8)
-    monkeypatch.setattr(chain, "bounds_for", lambda name, worker_gb: (1, 9))
-    monkeypatch.setattr(chain, "database_load", lambda url: reading)
-    monkeypatch.setattr(chain, "clock", lambda: NOW)
-    monkeypatch.setattr(chain, "ask_move", lambda step, count, state: asked.append((step["name"], count)) or True)
+    checked(monkeypatch, chain, "bounds_for", lambda name, worker_gb=chain.WORKER_GB: (1, 9))
+    checked(monkeypatch, chain, "database_load", lambda reader_url: reading)
+    checked(monkeypatch, chain, "clock", lambda: NOW)
+    checked(monkeypatch, chain, "ask_move", lambda step, count, state: asked.append((step["name"], count)) or True)
     memory = chain.Memory()
     return state, asked, lambda: chain.control_cycle(steps, state, memory)
 
@@ -2174,7 +2157,7 @@ def test_a_step_that_is_done_or_has_no_load_running_is_never_moved(monkeypatch, 
         handle.write("11-25 15:40:00 ET long done: Done\n")
     cycle()
     assert asked == [("short", 4)]
-    monkeypatch.setattr(chain.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": ""})())
+    checked(monkeypatch, chain, "process_listing", lambda: "")
     asked.clear()
     cycle()
     assert asked == []
@@ -2183,7 +2166,7 @@ def test_a_step_that_is_done_or_has_no_load_running_is_never_moved(monkeypatch, 
 def test_a_controller_cycle_that_breaks_names_its_kind_only_and_the_next_goes_on(monkeypatch, tmp_path, capsys):
     cycles = []
 
-    def broken(*_):
+    def broken(steps, state, memory, reader_url=None, connections=250):
         cycles.append(1)
         raise RuntimeError("postgresql://address")
 
@@ -2191,10 +2174,45 @@ def test_a_controller_cycle_that_breaks_names_its_kind_only_and_the_next_goes_on
         if len(cycles) == 2:
             raise _Ended()
 
-    monkeypatch.setattr(chain, "load_jobs", lambda: [])
-    monkeypatch.setattr(chain, "control_cycle", broken)
+    checked(monkeypatch, chain, "load_jobs", lambda: [])
+    checked(monkeypatch, chain, "control_cycle", broken)
     monkeypatch.setattr(chain.time, "sleep", sleep)
     with pytest.raises(_Ended):
         chain.control()
     said = capsys.readouterr().out
     assert said.count("RuntimeError") == 2 and "postgresql" not in said
+
+
+def test_after_a_shed_the_next_waits_for_four_more_pressed_cycles(monkeypatch, tmp_path):
+    _, asked, cycle = _controlled(monkeypatch, tmp_path, free=0.3, counts=(8, 8))
+    for _ in range(7):
+        cycle()
+    assert asked == [("short", 4)]
+    cycle()
+    assert len(asked) == 2
+
+
+def test_the_driver_of_a_load_is_found_though_a_worker_has_a_lower_pid_and_a_plan_is_no_load():
+    plan = "7 1 0:01 100 edgar-warehouse load --source a1 --target mastering --workers 2 --plan"
+    listing = f"{plan}\n5 90 0:01 100 worker\n90 1 0:01 100 edgar-warehouse load --source a1 --target mastering --workers 8\n"
+    assert chain.load_driver(listing, "a1", "mastering") == (90, 8)
+    assert chain.load_driver(plan, "a1", "mastering") is None
+
+
+def test_the_driver_is_ended_before_the_workers_it_started(monkeypatch, tmp_path):
+    listing = "5 90 0:01 100 worker\n90 1 0:01 100 edgar-warehouse load --source a1 --target mastering --workers 8\n"
+    checked(monkeypatch, chain, "process_listing", lambda: listing)
+    ended = []
+    checked(monkeypatch, chain.os, "kill", lambda pid, signal, /: ended.append(pid))
+    assert chain.ask_move(_step("a1", "A"), 4, tmp_path / "state.log")
+    assert ended == [90, 5]
+
+
+def test_a_load_that_ends_as_it_is_asked_leaves_no_request(monkeypatch, tmp_path):
+    def gone(pid, signal, /):
+        raise ProcessLookupError
+
+    checked(monkeypatch, chain, "process_listing", lambda: "90 1 0:01 100 edgar-warehouse load --source a1 --target mastering --workers 8\n")
+    checked(monkeypatch, chain.os, "kill", gone)
+    assert not chain.ask_move(_step("a1", "A"), 4, tmp_path / "state.log")
+    assert list(tmp_path.iterdir()) == []

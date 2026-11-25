@@ -566,14 +566,20 @@ def ask_move(step: dict, count: int, state: Path) -> bool:
     """Ask a running step's loop for `count` workers and end its load (the driver first, so that its exit is the signal's, then the
     workers it started, which can outlive it). The loop starts the load again, where it stopped. False when its load has already
     ended: nothing is left asked."""
-    listing = subprocess.run(["ps", "-Ao", "pid,ppid,time,rss,args"], check=False, capture_output=True, text=True).stdout
-    pids = list(load_pids(listing, step["source"], step["target"]))
-    if not pids:
+    listing = process_listing()
+    driver = load_driver(listing, step["source"], step["target"])
+    if not driver:
         return False
     move_path(state, step["name"]).write_text(str(count))
-    for pid in pids:
-        with contextlib.suppress(ProcessLookupError):
-            os.kill(pid, signal.SIGTERM)
+    try:
+        os.kill(driver[0], signal.SIGTERM)
+    except ProcessLookupError:
+        move_path(state, step["name"]).unlink(missing_ok=True)
+        return False
+    for pid in load_pids(listing, step["source"], step["target"]):
+        if pid != driver[0]:
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(pid, signal.SIGTERM)
     return True
 
 
@@ -582,7 +588,7 @@ def control_cycle(steps: list[dict], state: Path, memory: Memory, reader_url: st
     Nothing is raised while a step is being admitted: the memory read then is not yet what its load takes."""
     if not state.exists():
         return
-    listing = subprocess.run(["ps", "-Ao", "pid,ppid,time,rss,args"], check=False, capture_output=True, text=True).stdout
+    listing = process_listing()
     text, over, now = state.read_text(), done_steps(state) | failed_steps(state), clock()
     since = last_starts(text, now.year)
     running = {s["name"]: (s, count) for s in steps if s["name"] in since and s["name"] not in over
@@ -605,6 +611,7 @@ def control_cycle(steps: list[dict], state: Path, memory: Memory, reader_url: st
         note(f"controller moves {name} from {workers[name]} to {count} workers ({level} load, "
              f"{'?' if free is None else f'{free:.1f}'} GB free)", state)
         memory.finished.pop(name, None)
+        memory.pressed = 0  # the move shows in the readings before another is judged
 
 
 def control(poll: int = 30) -> None:
@@ -1002,20 +1009,32 @@ def load_pids(listing: str, source: str, target: str) -> dict[int, float]:
     return {pid: rows[pid][1] for pid in sorted(found)}
 
 
-def load_workers(listing: str, source: str, target: str) -> int | None:
-    """The `--workers` the running load of one source and target was started with, from its driver's command line."""
+def process_listing() -> str:
+    return subprocess.run(["ps", "-Ao", "pid,ppid,time,rss,args"], check=False, capture_output=True, text=True).stdout
+
+
+def load_driver(listing: str, source: str, target: str) -> tuple[int, int | None] | None:
+    """The pid and the `--workers` of the running load's driver of one source and target, from its command line; a `--plan`, which
+    loads nothing, is none."""
     for line in listing.splitlines():
         parts = line.split(None, 4)
-        if len(parts) == 5 and LOAD_COMMAND.search(parts[4]) and is_load_process(parts[4], source, target):
+        if (len(parts) == 5 and parts[0].isdigit() and LOAD_COMMAND.search(parts[4]) and is_load_process(parts[4], source, target)
+                and not re.search(r" --plan( |$)", parts[4])):
             found = re.search(r"--workers (\d+)", parts[4])
-            return int(found.group(1)) if found else None
+            return int(parts[0]), int(found.group(1)) if found else None
     return None
+
+
+def load_workers(listing: str, source: str, target: str) -> int | None:
+    """The `--workers` the running load of one source and target was started with."""
+    driver = load_driver(listing, source, target)
+    return driver[1] if driver else None
 
 
 def process_use(source: str, target: str) -> tuple[dict[int, float], float]:
     """Each process's CPU seconds so far, by pid, and the memory in MB, of the load running one source and target (its
     driver and the workers it started); two readings give the CPU percent."""
-    listing = subprocess.run(["ps", "-Ao", "pid,ppid,time,rss,args"], check=False, capture_output=True, text=True).stdout
+    listing = process_listing()
     seconds = load_pids(listing, source, target)
     memory = 0.0
     for pid in seconds:
@@ -1055,7 +1074,7 @@ def status_snapshot(steps: list[dict], state: Path, reader_url: str | None, samp
     time.sleep(sample if before or running else 0)
     rate = writes_per_minute(before, database_writes(reader_url), sample) if before else {}
     waiters = (database_load(reader_url) or {}).get("lock_waiters", 0)
-    listing = subprocess.run(["ps", "-Ao", "pid,ppid,time,rss,args"], check=False, capture_output=True, text=True).stdout
+    listing = process_listing()
     sessions = database_sessions(reader_url) if reader_url else {}
     tagged = step_sessions(reader_url) if reader_url else {}
     rows = []
@@ -1710,11 +1729,11 @@ def attempt_loop(step: dict, env: dict, state: Path, others_run: bool = True) ->
 
     errors, offset, previous = STORES / "load-errors.log", (0, 0), ""
     attempt, want = 1, step["workers"]
-    take_move(state, name)  # a request an earlier process left is not this one's
     while attempt <= step["attempts"]:
         workers = admit(want, step.get("worker_gb", WORKER_GB), gate_path(state), say=lambda text: note(f"{name} {text}", state))
         note(f"{name} attempt {attempt} start" + (f" with {workers} of its {step['workers']} workers" if workers != step["workers"] else ""), state)
         offset = error_log.position(errors)
+        take_move(state, name)  # a request left for a load that had ended is not this one's
         code, text = run_deliveries({**step, "workers": workers}, env, log)
         asked = take_move(state, name)
         if code == 0 and "Load stopped" not in text:
