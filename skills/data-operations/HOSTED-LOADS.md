@@ -207,6 +207,15 @@ a batch before changing its size: the writer made three a batch (70 ms each) and
   after any failure and reconcile the completed receipts before continuing. Run the affected store's normal
   `init`/table-deployment command after a drop; truncation retains the schema. Keep the captured extracts for reload.
 
+### Clear all MDM and Silver tables for a full reload
+
+Prepare a separate manifest for each store. List every table from its
+inventory with `action: truncate`. Use `--require-all-tables` when planning
+and applying each manifest. The script checks the complete inventory during
+planning and again under the reset locks, and verifies all selected tables are
+empty before commit. Keep RDM reference data and Rules configuration for this
+reload. Run the hosted initialization and readiness checks before loading.
+
 ### Preserve Rules configuration
 
 Keep the Rules store out of hosted data reset manifests. It holds configuration

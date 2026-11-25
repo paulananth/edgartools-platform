@@ -139,7 +139,7 @@ def retention_trigger(conn, item: dict) -> str | None:
     return trigger
 
 
-def read_plan(conn, engine, store: str, tables: list[dict[str, str]]) -> dict:
+def read_plan(conn, engine, store: str, tables: list[dict[str, str]], *, require_all: bool = False) -> dict:
     schema = STORE_SCHEMAS[store]
     if engine.dialect.name != "postgresql":
         raise ValueError("Hosted table reset supports PostgreSQL only")
@@ -147,6 +147,12 @@ def read_plan(conn, engine, store: str, tables: list[dict[str, str]]) -> dict:
     version = int(conn.scalar(sa.text("SHOW server_version_num")))
     if version // 10000 != 16:
         raise ValueError("Hosted table reset requires PostgreSQL 16")
+    if require_all:
+        selected = {item["table"] for item in tables}
+        if selected != {row["table"] for row in inventory(conn, schema)}:
+            raise ValueError("Manifest does not match the full store table inventory")
+        if any(item["action"] != "truncate" for item in tables):
+            raise ValueError("A full store reset requires truncate for every table")
     plan_tables = []
     for item in tables:
         relation = conn.execute(sa.text(PERSISTENT_TABLES),
@@ -161,6 +167,8 @@ def read_plan(conn, engine, store: str, tables: list[dict[str, str]]) -> dict:
             planned["retention_trigger"] = trigger
         plan_tables.append(planned)
     plan = {"store": store, "database": database, "postgres_major": version // 10000, "tables": plan_tables}
+    if require_all:
+        plan["require_all_tables"] = True
     canonical = json.dumps(plan, sort_keys=True, separators=(",", ":")).encode()
     plan["plan_sha256"] = hashlib.sha256(canonical).hexdigest()
     return plan
@@ -220,7 +228,8 @@ def show_plan(plan: dict) -> None:
     print(f"Plan SHA-256: {plan['plan_sha256']}")
 
 
-def apply_plan(engine, store: str, tables: list[dict[str, str]], words: str, expected_digest: str) -> dict:
+def apply_plan(engine, store: str, tables: list[dict[str, str]], words: str, expected_digest: str, *,
+               require_all: bool = False) -> dict:
     plan = None
     schema = STORE_SCHEMAS[store]
     try:
@@ -233,7 +242,7 @@ def apply_plan(engine, store: str, tables: list[dict[str, str]], words: str, exp
                 conn.exec_driver_sql(f"LOCK TABLE {qualified} IN ACCESS EXCLUSIVE MODE NOWAIT")
             if blocking_sessions(conn) != 0:
                 raise ValueError("Refusing reset while a blocking PostgreSQL session is connected to this store")
-            plan = read_plan(conn, engine, store, tables)
+            plan = read_plan(conn, engine, store, tables, require_all=require_all)
             if plan["plan_sha256"] != expected_digest:
                 raise ValueError("Plan changed since it was reviewed; generate and review a new plan")
             append_receipt({"at": datetime.now(ZoneInfo("America/New_York")).isoformat(), "status": "pending",
@@ -278,12 +287,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--store", choices=sorted(STORE_SCHEMAS), required=True)
     parser.add_argument("--inventory", action="store_true", help="list tables and planner row estimates; change nothing")
     parser.add_argument("--manifest", type=Path, help="explicit per-table drop/truncate plan")
+    parser.add_argument("--require-all-tables", action="store_true", help="require a truncate entry for every table in the store")
     parser.add_argument("--apply", action="store_true", help="apply the reviewed plan")
     parser.add_argument("--words", help="operator's exact approval words; required with --apply")
     parser.add_argument("--plan-sha256", help="digest printed by the reviewed plan; required with --apply")
     args = parser.parse_args(argv)
     if args.inventory == (args.manifest is not None):
         return fail("Choose exactly one of --inventory or --manifest")
+    if args.require_all_tables and args.inventory:
+        return fail("--require-all-tables requires a manifest")
     if args.apply and (not args.words or not args.words.strip() or not args.plan_sha256):
         return fail("--apply requires exact --words and --plan-sha256")
     if not args.apply and (args.words is not None or args.plan_sha256 is not None):
@@ -298,11 +310,12 @@ def main(argv: list[str] | None = None) -> int:
                 return print_inventory(engine, args.store)
             if not args.apply:
                 with engine.connect() as conn:
-                    plan = read_plan(conn, engine, args.store, tables)
+                    plan = read_plan(conn, engine, args.store, tables, require_all=args.require_all_tables)
                 show_plan(plan)
                 print("Plan only; nothing changed")
                 return 0
-            plan = apply_plan(engine, args.store, tables, args.words.strip(), args.plan_sha256)
+            plan = apply_plan(engine, args.store, tables, args.words.strip(), args.plan_sha256,
+                              require_all=args.require_all_tables)
             show_plan(plan)
             print(f"Applied {len(plan['tables'])} table actions; receipt recorded in the private stores folder")
             return 0
