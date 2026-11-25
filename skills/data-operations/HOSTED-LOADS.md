@@ -76,6 +76,15 @@ CODE read it in place of git.
   the compute carries when every step runs its declared workers. If lanes wait while CPU idles, memory is the limit: more lanes need
   more of it (a larger container-runtime ceiling or compute). The gate exists because lanes started at once, each with its declared
   workers, overload the CPU and the heaviest merges are killed for memory (status -9).
+- **The lane controller moves the running steps' workers.** A thread of the activity worker (`control` in `load_jobs.py`) looks every 30
+  seconds and moves at most one step, by the rules of the `--auto` scheduler (`choose_move`): with room it doubles the step with the
+  longest chain behind it, pressed for four cycles it halves the one with the shortest. Room is two worker shares (`WORKER_GB`) of free memory, CPU load
+  under three quarters of the cores and database connections below the target; pressed is under one share of memory, CPU load over
+  one and a half times the cores, or sessions waiting on locks. A raise stays within the memory that is free with one share left
+  over, waits ten minutes after the step's last start, comes just after a bundle completes, and is repeated only when the last one
+  raised the measured rate. Nothing is raised while a step is being admitted. A move writes `<state>.move-<step>` with the count and
+  ends the step's load (driver first, then the workers it started); the step's loop starts the load again in the same attempt,
+  through the same admission. The state file says `controller moves <step> from N to M workers`. A step of one bundle is never moved.
 - **One task per poller.** The worker's `ps` sees only its container, so QUIET's process count no longer covers the Mac; the
   loader's database sessions still do. Never start `load_jobs.py` on the Mac beside it.
 - **Mounts:** the logins and the captures are read-only; the stores folder, `LOGS` and the run documents' folder

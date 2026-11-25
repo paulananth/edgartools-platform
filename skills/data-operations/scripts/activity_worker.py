@@ -9,7 +9,8 @@ lanes, in order, as the task's output), `{"action": "lane", "lane": "<name>", "p
 or `{"action": "finish"}` (what follows the loads: links and lookups). The worker runs one task per lane at once, each with
 the workers its step declares; the load jobs file's waits hold a step until the steps it needs are done. It
 sends a heartbeat while a task runs, so the state machine learns of a worker that died. Each task's output goes to this
-container's log; the run's own logs stay in `LOGS`.
+container's log; the run's own logs stay in `LOGS`. Beside the tasks, the lane controller (`load_jobs.control`) moves the running
+steps' workers with the container's free memory, its CPU and the database.
 """
 from __future__ import annotations
 
@@ -136,6 +137,9 @@ def work_at_once(clients: list, activity: str, start=subprocess.Popen, tasks: in
 def main() -> int:
     import boto3
 
+    import load_jobs
+
+    threading.Thread(target=load_jobs.control, daemon=True).start()
     # One poller per lane, never fewer: a lane holding a poller can wait on a step of a lane that would need another.
     work_at_once([boto3.client("stepfunctions") for _ in lanes()], os.environ["ACTIVITY_ARN"])
     return 0
