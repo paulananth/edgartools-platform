@@ -25,6 +25,13 @@ unconfigured when its file existed). A fact that cannot be
 read is a failure. Fix what it names and run it again; there is no switch to skip it. A rehearsal of the first lane on a
 disposable store is the next check to add.
 
+After truncating tables for a full reload, assign a new `RUN` label and use
+it for readiness and every invocation of the hosted load pipeline. Confirm
+the state is fresh with zero done steps, and take the step count from the
+current loader's job list. Keep the previous run log as history. Start the
+complete plan with `RUN=<new-label> bash infra/load-pipeline/load.sh` (no step
+arguments). Use that label again only when resuming this same load.
+
 ## Where a load runs
 A load runs in the loader image, never in a checkout: a checkout's code can differ from its tested commit (an engine not
 rebuilt, an edit), and a deleted worktree stops its load. `.github/workflows/loader-image.yml` builds the image only from a

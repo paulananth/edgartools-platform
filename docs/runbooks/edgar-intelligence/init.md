@@ -132,6 +132,13 @@ A missing grant or login that a command names is a gap to fix through the centra
 `rules/load-jobs.yaml` holds the order of every source and target, each one's input (its source names the folder in `sources/<source>/inputs.yaml`), workers and the facts and revision no capture states, and
 `scripts/load_jobs.py` runs it, so a store is loaded the same way every time and nobody rewrites the list:
 
+After truncating tables for a full reload, assign a new `RUN` label and use
+it for readiness and every invocation of the hosted load pipeline. Confirm
+the state is fresh with zero done steps, and take the step count from the
+current loader's job list. Keep the previous run log as history. Start the
+complete plan with `RUN=<new-label> bash infra/load-pipeline/load.sh` (no step
+arguments). Use that label again only when resuming this same load.
+
 A load runs only in the loader image CI built from `main`, started by `infra/load-pipeline/load.sh [--plan|--force] [--finish] <step>...`
 (data-operations, HOSTED-LOADS.md, "Where a load runs"). In a checkout `load_jobs.py` reads (`--plan`, `--list`, `--status`) and
 refuses to start, resume or finish a load. The commands below are what the image's worker runs:
