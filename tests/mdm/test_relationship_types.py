@@ -147,7 +147,7 @@ def test_every_capacity_a_contract_states_is_one_its_type_has():
 def test_the_one_version_of_the_code_set_holds_each_approved_change():
     """A code set keeps one version (git holds what came before); each ruling it carries is stated here:
     EMPLOYED_BY's capacity `other`; one issuer per Security (ticket 24, operator, 2026-11-04); RELATED_PERSON, Form ADV's
-    own term (operator, 2026-11-08); INVESTMENT_ADVISER_TO's N-CEN capacities (operator, 2026-11-14: "yes")."""
+    own term (operator, 2026-11-08); INVESTMENT_ADVISER_TO's N-CEN capacities (operator, 2026-11-14: "yes"), and Form ADV's words for them."""
     from edgar_warehouse.mdm.evidence import KINDS
     from edgar_warehouse.rules.source_engine import prepare_relationship_types
 
@@ -159,3 +159,9 @@ def test_the_one_version_of_the_code_set_holds_each_approved_change():
     assert types["ISSUED_BY"]["one_target"] is True
     assert (types["RELATED_PERSON"]["from"], types["RELATED_PERSON"]["to"]) == (["company"], ["company"])
     assert types["INVESTMENT_ADVISER_TO"]["capacities"] == ["advisor", "subadvisor"]
+    # Form ADV states the adviser-to-fund link beside N-CEN, and states no discretion (operator, 2026-11-24:
+    # "Publish v7 as worded (Recommended)").
+    words = {row["code"]: row["definition"] for row in files.published_reference(pin)}
+    assert "Form ADV Schedule D 7.B(1), Subadviser N, or 7.B(2)" in words["INVESTMENT_ADVISER_TO:advisor"]
+    assert "Form ADV Schedule D 7.B(1), Subadviser Y" in words["INVESTMENT_ADVISER_TO:subadvisor"]
+    assert "Form ADV's fund links state none" in words["INVESTMENT_ADVISER_TO"]

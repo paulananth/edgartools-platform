@@ -124,8 +124,8 @@ WORDS = {
         usage=[("mdm", "relationship", "type", "exact")],
         hints=[("meaning", "A type's properties: from and to (the kinds at each end), from_profile and to_profile, "
                            "hierarchy, cycles, one_parent, one_target, ultimate_parent and ultimate_type, keeps_start, ends_parent_links.")],
-        versions={"6": ("claude (hosted-mirroring ticket 09)",
-                        "Yes; a trading venue is RDM's iso-10383-mic on a Security's listing")}),
+        versions={"7": ("claude (data-modeling, hosted-adv-private-fund-ingestion ticket 01)",
+                        "Publish v7 as worded (Recommended)")}),
     "mdm-kinds": dict(
         name="MDM kinds",
         definition="The kinds of entity MDM knows. A kind that holds golden records has its merge rules; the "

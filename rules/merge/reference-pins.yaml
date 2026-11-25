@@ -15,8 +15,11 @@ mdm-relationship-types:
   # adviser types (operator, 2026-11-14 10:30 ET, asked to name them with N-CEN's terms: "yes").
   # Version 6: every type names MDM kinds at both ends; a trading venue is RDM's iso-10383-mic on a Security's
   # listing, not a kind (operator, 2026-11-20: "Yes").
-  version: '6'
-  sha256: e544991c2caca8077c163f041dc06b6bb1cbc6c11eeeb965bf253fb83cb5e300
+  # Version 7: INVESTMENT_ADVISER_TO's `advisor` and `subadvisor` name Form ADV Schedule D 7.B(1)/7.B(2) beside N-CEN,
+  # and the link carries discretion only where its source states it, which Form ADV does not (operator, {{now}}:
+  # "Publish v7 as worded (Recommended)").
+  version: '7'
+  sha256: fe4c840f9db73fe2085623dd1d92226194c94a0b51739b2e4ff8458b2440c3cd
 sec-place-codes:
   code_set: sec-place-codes
   version: '1'

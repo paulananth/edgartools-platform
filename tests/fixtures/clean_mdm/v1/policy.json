@@ -54,8 +54,8 @@
   "reference_pins": {
     "mdm-relationship-types": {
       "code_set": "mdm-relationship-types",
-      "sha256": "e544991c2caca8077c163f041dc06b6bb1cbc6c11eeeb965bf253fb83cb5e300",
-      "version": "6"
+      "sha256": "fe4c840f9db73fe2085623dd1d92226194c94a0b51739b2e4ff8458b2440c3cd",
+      "version": "7"
     }
   },
   "relationships": {
