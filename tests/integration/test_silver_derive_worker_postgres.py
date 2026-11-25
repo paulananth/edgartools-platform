@@ -11,6 +11,7 @@ import json
 import pytest
 from sqlalchemy import create_engine, text
 
+from edgar_warehouse.control_contract import Blocked
 from edgar_warehouse.financials import measures
 from edgar_warehouse.rules import files
 from edgar_warehouse.silver_writer import database as silver
@@ -177,6 +178,36 @@ def test_links_land_as_one_row_a_period_and_a_second_build_keeps_them(postgres, 
         with runtime.connect() as conn:
             evidence = [tuple(r) for r in conn.execute(text("SELECT relationship_id, assertion_id FROM silver.relationship_evidence"))]
         assert evidence == [("invented", "c")]
+
+
+def test_a_store_whose_first_load_makes_no_link_builds_an_empty_table_and_a_full_one_is_never_emptied(postgres, monkeypatch):
+    """A first load can make no link (its links wait for other sources): its binding is still built."""
+    from edgar_warehouse.mastering import links, store as stores
+
+    admin, _ = postgres
+    edge = {"relationship_id": "invented", "type": "ISSUED_BY", "scope": "invented", "source_id": "a", "target_id": "b",
+            "evidence": [{"assertion_id": "c"}], "periods": [{"valid_from": "2026-03-01T00:00:00+00:00",
+                                                              "valid_from_basis": "observed", "valid_to": None,
+                                                              "properties": {}}]}
+    made = []
+    with silver_database(admin) as (owner, runtime):
+        silver.migrate(owner, runtime_role=RUNTIME)
+        for name in ("relationship", "relationship-evidence", "relationship-path", "master-binding"):
+            silver.register(owner, spec_file(files.ROOT / "silver" / f"silver-{name}.yaml", None), runtime_role=RUNTIME)
+        stores.install(owner, runtime_role=RUNTIME)
+        monkeypatch.setattr(links, "calculate", lambda db, policy, as_of, stored: (list(made), {"unresolved_endpoint": 1}))
+        monkeypatch.setattr(stores, "open_store", lambda engine: Master2())
+        monkeypatch.setattr("edgar_warehouse.rules.registry.engine", lambda: Rules())
+        monkeypatch.setattr("edgar_warehouse.rules.registry.policy", lambda conn, digest: {"relationships": {}})
+        build = lambda: links.build(runtime, MasterPolicy(), "invented", "2026-11-06T00:00:00+00:00")
+        assert build() == {"table": "relationship", "links": 0, "rows": 0, "bindings": 0, "waiting": {"unresolved_endpoint": 1}}
+        made.append(edge)
+        assert build()["rows"] == 1
+        made.clear()
+        with pytest.raises(Blocked, match="snapshot"):
+            build()
+        with runtime.connect() as conn:
+            assert conn.scalar(text("SELECT count(*) FROM silver.relationship")) == 1  # nothing was removed
 
 
 def test_the_worker_no_longer_builds_links():

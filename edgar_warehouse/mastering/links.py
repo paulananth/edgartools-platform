@@ -62,7 +62,8 @@ def build(silver, mdm, policy_digest: str, as_of: str) -> dict:
     tables = rows_of(edges)
     sink = DatabaseSink(silver)
     for table in ("relationship", "relationship_evidence", "relationship_path"):
-        land(sink, table, tables[table])
+        if tables[table] or last:  # a store with no link yet stays empty (as `bind`); one that holds links is never emptied
+            land(sink, table, tables[table])
     if silver.dialect.name == "postgresql":
         bound = bind(silver)  # MDM and silver are schemas of one database: the join runs there, no row reaches the client
     else:
