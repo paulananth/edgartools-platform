@@ -78,32 +78,50 @@ def worker_env() -> dict:
 
 
 def resolve_input(step: dict, sources: Path) -> dict:
-    """The step with its `capture` folder and `capture_root`, read from its source's `inputs.yaml`: the source holds the
-    folders of its deliveries by name, and the step names one (or none, when the source has one)."""
+    """The step with its `deliveries`, read from its source's `inputs.yaml`, which holds the folders by name: the one the step
+    names with `input`, else every one, in that file's order. A step is named after what it loads, never after a file. Each
+    has its own capture run: the step's, then the delivery's name (or its `capture_name`; empty for a delivery loaded under
+    the step's alone), so a delivery added to the file renames no earlier one's."""
     if "source" not in step:
         return step
     path = sources / step["source"] / "inputs.yaml"
     held = {}
     if path.exists():
         held = (yaml.safe_load(path.read_text()) or {}).get("inputs") or {}
-    name = step.get("input") or (next(iter(held)) if len(held) == 1 else None)
-    if name is None:
-        raise ValueError(f"{step['name']}: names no input, and {step['source']} holds {sorted(held) or 'none'}")
-    if name not in held:
-        raise ValueError(f"{step['name']}: {step['source']} has no input {name!r} (it holds {sorted(held)})")
-    folder, root = held[name].get("folder"), held[name].get("root", "captures")
-    if not isinstance(folder, str) or not folder or folder.startswith("/") or ".." in Path(folder).parts:
-        raise ValueError(f"{step['name']}: input {name!r} needs a folder under its root, not {folder!r}")
-    if root not in ROOTS:
-        raise ValueError(f"{step['name']}: input {name!r} has root {root!r}, not one of {sorted(ROOTS)}")
-    return {**step, "capture": folder, **({"capture_root": root} if root != "captures" else {})}
+    if not held:
+        raise ValueError(f"{step['name']}: names no input, and {step['source']} holds none")
+    if "input" in step and step["input"] not in held:
+        raise ValueError(f"{step['name']}: {step['source']} has no input {step['input']!r} (it holds {sorted(held)})")
+    names = [step["input"]] if "input" in step else list(held)
+    if len(names) > 1 and "revision" in step:
+        raise ValueError(f"{step['name']}: one revision cannot serve several deliveries of {step['source']}: name its `input`")
+    deliveries = []
+    for name in names:
+        folder, root = held[name].get("folder"), held[name].get("root", "captures")
+        if not isinstance(folder, str) or not folder or folder.startswith("/") or ".." in Path(folder).parts:
+            raise ValueError(f"{step['name']}: input {name!r} needs a folder under its root, not {folder!r}")
+        if root not in ROOTS:
+            raise ValueError(f"{step['name']}: input {name!r} has root {root!r}, not one of {sorted(ROOTS)}")
+        called = held[name].get("capture_name", name)
+        run = step["capture_run"] + (f"-{called}" if called else "")
+        deliveries.append({"delivery": name, "capture": folder, "capture_run": run, "minutes": step["minutes"],
+                           **({"capture_root": root} if root != "captures" else {})})
+    # The step may take its minutes once a delivery: its bound is all of them, each load's is the file's.
+    return {**step, "deliveries": deliveries, "minutes": step["minutes"] * len(deliveries)}
+
+
+def loads(step: dict) -> list[dict]:
+    """One load a delivery, in order: the step as `arguments` takes it, with the delivery's folder, capture run and position."""
+    return [{**step, **delivery} for delivery in step["deliveries"]]
 
 
 def load_jobs(path: Path = ROOT / "rules/load-jobs.yaml", sources: Path = ROOT / "sources") -> list[dict]:
-    """The load jobs, each with the file's `defaults` for what it does not say itself and its input's folder."""
+    """The load jobs, each with the file's `defaults` for what it does not say itself and its deliveries."""
     chain = yaml.safe_load(path.read_text())
-    steps = [resolve_input({**(chain.get("defaults") or {}), "capture_run": f"{chain['capture_label']}-{step['name']}", "position": place, **step}, sources)
-             for place, step in enumerate(chain["steps"])]
+    steps = [resolve_input({**(chain.get("defaults") or {}), "capture_run": f"{chain['capture_label']}-{step['name']}", **step}, sources)
+             for step in chain["steps"]]
+    for place, delivery in enumerate(one for step in steps for one in step.get("deliveries", ())):
+        delivery["position"] = place  # a forced load's revision ends with it: each delivery publishes its own
     for step in steps:
         priority = step.get("priority", 3)
         if type(priority) is not int or priority not in (1, 2, 3):  # `true` and `2.0` are not tiers
@@ -504,7 +522,9 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
 
 def bundle_progress(text: str) -> tuple[int, int] | None:
     """(bundles done, bundles in all) from a step's log: the `run ... complete in` lines, and the bundles an earlier
-    attempt already loaded, against the last `Bundle i/N:` line. None when the log names no bundles."""
+    attempt already loaded, against the last `Bundle i/N:` line. None when the log names no bundles. Of a step with several deliveries, the
+    delivery it is at (after the log's last `Input` line)."""
+    text = re.split(r"^Input \d+/\d+: .*$", text, flags=re.M)[-1]
     found = re.findall(r"^Bundle \d+/(\d+):", text, re.M)
     finished = len(re.findall(r"^\s+run \S+ complete in", text, re.M)) + len(re.findall(r"^Bundle \d+/\d+: all \d+ documents already loaded", text, re.M))
     return (finished, int(found[-1])) if found else None
@@ -981,12 +1001,17 @@ def note(message: str, state: Path) -> None:
         handle.write(line + "\n")
 
 
-def run(args: list[str], env: dict, log: Path | None = None) -> int:
-    with (log.open("w") if log else open(os.devnull, "w")) as out:
+def run(args: list[str], env: dict, log: Path | None = None, append: bool = False) -> int:
+    with (log.open("a" if append else "w") if log else open(os.devnull, "w")) as out:
         return subprocess.run([*ENGINE, *args], env=env, cwd=ROOT, stdout=out, stderr=subprocess.STDOUT).returncode
 
 
 def plan(step: dict, env: dict) -> str:
+    """What each delivery of the step would load."""
+    return "; ".join(plan_one(one, env) for one in loads(step))
+
+
+def plan_one(step: dict, env: dict) -> str:
     done = subprocess.run([*ENGINE, "load", *arguments(step), "--plan"], env=env, cwd=ROOT, capture_output=True, text=True)
     found = re.search(r"\{.*\}", done.stdout, re.S)
     try:
@@ -1447,6 +1472,31 @@ def catch_up(steps: list[dict], state: Path) -> dict[str, str | None]:
     return outcomes
 
 
+def run_deliveries(step: dict, env: dict, log: Path) -> tuple[int, str]:
+    """Load every delivery of the step in order into one log, up to the first that does not finish; its exit code and the log's
+    text. One an earlier attempt loaded is a short call that finds it done."""
+    code, parts = 0, loads(step)
+    log.write_text("")
+    for number, one in enumerate(parts, 1):
+        if len(parts) > 1:
+            with log.open("a") as handle:
+                handle.write(f"Input {number}/{len(parts)}: {one['delivery']}\n")
+        code = run(["load", *arguments(one)], env, log, append=True)
+        if code or "Load stopped" in log.read_text():
+            break
+    return code, log.read_text()
+
+
+def done_line(text: str) -> str:
+    """A step's `Done:` line: its one delivery's, or the documents of all its deliveries together."""
+    found = re.findall(r"^Done: (\d+) documents loaded, (\d+) already loaded before", text, re.M)
+    if len(found) > 1:
+        return (f"Done: {sum(int(new) for new, _ in found)} documents loaded, {sum(int(old) for _, old in found)} already loaded "
+                f"before, in {len(found)} deliveries")
+    lines = [line for line in text.splitlines() if line.startswith("Done: ")]
+    return lines[-1][:200] if lines else ""
+
+
 def attempt_loop(step: dict, env: dict, state: Path, others_run: bool = True) -> bool:
     name, log = step["name"], LOGS / f"chain-{RUN}-{step['name']}.log"
     if wait_for(step, state, others_run=others_run):
@@ -1457,11 +1507,9 @@ def attempt_loop(step: dict, env: dict, state: Path, others_run: bool = True) ->
     for attempt in range(1, step["attempts"] + 1):
         note(f"{name} attempt {attempt} start", state)
         offset = error_log.position(errors)
-        code = run(["load", *arguments(step)], env, log)
-        text = log.read_text()
+        code, text = run_deliveries(step, env, log)
         if code == 0 and "Load stopped" not in text:
-            done = [line for line in text.splitlines() if line.startswith("Done: ")]
-            note(f"{name} done: {done[-1][:200] if done else ''}", state)
+            note(f"{name} done: {done_line(text)}", state)
             return True
         why = [line for line in text.splitlines() if re.search(r"stopped|did not finish|Error", line)]
         note(f"{name} attempt {attempt} stopped rc={code}: "
@@ -1580,7 +1628,7 @@ def main() -> int:
         return 0
     if args.list:
         for step in steps:
-            print(f"{step['lane']} p{step.get('priority', 3)} {step['name']:30} {step['source']} {step['target']} {step['capture']}")
+            print(f"{step['lane']} p{step.get('priority', 3)} {step['name']:30} {step['source']} {step['target']} {' '.join(one['capture'] for one in loads(step))}")
         return 0
     state = LOGS / f"chain-{RUN}.log"
     if args.status:  # read-only: the reader login only, no loader login, no wake lock, nothing written

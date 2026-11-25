@@ -31,9 +31,11 @@ SNAPSHOT = {
                  "kind": "stalled", "why": ["a", "b", "c", "d", 'the store reads the table from disk ("cache misses")']}]}
 
 
-def test_every_state_has_one_code_and_one_colour():
+def test_every_state_has_one_code_and_not_running_is_grey_running_or_done_green_the_rest_red():
     names, codes, colours = zip(*[(n, c, k) for n, c, k, _ in design.STATES])
-    assert len(set(names)) == len(set(codes)) == len(set(colours)) == 6
+    assert len(set(names)) == len(set(codes)) == 6
+    assert dict(zip(names, colours)) == {"waiting": "#8b949e", "progressing": "#2da44e", "done": "#2da44e",
+                                         "failed": "#cf222e", "stalled": "#cf222e", "locked": "#cf222e"}
     # Prometheus keeps the codes it stored: dropping `unclear` leaves code 2 unused, and no other state is renumbered (history would repaint)
     assert sorted(codes) == [0, 1, 3, 4, 5, 6] and "unclear" not in names
 

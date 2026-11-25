@@ -1,7 +1,10 @@
 # The files this source loads from: each delivery by name, its folder under the captures root (or `root: proving`).
-# A load step names one with `input:`, or none when this source has one. Read by the load only: no rules version holds it.
+# A load step loads them all, in this order, or the one it names with `input:`. Read by the load only: no rules version holds it.
+# `capture_name` is what the delivery is called in its capture run, an input of its records, so it stays as the store was loaded.
 inputs:
-  2026q2-nport:
+  nport-answers:
     folder: openfigi/2026q2-nport
-  form4-tickers-20261109:
+    capture_name: ""
+  form4-tickers:
     folder: openfigi/form4-tickers-20261109
+    capture_name: ""

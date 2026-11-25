@@ -51,10 +51,10 @@ failed load; read the new execution and the run's state file.
 
 ## The design
 
-A step has one of six states (the codes are never renumbered: Prometheus keeps what it stored, and a changed number repaints history; code 2, once `unclear`, stays unused), each with one colour that means the same on every
+A step has one of six states (the codes are never renumbered: Prometheus keeps what it stored, and a changed number repaints history; code 2, once `unclear`, stays unused), each with one of three colours that mean the same on every
 panel (`scripts/design.py` is the only place that names them):
-waiting (grey), progressing (green), stalled (orange), locked (red),
-done (blue) and failed (dark red). A change of colour is the event: nothing is
+grey is not running (waiting), green is running or finished (progressing, done), red needs a
+look (failed, stalled, locked); the state's name, on hover and in the tiles, tells two of one colour apart. A change of colour is the event: nothing is
 decorated, and a number is never rounded to look calm.
 
 | Interaction | What carries it in Grafana |
@@ -62,9 +62,9 @@ decorated, and a number is never rounded to look calm.
 | A step starts, works, stalls or ends | The lane board: one bar a step, coloured by state, grouped by lane |
 | "Why is it not running?" | The Waiting-for table: each waiting step and the step it waits for; empty means a free slot |
 | A restart | An annotation on the timelines at the moment an attempt count rises, and an amber Attempt cell |
-| A stall | Log age turns amber at ten minutes and red at twenty; the Stalled-or-locked tile turns orange from one |
+| A stall | Log age turns amber at ten minutes and red at twenty; the bar and the Stalled-or-locked tile turn red from one |
 | "Why is a running step not working?" | The Why panel: the five whys of each stalled or locked step (symptom, its own database sessions, its latest statement, what it waits on, the cause or what was not measured); the Why column of Running now holds the last. A step is never "unclear" |
-| A failure | The Failed tile turns red from one, the bar goes dark red, an annotation marks the moment |
+| A failure | The Failed tile turns red from one, the bar goes red, an annotation marks the moment |
 | Database pressure | Lock waiters: amber at one, red at three (the scheduler's own limit) |
 | Memory pressure | Memory free: orange under a quarter, red under a tenth (the controller's own limits) |
 | A rate that has gone flat | Rows written a minute per store, beside the bars |

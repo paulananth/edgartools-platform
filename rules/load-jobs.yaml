@@ -1,9 +1,12 @@
 # The order a fresh store is loaded in: every captured source and target, each one's input and the facts and
 # revision no capture states, read by `skills/data-operations/scripts/load_jobs.py` (Edgar Intelligence initialize
-# runbook, "Load a fresh store"). `input` names one of the deliveries in the step's `sources/<source>/inputs.yaml`, which holds its folder (none needed where the source has one);
-# `capture_label` names each step's capture run (`<label>-<step>`), and a fact is written as its value: both are inputs of a
+# runbook, "Load a fresh store"). A step is named after what it loads, never after a file or a date: it loads every
+# delivery of its `sources/<source>/inputs.yaml`, in that file's order (oldest first), so a new delivery is a line there
+# and no new step. `input` names one only where a source's inputs are different kinds of file.
+# `capture_label` names each step's capture run (`<label>-<step>`, then the delivery's name, or its
+# `capture_name` in the inputs file), and a fact is written as its value: both are inputs of a
 # record, so they stay as the store was loaded (a new value processes every file again, and the Stage refuses the changed
-# records under the same revision). The run's RUN names its state and logs only. `minutes` bounds one attempt, which
+# records under the same revision). The run's RUN names its state and logs only. `minutes` bounds one delivery's attempt, which
 # carries on where the last stopped.
 # Steps that may run at the same time are in different `lane`s, and `waits_for` names a step of another lane that must
 # be done first. Each lane runs its steps in file order (`load_jobs.py --lane <name>`), so every lane can start at once.
@@ -72,7 +75,7 @@ steps:
     priority: 1
     source: openfigi
     target: mastering
-    input: 2026q2-nport
+    input: nport-answers
     facts:
       ticker_file_date: "2026-09-02"
     revision: 0
@@ -84,7 +87,7 @@ steps:
     lane: S
     source: openfigi
     target: mastering
-    input: form4-tickers-20261109
+    input: form4-tickers
     facts:
       ticker_file_date: "2026-09-02"
     revision: 1
@@ -102,147 +105,49 @@ steps:
     target: silver
     minutes: 90
     attempts: 3
-  - name: ncen-registrant-2025q4
+  - name: ncen-registrant
     lane: C
     source: sec.ncen.registrant
     target: mastering
-    input: 2025q4
     minutes: 60
     attempts: 3
-  - name: ncen-registrant-2026q1
-    lane: C
-    source: sec.ncen.registrant
-    target: mastering
-    input: 2026q1
-    minutes: 60
-    attempts: 3
-  - name: ncen-registrant-2026q2
-    lane: C
-    source: sec.ncen.registrant
-    target: mastering
-    input: 2026q2
-    minutes: 60
-    attempts: 3
-  - name: ncen-registrant-2026q3
-    lane: C
-    source: sec.ncen.registrant
-    target: mastering
-    input: 2026q3
-    minutes: 60
-    attempts: 3
-  - name: ncen-adviser-2025q4
+  - name: ncen-adviser
     lane: C
     source: sec.ncen.adviser
     target: mastering
-    input: 2025q4
     minutes: 60
     attempts: 3
-  - name: ncen-adviser-2026q1
-    lane: C
-    source: sec.ncen.adviser
-    target: mastering
-    input: 2026q1
-    minutes: 60
-    attempts: 3
-  - name: ncen-adviser-2026q2
-    lane: C
-    source: sec.ncen.adviser
-    target: mastering
-    input: 2026q2
-    minutes: 60
-    attempts: 3
-  - name: ncen-adviser-2026q3
-    lane: C
-    source: sec.ncen.adviser
-    target: mastering
-    input: 2026q3
-    minutes: 60
-    attempts: 3
-  - name: adv-mastering-03
+  - name: adv-mastering
     lane: C
     waits_for: [nport-registrant]
     source: iapd.adv
     target: mastering
-    input: p07-2026-03
     minutes: 60
     attempts: 3
-  - name: adv-mastering-06
-    lane: C
-    source: iapd.adv
-    target: mastering
-    input: p07-2026-06
-    minutes: 60
-    attempts: 3
-  - name: adv-silver-03
+  - name: adv-silver
     lane: C
     source: iapd.adv
     target: silver
-    input: p07-2026-03
-    minutes: 60
-    attempts: 3
-  - name: adv-silver-06
-    lane: C
-    source: iapd.adv
-    target: silver
-    input: p07-2026-06
     minutes: 60
     attempts: 3
   # Form ADV's private funds, after the adviser filings of the same months (lane C runs in order), so each
   # INVESTMENT_ADVISER_TO link finds its adviser; oldest month first, as the adviser filings load.
-  - name: adv-funds-03
+  - name: adv-funds
     lane: C
     source: iapd.adv.fund
     target: mastering
-    input: p07-2026-03
     minutes: 60
     attempts: 3
-  - name: adv-fund-advisers-03
-    lane: C
-    source: iapd.adv.fund
-    target: advisers
-    input: p07-2026-03
-    minutes: 60
-    attempts: 3
-  - name: adv-funds-06
-    lane: C
-    source: iapd.adv.fund
-    target: mastering
-    input: p07-2026-06
-    minutes: 60
-    attempts: 3
-  - name: adv-fund-advisers-06
+  - name: adv-fund-advisers
     lane: C
     source: iapd.adv.fund
     target: advisers
-    input: p07-2026-06
     minutes: 60
     attempts: 3
-  - name: ncen-fund-2025q4
+  - name: ncen-fund
     lane: L
     source: sec.ncen.fund
     target: mastering
-    input: 2025q4
-    minutes: 60
-    attempts: 3
-  - name: ncen-fund-2026q1
-    lane: L
-    source: sec.ncen.fund
-    target: mastering
-    input: 2026q1
-    minutes: 60
-    attempts: 3
-  - name: ncen-fund-2026q2
-    lane: L
-    source: sec.ncen.fund
-    target: mastering
-    input: 2026q2
-    minutes: 60
-    attempts: 3
-  - name: ncen-fund-2026q3
-    lane: L
-    source: sec.ncen.fund
-    target: mastering
-    input: 2026q3
     minutes: 60
     attempts: 3
   - name: nport-security
@@ -258,33 +163,11 @@ steps:
     target: mastering_other_keys
     minutes: 120
     attempts: 3
-  - name: ncen-class-2025q4
+  - name: ncen-class
     lane: L
     waits_for: [openfigi-tickers, 13f-securities, nport-security-other-keys]
     source: sec.ncen.class
     target: mastering
-    input: 2025q4
-    minutes: 60
-    attempts: 3
-  - name: ncen-class-2026q1
-    lane: L
-    source: sec.ncen.class
-    target: mastering
-    input: 2026q1
-    minutes: 60
-    attempts: 3
-  - name: ncen-class-2026q2
-    lane: L
-    source: sec.ncen.class
-    target: mastering
-    input: 2026q2
-    minutes: 60
-    attempts: 3
-  - name: ncen-class-2026q3
-    lane: L
-    source: sec.ncen.class
-    target: mastering
-    input: 2026q3
     minutes: 60
     attempts: 3
   - name: nport-security-silver
@@ -299,7 +182,7 @@ steps:
     priority: 1
     source: gleif
     target: subfund-pairs
-    input: 20260911-1600-publisher
+    input: publisher
     minutes: 60
     attempts: 3
   - name: gleif
@@ -308,7 +191,7 @@ steps:
     waits_for: [company]
     source: gleif
     target: mastering
-    input: 20260911-1600-publisher
+    input: publisher
     facts:
       publication_count: "3428477"
     minutes: 240
@@ -318,20 +201,11 @@ steps:
     worker_gb: 0.4
     workers: 8
     attempts: 40
-  - name: adv-custodians-06
+  - name: adv-custodians
     lane: G
-    waits_for: [nport-registrant, ncen-adviser-2026q3, gleif]
+    waits_for: [nport-registrant, ncen-adviser, gleif]
     source: iapd.adv
     target: custodians
-    input: p07-2026-06
-    minutes: 60
-    attempts: 3
-  - name: adv-custodians-03
-    lane: G
-    waits_for: [nport-registrant, gleif]
-    source: iapd.adv
-    target: custodians
-    input: p07-2026-03
     minutes: 60
     attempts: 3
   - name: ownership
