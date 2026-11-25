@@ -227,7 +227,9 @@ they record the installed migration and registered specifications that
 initialization checks. The script rejects either table in a reset manifest.
 Recover missing metadata from a verified backup or evidence of the installed
 schema and specifications. Keep RDM reference data and Rules configuration for this
-reload. Run the hosted initialization and readiness checks before loading.
+reload. A full hosted data-store clear may also reset RDM when named in scope; verify its published sources and restore
+them with `rdm_restore_published.py` before readiness or mirror creation. Rules configuration remains in config and is never
+reset. Run the hosted initialization and readiness checks before loading.
 
 ### Recover missing deployment metadata
 
