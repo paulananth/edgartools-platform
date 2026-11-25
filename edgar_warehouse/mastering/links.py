@@ -37,14 +37,14 @@ class Spool:
 
     def add(self, name: str, line: str) -> None:
         if name not in self.files:
-            self.files[name] = (self.folder / name).open("w")
+            self.files[name] = (self.folder / name).open("w", encoding="utf-8")
         self.files[name].write(line + "\n")
         self.counts[name] += 1
 
     def lines(self, name: str) -> Iterator[str]:
         if name in self.files:
             self.files[name].flush()
-            with (self.folder / name).open() as source:
+            with (self.folder / name).open(encoding="utf-8") as source:
                 for line in source:
                     yield line.rstrip("\n")
 
@@ -83,7 +83,7 @@ def portions(store, policy: dict, as_of: str, last: Iterable[dict], spool: Spool
     """Every link in parts, each part's links and how many of its reported links have no result yet, by reason. `last` is the
     rows of the last build, so a link keeps a start its current record no longer shows."""
     for subject, body in store.linked_records():  # a subject's records together: its revisions fold into one
-        spool.add(f"records-{_part(subject)}", body.replace("\n", " "))
+        spool.add(f"records-{_part(subject)}", body.replace("\r", " ").replace("\n", " "))  # outside a text JSON holds either only as space
     ends: set[str] = set()
     for part in range(PORTIONS):
         claims = current_claims("[" + ",".join(spool.lines(f"records-{part}")) + "]", as_of, set())
@@ -201,6 +201,11 @@ def build(silver, mdm, policy_digest: str, as_of: str) -> dict:
         bound = {"bindings": len(bindings)}
     return {"table": "relationship", "links": made, "rows": spool.counts["relationship"],
             "bindings": bound["bindings"], "waiting": dict(sorted(waiting.items()))}
+
+WANTED = ("select distinct on (r.source_code, r.source_key) r.source_code, r.source_key, m.kind, r.entity_id as master_id "
+          "from mdm.mastering_record r join mdm.mastering_master m on m.entity_id = r.entity_id "
+          "order by r.source_code, r.source_key, r.entity_id")
+
 
 def bind(silver) -> dict:
     """`silver.master_binding` (the golden record of each source record, by the source's own key) built by two statements inside
