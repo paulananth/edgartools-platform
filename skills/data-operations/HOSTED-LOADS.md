@@ -188,8 +188,11 @@ a batch before changing its size: the writer made three a batch (70 ms each) and
   steps does not establish that Bookkeeping has no open runs or leases. Let the default `load.sh` pipeline finish
   retained load runs; use the Bookkeeping recovery procedure only when that pipeline cannot resolve one. Never call
   `bookkeeping finalize` to bypass the loader, edit run state or delete leases by hand. Stop if any run or lease remains
-  unresolved. The table-reset command also refuses while another session is connected to the
-  selected store; it does not restart PostgreSQL or disconnect extension workers.
+  unresolved. The table-reset command checks for blocking sessions before and after taking
+  exclusive locks. It allows managed `pg base extension worker` sessions only
+  when PostgreSQL reports no session state and no open transaction. Client
+  sessions, WAL senders and any other backends on the selected database block
+  the reset. Leave internal workers under Snowflake management.
 - **A hosted table reset keeps the databases, schemas, roles and source extracts.** Inventory one store with
   `uv run python infra/scripts/reset-hosted-tables.py --store <store> --inventory`; the listed row counts are catalog
   estimates. Put the approved table names and their `drop` or `truncate` actions in one explicit manifest for that

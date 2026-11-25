@@ -178,10 +178,12 @@ def append_receipt(record: dict) -> None:
     path.chmod(0o600)
 
 
-def current_sessions(conn) -> int:
+def blocking_sessions(conn) -> int:
     return int(conn.scalar(sa.text("""
         SELECT count(*) FROM pg_stat_activity
         WHERE datname = current_database() AND pid <> pg_backend_pid()
+          AND NOT (backend_type IS NOT DISTINCT FROM 'pg base extension worker'
+                   AND state IS NULL AND xact_start IS NULL)
     """)))
 
 
@@ -198,14 +200,14 @@ def apply_plan(engine, store: str, tables: list[dict[str, str]], words: str, exp
     schema = STORE_SCHEMAS[store]
     try:
         with engine.begin() as conn:
-            if current_sessions(conn) != 0:
-                raise ValueError("Refusing reset while another PostgreSQL session is connected to this store")
+            if blocking_sessions(conn) != 0:
+                raise ValueError("Refusing reset while a blocking PostgreSQL session is connected to this store")
             conn.exec_driver_sql("SET LOCAL lock_timeout = '2s'")
             for item in tables:
                 qualified = f"{quote(engine, schema)}.{quote(engine, item['table'])}"
                 conn.exec_driver_sql(f"LOCK TABLE {qualified} IN ACCESS EXCLUSIVE MODE NOWAIT")
-            if current_sessions(conn) != 0:
-                raise ValueError("Refusing reset while another PostgreSQL session is connected to this store")
+            if blocking_sessions(conn) != 0:
+                raise ValueError("Refusing reset while a blocking PostgreSQL session is connected to this store")
             plan = read_plan(conn, engine, store, tables)
             if plan["plan_sha256"] != expected_digest:
                 raise ValueError("Plan changed since it was reviewed; generate and review a new plan")
