@@ -177,7 +177,9 @@ before changing it, and run the cheap check that can fail first. For a step that
 which no phase timing could name. **Measured phases of the finish on the hosted store** (`silver links`, 1,776 s to 238 s): a lookup of tens of thousands of keys is read by streaming the
 table once (a 2,000-key probe costs 300 to 630 ms of random reads, a streamed table 150,000 rows a second), a predicate that matches almost nothing in a
 large table (links in 13 GB of one source's bodies) is served by a partial index, a landing batch is one round trip so it carries 5,000 rows, and a
-table rebuilt from rows already in the database is one join pass that writes only what changed. Time the phases before choosing a build: an incremental
+table rebuilt from rows already in the database is one join pass that writes only what changed. A build that holds every record whole needs many times
+the text of its records and is killed by the container (status -9, an empty log): keep of each record what the result reads, spool the rest to disk and calculate in
+parts that share no result. Measure the process's footprint, not its resident size, which stays low while the machine swaps. Time the phases before choosing a build: an incremental
 build would not have shortened the first finish after a full load. A phase that moves a table between two schemas of one database through the client is the same defect: the binding
 rebuild read 4.4 million rows into Python and wrote them back (18 of the finish's 30 minutes) until it became one statement. Count a landing's round trips
 a batch before changing its size: the writer made three a batch (70 ms each) and now makes one.

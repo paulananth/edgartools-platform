@@ -32,13 +32,15 @@ def land(sink: Sink, table: str, records: Iterable[dict], results: Path | None =
     does not name is refused). A master is found by a join on a view, so no id is looked up or written."""
     spec = sink.spec(table)
     names = {c["name"] for c in spec["columns"]}
-    rows = []
-    for number, record in enumerate(records, 1):
-        unknown = set(record) - names
-        if unknown:
-            raise Blocked(f"Record {number} holds fields silver.{table} does not name: {sorted(unknown)}")
-        rows.append(record)
-    rows, quality = checks.run(spec, rows)
+
+    def known() -> Iterable[dict]:
+        for number, record in enumerate(records, 1):
+            if unknown := set(record) - names:
+                raise Blocked(f"Record {number} holds fields silver.{table} does not name: {sorted(unknown)}")
+            yield record
+
+    # A check reads the whole delivery; a table with none is written as its records arrive.
+    rows, quality = checks.run(spec, list(known())) if spec.get("checks") else (known(), {})
     results = (results or os.environ.get(quality_results.ENVIRONMENT)) if record_quality_results else None
     if quality and results:
         quality_results.record(Path(results), table, quality)

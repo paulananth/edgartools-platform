@@ -94,7 +94,10 @@ def test_a_stored_period_gives_back_the_properties_it_was_calculated_with():
         {"valid_from": "2026-01-01T00:00:00+00:00", "valid_from_basis": "observed", "properties": declared},
         {"valid_from": "2026-06-01T00:00:00+00:00", "valid_from_basis": "observed",
          "properties": declared | {"source_event_status": "done"}}])])
-    stored = links.stored_of({**row, "valid_to": None, "valid_to_basis": None} for row in tables["relationship"])
+    rows, declares = [{**row, "valid_to": None, "valid_to_basis": None} for row in tables["relationship"]], {}
+    for row in rows:
+        links._declare(declares, row)
+    stored = links.stored_of(rows, declares)
     first, second = stored["r1"]["periods"]
     assert first["properties"] == declared | {"source_event_status": None} | {}
     assert second["properties"] == declared | {"source_event_status": "done"}

@@ -524,10 +524,11 @@ class Store:
         bodies = self.assembled([row[1:] for row in rows])
         return [(row[0], row[1], json.dumps(bodies[row[1]])) for row in rows]
 
-    def linked_records(self) -> str:
-        """Every record that states a link, as one JSON array of the stored text: Rust reads it, Python never parses it."""
-        return "[" + ",".join(body for (body,) in self.rows(
-            "select body from mastering_record where body like %s", ['%"relationships":[{%'])) + "]"
+    def linked_records(self):
+        """The subject and the stored text of every record that states a link, as they arrive: Rust reads the text, Python
+        never parses it."""
+        sql, values = "select subject,body from mastering_record where body like %s", ['%"relationships":[{%']
+        return self.stream(sql, values) if self.scans else iter(self.rows(sql, values))
 
     def master_states(self, entities) -> dict:
         """What a link reads of each golden record: its kind and status columns and its profile rows, never its text."""

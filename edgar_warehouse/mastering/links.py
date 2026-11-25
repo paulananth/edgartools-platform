@@ -6,8 +6,13 @@ appears once that end is mastered and needs no stored queue.
 
 from __future__ import annotations
 
+import json
+import tempfile
 from collections import Counter
+from collections.abc import Iterable, Iterator
+from pathlib import Path
 from types import SimpleNamespace
+from zlib import crc32
 
 from sqlalchemy import text
 
@@ -16,26 +21,132 @@ from edgar_warehouse.mdm import relationships
 from edgar_warehouse.mdm.survivorship import current_claims
 from edgar_warehouse.silver_writer.writer import land
 
-def _ends(claims: dict) -> list[str]:
-    found = set(claims)
-    for subject, claim in claims.items():
-        for link in claim["relationships"]:
-            found.add(link.get("source_subject") or subject)
-            if link.get("target_subject"):
-                found.add(link["target_subject"])
-    return sorted(found)
+# The build's memory is one portion's and the ends' masters, never every record's: records are read, and links calculated, in
+# this many parts held on disk.
+PORTIONS = 64
+TOGETHER = 0  # the portion of the types that read each other's links
 
-def calculate(store, policy: dict, as_of: str, stored: dict) -> tuple[list[dict], Counter]:
-    """Every link, and how many reported links have no result yet, by reason. `stored` holds the links
-    of the last run by id, so a link keeps a start its current record no longer shows."""
-    claims = current_claims(store.linked_records(), as_of, set())
-    bound = store.bound(_ends(claims))
+
+class Spool:
+    """Named lists of JSON values on disk, written a value at a time and read back in the order written."""
+
+    def __init__(self, folder: Path):
+        self.folder = folder
+        self.files: dict = {}
+        self.counts: Counter = Counter()
+
+    def add(self, name: str, line: str) -> None:
+        if name not in self.files:
+            self.files[name] = (self.folder / name).open("w", encoding="utf-8")
+        self.files[name].write(line + "\n")
+        self.counts[name] += 1
+
+    def lines(self, name: str) -> Iterator[str]:
+        if name in self.files:
+            self.files[name].flush()
+            with (self.folder / name).open(encoding="utf-8") as source:
+                for line in source:
+                    yield line.rstrip("\n")
+
+    def values(self, name: str) -> Iterator:
+        return map(json.loads, self.lines(name))
+
+    def drop(self, name: str) -> None:
+        if name in self.files:
+            self.files.pop(name).close()
+            (self.folder / name).unlink()
+
+    def close(self) -> None:
+        for handle in self.files.values():
+            handle.close()
+
+
+def _part(text: str) -> int:
+    return crc32(text.encode()) % PORTIONS
+
+
+def _together(types: dict) -> set[str]:
+    """The types one calculation must hold whole: a hierarchy is walked over all its links, a succession ends links of other
+    types, and an ultimate parent is another type's derived link. Every other rule reads the links of one type and source."""
+    whole = {name for name, rules in types.items()
+             if any(rules.get(rule) for rule in ("hierarchy", "ends_parent_links", "one_parent", "ultimate_parent"))}
+    return whole | {types[name]["ultimate_type"] for name in whole if types[name].get("ultimate_type")}
+
+
+def portion_of(kind: str | None, source: str, together: set[str]) -> int:
+    """The part a link is calculated in: the same for every record that states it and for its stored row. `source` is the
+    source's master, or its subject while it has none (the link then only waits)."""
+    return TOGETHER if kind in together else 1 + _part(f"{kind} {source}")
+
+
+def portions(store, policy: dict, as_of: str, last: Iterable[dict], spool: Spool) -> Iterator[tuple[list[dict], Counter]]:
+    """Every link in parts, each part's links and how many of its reported links have no result yet, by reason. `last` is the
+    rows of the last build, so a link keeps a start its current record no longer shows."""
+    for subject, body in store.linked_records():  # a subject's records together: its revisions fold into one
+        spool.add(f"records-{_part(subject)}", body.replace("\r", " ").replace("\n", " "))  # outside a text JSON holds either only as space
+    ends: set[str] = set()
+    for part in range(PORTIONS):
+        claims = current_claims("[" + ",".join(spool.lines(f"records-{part}")) + "]", as_of, set())
+        spool.drop(f"records-{part}")
+        for subject, claim in claims.items():
+            meta = claim["source_meta"]
+            links = claim["relationships"]
+            for link in links:
+                ends.add(link.get("source_subject") or subject)
+                if link.get("target_subject"):
+                    ends.add(link["target_subject"])
+            spool.add("claims", json.dumps([subject, {  # what a link reads of its record
+                "relationships": links, "assertion_id": claim["assertion_id"],
+                "source_meta": {"effective_at": meta["effective_at"]} if "effective_at" in meta else {}}]))
+    bound = store.bound(sorted(ends))
+    del ends
     masters = store.master_states(sorted(set(bound.values())))
     store.commit()
-    state = SimpleNamespace(bindings=bound, canonical={entity: entity for entity in bound.values()})
-    edges, reviews = relationships.project(claims, state, masters, as_of,
-                                           types=relationships.types_of(policy), stored=stored)
-    return edges, Counter(review["reason"] for review in reviews)
+    types = relationships.types_of(policy)
+    together = _together(types)
+    for subject, claim in spool.values("claims"):
+        split: dict[int, list] = {}
+        for link in claim["relationships"]:
+            source = link.get("source_subject") or subject
+            split.setdefault(portion_of(link.get("type"), bound.get(source, source), together), []).append(link)
+        for part, links in split.items():
+            spool.add(f"links-{part}", json.dumps([subject, {**claim, "relationships": links}]))
+    spool.drop("claims")
+    declared: dict = {}
+    for row in last:
+        _declare(declared, row)
+        spool.add(f"last-{portion_of(row['relationship_type'], row['source_master_id'], together)}", json.dumps(row))
+    for part in range(PORTIONS + 1):
+        claims = dict(spool.values(f"links-{part}"))
+        if claims:
+            found = {end: bound[end] for subject, claim in claims.items() for link in claim["relationships"]
+                     for end in (link.get("source_subject") or subject, link.get("target_subject")) if end in bound}
+            entities = set(found.values())
+            state = SimpleNamespace(bindings=found, canonical={entity: entity for entity in entities})
+            edges, reviews = relationships.project(
+                claims, state, {entity: masters[entity] for entity in entities if entity in masters}, as_of, types=types,
+                stored=stored_of(spool.values(f"last-{part}"), declared))
+            yield edges, Counter(review["reason"] for review in reviews)
+        spool.drop(f"links-{part}")
+        spool.drop(f"last-{part}")
+
+
+def calculate(store, policy: dict, as_of: str, last: Iterable[dict]) -> tuple[list[dict], Counter]:
+    """Every link, by its id, and how many reported links have no result yet, by reason."""
+    edges, waiting = [], Counter()
+    with tempfile.TemporaryDirectory(prefix="links-") as folder:
+        spool = Spool(Path(folder))
+        try:
+            for found, reasons in portions(store, policy, as_of, last, spool):
+                edges += found
+                waiting += reasons
+        finally:
+            spool.close()
+    return sorted(edges, key=lambda edge: edge["relationship_id"]), waiting
+
+
+TABLES = ("relationship", "relationship_evidence", "relationship_path")
+
 
 def build(silver, mdm, policy_digest: str, as_of: str) -> dict:
     """The links table, built whole from the stored records as they are now, once a load's merges are done. A link
@@ -52,18 +163,31 @@ def build(silver, mdm, policy_digest: str, as_of: str) -> dict:
         rules.dispose()
     if policy is None:
         raise ValueError("The merge policy of the rules files is not registered: load or register a source first")
-    with silver.connect() as conn:
-        last = [dict(row._mapping) for row in conn.execute(text('select * from silver."relationship"'))]
-    db = open_store(mdm)
-    try:
-        edges, waiting = calculate(db, policy, as_of, stored_of(last))
-    finally:
-        db.close()
-    tables = rows_of(edges)
-    sink = DatabaseSink(silver)
-    for table in ("relationship", "relationship_evidence", "relationship_path"):
-        if tables[table] or last:  # a store with no link yet stays empty (as `bind`); one that holds links is never emptied
-            land(sink, table, tables[table])
+    made, waiting = 0, Counter()
+    with tempfile.TemporaryDirectory(prefix="links-") as folder:
+        spool = Spool(Path(folder))
+        try:
+            with silver.connect() as conn:
+                held = conn.execute(text('select * from silver."relationship"').execution_options(
+                    stream_results=True, yield_per=10_000))
+                for row in held.mappings():
+                    spool.add("last", json.dumps({name: value for name, value in row.items() if name in KEPT}))
+            db = open_store(mdm)
+            try:
+                for edges, reasons in portions(db, policy, as_of, spool.values("last"), spool):
+                    made += len(edges)
+                    waiting += reasons
+                    for table, found in rows_of(edges).items():
+                        for row in found:
+                            spool.add(table, json.dumps(row))
+            finally:
+                db.close()
+            sink = DatabaseSink(silver)
+            for table in TABLES:
+                if spool.counts[table] or spool.counts["last"]:  # a store with no link yet stays empty (as `bind`); one that holds links is never emptied
+                    land(sink, table, spool.values(table))
+        finally:
+            spool.close()
     if silver.dialect.name == "postgresql":
         bound = bind(silver)  # MDM and silver are schemas of one database: the join runs there, no row reaches the client
     else:
@@ -75,12 +199,13 @@ def build(silver, mdm, policy_digest: str, as_of: str) -> dict:
             db.close()
         land(sink, "master_binding", bindings)
         bound = {"bindings": len(bindings)}
-    return {"table": "relationship", "links": len(edges), "rows": len(tables["relationship"]),
+    return {"table": "relationship", "links": made, "rows": spool.counts["relationship"],
             "bindings": bound["bindings"], "waiting": dict(sorted(waiting.items()))}
 
 WANTED = ("select distinct on (r.source_code, r.source_key) r.source_code, r.source_key, m.kind, r.entity_id as master_id "
           "from mdm.mastering_record r join mdm.mastering_master m on m.entity_id = r.entity_id "
           "order by r.source_code, r.source_key, r.entity_id")
+
 
 def bind(silver) -> dict:
     """`silver.master_binding` (the golden record of each source record, by the source's own key) built by two statements inside
@@ -189,14 +314,19 @@ def around(silver, ids: list[str], relationship_type: str = "") -> list[dict]:
                 period["path"] = [*(period["path"] or []), row["step_relationship_id"]]
     return [links[key] for key in sorted(links)]
 
-def stored_of(rows) -> dict:
-    """The links of the last run, in the form `calculate` takes. A source rule declares the same properties for
-    every period of its scope, an empty one as null: those are the names some period of the scope fills."""
-    rows = list(rows)
-    declared: dict = {}
-    for row in rows:
-        declared.setdefault((row["relationship_type"], row["scope"]), set()).update(
-            name for name in PROPERTIES if row[name] is not None)
+# What the next build reads of a stored row.
+KEPT = {"relationship_id", "relationship_type", "scope", "source_master_id", "valid_from", "valid_from_basis", "valid_to",
+        "valid_to_basis", *PROPERTIES}
+
+
+def _declare(declared: dict, row: dict) -> None:
+    declared.setdefault((row["relationship_type"], row["scope"]), set()).update(
+        name for name in PROPERTIES if row[name] is not None)
+
+
+def stored_of(rows: Iterable[dict], declared: dict) -> dict:
+    """The links of the last build, in the form the calculation takes. A source rule declares the same properties for
+    every period of its scope, an empty one as null: `declared` holds, by type and scope, the names some period fills."""
     found = {}
     for row in rows:
         names = declared[(row["relationship_type"], row["scope"])]
