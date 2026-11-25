@@ -28,8 +28,8 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    (`uv sync --extra mdm --extra s3`) or a bundle installed from it: an older `edgar-warehouse`
    creates older schemas.
 1a. **Quiesce and drain (before step 2).** Before resetting an existing instance, stop scheduled
-   loads and applications that can reconnect to its databases. Check
-   `load_jobs.py --status --run <RUN>` for each active pipeline label and Bookkeeping's open runs and leases; all must be clear.
+   loads and applications that can reconnect to its databases. Read the status command in
+   HOSTED-LOADS.md ("While a load runs") inside the worker container for each active pipeline label, and inspect Bookkeeping runs and leases; all must be clear.
    Inventory managed mirrors with the Snowflake Postgres mirror skill.
    Resolve any mirror that reads a database being reset through that skill's
    approved drop or restart procedure first; approval to reset the hosted
