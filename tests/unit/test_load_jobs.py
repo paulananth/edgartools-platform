@@ -620,12 +620,16 @@ def test_the_minutes_left_follow_the_rate_so_far_and_are_unknown_before_one_bund
     assert chain.minutes_left(done=120, total=149, elapsed=7.0, ran=0) is None  # nothing run yet this attempt: no rate
 
 
+LOCK_WAITING = {"active": 1, "idle_in_transaction": 0, "lock_waiting": 1, "changed_min": 0.1, "statement": "update silver.t", "wait": "Lock:transactionid"}
+
+
 def test_a_step_is_progressing_waiting_on_locks_or_possibly_stalled_by_its_own_evidence():
     busy = {"elapsed": 30.0, "bound": 480, "log_age": 40.0, "cpu": 85.0, "lock_waiters": 0}
     assert chain.verdict(**busy).startswith("progressing")
     assert chain.verdict(**{**busy, "cpu": 0.0}).startswith("no sign of work")  # silent log too
     assert chain.verdict(**{**busy, "cpu": 0.0, "log_age": 2.0}).startswith("progressing")  # log moved
-    assert chain.verdict(**{**busy, "lock_waiters": 3}).startswith("waiting on database locks")
+    assert chain.verdict(**{**busy, "lock_waiters": 3}).startswith("progressing")  # the store's waiters are a neighbour's, not this step's
+    assert chain.verdict(**{**busy, "lock_waiters": 3}, evidence=LOCK_WAITING).startswith("waiting on database locks")
     assert "past its bound of 480 min" in chain.verdict(**{**busy, "elapsed": 500.0})
 
 
@@ -645,7 +649,9 @@ def test_a_step_is_judged_by_the_store_it_writes_and_one_waiting_session_is_not_
     assert chain.store_of("silver") == "silver" and chain.store_of("mastering") == "mdm" and chain.store_of("custodians") == "mdm"
     busy = {"elapsed": 30.0, "bound": 480, "log_age": 40.0, "cpu": 0.0}
     assert chain.verdict(**busy, lock_waiters=1).startswith("no sign of work")  # one waiter is normal
-    assert chain.verdict(**busy, lock_waiters=3).startswith("waiting on database locks")
+    assert chain.verdict(**busy, lock_waiters=3).startswith("no sign of work")  # three waiters elsewhere do not lock this step
+    assert chain.verdict(**busy, lock_waiters=3, evidence=LOCK_WAITING).startswith("waiting on database locks")
+    assert chain.verdict(**busy, lock_waiters=1, evidence=LOCK_WAITING).startswith("waiting on database locks") is False
 
 
 def test_a_step_that_cannot_finish_in_the_attempts_it_has_left_says_so():
@@ -1359,8 +1365,9 @@ def test_a_verdict_has_one_kind_the_words_follow():
     busy = dict(log_age=2.0, cpu=40.0, lock_waiters=0)
     assert chain.verdict_kind(**busy) == "progressing"
     assert chain.verdict_kind(**{**busy, "log_age": 30.0, "cpu": 0.0}) == "stalled"
-    assert chain.verdict_kind(**{**busy, "lock_waiters": 3}) == "locked"
-    assert chain.verdict_kind(**{**busy, "lock_waiters": 2}) == "progressing"  # one or two waiters are normal
+    assert chain.verdict_kind(**{**busy, "lock_waiters": 3}) == "progressing"  # waiters elsewhere on the store are no evidence of its own
+    assert chain.verdict_kind(**{**busy, "lock_waiters": 3}, evidence=LOCK_WAITING) == "locked"
+    assert chain.verdict_kind(**{**busy, "lock_waiters": 2}, evidence=LOCK_WAITING) == "progressing"  # one or two waiters are normal
 
 
 def test_a_snapshot_names_the_state_of_every_step_and_what_a_waiting_step_waits_for(tmp_path, monkeypatch):
@@ -1451,13 +1458,15 @@ def test_the_sessions_of_each_step_are_read_from_their_tag_and_a_statement_is_na
 
 def test_a_step_with_a_working_session_is_progressing_at_no_cpu_and_never_unclear():
     quiet = dict(log_age=120.0, cpu=0.0, lock_waiters=0)
-    working = {"active": 1, "idle_in_transaction": 0, "changed_min": 0.03, "statement": "insert silver.t", "wait": "IO:DataFileRead"}
+    working = {"active": 1, "idle_in_transaction": 0, "lock_waiting": 0, "changed_min": 0.03, "statement": "insert silver.t", "wait": "IO:DataFileRead"}
     waiting = {"active": 0, "idle_in_transaction": 1, "changed_min": 25.0, "statement": "update silver.t", "wait": "Client:ClientRead"}
     assert chain.verdict_kind(**quiet, evidence=working) == "progressing"  # the work is the database's
     assert chain.verdict_kind(**quiet, evidence=waiting) == "stalled"  # idle in a transaction for 25 minutes
     assert chain.verdict_kind(**quiet, evidence=None) == "stalled"
     assert chain.verdict_kind(**{**quiet, "cpu": 40.0}, evidence=waiting) == "progressing"
-    assert chain.verdict_kind(**{**quiet, "lock_waiters": 3}, evidence=working) == "locked"
+    assert chain.verdict_kind(**{**quiet, "lock_waiters": 3}, evidence=working) == "progressing"  # its sessions work: the waiters are others'
+    assert chain.verdict_kind(**{**quiet, "lock_waiters": 3}, evidence=None) == "stalled"  # no session of its own waits on a lock
+    assert chain.verdict_kind(**{**quiet, "lock_waiters": 3}, evidence=LOCK_WAITING) == "locked"
 
 
 @pytest.mark.parametrize("evidence, key_words", [
@@ -1905,3 +1914,13 @@ def test_a_lane_of_a_load_that_named_its_steps_runs_only_those_and_a_load_that_n
     every = tmp_path / "every.log"
     chain.begin_load(every)
     assert chain.run_steps(steps, {}, every, lane="A") is True and ran == ["a1", "a2", "a3"]
+
+
+def test_a_step_with_one_session_waiting_on_a_lock_among_sessions_waiting_on_the_client_is_locked():
+    rows = [("chain-s", "active", "Lock", "transactionid", 5, "update silver.t set a = 1"),
+            ("chain-s", "idle in transaction", "Client", "ClientRead", 5, "select 1 from silver.t"),
+            ("chain-s", "idle in transaction", "Client", "ClientRead", 5, "select 1 from silver.t")]
+    mine = chain.summarize_sessions(rows)["s"]
+    assert mine["wait"] == "Client:ClientRead" and mine["lock_waiting"] == 1  # the commonest wait is not the one that locks
+    assert chain.verdict_kind(log_age=120.0, cpu=0.0, lock_waiters=3, evidence=mine) == "locked"
+    assert chain.verdict_kind(log_age=120.0, cpu=0.0, lock_waiters=2, evidence=mine) == "progressing"  # one or two waiters are normal
