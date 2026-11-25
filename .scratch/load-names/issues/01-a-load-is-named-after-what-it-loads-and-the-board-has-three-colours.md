@@ -13,6 +13,7 @@ Operator, 2026-11-25 (recorded 2026-11-25 07:27 ET): "1) we cannot have date in 
 - [x] Nothing loads again because of it: the 47 capture runs are the same before and after (compared; `capture_name` in the inputs file holds what a delivery is called in its run; `test_the_capture_runs_stay_as_the_store_was_loaded`). Adding a file renames no earlier run (2026-11-25 07:27 ET)
 - [x] A step's deliveries run in one log and stop at the first that does not finish; an attempt after it finds the loaded ones done; a forced load gives each its own revision; a step with one `revision` and several deliveries is refused (2026-11-25 07:27 ET)
 - [x] The load board: grey not running, green running or done, red failed, stalled or locked; codes unchanged, so history keeps its meaning (2026-11-25 07:27 ET)
+- [x] Operator, 2026-11-25 07:35 ET: "just make sure the rules are not tied to filename". No rule names one file or date: the file and member patterns are the provider's fixed names. The load jobs still held five facts and two revisions of single files; they are beside their file in `inputs.yaml` (`test_the_load_jobs_hold_nothing_of_one_file`), and a target takes those it declares. The 47 load commands are the same before and after (compared, facts included) (2026-11-25 07:35 ET)
 - [x] Tests: 285 passed in load jobs, monitoring, pipeline, readiness and the skill checks (2026-11-25 07:27 ET)
 - [x] Learning → skill: data-operations SKILL.md, "Where retained files are"; load-monitoring SKILL.md, "The design" (2026-11-25 07:27 ET)
 

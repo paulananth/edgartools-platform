@@ -5,6 +5,10 @@ inputs:
   nport-answers:
     folder: openfigi/2026q2-nport
     capture_name: ""
+    facts: {ticker_file_date: "2026-09-02"}
+    revision: 0
   form4-tickers:
     folder: openfigi/form4-tickers-20261109
     capture_name: ""
+    facts: {ticker_file_date: "2026-09-02"}
+    revision: 1

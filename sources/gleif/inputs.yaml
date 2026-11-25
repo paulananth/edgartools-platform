@@ -8,3 +8,4 @@ inputs:
   publisher:
     folder: gleif/20260911-1600-publisher
     capture_name: ""
+    facts: {publication_count: "3428477"}

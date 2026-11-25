@@ -41,9 +41,9 @@ def test_every_target_that_loads_a_capture_is_in_the_chain():
 def test_a_later_delivery_of_one_source_carries_the_next_revision():
     seen = {}
     for step in STEPS:
-        if "revision" in step:
-            (one,) = chain.loads(step)
-            seen.setdefault((step["source"], one["capture"].split("/")[0]), []).append((one["capture"], step["revision"]))
+        for one in chain.loads(step):
+            if "revision" in one:
+                seen.setdefault((step["source"], one["capture"].split("/")[0]), []).append((one["capture"], one["revision"]))
     for key, runs in seen.items():
         order = list(dict.fromkeys(runs))
         assert [r for _, r in order] == list(range(len(order))), key
@@ -1686,11 +1686,27 @@ def test_a_step_runs_its_deliveries_in_one_log_and_stops_at_the_first_that_does_
     assert chain.bundle_progress(text) == (1, 3)  # of the delivery it is at, never every delivery's against the last one's total
 
 
-def test_one_revision_cannot_serve_several_deliveries(tmp_path):
+def test_a_revision_is_its_deliverys_never_the_steps(tmp_path):
     path, sources = _chain_with_sources(tmp_path, [{"name": "a", "source": "s", "target": "t", "minutes": 1, "revision": 1}],
                                         {"s": {"inputs": {"d1": {"folder": "s/d1"}, "d2": {"folder": "s/d2"}}}})
-    with pytest.raises(ValueError, match="one revision"):
+    with pytest.raises(ValueError, match="belongs to one file"):
         chain.load_jobs(path, sources)
+
+
+def test_a_deliverys_facts_and_revision_are_its_own_beside_the_steps(tmp_path):
+    path, sources = _chain_with_sources(tmp_path, [{"name": "a", "source": "s", "target": "t", "minutes": 1, "facts": {"mode": "default"}}],
+                                        {"s": {"inputs": {"d1": {"folder": "s/d1", "facts": {"day": "x", "of another target": "y"}, "revision": 4}, "d2": {"folder": "s/d2"}}}})
+    (sources / "s" / "source.yaml").write_text(yaml.safe_dump({"bookkeeping": {"targets": {"t": {"run": {"facts": ["day", "mode"]}}}}}))
+    (step,) = chain.load_jobs(path, sources)
+    assert [(one["facts"], one.get("revision")) for one in chain.loads(step)] == [({"mode": "default", "day": "x"}, 4), ({"mode": "default"}, None)]
+
+
+def test_the_load_jobs_hold_nothing_of_one_file():
+    """A file's date, count or revision is beside its folder in `inputs.yaml`; the load jobs hold only how a target is loaded."""
+    body = yaml.safe_load((ROOT / "rules/load-jobs.yaml").read_text())
+    assert [(s["name"], s.get("facts")) for s in body["steps"] if s.get("facts")] == [
+        ("company", {"capture_run": "fresh-v1-company", "catalog_run": "fresh-v1-catalog", "load_mode": "default"})]
+    assert not [s["name"] for s in body["steps"] if "revision" in s]
 
 
 def test_no_step_or_input_of_the_load_jobs_names_a_date():

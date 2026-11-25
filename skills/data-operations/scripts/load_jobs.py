@@ -81,7 +81,8 @@ def resolve_input(step: dict, sources: Path) -> dict:
     """The step with its `deliveries`, read from its source's `inputs.yaml`, which holds the folders by name: the one the step
     names with `input`, else every one, in that file's order. A step is named after what it loads, never after a file. Each
     has its own capture run: the step's, then the delivery's name (or its `capture_name`; empty for a delivery loaded under
-    the step's alone), so a delivery added to the file renames no earlier one's."""
+    the step's alone), so a delivery added to the file renames no earlier one's. The
+    `facts` and `revision` that belong to one file are its delivery's."""
     if "source" not in step:
         return step
     path = sources / step["source"] / "inputs.yaml"
@@ -93,8 +94,8 @@ def resolve_input(step: dict, sources: Path) -> dict:
     if "input" in step and step["input"] not in held:
         raise ValueError(f"{step['name']}: {step['source']} has no input {step['input']!r} (it holds {sorted(held)})")
     names = [step["input"]] if "input" in step else list(held)
-    if len(names) > 1 and "revision" in step:
-        raise ValueError(f"{step['name']}: one revision cannot serve several deliveries of {step['source']}: name its `input`")
+    if "revision" in step:
+        raise ValueError(f"{step['name']}: a revision belongs to one file: state it on the delivery in {step['source']}/inputs.yaml")
     deliveries = []
     for name in names:
         folder, root = held[name].get("folder"), held[name].get("root", "captures")
@@ -105,9 +106,20 @@ def resolve_input(step: dict, sources: Path) -> dict:
         called = held[name].get("capture_name", name)
         run = step["capture_run"] + (f"-{called}" if called else "")
         deliveries.append({"delivery": name, "capture": folder, "capture_run": run, "minutes": step["minutes"],
+                           "facts": {**(step.get("facts") or {}), **taken(held[name].get("facts") or {}, step, sources)},
+                           **({"revision": held[name]["revision"]} if "revision" in held[name] else {}),
                            **({"capture_root": root} if root != "captures" else {})})
     # The step may take its minutes once a delivery: its bound is all of them, each load's is the file's.
     return {**step, "deliveries": deliveries, "minutes": step["minutes"] * len(deliveries)}
+
+
+def taken(facts: dict, step: dict, sources: Path) -> dict:
+    """The facts of a file that the step's target declares (`run: {facts: [...]}`): two targets of one file take different ones."""
+    if not facts:
+        return {}
+    targets = (yaml.safe_load((sources / step["source"] / "source.yaml").read_text()).get("bookkeeping") or {}).get("targets") or {}
+    declared = ((targets.get(step["target"]) or {}).get("run") or {}).get("facts") or []
+    return {name: value for name, value in facts.items() if name in declared}
 
 
 def loads(step: dict) -> list[dict]:

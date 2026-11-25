@@ -1,8 +1,8 @@
 # The order a fresh store is loaded in: every captured source and target, each one's input and the facts and
 # revision no capture states, read by `skills/data-operations/scripts/load_jobs.py` (Edgar Intelligence initialize
 # runbook, "Load a fresh store"). A step is named after what it loads, never after a file or a date: it loads every
-# delivery of its `sources/<source>/inputs.yaml`, in that file's order (oldest first), so a new delivery is a line there
-# and no new step. `input` names one only where a source's inputs are different kinds of file.
+# delivery of its `sources/<source>/inputs.yaml`, in that file's order (oldest first), so a new delivery is an entry there
+# and no new step; the facts and revision that belong to one file are there too. `input` names one only where a source's inputs are different kinds of file.
 # `capture_label` names each step's capture run (`<label>-<step>`, then the delivery's name, or its
 # `capture_name` in the inputs file), and a fact is written as its value: both are inputs of a
 # record, so they stay as the store was loaded (a new value processes every file again, and the Stage refuses the changed
@@ -43,7 +43,6 @@ steps:
     facts:
       capture_run: fresh-v1-company
       catalog_run: fresh-v1-catalog
-      observed_at: "2026-09-30T02:20:28+00:00"
       load_mode: "default"
     workers: 2
     bundles: 4
@@ -76,9 +75,6 @@ steps:
     source: openfigi
     target: mastering
     input: nport-answers
-    facts:
-      ticker_file_date: "2026-09-02"
-    revision: 0
     workers: 4
     bundles: 3
     minutes: 420
@@ -88,9 +84,6 @@ steps:
     source: openfigi
     target: mastering
     input: form4-tickers
-    facts:
-      ticker_file_date: "2026-09-02"
-    revision: 1
     minutes: 60
     attempts: 3
   - name: 13f-securities
@@ -192,8 +185,6 @@ steps:
     source: gleif
     target: mastering
     input: publisher
-    facts:
-      publication_count: "3428477"
     minutes: 240
     # `worker_gb` is the memory one worker of this merge was measured to hold (`load_jobs.py --status` shows a load's
     # memory and CPU). The compute holds the workers to the range it carries; raise `workers` on a task with the memory
@@ -255,8 +246,6 @@ steps:
     priority: 1
     source: sec.ipo
     target: silver
-    facts:
-      observed_at: "2026-09-30T02:20:28+00:00"
     # Its bundles are independent silver landings that wait on the database, not on the machine: several at once (the load's
     # measured time one at a time is in the load ticket).
     bundles: 4
