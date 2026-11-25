@@ -52,9 +52,9 @@ failed load; read the new execution and the run's state file.
 
 ## The design
 
-A step has one of six states (the codes are never renumbered: Prometheus keeps what it stored, and a changed number repaints history; code 2, once `unclear`, stays unused), each with one of three colours that mean the same wherever a
+A step has one of six states (the codes are never renumbered: Prometheus keeps what it stored, and a changed number repaints history; code 2, once `unclear`, stays unused), each with one of four colours that mean the same wherever a
 step's state is shown (`scripts/design.py` is the only place that names them):
-grey is not running (waiting), green is running or finished (progressing, done), red needs a
+grey is not running (waiting), orange is running (progressing), green is finished (done), red needs a
 look (failed, stalled, locked); the state's name, on hover and in the tiles, tells two of one colour apart. A change of colour is the event: nothing is
 decorated, and a number is never rounded to look calm.
 

@@ -5,7 +5,7 @@ turn a reading into a colour. The exporter writes the numbers, the dashboard map
 # a changed number would repaint the history (code 2 was `unclear`, removed; it stays unused).
 STATES = (
     ("waiting", 0, "#8b949e", "not started: it waits for a step of another lane, or for a free slot"),
-    ("progressing", 1, "#2da44e", "running, and its own evidence shows work: a database session of its own, CPU, or a log that moved"),
+    ("progressing", 1, "#e16f24", "running, and its own evidence shows work: a database session of its own, CPU, or a log that moved"),
     ("stalled", 3, "#cf222e", "running with no CPU, no session of its own working and a silent log: the Why column says why"),
     ("locked", 4, "#cf222e", "running, one of its own sessions waits on a database lock and three or more sessions wait on the store"),
     ("done", 5, "#2da44e", "finished"),

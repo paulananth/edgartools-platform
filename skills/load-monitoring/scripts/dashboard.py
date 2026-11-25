@@ -32,7 +32,7 @@ def header() -> list[dict]:
         stat("Done", "Steps finished. The number ticks up when a step ends; its block stays green on the lanes below.",
              'load_steps{state="done"}', 0, steps((None, d.NEUTRAL), (1, d.GREEN))),
         stat("Running", "Steps with a process now: progressing, stalled or locked.",
-             'sum(load_steps{state=~"progressing|stalled|locked"})', 3, steps((None, d.NEUTRAL), (1, d.GREEN))),
+             'sum(load_steps{state=~"progressing|stalled|locked"})', 3, steps((None, d.NEUTRAL), (1, d.ORANGE))),
         stat("Failed", "Steps the scheduler gave up on. Any is red: a retry cannot change a repeated failure.",
              'load_steps{state="failed"}', 6, zero_green(d.RED), graph="none"),
         stat("Stalled or locked", "Running steps with no sign of work, or waiting on database locks. Red from one.",
@@ -54,8 +54,8 @@ def header() -> list[dict]:
 def lanes() -> dict:
     mappings = {str(code): {"text": name, "color": colour, "index": code} for name, code, colour, _ in design.STATES}
     return {"type": "state-timeline", "title": "Lanes", "datasource": SOURCE,
-            "description": "One row a step, grouped by lane. A step is grey while it is not running, green while it "
-                           "works and when it is done, red when it failed, stalled or locked. A change of colour is the event; hover a bar for the step and its state. "
+            "description": "One row a step, grouped by lane. A step is grey while it is not running, orange while it "
+                           "works, green when it is done, red when it failed, stalled or locked. A change of colour is the event; hover a bar for the step and its state. "
                            + " ".join(f"{name}: {meaning}." for name, _, _, meaning in design.STATES),
             "gridPos": {"h": 16, "w": 24, "x": 0, "y": 4},
             "targets": [target("load_step_state", legend="{{lane}} · {{step}}")],
