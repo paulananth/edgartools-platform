@@ -207,6 +207,13 @@ a batch before changing its size: the writer made three a batch (70 ms each) and
   after any failure and reconcile the completed receipts before continuing. Run the affected store's normal
   `init`/table-deployment command after a drop; truncation retains the schema. Keep the captured extracts for reload.
 
+### Preserve Rules configuration
+
+Keep the Rules store out of hosted data reset manifests. It holds configuration
+needed for reload, including dataset readings and policies. A request to clear
+all hosted data tables does not include the Rules store. Change Rules only
+through its configuration deployment or a separately requested Rules migration.
+
 ### Resetting the control stores
 
 A reset that includes Bookkeeping and Change Journal needs a backup of both
