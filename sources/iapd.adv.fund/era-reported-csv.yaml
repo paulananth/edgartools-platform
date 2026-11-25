@@ -1,0 +1,34 @@
+pass:
+  name: read_era_reported
+  files: '*.zip'
+  units: {each: file}
+  context: {published: {fact: published}}
+# The reading of the exempt reporting advisers' Schedule D 7.B(1) (ERA_Schedule_D_7B1), whose columns are
+# IA_Schedule_D_7B1's: 49,740 rows of 2026-03, 25,421 of 2026-06, none of the wrong width, every filing in
+# ERA_ADV_Base. A registered filing's rows (161 and 605) are in both tables and make one link.
+execution: {profile: source.read, workers: 1, max_artifacts: 512}
+read:
+  format: csv
+  container: zip
+  member: "ERA_Schedule_D_7B1_*.csv"
+  encoding: [utf-8, windows-1252]
+  limits: {max_bytes: 33554432, max_member_bytes: 33554432, max_records: 100000}
+  context:
+    published: {type: text, max_bytes: 64}
+  tables:
+    funds:
+      each: record
+      columns:
+        filing_id: {text: {path: FilingID, path_mode: literal}}
+        fund_id: {text: {path: "Fund ID", path_mode: literal, transforms: [{trim: true}], null_if: [""]}}
+        name: {text: {path: "Fund Name", path_mode: literal, null_if: [""]}}
+        master_fund_id: {text: {path: "Master Fund ID", path_mode: literal, transforms: [{trim: true}], null_if: [""]}}
+        as_advisor:
+          equal:
+            left: {text: {path: Subadviser, path_mode: literal}}
+            right: {const: {value: "N"}}
+        as_subadvisor:
+          equal:
+            left: {text: {path: Subadviser, path_mode: literal}}
+            right: {const: {value: "Y"}}
+        published: {context: {name: published}}

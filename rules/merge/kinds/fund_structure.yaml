@@ -9,12 +9,13 @@
 # a field over N-CEN, filed once a year. Form ADV's private funds
 # (sources/iapd.adv.fund) join by their PFID alone (operator, 2026-11-24:
 # "Join by PFID only (Recommended)"); they rank last.
-version: fund_structure-2026-11-24.adv-private-funds
+version: fund_structure-2026-11-24.adv-links-per-filing
 defaults:
   sources:
   - sec.nport.fund.v1
   - sec.ncen.fund.v1
   - iapd.adv.fund.v1
+  - iapd.adv.fund_filing.v1
   allow_unknown_effective: true
 rules:
 # The SEC series id: a record joins the one Fund that holds it, or creates it.
@@ -98,6 +99,22 @@ rules:
   - primitive: identifier_cardinality@1
     args:
       namespace: pfid
+# A filing's record of one of its funds joins that fund the same way.
+- rule_id: iapd-adv-fund-filing-pfid
+  version: 2026-11-24.pfid
+  family: binding
+  source: iapd.adv.fund_filing.v1
+  applies_to_verdict: fund_structure
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: pfid
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: pfid
 identifiers:
   sec_series_id:
     authority: SEC/EDGAR
@@ -135,6 +152,7 @@ identifiers:
     authority: SEC IARD (Form ADV)
     sources:
     - iapd.adv.fund.v1
+    - iapd.adv.fund_filing.v1
     normalizer: normalize_identifier@pfid-v1
     claim:
       forward: 1

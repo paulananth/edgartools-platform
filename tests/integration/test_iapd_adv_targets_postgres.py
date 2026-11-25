@@ -42,6 +42,9 @@ def archive() -> bytes:
         z.writestr("IA_1D3_CIK_20260501_20260531.csv", csv_text(["FilingID", "CIK"], [["F1", "900001"], ["F1", "900001"]]))
         z.writestr("IA_Schedule_D_7A_CIK_20260501_20260531.csv",
                    csv_text(["FilingID", "ReferenceID", "CIK"], [["F1", "1", "900002"]]))
+        z.writestr("ERA_ADV_Base_20260501_20260531.csv", csv_text(BASE, []))
+        z.writestr("ERA_1D3_CIK_20260501_20260531.csv", csv_text(["FilingID", "CIK"], []))
+        z.writestr("ERA_Schedule_D_7A_CIK_20260501_20260531.csv", csv_text(["FilingID", "ReferenceID", "CIK"], []))
     return out.getvalue()
 
 

@@ -15,7 +15,7 @@ from tests.support.memory_journal import MemoryJournal
 
 SOURCE = "iapd.adv"
 FACTS = {"published": "2026-09-30T00:00:00Z"}
-STEPS = {"mastering": ["read_filings", "read_custody", "read_ciks", "read_related", "combine", "prepare", "merge", "processed"],
+STEPS = {"mastering": ["read_filings", "read_custody", "read_ciks", "read_related", "read_era_filings", "read_era_ciks", "read_era_related", "combine", "prepare", "merge", "processed"],
          "custodians": ["read_custody", "prepare", "merge", "processed"],
          "silver": ["read_custody", "land_custody", "processed"]}
 

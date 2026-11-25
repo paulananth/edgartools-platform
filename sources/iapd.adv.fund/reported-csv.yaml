@@ -8,11 +8,9 @@ pass:
 # full. Profile of 2026-03: 68,253 rows, 63,746 funds (PFID, "Fund ID"), 5,529
 # filings, every one in IA_ADV_Base_A; a PFID at most once a filing; 3,833 funds
 # on two or more filings of the month (amendments, or several advisers).
-# `capacity` is the adviser's role as 7.B(1) states it ("Subadviser": Y or N),
-# in N-CEN's words (operator, 2026-11-24: "Reuse advisor/subadvisor
-# (Recommended)"); a row stating neither makes no link. Every row is a held
-# sighting (`held`: FilingID equals itself): Form ADV restates its funds in
-# every filing and states no end.
+# `as_advisor` and `as_subadvisor` are the adviser's role as 7.B(1) states it
+# ("Subadviser": N or Y), in N-CEN's words (operator, 2026-11-24: "Reuse
+# advisor/subadvisor (Recommended)"); a row stating neither makes no link.
 execution: {profile: source.read, workers: 1, max_artifacts: 512}
 read:
   format: csv
@@ -36,9 +34,12 @@ read:
         # The master fund a feeder invests in, by its PFID (IS_FEEDER_TO; operator, 2026-11-24:
         # "Yes, IS_FEEDER_TO by PFID (Recommended)"). Filled on 3,182 rows of 2026-03.
         master_fund_id: {text: {path: "Master Fund ID", path_mode: literal, transforms: [{trim: true}], null_if: [""]}}
-        capacity: {text: {path: Subadviser, path_mode: literal, transforms: [{tokens: {N: advisor, Y: subadvisor}}], null_if: [""]}}
-        held:
+        as_advisor:
           equal:
-            left: {text: {path: FilingID, path_mode: literal}}
-            right: {text: {path: FilingID, path_mode: literal}}
+            left: {text: {path: Subadviser, path_mode: literal}}
+            right: {const: {value: "N"}}
+        as_subadvisor:
+          equal:
+            left: {text: {path: Subadviser, path_mode: literal}}
+            right: {const: {value: "Y"}}
         published: {context: {name: published}}

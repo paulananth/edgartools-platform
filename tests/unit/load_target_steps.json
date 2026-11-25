@@ -258,11 +258,6 @@
   ]
  },
  "iapd.adv/mastering": {
-  "checks": [
-   "manifest.hash",
-   "work.accounting",
-   "journal.delivered"
-  ],
   "run": {
    "facts": [
     "published"
@@ -270,100 +265,183 @@
   },
   "steps": [
    {
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "source.output"
-    ],
-    "input": {
-     "context": {
-      "published": {
-       "fact": "published"
-      }
-     },
-     "contract": "adviser-filings-csv.yaml",
-     "files": "*.zip"
-    },
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
     "name": "read_filings",
     "operation": "source.read",
     "requires": [],
-    "units": {
-     "each": "file"
-    }
-   },
-   {
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
     "checks": [
      "input.hash",
      "output.receipt",
      "source.output"
     ],
+    "units": {
+     "each": "file"
+    },
     "input": {
+     "contract": "adviser-filings-csv.yaml",
+     "files": "*.zip",
      "context": {
       "published": {
        "fact": "published"
       }
-     },
-     "contract": "custody-csv.yaml",
-     "files": "*.zip"
-    },
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
+     }
+    }
+   },
+   {
     "name": "read_custody",
     "operation": "source.read",
     "requires": [],
-    "units": {
-     "each": "file"
-    }
-   },
-   {
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
     "checks": [
      "input.hash",
      "output.receipt",
      "source.output"
     ],
-    "input": {
-     "contract": "ciks-csv.yaml",
-     "files": "*.zip"
+    "units": {
+     "each": "file"
     },
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
+    "input": {
+     "contract": "custody-csv.yaml",
+     "files": "*.zip",
+     "context": {
+      "published": {
+       "fact": "published"
+      }
+     }
+    }
+   },
+   {
     "name": "read_ciks",
     "operation": "source.read",
     "requires": [],
-    "units": {
-     "each": "file"
-    }
-   },
-   {
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
     "checks": [
      "input.hash",
      "output.receipt",
      "source.output"
     ],
-    "input": {
-     "contract": "related-csv.yaml",
-     "files": "*.zip"
+    "units": {
+     "each": "file"
     },
+    "input": {
+     "contract": "ciks-csv.yaml",
+     "files": "*.zip"
+    }
+   },
+   {
+    "name": "read_related",
+    "operation": "source.read",
+    "requires": [],
     "key": "{unit}",
     "leases": [
      "artifact:{destination}"
     ],
-    "name": "read_related",
-    "operation": "source.read",
-    "requires": [],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
     "units": {
      "each": "file"
+    },
+    "input": {
+     "contract": "related-csv.yaml",
+     "files": "*.zip"
     }
    },
    {
+    "name": "read_era_filings",
+    "operation": "source.read",
+    "requires": [],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "units": {
+     "each": "file"
+    },
+    "input": {
+     "contract": "era-filings-csv.yaml",
+     "files": "*.zip",
+     "context": {
+      "published": {
+       "fact": "published"
+      }
+     }
+    }
+   },
+   {
+    "name": "read_era_ciks",
+    "operation": "source.read",
+    "requires": [],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "units": {
+     "each": "file"
+    },
+    "input": {
+     "contract": "era-ciks-csv.yaml",
+     "files": "*.zip"
+    }
+   },
+   {
+    "name": "read_era_related",
+    "operation": "source.read",
+    "requires": [],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "units": {
+     "each": "file"
+    },
+    "input": {
+     "contract": "era-related-csv.yaml",
+     "files": "*.zip"
+    }
+   },
+   {
+    "name": "combine",
+    "operation": "source.combine",
+    "requires": [
+     "read_filings",
+     "read_custody",
+     "read_ciks",
+     "read_related",
+     "read_era_filings",
+     "read_era_ciks",
+     "read_era_related"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
     "checks": [
      "input.hash",
      "output.receipt",
@@ -372,34 +450,40 @@
     "input": {
      "contract": "combine.yaml",
      "readings": {
-      "ciks": {
-       "all": "read_ciks"
+      "filings": {
+       "all": "read_filings"
       },
       "custody": {
        "all": "read_custody"
       },
-      "filings": {
-       "all": "read_filings"
+      "ciks": {
+       "all": "read_ciks"
       },
       "related": {
        "all": "read_related"
+      },
+      "era_filings": {
+       "all": "read_era_filings"
+      },
+      "era_ciks": {
+       "all": "read_era_ciks"
+      },
+      "era_related": {
+       "all": "read_era_related"
       }
      }
-    },
+    }
+   },
+   {
+    "name": "prepare",
+    "operation": "mdm.prepare",
+    "requires": [
+     "combine"
+    ],
     "key": "{unit}",
     "leases": [
      "artifact:{destination}"
     ],
-    "name": "combine",
-    "operation": "source.combine",
-    "requires": [
-     "read_filings",
-     "read_custody",
-     "read_ciks",
-     "read_related"
-    ]
-   },
-   {
     "checks": [
      "input.hash",
      "output.receipt",
@@ -415,49 +499,45 @@
        "all": "combine"
       }
      }
-    },
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
-    "name": "prepare",
-    "operation": "mdm.prepare",
-    "requires": [
-     "combine"
-    ]
+    }
    },
    {
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "mdm.committed"
+    "name": "merge",
+    "operation": "mastering.merge",
+    "requires": [
+     "prepare"
     ],
     "key": "{batch_id}",
     "leases": [
      "mdm:consumer:{consumer}"
     ],
-    "name": "merge",
-    "operation": "mastering.merge",
-    "requires": [
-     "prepare"
-    ]
-   },
-   {
     "checks": [
      "input.hash",
      "output.receipt",
-     "journal.recorded"
+     "mdm.committed"
+    ]
+   },
+   {
+    "name": "processed",
+    "operation": "journal.record",
+    "requires": [
+     "merge"
     ],
     "key": "{unit}",
     "leases": [
      "artifact:{destination}"
     ],
-    "name": "processed",
-    "operation": "journal.record",
-    "requires": [
-     "merge"
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "journal.recorded"
     ]
    }
+  ],
+  "checks": [
+   "manifest.hash",
+   "work.accounting",
+   "journal.delivered"
   ]
  },
  "iapd.adv/silver": {
@@ -598,11 +678,65 @@
     }
    },
    {
+    "name": "read_era_reported",
+    "operation": "source.read",
+    "requires": [],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "units": {
+     "each": "file"
+    },
+    "input": {
+     "contract": "era-reported-csv.yaml",
+     "files": "*.zip",
+     "context": {
+      "published": {
+       "fact": "published"
+      }
+     }
+    }
+   },
+   {
+    "name": "read_era_listed",
+    "operation": "source.read",
+    "requires": [],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "units": {
+     "each": "file"
+    },
+    "input": {
+     "contract": "era-listed-csv.yaml",
+     "files": "*.zip",
+     "context": {
+      "published": {
+       "fact": "published"
+      }
+     }
+    }
+   },
+   {
     "name": "funds",
     "operation": "source.combine",
     "requires": [
      "read_reported",
-     "read_listed"
+     "read_listed",
+     "read_era_reported",
+     "read_era_listed"
     ],
     "key": "{unit}",
     "leases": [
@@ -621,6 +755,12 @@
       },
       "listed": {
        "all": "read_listed"
+      },
+      "era_reported": {
+       "all": "read_era_reported"
+      },
+      "era_listed": {
+       "all": "read_era_listed"
       }
      }
     }
@@ -631,7 +771,9 @@
     "requires": [
      "funds",
      "read_reported",
-     "read_listed"
+     "read_listed",
+     "read_era_reported",
+     "read_era_listed"
     ],
     "key": "{unit}",
     "leases": [
@@ -653,6 +795,12 @@
       },
       "listed": {
        "all": "read_listed"
+      },
+      "era_reported": {
+       "all": "read_era_reported"
+      },
+      "era_listed": {
+       "all": "read_era_listed"
       }
      }
     }
@@ -4586,6 +4734,223 @@
      "land_holding"
     ]
    }
+  ]
+ },
+ "iapd.adv.fund/advisers": {
+  "run": {
+   "facts": [
+    "published"
+   ]
+  },
+  "steps": [
+   {
+    "name": "read_reported",
+    "operation": "source.read",
+    "requires": [],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "units": {
+     "each": "file"
+    },
+    "input": {
+     "contract": "reported-csv.yaml",
+     "files": "*.zip",
+     "context": {
+      "published": {
+       "fact": "published"
+      }
+     }
+    }
+   },
+   {
+    "name": "read_era_reported",
+    "operation": "source.read",
+    "requires": [],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "units": {
+     "each": "file"
+    },
+    "input": {
+     "contract": "era-reported-csv.yaml",
+     "files": "*.zip",
+     "context": {
+      "published": {
+       "fact": "published"
+      }
+     }
+    }
+   },
+   {
+    "name": "read_listed",
+    "operation": "source.read",
+    "requires": [],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "units": {
+     "each": "file"
+    },
+    "input": {
+     "contract": "listed-csv.yaml",
+     "files": "*.zip",
+     "context": {
+      "published": {
+       "fact": "published"
+      }
+     }
+    }
+   },
+   {
+    "name": "read_era_listed",
+    "operation": "source.read",
+    "requires": [],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "units": {
+     "each": "file"
+    },
+    "input": {
+     "contract": "era-listed-csv.yaml",
+     "files": "*.zip",
+     "context": {
+      "published": {
+       "fact": "published"
+      }
+     }
+    }
+   },
+   {
+    "name": "filing_funds",
+    "operation": "source.combine",
+    "requires": [
+     "read_reported",
+     "read_era_reported",
+     "read_listed",
+     "read_era_listed"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.combined"
+    ],
+    "input": {
+     "contract": "filing-funds.yaml",
+     "readings": {
+      "reported": {
+       "all": "read_reported"
+      },
+      "era_reported": {
+       "all": "read_era_reported"
+      },
+      "listed": {
+       "all": "read_listed"
+      },
+      "era_listed": {
+       "all": "read_era_listed"
+      }
+     }
+    }
+   },
+   {
+    "name": "prepare",
+    "operation": "mdm.prepare",
+    "requires": [
+     "filing_funds"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "mdm.prepared"
+    ],
+    "input": {
+     "keys": {
+      "dataset": "iapd.adv.fund_filing.v1",
+      "distinct_on": [
+       "filing_id",
+       "fund_id"
+      ],
+      "table": "filing_fund"
+     },
+     "readings": {
+      "filing_funds": {
+       "all": "filing_funds"
+      }
+     }
+    }
+   },
+   {
+    "name": "merge",
+    "operation": "mastering.merge",
+    "requires": [
+     "prepare"
+    ],
+    "key": "{batch_id}",
+    "leases": [
+     "mdm:consumer:{consumer}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "mdm.committed"
+    ]
+   },
+   {
+    "name": "processed",
+    "operation": "journal.record",
+    "requires": [
+     "merge"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "journal.recorded"
+    ]
+   }
+  ],
+  "checks": [
+   "manifest.hash",
+   "work.accounting",
+   "journal.delivered"
   ]
  }
 }

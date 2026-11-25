@@ -1,0 +1,19 @@
+pass:
+  name: read_era_ciks
+  files: '*.zip'
+  units: {each: file}
+# The reading of the exempt reporting advisers' Form ADV Item 1.D(3) (ERA_1D3_CIK): as
+# ciks-csv.yaml reads the registered advisers'.
+execution: {profile: source.read, workers: 1, max_artifacts: 512}
+read:
+  format: csv
+  container: zip
+  member: "ERA_1D3_CIK_*.csv"
+  encoding: [utf-8, windows-1252]
+  limits: {max_bytes: 33554432, max_member_bytes: 33554432, max_records: 100000}
+  tables:
+    ciks:
+      each: record
+      columns:
+        filing_id: {text: {path: FilingID, path_mode: literal}}
+        cik: {text: {path: CIK, path_mode: literal, null_if: [""]}}

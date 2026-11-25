@@ -77,6 +77,7 @@ Counts only; expected counts computed from the same file with Python's CSV reade
 | IS_FEEDER_TO | 802 feeder pairs, 654 with the master in the file | 652 linked, 1 a hierarchy cycle |
 | Reviews | | 30 Companies in review, no fund |
 
+- Corrected 2026-11-24 20:42 ET: the cause below was only part of it on a two-month load (see "Proof, IA and ERA").
 - The 777 adviser links not made: inferred to start at the 30 advisers in review (`unresolved_endpoint_identity`, 781
   with other types); the review reasons were not read (the review table showed no open row), so the cause is not
   measured. No link creates a master.
@@ -89,3 +90,12 @@ Counts only; expected counts computed from the same file with Python's CSV reade
 
 - `edgar-warehouse rules test` (data-onboarding, **test**): not in this build. Used `edgar-warehouse load` on a
   disposable store from `local-test-stores.py up`, then `silver links`; the store needed `deploy-silver.sh` first.
+
+## Proof, IA and ERA, March and June (disposable stores, stopped after; 2026-11-24 20:42 ET)
+
+118,554 Fund Structures and 23,167 filing records, equal to the files. Adviser links: 130,036 expected from the files, 126,295
+made, 3,737 at advisers in review, 4 of two advisers whose filings of one month state both roles for one fund. The first run,
+with the links on the fund's record, made 120,749: 5,550 March links were dropped when June re-reported the fund.
+Approval of `iapd-adv-fund-filing-pfid` (2026-11-24.pfid), `fund_structure-2026-11-24.adv-links-per-filing` and
+`iapd-adv-fund-filing-2026-11-24.links-per-filing`: under the standing rule ("auto merge and not ask for approval") and the
+ruling "Join by PFID only (Recommended)", on this evidence, 2026-11-24 20:42 ET. Data quality, fund name: "Set it aside (Recommended)".
