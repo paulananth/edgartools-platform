@@ -192,7 +192,7 @@ setting, and is not part of any contract.
 |---|---|---|
 | `xml` | `envelope: sgml_text` (take the `<XML>` block of a full SEC `.txt` submission and expose its header fields); `root: <tag>` (any other root gives zero rows); `on_parse_error: no_rows \| retry_without_control_chars` | one document |
 | `json` | none: the whole artifact is **one document** (e.g. one SEC company profile per file). `records: jsonl`: one document per line. `record_path: <path>`: the record inside each document | one document per artifact, or per line |
-| `csv` | `columns: { <path-safe name>: "<header text>" }` (required), `delimiter` (default `,`), `encoding` (default `utf-8`) | one document per row, keyed by the names in `columns`; other headers are ignored. **Proposed:** an artifact that lacks a listed header, or whose bytes are not in the declared encoding, is rejected whole and counted in `rejected` |
+| `csv` | `columns: { <path-safe name>: "<header text>" }` (required), `delimiter` (default `,`), `encoding` (default `utf-8`), `on_wrong_width: set_aside` (a line whose field count differs from the header's is set aside with reason `wrong_width`; absent, it refuses the artifact) | one document per row, keyed by the names in `columns`; other headers are ignored. **Proposed:** an artifact that lacks a listed header, or whose bytes are not in the declared encoding, is rejected whole and counted in `rejected` |
 | `bytes` | none | no document. Every table must use a `custom_reader` (§11) |
 
 **A Source Contract is for a Bronze Artifact with a fixed shape.** The three

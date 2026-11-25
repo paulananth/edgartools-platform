@@ -1528,6 +1528,16 @@ tell apart is a windows-1252 file whose accented letters happen to form valid
 UTF-8 pairs; profile the source's publications before choosing the list, and
 prefer a single encoding when every publication shares one.
 
+A CSV or TSV line whose field count differs from the header's (a stray quote
+mark splits or joins fields) refuses the artifact with `malformed`. When
+profiling finds a few such lines in a publication that is otherwise sound,
+declare `read.on_wrong_width: set_aside` (CSV and TSV only, a whole-file
+reading): each such line is read as no record, and every table of the reading
+sets it aside in its deferred rows with the reason `wrong_width` and its
+ordinal, as a failed check does. Measure the count first; a file where many
+lines are the wrong width has the wrong delimiter or encoding, not a few bad
+rows. Every other malformed shape still refuses the artifact.
+
 ## The XML document inside an SGML submission file
 
 Some publishers wrap each submission in SGML, not XML: an envelope with a

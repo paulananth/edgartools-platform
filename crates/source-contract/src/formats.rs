@@ -122,22 +122,25 @@ pub fn jsonl(bytes: &[u8], max_records: usize, exact_numbers: bool, python_text:
     Ok(records(rows))
 }
 
-pub fn csv(bytes: &[u8], max_records: usize) -> Result<El, Rejected> {
-    delimited(bytes, b',', true, max_records)
+/// `wrong_width` reads a line whose field count differs from the header's as a
+/// record marked to be set aside; without it such a line refuses the file.
+pub fn csv(bytes: &[u8], max_records: usize, wrong_width: bool) -> Result<El, Rejected> {
+    delimited(bytes, b',', true, max_records, wrong_width)
 }
 
 /// Tab-separated text, read as CSV is: a header line, then one record per
 /// line. A tab never occurs inside a value, so nothing is quoted: a quote
 /// mark is an ordinary character.
-pub fn tsv(bytes: &[u8], max_records: usize) -> Result<El, Rejected> {
-    delimited(bytes, b'\t', false, max_records)
+pub fn tsv(bytes: &[u8], max_records: usize, wrong_width: bool) -> Result<El, Rejected> {
+    delimited(bytes, b'\t', false, max_records, wrong_width)
 }
 
-fn delimited(bytes: &[u8], delimiter: u8, quoting: bool, max_records: usize) -> Result<El, Rejected> {
+fn delimited(bytes: &[u8], delimiter: u8, quoting: bool, max_records: usize, wrong_width: bool) -> Result<El, Rejected> {
     let mut reader = ::csv::ReaderBuilder::new()
         .has_headers(true)
         .delimiter(delimiter)
         .quoting(quoting)
+        .flexible(wrong_width)
         .from_reader(bytes);
     let headers = reader.headers().map_err(malformed)?.clone();
     let mut rows = Vec::new();
@@ -146,7 +149,13 @@ fn delimited(bytes: &[u8], delimiter: u8, quoting: bool, max_records: usize) -> 
         if rows.len() == max_records {
             return Err(Rejected::new("limit_exceeded", format!("more than {max_records} records")));
         }
-        let mut el = El::default();
+        let wrong_width = row.len() != headers.len();
+        // A quote left open swallows the lines after it: not one bad row, so the file is refused.
+        if wrong_width && row.iter().any(|cell| cell.contains(['\n', '\r'])) {
+            return Err(malformed(format!("a record of {} fields, not {}, spans lines from line {}", row.len(), headers.len(),
+                row.position().map_or(0, |p| p.line()))));
+        }
+        let mut el = El { wrong_width, ..El::default() };
         for (name, cell) in headers.iter().zip(row.iter()) {
             el.add_child(name.to_string(), El::scalar(Some(cell.to_string())));
         }

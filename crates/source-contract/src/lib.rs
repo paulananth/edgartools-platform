@@ -330,6 +330,10 @@ impl Engine {
             let rows = reading.tables.entry(name.clone()).or_default();
             let mut selected = 0;
             for (index, item) in items.into_iter().take(context::take(table, context)).enumerate() {
+                if item.wrong_width {
+                    reading.deferred.push(Deferred { table: name.clone(), ordinal: index as i64 + 1, reason: "wrong_width".into(), raw: item.raw() });
+                    continue;
+                }
                 if let Some(select) = table.get("select") {
                     match eval(self, context, lookups, &document, item, index as i64 + 1, select)? {
                         Val::Bool(true) => {}, Val::Bool(false) | Val::Null => continue,
@@ -358,8 +362,8 @@ impl Engine {
         match setting(&self.read, "format").unwrap_or_default() {
             "json" => formats::json(bytes, self.json_integer, self.json_python_text || self.json_iteration_order),
             "jsonl" => formats::jsonl(bytes, max_records, self.json_integer, self.json_python_text),
-            "csv" => formats::csv(&formats::decode(bytes, &encodings(&self.read))?, max_records),
-            "tsv" => formats::tsv(&formats::decode(bytes, &encodings(&self.read))?, max_records),
+            "csv" => formats::csv(&formats::decode(bytes, &encodings(&self.read))?, max_records, self.read.get("on_wrong_width").is_some()),
+            "tsv" => formats::tsv(&formats::decode(bytes, &encodings(&self.read))?, max_records, self.read.get("on_wrong_width").is_some()),
             "html" => html::html(&formats::decode(bytes, &encodings(&self.read))?, max_records),
             _ => {
                 let parsed = match parse_xml(bytes) {
@@ -546,6 +550,11 @@ fn validate(read: &Value, steps: &Steps) -> Result<(), String> {
     if let Some(retry) = read.get("on_parse_error") {
         if retry.as_str() != Some("retry_without_control_chars") || format != "xml" {
             return Err("on_parse_error is retry_without_control_chars for XML only".into());
+        }
+    }
+    if let Some(choice) = read.get("on_wrong_width") {
+        if choice.as_str() != Some("set_aside") || !matches!(format, "csv" | "tsv") {
+            return Err("on_wrong_width is set_aside for CSV or TSV only".into());
         }
     }
     if let Some(limits) = read.get("limits") {
