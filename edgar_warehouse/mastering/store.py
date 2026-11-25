@@ -524,11 +524,13 @@ class Store:
         bodies = self.assembled([row[1:] for row in rows])
         return [(row[0], row[1], json.dumps(bodies[row[1]])) for row in rows]
 
+    linked_select = "select subject,body from mastering_record where body like %s"
+
     def linked_records(self):
         """The subject and the stored text of every record that states a link, as they arrive: Rust reads the text, Python
         never parses it."""
-        sql, values = "select subject,body from mastering_record where body like %s", ['%"relationships":[{%']
-        return self.stream(sql, values) if self.scans else iter(self.rows(sql, values))
+        values = ['%"relationships":[{%']
+        return self.stream(self.linked_select, values) if self.scans else iter(self.rows(self.linked_select, values))
 
     def master_states(self, entities) -> dict:
         """What a link reads of each golden record: its kind and status columns and its profile rows, never its text."""
@@ -636,6 +638,16 @@ class Postgres(Store):
     review_upsert = " on conflict(subject,reason) do update set assertion_id=excluded.assertion_id,open_review=1"
 
     scans = True
+
+    # What the links build reads of a record: its identity, its links and the fields the reader requires, cut in the
+    # database so the profiles, fields and identifiers (a record's bulk) never cross the network. `json`, not `jsonb`,
+    # keeps the links' text as stored.
+    linked_select = ("select subject, json_build_object('assertion_id', b->'assertion_id', 'subject', b->'subject', "
+                     "'source_code', b->'source_code', 'record_key', b->'record_key', 'publication_key', b->'publication_key', "
+                     "'revision', b->'revision', 'mapping_version', b->'mapping_version', 'effective_at', b->'effective_at', "
+                     "'kind', b->'kind', 'fields', '{}'::json, 'identifiers', 'null'::json, 'profiles', '[]'::json, "
+                     "'relationships', b->'relationships')::text "
+                     "from (select subject, body::json b from mastering_record where body like %s) r")
 
     def stream(self, sql: str, values=()):
         with self.connection.cursor(name="mastering_scan") as cursor:  # a server-side cursor: the rows arrive 50,000 at a time
