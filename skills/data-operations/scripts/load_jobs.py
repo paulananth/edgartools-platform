@@ -682,10 +682,11 @@ def step_sessions(reader_url: str) -> dict[str, dict]:
 
 
 def verdict_kind(log_age: float, cpu: float, lock_waiters: int, evidence: dict | None = None) -> str:
-    """A step's state by its own evidence, never by a neighbour's: `locked` (sessions waiting on locks), `progressing` (its processes
-    work, its log moved, or one of its own database sessions is active or changed state lately) or `stalled` (none of them). A step
-    whose work is on the database side uses no CPU and writes no log, so its own sessions are the evidence."""
-    if lock_waiters >= 3:  # the scheduler's own threshold: one waiting session is normal
+    """A step's state by its own evidence, never by a neighbour's: `locked` (its own sessions wait on locks while the store has three
+    or more waiting), `progressing` (its processes work, its log moved, or one of its own database sessions is active or changed
+    state lately) or `stalled` (none of them). A step whose work is on the database side uses no CPU and writes no log, so its own
+    sessions are the evidence."""
+    if lock_waiters >= 3 and evidence and evidence["wait"].startswith("Lock:"):  # three waiting is the scheduler's own threshold: one is normal
         return "locked"
     if cpu >= 5 or log_age < IDLE_MINUTES or (evidence and (evidence["active"] > 0 or evidence["changed_min"] < IDLE_MINUTES)):
         return "progressing"
