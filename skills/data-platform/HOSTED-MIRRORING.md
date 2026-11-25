@@ -116,16 +116,17 @@ Two permissions a mirror needs beyond the sub-skill's grant sequence:
 - Snowflake's system login `snowflake_system` must hold CONNECT on each mirrored database ("permission denied for
   database"): the stores revoke it from PUBLIC, and `infra/scripts/harden-hosted-roles.py` grants it.
 
-**The managed mirror record is the system of record.** `sources/managed-mirror.yaml` lists the tables the managed mirror carries (with its name,
-database, refresh interval, table format, the operator's words and whether a read-back verified it), and the mirror SQL is written from that file alone. Mirror only what a reader in Snowflake
-reads: Gold (its dbt sources file, `models/sources.yml`, written from its configuration) may read only what the record lists
-(`mirror_sql.py check --reads <sources file>`, and a unit test on the repository's files), and the record may list only what
-`destination/authorised_data_sharing.yaml` lets leave the stores. The exposure list is the upper bound, not the list: a listed table the exposure list does not name is refused,
-and an exposed table nothing in Snowflake reads stays out (the catalog publishes it from the stores, not the mirror). Changing the list is changing the mirror:
-edit the record with the operator's words, then `mirror_sql.py alter`. Working tables (the merge stage, reviews, decisions, lookups, progress) are never
-mirrored. Each mirrored table is a full copy kept current at the refresh interval, so its size is a cost: say each table's size in the
-plan. When the record changes, `scripts/exposure/mirror_sql.py alter` writes the `ALTER_MIRROR` that adds and removes the
-difference; a removal needs the operator's approval.
+**The managed mirror record is the system of record.** `sources/managed-mirror.yaml` lists the tables, mirror name, source database,
+refresh interval, table format and approval. The target database comes from `rules/snowflake.yaml`; the mirror scope is checked
+against `destination/authorised_data_sharing.yaml`.
+Gold's dbt source file may read only listed tables (`mirror_sql.py check --reads <sources file>`), and the record may list only
+tables the exposure list approves. The exposure list is the upper bound, not the mirror list: an unexposed table is refused,
+and an exposed table nothing in Snowflake reads stays out. The catalog publishes approved exposure from the stores, not the mirror.
+`verified` is current read-back state. Keep it false while the target is absent or after a source-store reset; set it true only
+after the current mirror's readback passes. A prior successful readback does not qualify an absent or reset target.
+Changing the table list changes the mirror: record the operator's words, then use `scripts/exposure/mirror_sql.py alter`.
+Working tables (the merge stage, reviews, decisions, lookups, progress) are never mirrored. Each mirrored table is a full copy
+kept current at the refresh interval, so its size is a cost: state every table's size in the plan. A table removal needs approval.
 
 **Plan the mirrors from the read list, never table by table.** Group the read tables by the database that holds them:
 each database is one mirror, and each schema keeps its name in the target. Read the instance's publication limit and the
