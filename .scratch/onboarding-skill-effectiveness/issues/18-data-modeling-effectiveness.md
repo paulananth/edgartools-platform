@@ -1,7 +1,7 @@
 # data-modeling: Measure effectiveness
 
 Type: task
-Status: claimed
+Status: resolved
 Priority: P0
 Blocked by: 06, 12, 17
 Labels: wayfinder:task
@@ -36,7 +36,7 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] Record the baseline, matched inputs and predeclared outcome and timing bars in [Comparison protocol](#comparison-protocol) before running the comparison. (2026-11-24 22:19 ET)
 - [x] Run four matched pairs of two-wave decisions, with the same model and evidence in each pair; all sixteen CLI calls completed. Report elapsed time and unavailable live evidence under [Answer](#answer). (2026-11-24 22:19 ET)
 - [x] Score against the approved behavior before revealing the revision labels. Record gains, regressions, missed bars and the shared Silver handoff error under [Answer](#answer). (2026-11-24 22:19 ET)
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md.
+- [x] Publish the comparison in [docs(modeling): record paired effectiveness trials](https://github.com/paulananth/edgartools-platform/pull/2129); documentation genericity **155 passed**. (2026-11-24 22:20 ET)
 - [x] Learning → skill: both revisions misread the stored Silver link. [Distinguish Silver source keys from resolved master IDs](./97-data-modeling-silver-link.md) owns the scoped clarification in Data Modeling's class guidance. (2026-11-24 22:19 ET)
 
 ## Completion evidence
