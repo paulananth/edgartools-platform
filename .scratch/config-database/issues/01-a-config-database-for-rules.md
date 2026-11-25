@@ -13,6 +13,8 @@ Owner: claude (branch `claude/config-database`)
   postgress but postgress is ok too, need options kiss no 7 wastes" (2026-11-25)
 - Of four options (a third Postgres database, Git files, S3 objects, a Snowflake table), the operator chose a third
   Postgres database on the same instance: "A, CONFIG_URL is fine, go ahead" (2026-11-25).
+- Live moves: "yes do both, keep rdm in the mirror" (2026-11-25 11:58 ET): provision and copy on the hosted instance and
+  on the shared local server; the mirror keeps `rdm.published_code` (Gold's code-set dimensions and hierarchies read it).
 
 ## What it is
 
@@ -44,13 +46,22 @@ data database: Silver registration writes `table_spec` with the table's DDL, and
   fails on the earlier check: it read `answers`), STORES.md and native-gleif name the config database. Kept: the MDM
   init file's own comment (its text is the installed checksum), tests that make the Rules schema in their one test
   database (2026-11-25 11:05 ET)
-- [ ] PR open as draft; ready, CI green and merged only after the hosted and shared local moves below, since every
-  load reads Rules from config once it merges
-- [ ] Hosted: provision the config database and add `CONFIG_URL` to the duty files (`provision_hosted_store.py --confirm`;
-  needs the operator's word: it changes the live instance)
-- [ ] Hosted: copy the `rules` schema from control to config (`pg_dump --schema=rules` from control, restore into config
-  as the owner), check each table's row count is equal, then drop `rules` from control; needs the operator's word
-- [ ] Shared local server: the same copy, once no agent on older code still reads Rules from control
+- [ ] PR ready, CI green and merged
+- [x] Hosted: config database made, CONNECT for the loader, governance and reader logins, `CONFIG_URL` added to the four
+  duty files with their own logins (copies kept as `*.env.before-config`); no client session and no load was running
+  (`db_monitor.py sessions` 0, the load worker idle) (2026-11-25 12:03 ET)
+- [x] Hosted: `rules init` on config, then every row copied from control as the owner: `rules_used` 21, `policy` 2,
+  `dataset_reading` 21, `draft` 0, each table's rows equal by digest; the loader reads 2 policies and 21 readings from
+  config and `doctor` answers for every store (2026-11-25 12:03 ET)
+- [ ] Hosted: drop the `rules` tables and schema from control once this merges (the loader image of today's `main` still
+  reads them), after checking the counts are still equal
+- [x] Shared local server (stopped, started for this and stopped again): config database made, `rules init` on it,
+  `CONFIG_URL` in every duty file; its control `rules` held only an empty `rules_used`, so nothing was copied (2026-11-25 12:03 ET)
+- [ ] Shared local server: drop the empty `rules.rules_used` from control once this merges
+- [ ] Shared local server: its MDM schema stamp differs from today's `mdm init` ("Installed migration checksum differs")
+  and its registry is an older layout (`mdm.policy` in data): it needs its own reset before a load; found here, not changed
+- [ ] Hosted: provisioning's last check refused the loader, which can create in the data database's `lake_struct` schema
+  (Snowflake's `pg_lake` schema); found here, not changed: the grant needs its own decision
 - [ ] Hosted readiness passes with the config database (LOGINS and REGISTERED read it)
 - [ ] Hosted clear-out of data and control follows on `.scratch/hosted-reset/` with config kept
 - [ ] Learning → skill: data-platform CONNECTIONS.md "Six stores live in three databases" and data-operations

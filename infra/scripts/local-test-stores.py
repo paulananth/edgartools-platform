@@ -205,7 +205,7 @@ class LocalStores:
 
     def connections(self, name: str, *, include_silver=False):
         def duty(user: str) -> dict:
-            """One URL a database: the file names both, each with its database."""
+            """One URL a database: the file names each, with its database."""
             return {url_variable(DATABASES[database][0]): self.url(name, database, user).render_as_string(hide_password=False)
                     for database in DATABASES}
 
