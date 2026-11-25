@@ -331,3 +331,21 @@ def test_empty_text_collection_filter_preserves_types_order_and_element_budget(t
         refused = envelope(store, tmp_path, plan({'values': bad}, {'rows': table('main', 'rows', {'values': join('values')})}), refs)
         with pytest.raises(ValueError, match='skip_empty_text'):
             source_combine.execute(refused, store)
+
+
+def test_a_row_set_aside_for_its_width_passes_and_any_other_set_aside_row_refuses(tmp_path):
+    """As for a reduction: a wrong-width row is absent from the combination; a checked row still refuses."""
+    store = Artifacts()
+    rows = [{"cik": 1, "form": "10-K", "rank": 1}]
+    body = plan({"forms": group("aux", "filings", "cik", "form", order_by=("rank",))},
+                {"companies": table("main", "companies", {"forms": join("forms")})})
+    wide = {"table": "filings", "ordinal": 2, "reason": "wrong_width", "raw": {"cik": "2"}}
+
+    def combined(name, deferred):
+        refs = {"main": reading(store, tmp_path, {"companies": [{"cik": 1}]}),
+                "aux": reading(store, tmp_path, {"filings": rows}, deferred=deferred)}
+        return source_combine.execute(envelope(store, tmp_path / name, body, refs), store)
+
+    assert store.json(combined("w", [wide]))["artifacts"][0]["tables"] == store.json(combined("c", []))["artifacts"][0]["tables"]
+    with pytest.raises(ValueError, match="resolved deferred"):
+        combined("m", [wide, {"reason": "unresolved"}])

@@ -120,7 +120,7 @@ def _reading_body(body):
         if not isinstance(artifact, dict) or not isinstance(artifact.get("tables"), dict):
             raise ValueError("Combination artifact must hold tables")
         reference(artifact.get("input"))
-        if not isinstance(artifact.get("deferred"), list) or artifact["deferred"]:
+        if not isinstance(artifact.get("deferred"), list) or source_readings.unresolved(artifact["deferred"]):
             raise ValueError("Combination requires explicitly resolved deferred records")
         for table, records in artifact["tables"].items():
             if not _name(table) or not isinstance(records, list) or any(not isinstance(row, dict) for row in records):

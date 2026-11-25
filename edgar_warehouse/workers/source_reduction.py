@@ -135,7 +135,7 @@ def _reduced(plan, refs, artifacts):
             for _, _, chunk, consumed in source_readings.iter_load(
                     ref, artifacts, max_bytes=plan["max_input_bytes"] - input_bytes,
                     max_rows=plan["max_rows"] - row_count, allow_lookup_receipts=True, tables=used):
-                if chunk["deferred"]:
+                if source_readings.unresolved(chunk["deferred"]):
                     raise ValueError("Reduction requires resolved deferred records")
                 located = (chunk.get("partition") or {}).get("tables")
                 # A located piece gives only the used tables; every table's rows count.

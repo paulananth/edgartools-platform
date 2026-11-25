@@ -27,6 +27,9 @@ pub struct El {
     pub array: bool,
     /// JSON object insertion order, retained only for declared Python text coercion.
     pub json_keys: Option<Vec<String>>,
+    /// A CSV or TSV line whose field count differs from the header's, read
+    /// only under `read.on_wrong_width: set_aside`: every table sets it aside.
+    pub wrong_width: bool,
 }
 
 #[derive(Clone, Debug)]

@@ -182,6 +182,33 @@ fn jsonl_and_csv_read_one_record_per_line() {
 }
 
 #[test]
+fn a_reading_that_sets_aside_a_wrong_width_row_reads_the_others() {
+    let contract = |format: &str, option: &str| {
+        format!("read:\n  format: {format}\n{option}  tables:\n    rows:\n      each: record\n      columns:\n        a: {{ text: {{ path: a }} }}\n    names:\n      each: record\n      columns:\n        b: {{ text: {{ path: b }} }}\n")
+    };
+    let bytes = b"a,b\nx,1\nshort\nz,2\nw,3,4\n";
+    // Without the option, one row of the wrong width refuses the whole file.
+    let strict = configured(&contract("csv", ""), Steps::new()).unwrap();
+    assert_eq!(strict.read(bytes, &Lookups::new()).unwrap_err().code, "malformed");
+    let lenient = configured(&contract("csv", "  on_wrong_width: set_aside\n"), Steps::new()).unwrap();
+    let reading = lenient.read(bytes, &Lookups::new()).unwrap();
+    let a: Vec<_> = reading.tables["rows"].iter().map(|r| r["a"].clone()).collect();
+    assert_eq!(a, [Val::Str("x".into()), Val::Str("z".into())]);
+    assert_eq!(reading.tables["names"].len(), 2);
+    // Each table of the reading sets aside the short row (2) and the long one (4), by ordinal.
+    let aside: Vec<_> = reading.deferred.iter().map(|d| (d.table.as_str(), d.ordinal, d.reason.as_str())).collect();
+    assert_eq!(aside, [("rows", 2, "wrong_width"), ("rows", 4, "wrong_width"), ("names", 2, "wrong_width"), ("names", 4, "wrong_width")]);
+    // A quote left open swallows the lines after it into one short record: that is not one bad row, so it refuses.
+    assert_eq!(lenient.read(b"a,b\nx,1\n\"y,2\nz,3\n", &Lookups::new()).unwrap_err().code, "malformed");
+    assert_eq!(lenient.read(b"a,b\nx,1\n\"y,2\nz,3\nw,4\n", &Lookups::new()).unwrap_err().code, "malformed");
+    let tsv = configured(&contract("tsv", "  on_wrong_width: set_aside\n"), Steps::new()).unwrap();
+    assert_eq!(tsv.read(b"a\tb\nx\t1\nshort\n", &Lookups::new()).unwrap().deferred.len(), 2);
+    // Only CSV and TSV have a width, and set_aside is the only choice.
+    assert!(configured(&contract("jsonl", "  on_wrong_width: set_aside\n"), Steps::new()).is_err());
+    assert!(configured(&contract("csv", "  on_wrong_width: skip\n"), Steps::new()).is_err());
+}
+
+#[test]
 fn tsv_reads_as_csv_does_with_tabs_and_no_quoting() {
     let contract = |format: &str| {
         format!("read:\n  format: {format}\n  tables:\n    rows:\n      each: record\n      columns:\n        a: {{ text: {{ path: a }} }}\n        b: {{ number: {{ path: b }} }}\n")
