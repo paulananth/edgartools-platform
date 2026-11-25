@@ -92,6 +92,7 @@ No scenario or test code is approved by creating these tickets. Proposed Givenâ€
 - [data-quality: Reconcile shared rules](issues/26-data-quality-consistent-rules.md): Shared approval and access gates stay with their authoritative owners; Data Quality owns check/fix meaning, measured counts and row dispositions.
 - [data-quality: Make the entrypoint executable](issues/27-data-quality-entrypoint.md): A concise Start here route covers new/live MDM checks, silver specs, audits, supported commands, owners and stops.
 - [data-profiling: Measure effectiveness](issues/12-data-profiling-effectiveness.md): The revised CLI improved exact inference and protected approved findings; the matched comparison does not isolate skill wording.
+- [data-modeling: Specify generic verification](issues/17-data-modeling-generic-verification.md): Invented fixtures proved shared identity, ambiguous-name review, lookup-only separation, stated relationship periods and Silver fact ownership.
 
 ## Not yet specified
 

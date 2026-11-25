@@ -1,7 +1,7 @@
 # data-modeling: Specify generic verification
 
 Type: task
-Status: claimed
+Status: resolved
 Priority: P0
 Blocked by: 05, 11, 16
 Labels: wayfinder:task
@@ -36,7 +36,7 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] Record and obtain operator approval for the four [Given–When–Then scenarios](#approved-scenarios) before writing tests. Operator selected “Approve as written.” (2026-11-24 21:18 ET)
 - [x] Exercise all four approved scenarios through shared behavior paths: six invocations on disposable PostgreSQL 16, including both arrival orders and separate relationship and Silver proofs. (2026-11-24 21:18 ET)
 - [x] Record persisted outcomes, projection evidence and limits under [Answer](#answer). No mock supplied any asserted matching, period or storage outcome. (2026-11-24 21:18 ET)
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md.
+- [x] Publish the scoped proofs in [test(modeling): prove identity, stated periods, and fact ownership](https://github.com/paulananth/edgartools-platform/pull/2127); six behavioral invocations and **155** documentation genericity checks passed locally. (2026-11-24 21:19 ET)
 - [x] Learning → skill: none. The proof exercises decisions already in the Data Modeling skill without changing rules, the skill or runtime behavior. (2026-11-24 21:18 ET)
 
 ## Completion evidence
