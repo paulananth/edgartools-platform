@@ -196,10 +196,24 @@ steps:
     input: p07-2026-03
     minutes: 60
     attempts: 3
+  - name: adv-fund-advisers-03
+    lane: C
+    source: iapd.adv.fund
+    target: advisers
+    input: p07-2026-03
+    minutes: 60
+    attempts: 3
   - name: adv-funds-06
     lane: C
     source: iapd.adv.fund
     target: mastering
+    input: p07-2026-06
+    minutes: 60
+    attempts: 3
+  - name: adv-fund-advisers-06
+    lane: C
+    source: iapd.adv.fund
+    target: advisers
     input: p07-2026-06
     minutes: 60
     attempts: 3

@@ -4,6 +4,9 @@ pass:
     custody: {all: custody-csv.yaml}
     ciks: {all: ciks-csv.yaml}
     related: {all: related-csv.yaml}
+    era_filings: {all: era-filings-csv.yaml}
+    era_ciks: {all: era-ciks-csv.yaml}
+    era_related: {all: era-related-csv.yaml}
 # Each adviser filing with the custodians its Schedule D 5.K(3) names (ticket
 # 75): the custody rows' distinct `custodian_id`s, collected by filing and
 # joined onto the filing as `custodians` (an empty list when it names none).
@@ -15,17 +18,19 @@ pass:
 # filing. The CIKs the adviser lists as its own (Item 1.D(3), `ciks`) and those
 # of its related persons (Schedule D 7.A, `related_persons`) join the same way,
 # from their source extracts (ciks-csv.yaml, related-csv.yaml).
+# The exempt reporting advisers' filings (`era_filings`) are records of the same table, with their own CIK and
+# related person rows; they name no custodians.
 # Pin canonical JSON of this file as the source.combine contract.
 execution: {profile: source.combine}
 combine:
   max_rows: 1000000
   groups:
     filing_custodians: {source: custody, table: custody, key: filing_id, value: custodian_id, mode: collect, order_by: [], distinct: true, sort_values: true, skip_null_values: true, checks: {}, where: {}}
-    filing_ciks: {source: ciks, table: ciks, key: filing_id, value: cik, mode: collect, order_by: [], distinct: true, sort_values: true, skip_null_values: true, checks: {}, where: {}}
-    filing_related: {source: related, table: related, key: filing_id, value: cik, mode: collect, order_by: [], distinct: true, sort_values: true, skip_null_values: true, checks: {}, where: {}}
+    filing_ciks: {source: [ciks, era_ciks], table: ciks, key: filing_id, value: cik, mode: collect, order_by: [], distinct: true, sort_values: true, skip_null_values: true, checks: {}, where: {}}
+    filing_related: {source: [related, era_related], table: related, key: filing_id, value: cik, mode: collect, order_by: [], distinct: true, sort_values: true, skip_null_values: true, checks: {}, where: {}}
   tables:
     filings:
-      source: filings
+      source: [filings, era_filings]
       table: filings
       checks: {}
       where: {}

@@ -1,0 +1,12 @@
+pass:
+  readings: {reported: {all: reported-csv.yaml}, era_reported: {all: era-reported-csv.yaml}, listed: {all: listed-csv.yaml}, era_listed: {all: era-listed-csv.yaml}}
+# Each filing and private fund it reports (7.B(1)) or lists (7.B(2)): one row, the record of the adviser's link to the
+# fund, so another adviser's later filing never replaces it. A registered filing's rows are in the IA and the ERA
+# tables alike; mdm.prepare keeps the first (`distinct_on`). No filing holds a fund twice in one table, or in both 7.B(1)
+# and 7.B(2) (2026-03 and 2026-06).
+execution: {profile: source.combine}
+combine:
+  max_rows: 1000000
+  groups: {}
+  tables:
+    filing_fund: {source: [reported, era_reported, listed, era_listed], table: funds, checks: {}, where: {}, joins: {}}

@@ -133,6 +133,11 @@ automatic_rules:
   rule_id: iapd-adv-fund-pfid
   rule_version: 2026-11-24.pfid
   verdict: bind
+- kind: fund_structure
+  family: binding
+  rule_id: iapd-adv-fund-filing-pfid
+  rule_version: 2026-11-24.pfid
+  verdict: bind
 - kind: security
   family: binding
   rule_id: openfigi-security-cusip

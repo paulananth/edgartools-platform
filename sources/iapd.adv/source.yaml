@@ -1,6 +1,6 @@
 # IAPD Form ADV: the MDM mappings of the monthly Form ADV bulk file (a ZIP of
 # 101 CSV tables, one month's filings each), read for the Company kind:
-# advisers from Part 1A (IA_ADV_Base_A) and their custodians from Schedule D
+# advisers from Part 1A (IA_ADV_Base_A, and ERA_ADV_Base for exempt reporting advisers) and their custodians from Schedule D
 # 5.K(3) (IA_Schedule_D_5K3), one record per monthly file and custodian.
 # Profiling ticket 07 (.scratch/profiling/issues/07-readers-per-feed.md):
 # operator, 2026-10-09 10:38 ET, the design, "Approve as proposed

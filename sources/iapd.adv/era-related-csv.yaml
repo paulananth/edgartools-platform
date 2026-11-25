@@ -1,0 +1,19 @@
+pass:
+  name: read_era_related
+  files: '*.zip'
+  units: {each: file}
+# The reading of the exempt reporting advisers' Form ADV Schedule D 7.A (ERA_Schedule_D_7A_CIK):
+# as related-csv.yaml reads the registered advisers'.
+execution: {profile: source.read, workers: 1, max_artifacts: 512}
+read:
+  format: csv
+  container: zip
+  member: "ERA_Schedule_D_7A_CIK_*.csv"
+  encoding: [utf-8, windows-1252]
+  limits: {max_bytes: 33554432, max_member_bytes: 33554432, max_records: 100000}
+  tables:
+    related:
+      each: record
+      columns:
+        filing_id: {text: {path: FilingID, path_mode: literal}}
+        cik: {text: {path: CIK, path_mode: literal, null_if: [""], transforms: [{pad: {left: "0000000000", right: ""}}, {keep_last: 10}]}}

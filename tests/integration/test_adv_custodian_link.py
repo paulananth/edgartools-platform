@@ -107,13 +107,19 @@ def month(root: Path, published: str) -> tuple[list[dict], list[dict]]:
         # Schedule D 7.A: May's filing names one related person by CIK, as filed (no leading zeros).
         z.writestr(f"IA_Schedule_D_7A_CIK_{tag}.csv", csv_text(["FilingID", "ReferenceID", "CIK"],
                                                                 RELATED.get(published, [])))
+        z.writestr(f"ERA_ADV_Base_{tag}.csv", csv_text(BASE, []))
+        z.writestr(f"ERA_1D3_CIK_{tag}.csv", csv_text(["FilingID", "CIK"], []))
+        z.writestr(f"ERA_Schedule_D_7A_CIK_{tag}.csv", csv_text(["FilingID", "ReferenceID", "CIK"], []))
     raw = store.put_bytes((root / "capture.zip").as_uri(), body.getvalue())
     filings = read(store, root / "filings", "adviser-filings-csv.yaml", raw, published)
     custody_rows = read(store, root / "custody", "custody-csv.yaml", raw, published)
     ciks = read(store, root / "ciks", "ciks-csv.yaml", raw, None)
     related = read(store, root / "related", "related-csv.yaml", raw, None)
     combined = chain.combine(store, root / "combine", FOLDER / "combine.yaml",
-                             {"filings": filings, "custody": custody_rows, "ciks": ciks, "related": related})
+                             {"filings": filings, "custody": custody_rows, "ciks": ciks, "related": related,
+                              "era_filings": read(store, root / "era-filings", "era-filings-csv.yaml", raw, published),
+                              "era_ciks": read(store, root / "era-ciks", "era-ciks-csv.yaml", raw, None),
+                              "era_related": read(store, root / "era-related", "era-related-csv.yaml", raw, None)})
     # Each month's file restates every custodian it names: its own publication, the
     # month (YYYYMM) its revision, so a later month is a later revision (ticket 129).
     custodians = prepare(store, root / "mdm-custodians", custody_rows, "custody", CUSTODIANS,
