@@ -31,18 +31,27 @@ data database: Silver registration writes `table_spec` with the table's DDL, and
   `test_a_duty_file_missing_a_database_is_given_it_for_its_own_login_and_keeps_its_other_settings`) (2026-11-25 10:59 ET)
 - [x] Local stores make the config database and write `CONFIG_URL` into every duty file (tests/unit/test_local_test_stores.py) (2026-11-25 10:59 ET)
 - [x] Readiness checks every duty login against every store database and reads the Rules counts from config; the load
-  monitor reads each store database from the map (tests/unit/test_load_jobs.py, tests/unit/test_readiness.py) (2026-11-25 10:59 ET)
+  monitor reads each store database from the map (tests/unit/test_load_jobs.py and tests/unit/test_readiness.py pass;
+  no unit test reads the config database there: the hosted readiness run below proves it) (2026-11-25 10:59 ET)
 - [x] Resets never name the config database (tests/unit/test_reset_hosted_databases.py; `reset-hosted-tables.py --store` choices) (2026-11-25 10:59 ET)
 - [x] Skills and docs say three databases (CONNECTIONS, HOSTED-LOADS, HOSTED-MIRRORING, the init runbook, the
   operations, onboarding, monitoring and journal skills) (2026-11-25 10:59 ET)
-- [ ] Integration and storage-adapter tests that reach Rules use `CONFIG_URL` and pass locally on PostgreSQL
-- [ ] Review: Standards, Spec and GoF
-- [ ] PR open, CI green, merged
+- [x] Integration and storage-adapter tests that reach Rules use `CONFIG_URL` and pass locally: 60 integration tests,
+  47 storage-adapter and engine tests on PostgreSQL, 5 storage-adapter tests on MySQL (2026-11-25 11:05 ET)
+- [x] Review (reviewer agent, three axes): GoF no findings; Standards and Spec fixed: provisioning checks every file
+  before changing any and adds an `unset` line where none is, readiness LOGINS connects with each URL the duty file names
+  so a file without `CONFIG_URL` keeps the gate shut (`test_a_duty_login_is_tried_on_each_database_by_its_own_url_and_a_missing_url_keeps_the_gate_shut`
+  fails on the earlier check: it read `answers`), STORES.md and native-gleif name the config database. Kept: the MDM
+  init file's own comment (its text is the installed checksum), tests that make the Rules schema in their one test
+  database (2026-11-25 11:05 ET)
+- [ ] PR open as draft; ready, CI green and merged only after the hosted and shared local moves below, since every
+  load reads Rules from config once it merges
 - [ ] Hosted: provision the config database and add `CONFIG_URL` to the duty files (`provision_hosted_store.py --confirm`;
   needs the operator's word: it changes the live instance)
 - [ ] Hosted: copy the `rules` schema from control to config (`pg_dump --schema=rules` from control, restore into config
   as the owner), check each table's row count is equal, then drop `rules` from control; needs the operator's word
 - [ ] Shared local server: the same copy, once no agent on older code still reads Rules from control
+- [ ] Hosted readiness passes with the config database (LOGINS and REGISTERED read it)
 - [ ] Hosted clear-out of data and control follows on `.scratch/hosted-reset/` with config kept
 - [ ] Learning → skill: data-platform CONNECTIONS.md "Six stores live in three databases" and data-operations
   HOSTED-LOADS.md "Rules configuration is never reset"

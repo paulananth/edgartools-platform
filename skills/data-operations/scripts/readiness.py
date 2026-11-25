@@ -269,26 +269,31 @@ def audit_failures(env: dict | None = None) -> list[str] | None:
 
 
 def login_facts(stores: Path) -> dict:
-    """Each duty file's login against each database of its duty: "answers", or the kind of failure. A driver's error text can hold
-    the address and the password, so only its class is kept."""
-    from urllib.parse import urlsplit, urlunsplit
+    """Each duty file's login against each database of its duty, by the URL the file names for it: "answers", or the kind of
+    failure. A duty file that names no URL for a store database is unreadable, so the gate never opens on a load that would
+    stop at its first store call. A driver's error text can hold the address and the password, so only its class is kept."""
+    import psycopg2
     sys.path.insert(0, str(HERE))
     import load_jobs
+    from edgar_warehouse.database_connections import DATABASES, store_url
+
     found = {}
-    duties = {"owner.env": ("postgres",), **{name: load_jobs.store_databases() for name in DUTY_FILES}}
-    for name, databases in duties.items():
+    for name in ("owner.env", *DUTY_FILES):
         try:
-            url = load_jobs.data_url(load_jobs.load_env(stores / name))
+            env = load_jobs.load_env(stores / name)
+            url = load_jobs.data_url(env)
             if url is None:
                 raise KeyError("no data database")
+            urls = [load_jobs.in_database(url, "postgres")] if name == "owner.env" else [
+                store_url(group[0], env).set(drivername="postgresql").render_as_string(hide_password=False)
+                for group in DATABASES.values()]
         except Exception as exc:  # noqa: BLE001
             found[name] = f"unreadable ({type(exc).__name__})"
             continue
         state = "answers"
         try:
-            import psycopg2
-            for database in databases:
-                psycopg2.connect(urlunsplit(urlsplit(url)._replace(path="/" + database)), connect_timeout=10).close()
+            for each in urls:
+                psycopg2.connect(each, connect_timeout=10).close()
         except Exception as exc:  # noqa: BLE001
             state = f"does not answer ({type(exc).__name__})"
         found[name] = state

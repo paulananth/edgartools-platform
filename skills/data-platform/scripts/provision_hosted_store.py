@@ -102,17 +102,19 @@ def missing_settings(folder: Path, name: str) -> list[str]:
 
 def complete(folder: Path, name: str) -> list[str]:
     """Add to a duty file the URL of each database it does not name: its own login on that database. Every other line stays
-    (a loader file's settings), and its `unset` line also clears the added names. The settings added."""
+    (a loader file's settings), and its `unset` line (one is put first when the file has none) also clears the added names.
+    The settings added."""
     url = read_url(folder, name)
     added = missing_settings(folder, name)
     if url is None or not added:
         return []
     part = urlsplit(url)
-    lines = []
-    for line in (folder / name).read_text().splitlines():
-        if line.startswith("unset "):
-            line += "".join(f" {setting}" for setting in added if setting not in line.split())
-        lines.append(line)
+    lines = (folder / name).read_text().splitlines()
+    if not any(line.split()[:1] == ["unset"] for line in lines):
+        lines.insert(0, "unset")
+    for number, line in enumerate(lines):
+        if line.split()[:1] == ["unset"]:
+            lines[number] = " ".join([line, *(setting for setting in added if setting not in line.split())])
     lines += [f"export {setting}={shlex.quote(urlunsplit(part._replace(path='/' + SETTINGS[setting])))}" for setting in added]
     private_write(folder / name, "\n".join(lines) + "\n")
     return added
@@ -311,6 +313,8 @@ def main(argv: list[str] | None = None) -> int:
             missing = [name for name in (OWNER_FILE, *DUTIES) if not (args.stores / name).exists()]
             if missing:
                 print(f"would make {', '.join(missing)}")
+        for name in (OWNER_FILE, *DUTIES):  # every file is checked before any is changed
+            read_url(args.stores, name)
         for name in (OWNER_FILE, *DUTIES):
             added = complete(args.stores, name) if args.confirm else missing_settings(args.stores, name)
             if added:

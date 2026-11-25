@@ -84,6 +84,13 @@ def test_a_duty_file_missing_a_database_is_given_it_for_its_own_login_and_keeps_
     assert complete(tmp_path, "worker.env") == [] and missing_settings(tmp_path, "worker.env") == []
 
 
+def test_a_duty_file_with_no_unset_line_also_clears_the_names_it_is_given(tmp_path):
+    (tmp_path / "governance.env").write_text("export DATA_URL='postgresql://governance:g-invented@h:5432/data'\n")
+    assert complete(tmp_path, "governance.env") == ["CONTROL_URL", "CONFIG_URL"]
+    assert (tmp_path / "governance.env").read_text().splitlines()[0] == "unset CONTROL_URL CONFIG_URL"
+    assert read_url(tmp_path, "governance.env") == "postgresql://governance:g-invented@h:5432/data"
+
+
 class _Server:
     """An instance with no roles and no databases; `owner` makes every database exist, owned by that role."""
 
