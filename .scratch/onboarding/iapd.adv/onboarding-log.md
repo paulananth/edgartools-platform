@@ -57,6 +57,27 @@ run over IA and ERA 7.B(1), 7.B(2) and both Base tables of March. Operator, 2026
 - 7.B(2) funds (asked: a 7.B(2) row creates its fund by PFID, or only links). Operator, 2026-11-24 19:26 ET: "Yes, by PFID (Recommended)". 7.B(1) ranks first for every field.
 - The 3 malformed March rows (asked: an engine change that sets a wrong-width row aside, counted, off by default; or load June only). Operator, 2026-11-24 19:26 ET: "Code: set the row aside (Recommended)". GoF consult before code; test first.
 
+## Proof on the real June file (disposable store `advfund-proof`, stopped after)
+
+`edgar-warehouse load` of `iapd.adv` then `iapd.adv.fund` over `iapd.adv/p07-2026-06`, then `silver links` (2026-11-24 19:30 ET).
+Counts only; expected counts computed from the same file with Python's CSV reader.
+
+| Measure | Expected from the file | Loaded |
+|---|---|---|
+| Fund Structures | 12,533 distinct PFIDs (7.B(1) and 7.B(2)) | 12,533 |
+| INVESTMENT_ADVISER_TO, advisor | 12,444 (adviser, fund) pairs | 11,677 linked |
+| INVESTMENT_ADVISER_TO, subadvisor | 305 | 295 linked |
+| IS_FEEDER_TO | 802 feeder pairs, 654 with the master in the file | 652 linked, 1 a hierarchy cycle |
+| Reviews | | 30 Companies (Form ADV's several-CIK rule), no fund |
+
+- The 777 adviser links not made start at advisers in review (`unresolved_endpoint_identity`, 781 with other types):
+  they resolve when a steward settles the review. No link creates a master.
+- The 148 feeder links whose master is not in June's file wait (`unresolved_endpoint`, 4,585 with this load's
+  CUSTODIAN and RELATED_PERSON links, whose targets this store did not load).
+- A second load of the same month: "all 1 documents already loaded", nothing changed.
+- June's fund run took 0.2 minutes.
+
 ## Commands named by the skill that did not exist
 
-(none yet)
+- `edgar-warehouse rules test` (data-onboarding, **test**): not in this build. Used `edgar-warehouse load` on a
+  disposable store from `local-test-stores.py up`, then `silver links`; the store needed `deploy-silver.sh` first.

@@ -40,12 +40,16 @@ Build and qualify an isolated hosted load of the retained Form ADV Schedule D 7.
 ## Checklist
 
 - [ ] Reconcile the legacy Adviser–Fund contract and source rules to the current Company/Person, Fund Structure and `INVESTMENT_ADVISER_TO` model; record the approved rule changes and proof.
-- [ ] Add 7.B(1)/(2) readings, joins, Dataset Contracts and Fund Structure relationship processing with regression tests for encoding, PFID identity, 7.B(2), amendments, duplicate/conflicting rows and replay.
+- [x] Add 7.B(1)/(2) readings, joins, Dataset Contracts and Fund Structure relationship processing with regression tests for encoding, PFID identity, 7.B(2), amendments, duplicate/conflicting rows and replay: `sources/iapd.adv.fund`, rule `iapd-adv-fund-pfid`, `tests/integration/test_adv_private_funds.py` (PG16, 2 passed); real June file on a disposable store: 12,533 funds of 12,533 PFIDs, 11,972 adviser links, 652 feeder links, a second load changed nothing ([log](../../onboarding/iapd.adv/onboarding-log.md)) (2026-11-24 19:30 ET). IA only: ERA is part 2.
 - [ ] Establish a complete supported capture manifest/receipts and its producer run identity for the intended monthly window; if unavailable, leave this part open and name the acquisition authorization needed.
 - [ ] Run the isolated Bookkeeping load against hosted connections; verify Silver, MDM, Journal and graph outcomes and record counts/run IDs privately.
 - [ ] Update the current source/runbook documentation to match the shipped path.
 - [x] Discover: one profiling run over March's IA and ERA 7.B(1), 7.B(2) and Base tables; findings and counts in the [onboarding log](../../onboarding/iapd.adv/onboarding-log.md) (2026-11-24 19:11 ET).
-- [ ] Operator decisions, one at a time: IA and ERA scope; PFID identifier and its matching rule; adviser capacities; `IS_FEEDER_TO` from Master Fund ID; Fund Structures from 7.B(2) rows; findings approval.
-- [ ] March's IA 7.B(1) has 3 malformed rows (a stray quote mark); the engine's CSV reader refuses the whole table. Needs an engine change (a code ticket, the operator's word before coding), or that month's IA funds wait.
-- [ ] The ADV fund steps join the hosted reset's reload (`.scratch/hosted-reset`, part F) as entries in `rules/load-jobs.yaml`, not a separate hosted run: the hosted stores are not drained.
+- [x] Operator decisions, one at a time: IA and ERA scope; PFID identifier and its matching rule; adviser capacities; `IS_FEEDER_TO` from Master Fund ID; Fund Structures from 7.B(2) rows; findings approval. Each with the operator's words in the [log](../../onboarding/iapd.adv/onboarding-log.md) (2026-11-24 19:30 ET).
+- [ ] Part 2, ERA: read `ERA_ADV_Base` as adviser filings (Company by CRD, adviser role) and the ERA 7.B(1)/(2) tables into the same funds (49,065 ERA funds in March; 197 PFIDs in both IA and ERA).
+- [ ] Reference data: the `advisor`/`subadvisor` definitions name Form ADV 7.B(1) as well as N-CEN, as a new `mdm-relationship-types` version; needs the operator's explicit words for that version (data-modeling). The links work on version 6 meanwhile.
+- [ ] Known effect: adding Form ADV to `fund_structure` changes the policy slice of `sec.nport.fund.v1` and `sec.ncen.fund.v1` (measured), so their next default load on a kept store reprocesses their series once; the hosted reset's reload loads them fresh anyway.
+- [ ] March's IA 7.B(1) has 3 malformed rows (a stray quote mark); the engine's CSV reader refuses the whole table. Operator: "Code: set the row aside (Recommended)"; [ticket 02](02-a-csv-row-of-the-wrong-width-is-set-aside.md).
+- [x] The ADV fund steps are in `rules/load-jobs.yaml` (`adv-funds-03`, `adv-funds-06`, lane C after the adviser filings), so the hosted reset's reload (`.scratch/hosted-reset`, part F) runs them (2026-11-24 19:30 ET).
+- [ ] The hosted load itself: in the hosted reset's reload, blocked until that reset's drain (part A) is done.
 - [ ] Learning → skill: record the verified hosted ADV source/load procedure in the owning skill.
