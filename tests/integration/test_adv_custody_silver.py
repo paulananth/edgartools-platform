@@ -13,6 +13,7 @@ import copy
 
 from sqlalchemy import text
 
+from edgar_warehouse.mastering import links
 from edgar_warehouse.rules import files
 from edgar_warehouse.silver_writer import database as silver
 from edgar_warehouse.silver_writer import spec as silver_spec
@@ -49,3 +50,32 @@ def test_a_custody_row_lands_once_with_its_amount(database):
         with runtime.connect() as conn:
             rows = conn.execute(text("SELECT row, amount FROM silver.adv_custody ORDER BY row")).all()
     assert [(r[0], r[1]) for r in rows] == [(1, 1500000000), (2, 250000)]
+
+
+def test_the_custody_fact_links_to_the_master_without_copying_its_name(database):
+    engine = database.application
+    role = engine.url.username
+    silver.migrate(database.admin, runtime_role=role)
+    for path in (FOLDER / "silver-custody.yaml", files.ROOT / "silver/silver-master-binding.yaml"):
+        silver.register(database.admin, spec_file(path, None), runtime_role=role)
+
+    fact = ROWS[0]
+    name = "Example Clearing Company"
+    ids = masters.seed(engine, [core.source(
+        key=fact["custodian_id"], source_code=CUSTODIANS, fields={"name": name},
+        identifiers={"bd_number": fact["custodian_id"].removeprefix("bd:")},
+    )])
+    custodian = ids[fact["custodian_id"]]
+    links.bind(engine)
+    land(PostgresSink(engine), "adv_custody", [dict(fact)])
+
+    with engine.connect() as conn:
+        row = conn.execute(text(
+            "SELECT f.*, b.master_id FROM silver.adv_custody f JOIN silver.master_binding b"
+            " ON b.source_code = :source AND b.source_key = f.custodian_id AND b.kind = 'company'"
+        ), {"source": CUSTODIANS}).mappings().one()
+    assert (row["filing_id"], row["row"], row["amount"], row["master_id"]) == ("F1", 1, 1500000000, custodian)
+    assert name not in row.values()
+    fields = masters.bodies(engine)[custodian]["fields"]
+    assert fields["name"]["value"] == name
+    assert "amount" not in fields

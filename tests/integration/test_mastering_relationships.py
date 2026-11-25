@@ -10,6 +10,7 @@ import pytest
 
 from edgar_warehouse.mdm.evidence import subject_key
 from tests.integration import test_mdm_postgres as core
+from tests.mdm import test_gleif_relationship_contract as relationship_fixture
 from tests.mdm import policy_layers
 from edgar_warehouse.rules import files
 from tests.support import masters
@@ -104,3 +105,41 @@ def test_a_relationship_to_a_gleif_record_resolves_once_a_company_holds_its_lei(
     assert len(masters.bodies(database.application)) == 2  # the target Company exists once; GLEIF's record joined it
     (link,) = masters.links(database.application, policy(), of_type=relationship)
     assert link["source_id"] != link["target_id"]
+
+
+@pytest.mark.parametrize("gleif_first", [False, True], ids=["holder-first", "registry-first"])
+def test_two_sources_with_the_same_issued_lei_bind_to_one_company(database, gleif_first):
+    holder, registry = company_with_lei(LEI_A), gleif(LEI_A)
+    engine = database.application
+    enabled = policy()
+    for item in ((registry, holder) if gleif_first else (holder, registry)):
+        masters.seed(engine, [item], enabled)
+
+    (entity, body), = masters.bodies(engine).items()
+    assert body["identifiers"]["lei"] == [LEI_A]
+    with masters.opened(engine) as store:
+        subjects = [subject_key(item["source_code"], item["record_key"]) for item in (holder, registry)]
+        assert store.bound(subjects) == dict.fromkeys(subjects, entity)
+
+
+def test_stated_relationship_period_survives_projection_from_persisted_claims(database):
+    child, parent = "9999000000EXAMPL0190", "9999000000EXAMPL0287"  # invented, with valid check digits
+    period = {**relationship_fixture.PERIOD, "EndDate": {"$": "2024-01-01T00:00:00Z"}}
+    raw = relationship_fixture.record(
+        (period, relationship_fixture.ACCOUNTING), status="INACTIVE", start=child,
+    )
+    raw["RelationshipRecord"]["Relationship"]["EndNode"]["NodeID"]["$"] = parent
+    evidence = relationship_fixture.read(raw)
+    engine = database.application
+    enabled = policy()
+    parties = masters.seed(
+        engine, [company_with_lei(child), company_with_lei(parent), gleif(child), gleif(parent)], enabled,
+    )
+    masters.seed(engine, [evidence], enabled)
+
+    (link,) = masters.links(engine, enabled, of_type="IS_DIRECTLY_CONSOLIDATED_BY")
+    assert (link["source_id"], link["target_id"]) == (parties[child], parties[parent])
+    (held,) = link["periods"]
+    assert (held["valid_from"], held["valid_to"]) == (
+        "2020-01-01T00:00:00+00:00", "2024-01-01T00:00:00+00:00",
+    )
