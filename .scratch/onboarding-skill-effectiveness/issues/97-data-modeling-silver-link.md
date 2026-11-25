@@ -1,7 +1,7 @@
 # data-modeling: Distinguish Silver source keys from resolved master IDs
 
 Type: task
-Status: open
+Status: resolved
 Priority: P0
 Blocked by: 18
 Labels: wayfinder:task
@@ -18,7 +18,11 @@ How should the Data Modeling handoff describe a source-key link so the fact's st
 
 ## Acceptance checklist
 
-- [ ] Clarify the generic source-key link path in the owning skill: the fact stores its source key, the reader resolves the master ID through `master_binding`, and master attributes stay in MDM. Do not change unrelated link modes or source rules.
-- [ ] Verify the wording against the configured writer/readback evidence and run the affected documentation checks. No new test scenario without approval.
-- [ ] Publish the skill correction and evidence on its own branch and PR.
-- [ ] Learning → skill: name the clarified handoff section.
+- [x] Clarify source-key links in [Data Modeling: A transaction part](../../../skills/data-modeling/SKILL.md#6-a-transaction-part-its-silver-table); class guidance points there and keeps master attributes in MDM. No other link modes or source rules changed. (2026-11-25 07:00 ET)
+- [x] Verify the configured fact and read-time join with `test_the_custody_fact_links_to_the_master_without_copying_its_name`: **1 passed** on disposable PostgreSQL 16. Genericity, guide path and skill lint: **163 passed**. No new scenario added. (2026-11-25 07:00 ET)
+- [x] Publish the correction and evidence in [docs(modeling): distinguish stored source keys from master IDs](https://github.com/paulananth/edgartools-platform/pull/2130). (2026-11-25 07:01 ET)
+- [x] Learning → skill: [A transaction part: its silver table](../../../skills/data-modeling/SKILL.md#6-a-transaction-part-its-silver-table) distinguishes stored source keys from master IDs resolved at read time. (2026-11-25 07:00 ET)
+
+## Answer
+
+For a source-key link, the Silver fact stores its own facts and the declared source key. The reader joins `silver.master_binding` on the Dataset Contract source code and key to resolve the master ID; that ID is not a stored fact column. Master attributes stay in MDM. The existing custody integration test read the amount at its fact grain, resolved the master ID by the binding join, and found the name only in MDM. This verifies the storage contract, not a change in agent behavior. No runtime or source configuration changed.
