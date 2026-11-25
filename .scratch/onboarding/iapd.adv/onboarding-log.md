@@ -56,6 +56,13 @@ run over IA and ERA 7.B(1), 7.B(2) and both Base tables of March. Operator, 2026
 - Feeder link (asked: `IS_FEEDER_TO` from "Master Fund ID" by PFID, or not now). Operator, 2026-11-24 19:26 ET: "Yes, IS_FEEDER_TO by PFID (Recommended)".
 - 7.B(2) funds (asked: a 7.B(2) row creates its fund by PFID, or only links). Operator, 2026-11-24 19:26 ET: "Yes, by PFID (Recommended)". 7.B(1) ranks first for every field.
 - The 3 malformed March rows (asked: an engine change that sets a wrong-width row aside, counted, off by default; or load June only). Operator, 2026-11-24 19:26 ET: "Code: set the row aside (Recommended)". GoF consult before code; test first.
+- 7.B(2) capacity (asked: `advisor`, a new capacity, or no link). Operator, 2026-11-24 19:34 ET: "advisor (Recommended)".
+- Approval of the rules versions this onboarding makes (`iapd-adv-private-fund-2026-11-24.pfid`, rule
+  `iapd-adv-fund-pfid` 2026-11-24.pfid, `fund_structure-2026-11-24.adv-private-funds`,
+  `iapd-adv-filing-csv-2026-11-24.adviser-profile`): recorded as given under the standing rule (operator,
+  2026-10-17: "auto merge and not ask for approval"), 2026-11-24 19:34 ET. What it changes: Form ADV's private funds become
+  Fund Structures by PFID, linked to their advisers and masters, and the Form ADV adviser filings give the adviser
+  role. Evidence: the integration test and the June proof below.
 
 ## Proof on the real June file (disposable store `advfund-proof`, stopped after)
 
@@ -68,10 +75,11 @@ Counts only; expected counts computed from the same file with Python's CSV reade
 | INVESTMENT_ADVISER_TO, advisor | 12,444 (adviser, fund) pairs | 11,677 linked |
 | INVESTMENT_ADVISER_TO, subadvisor | 305 | 295 linked |
 | IS_FEEDER_TO | 802 feeder pairs, 654 with the master in the file | 652 linked, 1 a hierarchy cycle |
-| Reviews | | 30 Companies (Form ADV's several-CIK rule), no fund |
+| Reviews | | 30 Companies in review, no fund |
 
-- The 777 adviser links not made start at advisers in review (`unresolved_endpoint_identity`, 781 with other types):
-  they resolve when a steward settles the review. No link creates a master.
+- The 777 adviser links not made: inferred to start at the 30 advisers in review (`unresolved_endpoint_identity`, 781
+  with other types); the review reasons were not read (the review table showed no open row), so the cause is not
+  measured. No link creates a master.
 - The 148 feeder links whose master is not in June's file wait (`unresolved_endpoint`, 4,585 with this load's
   CUSTODIAN and RELATED_PERSON links, whose targets this store did not load).
 - A second load of the same month: "all 1 documents already loaded", nothing changed.

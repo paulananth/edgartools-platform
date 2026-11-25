@@ -8,8 +8,10 @@ pass:
 # while another adviser reports it in full in its own 7.B(1). Profile of
 # 2026-03: 4,163 rows, 3,407 funds, 815 filings. Each row creates its fund by
 # PFID when no 7.B(1) row has (operator, 2026-11-24: "Yes, by PFID
-# (Recommended)"); 7.B(1) ranks first for every field. 7.B(2) states no role,
-# so the link is in capacity `advisor`.
+# (Recommended)"); 7.B(1) ranks first for every field. 7.B(2) states no role:
+# its link is in capacity `advisor` (operator, 2026-11-24: "advisor (Recommended)"),
+# written as a constant (the row's FilingID replaced). `held` is always true
+# (FilingID equals itself): Form ADV restates its funds and states no end.
 execution: {profile: source.read, workers: 1, max_artifacts: 512}
 read:
   format: csv

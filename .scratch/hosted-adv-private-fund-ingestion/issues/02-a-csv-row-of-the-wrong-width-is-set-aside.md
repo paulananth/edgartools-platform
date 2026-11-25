@@ -32,4 +32,5 @@ March's 63,746 IA private funds can be read. June's tables are clean.
       the other rows and sets that one aside with `wrong_width`; a row with an unclosed quote still refuses
 - [ ] Implement, and the Python binding's reading reports the deferred rows
 - [ ] The reading of March's real file: 68,253 rows read, 3 set aside (counts only)
+- [ ] Re-add the March step `adv-funds-03` to `rules/load-jobs.yaml` (lane C, after `adv-funds-06`'s sibling order) and its answer in `tests/unit/test_load_jobs.py`
 - [ ] Learning → skill: data-platform READING.md, the CSV section, names the option

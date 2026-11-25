@@ -107,6 +107,11 @@ def test_private_funds_join_by_pfid_and_link_to_their_advisers(database, tmp_pat
     assert masters.reviews(database.application) == []
     named = {name: entity for entity, name in masters.names(database.application).items()}
     a, b = named["EXAMPLE ADVISERS A LLC"], named["EXAMPLE ADVISERS B LLC"]
+    # The adviser filings give each adviser's Company the adviser role, which the link needs at its start.
+    bodies = masters.bodies(database.application)
+    assert [p["role"] for p in bodies[a].get("profiles", [])] == ["adviser"]
+    assert [p["role"] for p in bodies[b].get("profiles", [])] == ["adviser"]
+    assert [p["role"] for p in bodies[ids[P4]].get("profiles", [])] == ["fund"]
     advice = masters.links(database.application, of_type="INVESTMENT_ADVISER_TO")
     # A's two filings report fund 1: one link. B reports it as subadviser: a link of its own.
     assert Counter((l["source_id"], l["target_id"], l["capacity"]) for l in advice) == Counter({

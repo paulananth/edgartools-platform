@@ -11,7 +11,8 @@ pass:
 # `capacity` is the adviser's role as 7.B(1) states it ("Subadviser": Y or N),
 # in N-CEN's words (operator, 2026-11-24: "Reuse advisor/subadvisor
 # (Recommended)"); a row stating neither makes no link. Every row is a held
-# sighting: Form ADV restates its funds in every filing and states no end.
+# sighting (`held`: FilingID equals itself): Form ADV restates its funds in
+# every filing and states no end.
 execution: {profile: source.read, workers: 1, max_artifacts: 512}
 read:
   format: csv
