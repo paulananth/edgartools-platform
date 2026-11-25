@@ -188,6 +188,7 @@ def test_a_step_has_a_capture_when_its_folder_holds_receipts_and_the_check_plans
              {"name": "d", "capture": "c1", "capture_root": "proving", **one},
              {"name": "e", "capture": "bad", **one}, {"name": "f", "capture": "nosha", **one},  # receipts a load cannot read
              {"name": "g", "capture": "c1", "source": "sec.company", "target": "undeclared"}]  # a target the source lacks
+    steps = [{**step, "deliveries": [{name: step[name] for name in ("capture", "capture_root") if name in step}]} for step in steps]
     checked(monkeypatch, load_jobs, "load_jobs", lambda *a, **k: steps)
     monkeypatch.setattr(load_jobs, "ROOTS", {"captures": tmp_path / "here", "proving": tmp_path / "there"})
     checked(monkeypatch, readiness.subprocess, "run", lambda *a, **k: pytest.fail("a capture check runs no command"))

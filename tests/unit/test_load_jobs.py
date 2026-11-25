@@ -41,9 +41,9 @@ def test_every_target_that_loads_a_capture_is_in_the_chain():
 def test_a_later_delivery_of_one_source_carries_the_next_revision():
     seen = {}
     for step in STEPS:
-        key = (step["source"], step["capture"].split("/")[0])
-        if "revision" in step:
-            seen.setdefault(key, []).append((step["capture"], step["revision"]))
+        for one in chain.loads(step):
+            if "revision" in one:
+                seen.setdefault((step["source"], one["capture"].split("/")[0]), []).append((one["capture"], one["revision"]))
     for key, runs in seen.items():
         order = list(dict.fromkeys(runs))
         assert [r for _, r in order] == list(range(len(order))), key
@@ -63,9 +63,9 @@ def test_the_run_label_is_no_input_of_a_load(monkeypatch):
     """A fact is part of what a file is processed under: a run label in one made a rerun under another label process
     every company document again, and the Stage refused the changed records under the same revision."""
     monkeypatch.setattr(chain, "RUN", "one-label")
-    first = [chain.arguments(step) for step in chain.load_jobs()]
+    first = [chain.arguments(one) for step in chain.load_jobs() for one in chain.loads(step)]
     monkeypatch.setattr(chain, "RUN", "another-label")
-    assert [chain.arguments(step) for step in chain.load_jobs()] == first
+    assert [chain.arguments(one) for step in chain.load_jobs() for one in chain.loads(step)] == first
     company = BY_NAME["company"]
     assert company["capture_run"] == "fresh-v1-company"  # the label the store's records were loaded under
     assert company["facts"]["capture_run"] == "fresh-v1-company" and company["facts"]["catalog_run"] == "fresh-v1-catalog"
@@ -92,7 +92,7 @@ def test_the_chain_builds_the_links_table_once_after_the_loads_and_no_target_bui
     builds = sorted(f"{s}/{t}" for (s, t), body in targets().items()
                     if any((x.get("input") or {}).get("keys", {}).get("build") == "links" for x in body["steps"]))
     assert builds == []
-    assert all("--no-links" in chain.arguments(step) for step in STEPS)
+    assert all("--no-links" in chain.arguments(one) for step in STEPS for one in chain.loads(step))
     calls = []
     original = chain.run
     chain.run = lambda args, env, log=None: calls.append(args) or 0
@@ -156,12 +156,9 @@ def ancestors(name):
     return found
 
 
-def steps_of(source, like=None):
-    """The load jobs of one source that master (a target with a kind of its own). A step of a quarterly delivery needs
-    only the same delivery's steps of another source that has one (the same capture folder name), else all of them."""
-    found = [s for s in STEPS if s["source"] == source and INFERRED[key(s)]["kinds"]]
-    same = [s for s in found if like and s["capture"].split("/")[-1] == like["capture"].split("/")[-1]]
-    return [s["name"] for s in (same or found)]
+def steps_of(source):
+    """The load jobs of one source that master (a target with a kind of its own)."""
+    return [s["name"] for s in STEPS if s["source"] == source and INFERRED[key(s)]["kinds"]]
 
 
 def test_a_load_follows_the_sources_its_rules_prefer():
@@ -169,7 +166,7 @@ def test_a_load_follows_the_sources_its_rules_prefer():
         item = INFERRED[key(step)]
         wanted = set(item["prefer_after"])
         for source in wanted - {step["source"]}:
-            assert set(steps_of(source, step)) <= ancestors(step["name"]), (step["name"], source)
+            assert set(steps_of(source)) <= ancestors(step["name"]), (step["name"], source)
 
 
 def test_every_wait_is_explained_by_what_the_rules_declare():
@@ -1638,7 +1635,7 @@ def _chain_with_sources(tmp_path, steps, inputs):
     (tmp_path / "chain.yaml").write_text(yaml.safe_dump({"capture_label": "l", "steps": steps}))
     for source, body in inputs.items():
         (tmp_path / "sources" / source).mkdir(parents=True)
-        (tmp_path / "sources" / source / "inputs.yaml").write_text(yaml.safe_dump(body))
+        (tmp_path / "sources" / source / "inputs.yaml").write_text(yaml.safe_dump(body, sort_keys=False))
     return tmp_path / "chain.yaml", tmp_path / "sources"
 
 
@@ -1649,13 +1646,88 @@ def test_a_step_names_its_input_and_the_source_holds_the_folder_and_its_root(tmp
         {"name": "c", "source": "p", "target": "t", "minutes": 1}], {
         "s": {"inputs": {"d1": {"folder": "s/d1"}, "d2": {"folder": "s/d2", "root": "proving"}}},
         "p": {"inputs": {"only": {"folder": "p/only"}}}})
-    got = {s["name"]: (s["capture"], s.get("capture_root", "captures")) for s in chain.load_jobs(path, sources)}
-    assert got == {"a": ("s/d2", "proving"), "b": ("s/d1", "captures"), "c": ("p/only", "captures")}
+    got = {s["name"]: [(one["capture"], one.get("capture_root", "captures"), one["capture_run"]) for one in chain.loads(s)]
+           for s in chain.load_jobs(path, sources)}
+    assert got == {"a": [("s/d2", "proving", "l-a-d2")], "b": [("s/d1", "captures", "l-b-d1")], "c": [("p/only", "captures", "l-c-only")]}
+
+
+def several(tmp_path):
+    path, sources = _chain_with_sources(tmp_path, [
+        {"name": "first", "source": "p", "target": "t", "minutes": 1},
+        {"name": "a", "source": "s", "target": "t", "minutes": 5, "attempts": 2, "workers": 1, "bundles": 1}], {
+        "s": {"inputs": {"d2": {"folder": "s/d2"}, "d1": {"folder": "s/d1", "capture_name": "old"}}},
+        "p": {"inputs": {"only": {"folder": "p/only"}}}})
+    return chain.load_jobs(path, sources)[1]
+
+
+def test_a_step_loads_every_delivery_of_its_source_in_the_files_order_each_under_its_own_run_and_place(tmp_path):
+    step = several(tmp_path)
+    assert [(o["capture"], o["capture_run"], o["position"], o["minutes"]) for o in chain.loads(step)] == [
+        ("s/d2", "l-a-d2", 1, 5), ("s/d1", "l-a-old", 2, 5)]
+    assert step["minutes"] == 10  # the bound of the step is all its deliveries'
+
+
+@pytest.mark.parametrize("codes, ran, code, done", [
+    ([0, 0], ["l-a-d2", "l-a-old"], 0, "Done: 2 documents loaded, 4 already loaded before, in 2 deliveries"),
+    ([1], ["l-a-d2"], 1, "Done: 1 documents loaded, 2 already loaded before")])
+def test_a_step_runs_its_deliveries_in_one_log_and_stops_at_the_first_that_does_not_finish(tmp_path, monkeypatch, codes, ran, code, done):
+    called = []
+
+    def run(args, env, log, append=False):
+        called.append(args[args.index("--capture-run") + 1])
+        assert append
+        with log.open("a") as handle:
+            handle.write("Bundle 1/3: 1 of 1 documents to load\n  run x complete in 1 min\nDone: 1 documents loaded, 2 already loaded before\n")
+        return codes[len(called) - 1]
+
+    monkeypatch.setattr(chain, "run", run)
+    got, text = chain.run_deliveries(several(tmp_path), {}, tmp_path / "log")
+    assert (called, got, chain.done_line(text)) == (ran, code, done)
+    assert chain.bundle_progress(text) == (1, 3)  # of the delivery it is at, never every delivery's against the last one's total
+
+
+def test_a_revision_is_its_deliverys_never_the_steps(tmp_path):
+    path, sources = _chain_with_sources(tmp_path, [{"name": "a", "source": "s", "target": "t", "minutes": 1, "revision": 1}],
+                                        {"s": {"inputs": {"d1": {"folder": "s/d1"}, "d2": {"folder": "s/d2"}}}})
+    with pytest.raises(ValueError, match="belongs to one file"):
+        chain.load_jobs(path, sources)
+
+
+def test_a_deliverys_facts_and_revision_are_its_own_beside_the_steps(tmp_path):
+    path, sources = _chain_with_sources(tmp_path, [{"name": "a", "source": "s", "target": "t", "minutes": 1, "facts": {"mode": "default"}}],
+                                        {"s": {"inputs": {"d1": {"folder": "s/d1", "facts": {"day": "x", "of another target": "y"}, "revision": 4}, "d2": {"folder": "s/d2"}}}})
+    (sources / "s" / "source.yaml").write_text(yaml.safe_dump({"bookkeeping": {"targets": {"t": {"run": {"facts": ["day", "mode"]}}}}}))
+    (step,) = chain.load_jobs(path, sources)
+    assert [(one["facts"], one.get("revision")) for one in chain.loads(step)] == [({"mode": "default", "day": "x"}, 4), ({"mode": "default"}, None)]
+
+
+def test_the_load_jobs_hold_nothing_of_one_file():
+    """A file's date, count or revision is beside its folder in `inputs.yaml`; the load jobs hold only how a target is loaded."""
+    body = yaml.safe_load((ROOT / "rules/load-jobs.yaml").read_text())
+    assert [(s["name"], s.get("facts")) for s in body["steps"] if s.get("facts")] == [
+        ("company", {"capture_run": "fresh-v1-company", "catalog_run": "fresh-v1-catalog", "load_mode": "default"})]
+    assert not [s["name"] for s in body["steps"] if "revision" in s]
+
+
+def test_no_step_or_input_of_the_load_jobs_names_a_date():
+    """A load is decoupled from its file: a new month or quarter is a line of the source's inputs, never a new step."""
+    dated = re.compile(r"(19|20)\d\d|q[1-4]\b|-\d\d$")
+    assert [s["name"] for s in STEPS if dated.search(s["name"]) or dated.search(str(s.get("input", "")))] == []
+
+
+def test_the_capture_runs_stay_as_the_store_was_loaded():
+    """A capture run is an input of its records: a new one processes every file again."""
+    runs = {one["capture_run"] for step in STEPS for one in chain.loads(step)}
+    single = {"fresh-v1-" + step["name"] for step in STEPS if len(step["deliveries"]) == 1}
+    assert single <= runs  # a delivery added beside one of these must not rename it: its `capture_name` is empty
+    assert {"fresh-v1-ncen-fund-2025q4", "fresh-v1-ncen-fund-2026q3", "fresh-v1-adv-mastering-03", "fresh-v1-adv-silver-06",
+            "fresh-v1-adv-funds-03", "fresh-v1-adv-fund-advisers-06", "fresh-v1-adv-custodians-06", "fresh-v1-gleif",
+            "fresh-v1-openfigi-answers", "fresh-v1-openfigi-tickers"} <= runs
 
 
 @pytest.mark.parametrize("step, inputs, words", [
     ({"input": "nope"}, {"d1": {"folder": "s/d1"}}, "no input"),
-    ({}, {"d1": {"folder": "s/d1"}, "d2": {"folder": "s/d2"}}, "names no input"),
+    ({}, {}, "names no input"),
     ({"input": "d1"}, {"d1": {"folder": "s/d1", "root": "elsewhere"}}, "root"),
     ({"input": "d1"}, {"d1": {"folder": "/abs/path"}}, "folder")])
 def test_an_input_that_cannot_be_resolved_is_refused_by_name(tmp_path, step, inputs, words):
@@ -1673,55 +1745,38 @@ def test_the_chain_file_holds_no_capture_folder_and_every_source_holds_its_own_i
 
 def test_each_step_resolves_to_the_folder_its_source_names():
     """The answer of every step, written once while it agreed with the load jobs file as it was before inputs moved to the sources."""
-    got = {name: (BY_NAME[name]["capture"], BY_NAME[name].get("capture_root", "captures")) for name in BY_NAME}
+    got = {name: [(one["capture"], one.get("capture_root", "captures")) for one in chain.loads(BY_NAME[name])] for name in BY_NAME}
     assert got == {
-        'company': ('sec.submissions.company/all-76230', 'captures'),
-        'nport-registrant': ('sec.nport-datasets/2026q2', 'captures'),
-        'nport-fund': ('sec.nport-datasets/2026q2', 'captures'),
-        'person': ('sec.submissions.company/all-76230', 'captures'),
-        'openfigi-answers': ('openfigi/2026q2-nport', 'captures'),
-        'openfigi-tickers': ('openfigi/form4-tickers-20261109', 'captures'),
-        '13f-securities': ('sec.thirteenf.securities/p07-cohort', 'captures'),
-        '13f-securities-silver': ('sec.thirteenf.securities/p07-cohort', 'captures'),
-        'ncen-registrant-2025q4': ('sec.ncen-datasets/2025q4', 'captures'),
-        'ncen-registrant-2026q1': ('sec.ncen-datasets/2026q1', 'captures'),
-        'ncen-registrant-2026q2': ('sec.ncen-datasets/2026q2', 'captures'),
-        'ncen-registrant-2026q3': ('sec.ncen-datasets/2026q3', 'captures'),
-        'ncen-adviser-2025q4': ('sec.ncen-datasets/2025q4', 'captures'),
-        'ncen-adviser-2026q1': ('sec.ncen-datasets/2026q1', 'captures'),
-        'ncen-adviser-2026q2': ('sec.ncen-datasets/2026q2', 'captures'),
-        'ncen-adviser-2026q3': ('sec.ncen-datasets/2026q3', 'captures'),
-        'adv-mastering-03': ('iapd.adv/p07-2026-03', 'captures'),
-        'adv-mastering-06': ('iapd.adv/p07-2026-06', 'captures'),
-        'adv-silver-03': ('iapd.adv/p07-2026-03', 'captures'),
-        'adv-silver-06': ('iapd.adv/p07-2026-06', 'captures'),
-        'adv-funds-03': ('iapd.adv/p07-2026-03', 'captures'),
-        'adv-fund-advisers-03': ('iapd.adv/p07-2026-03', 'captures'),
-        'adv-funds-06': ('iapd.adv/p07-2026-06', 'captures'),
-        'adv-fund-advisers-06': ('iapd.adv/p07-2026-06', 'captures'),
-        'ncen-fund-2025q4': ('sec.ncen-datasets/2025q4', 'captures'),
-        'ncen-fund-2026q1': ('sec.ncen-datasets/2026q1', 'captures'),
-        'ncen-fund-2026q2': ('sec.ncen-datasets/2026q2', 'captures'),
-        'ncen-fund-2026q3': ('sec.ncen-datasets/2026q3', 'captures'),
-        'nport-security': ('sec.nport-datasets/2026q2', 'captures'),
-        'nport-security-other-keys': ('sec.nport-datasets/2026q2', 'captures'),
-        'ncen-class-2025q4': ('sec.ncen-datasets/2025q4', 'captures'),
-        'ncen-class-2026q1': ('sec.ncen-datasets/2026q1', 'captures'),
-        'ncen-class-2026q2': ('sec.ncen-datasets/2026q2', 'captures'),
-        'ncen-class-2026q3': ('sec.ncen-datasets/2026q3', 'captures'),
-        'nport-security-silver': ('sec.nport-datasets/2026q2', 'captures'),
-        'gleif-pairs': ('gleif/20260911-1600-publisher', 'captures'),
-        'gleif': ('gleif/20260911-1600-publisher', 'captures'),
-        'adv-custodians-06': ('iapd.adv/p07-2026-06', 'captures'),
-        'adv-custodians-03': ('iapd.adv/p07-2026-03', 'captures'),
-        'ownership': ('sec.ownership/p07-cohort', 'captures'),
-        'ownership-symbols': ('sec.ownership/p07-cohort', 'captures'),
-        'ownership-silver': ('sec.ownership/p07-cohort', 'captures'),
-        '13f-filings': ('sec.thirteenf.filings/p07-managers', 'captures'),
-        'company-facts': ('company-facts/cohort-json', 'proving'),
-        'registration': ('sec.registration/s1-f1-originals', 'captures'),
-        'ipo': ('sec.submissions.company/all-76230', 'captures'),
-        'prospectus': ('sec.prospectus/first-424b4', 'captures'),
+        'company': [('sec.submissions.company/all-76230', 'captures')],
+        'nport-registrant': [('sec.nport-datasets/2026q2', 'captures')],
+        'nport-fund': [('sec.nport-datasets/2026q2', 'captures')],
+        'person': [('sec.submissions.company/all-76230', 'captures')],
+        'openfigi-answers': [('openfigi/2026q2-nport', 'captures')],
+        'openfigi-tickers': [('openfigi/form4-tickers-20261109', 'captures')],
+        '13f-securities': [('sec.thirteenf.securities/p07-cohort', 'captures')],
+        '13f-securities-silver': [('sec.thirteenf.securities/p07-cohort', 'captures')],
+        'ncen-registrant': [('sec.ncen-datasets/2025q4', 'captures'), ('sec.ncen-datasets/2026q1', 'captures'), ('sec.ncen-datasets/2026q2', 'captures'), ('sec.ncen-datasets/2026q3', 'captures')],
+        'ncen-adviser': [('sec.ncen-datasets/2025q4', 'captures'), ('sec.ncen-datasets/2026q1', 'captures'), ('sec.ncen-datasets/2026q2', 'captures'), ('sec.ncen-datasets/2026q3', 'captures')],
+        'adv-mastering': [('iapd.adv/p07-2026-03', 'captures'), ('iapd.adv/p07-2026-06', 'captures')],
+        'adv-silver': [('iapd.adv/p07-2026-03', 'captures'), ('iapd.adv/p07-2026-06', 'captures')],
+        'adv-funds': [('iapd.adv/p07-2026-03', 'captures'), ('iapd.adv/p07-2026-06', 'captures')],
+        'adv-fund-advisers': [('iapd.adv/p07-2026-03', 'captures'), ('iapd.adv/p07-2026-06', 'captures')],
+        'ncen-fund': [('sec.ncen-datasets/2025q4', 'captures'), ('sec.ncen-datasets/2026q1', 'captures'), ('sec.ncen-datasets/2026q2', 'captures'), ('sec.ncen-datasets/2026q3', 'captures')],
+        'nport-security': [('sec.nport-datasets/2026q2', 'captures')],
+        'nport-security-other-keys': [('sec.nport-datasets/2026q2', 'captures')],
+        'ncen-class': [('sec.ncen-datasets/2025q4', 'captures'), ('sec.ncen-datasets/2026q1', 'captures'), ('sec.ncen-datasets/2026q2', 'captures'), ('sec.ncen-datasets/2026q3', 'captures')],
+        'nport-security-silver': [('sec.nport-datasets/2026q2', 'captures')],
+        'gleif-pairs': [('gleif/20260911-1600-publisher', 'captures')],
+        'gleif': [('gleif/20260911-1600-publisher', 'captures')],
+        'adv-custodians': [('iapd.adv/p07-2026-03', 'captures'), ('iapd.adv/p07-2026-06', 'captures')],
+        'ownership': [('sec.ownership/p07-cohort', 'captures')],
+        'ownership-symbols': [('sec.ownership/p07-cohort', 'captures')],
+        'ownership-silver': [('sec.ownership/p07-cohort', 'captures')],
+        '13f-filings': [('sec.thirteenf.filings/p07-managers', 'captures')],
+        'company-facts': [('company-facts/cohort-json', 'proving')],
+        'registration': [('sec.registration/s1-f1-originals', 'captures')],
+        'ipo': [('sec.submissions.company/all-76230', 'captures')],
+        'prospectus': [('sec.prospectus/first-424b4', 'captures')],
     }
 
 
@@ -1796,14 +1851,14 @@ def test_lanes_at_once_is_read_from_the_real_load_jobs_and_load_sh_sets_it_in_th
 
 
 def test_each_job_of_a_forced_load_publishes_its_own_revision_so_a_sources_quarters_never_clash(monkeypatch):
-    """A forced load stopped `ncen-registrant-2026q1` and `ncen-fund-2026q1` with "contradictory publications": every job of the run
+    """A forced load stopped two N-CEN jobs with "contradictory publications": every job of the run
     carried one revision, and the second quarter of a source published other content under the first quarter's revision."""
     monkeypatch.setenv(chain.FORCE, "2026-11-24T12:19:19Z")
     first = {"name": "q4", "source": "s", "target": "t", "capture": "a/b", "workers": 2, "bundles": 1, "minutes": 5, "capture_run": "l-q4", "position": 11}
     second = {**first, "name": "q1", "capture_run": "l-q1", "position": 12}
     revisions = [a[a.index("--revision") + 1] for a in (chain.arguments(first), chain.arguments(second))]
     assert revisions == ["20261124121919011", "20261124121919012"] and revisions[0] < revisions[1]
-    assert all(step["position"] == place for place, step in enumerate(chain.load_jobs()))
+    assert all(one["position"] == place for place, one in enumerate(one for step in chain.load_jobs() for one in chain.loads(step)))
 
 
 def test_inside_the_loader_container_local_is_the_whole_memory_the_runtime_gives_and_the_measured_worker_size_sets_the_lanes(monkeypatch):

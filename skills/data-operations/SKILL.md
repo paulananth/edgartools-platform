@@ -289,7 +289,7 @@ securities and 13F securities in the same way.
 
 Under `~/.local/share/edgartools/mdm/`, `captures/` holds whole deliveries and `proving/` holds cohorts. A source names
 its own: `sources/<source>/inputs.yaml` lists each delivery by name with its folder (and `root: proving` for a cohort),
-and a step of `rules/load-jobs.yaml` names one with `input:`. Read that file, never a list copied here;
+and a step of `rules/load-jobs.yaml` loads them all in order, or names one kind with `input:`. A step's name holds no date: a new file is a line there. Read that file, never a list copied here;
 `load_jobs.py --list` shows each step's resolved folder. A new delivery is a new entry there.
 
 `~/edgar-local-tmp/` holds working copies from earlier tests.

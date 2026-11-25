@@ -129,7 +129,7 @@ A missing grant or login that a command names is a gap to fix through the centra
 
 ## Load a fresh store
 
-`rules/load-jobs.yaml` holds the order of every source and target, each one's input (its source names the folder in `sources/<source>/inputs.yaml`), workers and the facts and revision no capture states, and
+`rules/load-jobs.yaml` holds the order of every source and target, each one's inputs (its source names every delivery's folder in `sources/<source>/inputs.yaml`; a step's name holds no date), workers and the facts and revision no capture states, and
 `scripts/load_jobs.py` runs it, so a store is loaded the same way every time and nobody rewrites the list:
 
 After truncating tables for a full reload, assign a new `RUN` label and use
