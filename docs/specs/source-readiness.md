@@ -117,7 +117,8 @@ document on disk is not proof of runtime readiness.
 | `sec.company` | Read, prepare, merge, processed | Source-specific `prepare-clean-company` still constructs the manifest; capture/catalog/Name Matching inputs need a common path. |
 | `sec.submissions.person` | Read, prepare, merge, processed | Separate `prepare-capture`. Reads the files Company's feed captures; switches on without a feed of its own. |
 | `gleif` | Merge only | Complete member read/combine/prepare/processed path; publication validation remains outside it. |
-| `iapd.adv` | None | Monthly context, grouping/joins and complete run wiring. |
+| `iapd.adv` | Read, prepare, merge (filings) and custody silver; custodians | Loaded in the hosted reload (steps `adv-mastering`, `adv-silver`, `adv-custodians`). Months other than the two captured have no capture; capturing them is a provider request. |
+| `iapd.adv.fund` | Read, prepare, merge (Fund Structures by PFID) and adviser links (`INVESTMENT_ADVISER_TO`, `IS_FEEDER_TO`) | Loaded in the hosted reload (steps `adv-funds`, `adv-fund-advisers`) after the adviser filings of the same months. Open: the readings carry no section or filing-action field; two advisers of one PFID naming different masters leave the latest filing's row to decide the feeder link. |
 | `sec.ownership` | None | Reading selection, owner preparation, relationship dependencies and processed accounting. |
 | `sec.thirteenf.securities` | None; separate reading-only pipeline | Source-owned reduce/combine/prepare/merge/processed path. |
 | `sec.nport.registrant` | None | Authenticated filed-registrant lookup producer and complete run. |
