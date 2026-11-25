@@ -319,14 +319,14 @@ class Loader:
         result["finished_open_runs"] = []
 
         def finish(run_id: str) -> None:
-            """A run that cannot be finished (a conflicting output, say) cannot be resumed, and a replacement
-            needs a new run (bookkeeping RECOVERY.md): name it and go on. The Change Journal holds only what was
-            verified, so its documents load again below. It stays in Bookkeeping as evidence."""
+            """Proceed past a failed replay only when Bookkeeping confirms the run is abandoned."""
             try:
                 self.drive(run_id)
             except RunStopped as stopped:
-                result["left_as_they_are"][run_id] = f"could not be finished: {stopped}"
-                self.say(f"Run {run_id} could not be finished and is left as it is: {stopped}")
+                if self.commands.status(run_id)["run"]["state"] != "abandoned":
+                    raise
+                result["left_as_they_are"][run_id] = f"abandoned: {stopped}"
+                self.say(f"Run {run_id} was abandoned: {stopped}")
             else:
                 result["finished_open_runs"].append(run_id)
         self.at_once([(f"run {run_id}", lambda run_id=run_id: finish(run_id)) for run_id in unfinished])

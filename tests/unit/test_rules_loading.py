@@ -80,7 +80,8 @@ class Recorded:
         raise AssertionError(args)
 
     def status(self, run_id):
-        return {"run": {"submission": {"rules": {"uri": f"file:///frozen/{run_id}", "sha256": "2" * 64},
+        return {"run": {"state": next((state for key, _, _, state in self.open if key == run_id), "running"),
+                        "submission": {"rules": {"uri": f"file:///frozen/{run_id}", "sha256": "2" * 64},
                                        "rule_version": self.versions.get(run_id, CURRENT)},
                         "runtimes": self.pinned.get(run_id, {"source.read": "this-checkout"})}}
 
@@ -436,28 +437,34 @@ def test_a_bundle_too_small_for_its_shared_documents_is_refused(tmp_path):
         loading.cut_bundles(ALWAYS, "with_shared", folder)
 
 
-def test_a_run_that_cannot_be_finished_is_left_named_and_its_documents_load_again(tmp_path, monkeypatch):
-    """Ticket 185: a run whose retry fails (a conflicting output file, say) cannot be resumed, and a replacement
-    needs a new run (bookkeeping RECOVERY.md). The load names it and goes on; the Change Journal, which holds
-    only what was verified, loads its documents again."""
+@pytest.mark.parametrize("abandoned", [False, True])
+def test_a_failed_replay_requires_confirmed_abandonment(tmp_path, monkeypatch, abandoned):
     commands = Recorded(open_runs=[("stuck-1", "example", "by_letter", "running"),
                                    ("slow-1", "example", "by_letter", "waiting")])
     real = commands.drive
 
     def drive(run_id, steps):
         if run_id == "stuck-1":
+            if abandoned:
+                commands.open[0] = ("stuck-1", "example", "by_letter", "abandoned")
             raise driving.RunStopped("workers work source.read failed with status 1; its message is in the log")
         return real(run_id, steps)
     commands.drive = drive
     folder = capture(tmp_path / "c", "letters/a.json")
 
-    result = loader(tmp_path, monkeypatch, commands).load(
-        capture=folder, capture_run="capture-1", as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
+    def load():
+        return loader(tmp_path, monkeypatch, commands).load(
+            capture=folder, capture_run="capture-1", as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
 
-    assert result["finished_open_runs"] == ["slow-1"]  # the other open run is still finished
-    assert list(result["left_as_they_are"]) == ["stuck-1"]
-    assert "could not be finished" in result["left_as_they_are"]["stuck-1"] and "status 1" in result["left_as_they_are"]["stuck-1"]
-    assert [b["run_id"] for b in result["bundles"]] == ["new-1"]  # its documents were loaded again in a new run
+    if abandoned:
+        result = load()
+        assert result["finished_open_runs"] == ["slow-1"]
+        assert result["left_as_they_are"]["stuck-1"].startswith("abandoned:")
+        assert commands.submitted == 1
+    else:
+        with pytest.raises(driving.RunStopped, match="stuck-1.*status 1"):
+            load()
+        assert commands.submitted == 0
 
 
 def test_a_target_that_lands_silver_stops_at_once_when_an_env_file_has_no_silver_login(tmp_path, monkeypatch):

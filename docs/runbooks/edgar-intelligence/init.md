@@ -123,7 +123,7 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    The statuses it already holds for the steps are the previous load's history; the new load's statuses supersede them (see
    [data-operations](../../../skills/data-operations/SKILL.md#publish-a-steps-status-to-the-catalog)).
 
-9. **Ready.** `python <data-operations skill>/scripts/readiness.py` reads the infrastructure and writes `readiness.json` only when every check passes (code with green CI, engine built from this source, `doctor`, guards, reference data, captures, quiet instance, room, audit, each duty file's login, the run's state file). Done when it prints `READY` (twelve checks, the last `REGISTERED`: the merge policy, the Dataset Contracts and every worker profile). The gate is not this runbook: say which steps ran and which did not before a load starts. A load does not start without it, and any reset of the databases or new commit closes it again.
+9. **Ready.** `python <data-operations skill>/scripts/readiness.py` reads the infrastructure and writes `readiness.json` only when every check passes (committed code containing main, `doctor`, guards, reference data, captures, quiet instance, room, audit, each duty file's login, the run's state file). Done when it prints `READY` (eleven checks, the last `REGISTERED`: the merge policy, the Dataset Contracts and every worker profile). The gate is not this runbook: say which steps ran and which did not before a load starts. A load does not start without it, and any reset of the databases or new commit closes it again.
 
 A missing grant or login that a command names is a gap to fix through the central connection section, not to work around.
 
@@ -131,6 +131,13 @@ A missing grant or login that a command names is a gap to fix through the centra
 
 `rules/load-jobs.yaml` holds the order of every source and target, each one's input (its source names the folder in `sources/<source>/inputs.yaml`), workers and the facts and revision no capture states, and
 `scripts/load_jobs.py` runs it, so a store is loaded the same way every time and nobody rewrites the list:
+
+After truncating tables for a full reload, assign a new `RUN` label and use
+it for readiness and every invocation of the hosted load pipeline. Confirm
+the state is fresh with zero done steps, and take the step count from the
+current loader's job list. Keep the previous run log as history. Start the
+complete plan with `RUN=<new-label> bash infra/load-pipeline/load.sh` (no step
+arguments). Use that label again only when resuming this same load.
 
 A load runs only in the loader image CI built from `main`, started by `infra/load-pipeline/load.sh [--plan|--force] [--finish] <step>...`
 (data-operations, HOSTED-LOADS.md, "Where a load runs"). In a checkout `load_jobs.py` reads (`--plan`, `--list`, `--status`) and

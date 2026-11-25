@@ -74,10 +74,6 @@ def test_ready_infrastructure_passes_every_check():
 @pytest.mark.parametrize("check, change", [
     ("CODE", {"git": {"clean": False, "contains_main": True, "ci": "success"}}),
     ("CODE", {"git": {"clean": True, "contains_main": False, "ci": "success"}}),
-    ("CODE", {"git": {"clean": True, "contains_main": True, "ci": "not green"}}),
-    ("CODE", {"git": {"clean": True, "contains_main": True, "ci": "unknown"}}),
-    ("ENGINE", {"engine": {"applicable": True, "built": "h0", "source": "h1"}}),
-    ("ENGINE", {"engine": {"applicable": True, "built": None, "source": "h1"}}),
     ("DOCTOR", {"doctor": False}),
     ("GUARDS", {"loader": None}),
     ("GUARDS", {"loader": {"limit": -1, "settings": {"work_mem": "64MB", "statement_timeout": "4h", "idle_in_transaction_session_timeout": "10min"}}}),
@@ -103,8 +99,8 @@ def test_each_unready_fact_fails_its_own_check(check, change):
     assert check in failed(facts(**change))
 
 
-def test_an_installed_bundle_has_no_engine_source_to_compare():
-    assert "ENGINE" not in failed(facts(engine={"applicable": False, "built": None, "source": ""}))
+def test_readiness_does_not_depend_on_ci_or_engine_provenance():
+    assert failed(facts(git={"clean": True, "contains_main": True})) == set()
 
 
 def test_load_jobs_starts_nothing_until_the_gate_is_open(tmp_path, monkeypatch, capsys):
@@ -207,7 +203,7 @@ def test_an_image_names_the_commit_ci_built_it_from_for_the_gate_and_the_code_ch
         raise AssertionError("an image runs no git or gh")
     monkeypatch.setattr(readiness.subprocess, "run", no_command)
     assert readiness.current_sha(tmp_path) == "abc123"
-    assert readiness.git_facts(tmp_path) == {"clean": True, "contains_main": True, "ci": "success", "image": "abc123"}
+    assert readiness.git_facts(tmp_path) == {"clean": True, "contains_main": True, "image": "abc123"}
 
 
 def test_a_folder_with_neither_a_checkout_nor_an_image_commit_has_no_commit(tmp_path):

@@ -199,5 +199,16 @@ The create plan names the one source database, its tables per schema, its target
 the record with every table REPLICATING; then set `verified: true` in `sources/managed-mirror.yaml`. Read the snapshot cost from metering history
 (`SERVERLESS_TASK` lines lag by hours) against the 5-credit bound.
 
-A reset of the stores drops and recreates the databases a mirror reads, which breaks that mirror: plan its drop or restart, with its
-own approval, before the reset, and create it again from the list after the next load.
+For a hosted table reset, authenticate to Snowflake with the configured mirror
+operator key-pair service user and its explicit mirror operator role. Call
+`SNOWFLAKE.POSTGRES.SUSPEND_MIRROR` for the mirror named in the configuration,
+then verify `SUSPENDED` with `SNOWFLAKE.POSTGRES.LIST_MIRRORS` as the same
+identity. Suspension pauses Snowflake apply. A PostgreSQL WAL sender can remain
+connected, so check source sessions and logical slot activity separately before
+running the table reset. Read `pg_stat_activity` by backend type and transaction
+state, and `pg_replication_slots` by slot type and active state for the source
+database. An active logical slot means the source connection still needs to
+drain even when Snowflake reports `SUSPENDED`. Use the managed lifecycle for
+replication and extension workers.
+If the reset requires tearing down the mirror or taking a new snapshot, use the
+separate approval for that lifecycle action.

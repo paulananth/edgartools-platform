@@ -2,13 +2,20 @@
 
 Read before starting or resuming a load on the hosted instance. Each item is a cause met on a real load and its rule.
 
+## Prepare a fresh worktree for the local operations
+Before running a hosted-store operation script from a fresh worktree, install the project's runtime dependencies with
+`uv sync --extra s3 --extra mdm-runtime`. `uv run` alone may create `.venv` without installing SQLAlchemy and the
+other MDM dependencies, so a preflight can fail before it reaches the store. Run project Python commands with `uv run`;
+source the private hosted environment file in the same shell without printing its values. This prepares local tooling;
+the hosted load itself still runs from the CI-built loader image below.
+
 ## The gate: nothing loads until the infrastructure is ready and tested
-`scripts/readiness.py` reads twelve facts and writes `readiness.json` in the stores folder only on a full pass; `load_jobs.py`
+`scripts/readiness.py` checks hosted readiness and writes `readiness.json` in the stores folder only on a full pass; `load_jobs.py`
 refuses to start, resume or finish a load without it (the read-only `--plan`, `--list`, `--status` and `--catalog-status` still
 run). A pass belongs to one store generation (a reset of the databases closes the gate), one commit (any new commit closes it)
 and one day. Each check reads only what it asks (a capture is its folder's receipts file), never a plan of
-the work. The checks: the code is committed, contains `main` and its commit has green CI (tested means CI, never a local run
-alone); the compiled engine was built from this checkout's source (`readiness.py --build-engine` rebuilds it and records a hash of what it was built from); `doctor` is ready; the loader holds its connection limit, memory ceiling
+the work. The checks: the code is committed and contains `main`;
+`doctor` is ready; the loader holds its connection limit, memory ceiling
 and timeouts; RDM holds its codes and silver a table per spec; every step has a capture; no load runs and the loader has no
 session; disk and load average have room; the access audit of the database has no failing control; every duty file's login connects to the databases of its duty (names only, a
 driver's text is never kept); the run's state file is this store's, or is shown as one that will be set aside, with its count of done
@@ -18,11 +25,18 @@ unconfigured when its file existed). A fact that cannot be
 read is a failure. Fix what it names and run it again; there is no switch to skip it. A rehearsal of the first lane on a
 disposable store is the next check to add.
 
+After truncating tables for a full reload, assign a new `RUN` label and use
+it for readiness and every invocation of the hosted load pipeline. Confirm
+the state is fresh with zero done steps, and take the step count from the
+current loader's job list. Keep the previous run log as history. Start the
+complete plan with `RUN=<new-label> bash infra/load-pipeline/load.sh` (no step
+arguments). Use that label again only when resuming this same load.
+
 ## Where a load runs
 A load runs in the loader image, never in a checkout: a checkout's code can differ from its tested commit (an engine not
 rebuilt, an edit), and a deleted worktree stops its load. `.github/workflows/loader-image.yml` builds the image only from a
 `main` commit that passed CI (`loader-sha-<commit>` on ghcr.io) and writes that commit into it; in the image the gate and
-CODE read it in place of git, and ENGINE does not apply (the image compiles its own engine).
+CODE read it in place of git.
 - **Start:** `infra/load-pipeline/load.sh [--plan]` pulls the image of `main`'s newest commit (it refuses while that image
   is not built), starts AWS Step Functions Local and one worker from the image, runs readiness, then every lane of the load jobs
   file at once and the finish. `load.sh [--plan] [--finish] <step>...` runs only those steps, in order. It waits and exits 0
@@ -175,18 +189,105 @@ a batch before changing its size: the writer made three a batch (70 ms each) and
   the worker container's processes, end the lane process and the engine process (`kill -9` when `TERM` is ignored),
   and check the list is empty apart from the activity worker and exporter. Stop the watchers too. A step stopped
   mid-bundle redoes that bundle on restart; keep the run's bundle folders, since the restart resumes from them.
-- Before a hosted reset, follow the quiesce and drain procedure in the repository's Edgar Intelligence initialize
-  runbook: stop clients that can reconnect, confirm no open Bookkeeping runs or leases, resolve managed mirrors under
-  their own approval, restart the PostgreSQL service, wait for `READY`, and rerun the read-only reset preflight. An
-  empty load-jobs status alone does not prove that the databases have no sessions. The preflight must find no client
-  sessions or active transactions. It reports idle PostgreSQL extension workers separately; the approved reset records
-  and disconnects those with `DROP DATABASE ... WITH (FORCE)`. Stop for any client session or extension worker with an
-  open transaction; never terminate internal sessions directly or bypass the reset script's classification.
-- The reset script (`reset-hosted-databases.py --words "<the operator's words>"`, which records them) requires the
-  operator's sign-off and refuses while a client session or transaction remains. The approval record includes counts of
-  the idle extension worker sessions that `DROP DATABASE ... WITH (FORCE)` disconnects. After the reset, expect the
-  previous run's done steps to be set aside as another store's state. It deletes the dropped stores' run files
-  (`<manifest root>/load`) and keeps the extracts.
+- Before a hosted table reset, stop clients that can reconnect and check `load_jobs.py --status`. Independently inspect
+  Bookkeeping with `edgar-warehouse bookkeeping runs --state running`, `--state waiting` and `--state blocked`; for each
+  returned run, read `bookkeeping status <run-id>` and `bookkeeping leases <run-id>`. A load-jobs status with no active
+  steps does not establish that Bookkeeping has no open runs or leases. Let the default `load.sh` pipeline finish
+  retained load runs; use the Bookkeeping recovery procedure only when that pipeline cannot resolve one. Never call
+  `bookkeeping finalize` to bypass the loader, edit run state or delete leases by hand. Stop if any run or lease remains
+  unresolved. The table-reset command checks for blocking sessions before and after taking
+  exclusive locks. It allows managed `pg base extension worker` sessions only
+  when PostgreSQL reports no session state and no open transaction. Client
+  sessions, WAL senders and any other backends on the selected database block
+  the reset. Leave internal workers under Snowflake management.
+- **A hosted table reset keeps the databases, schemas, roles and source extracts.** Inventory one store with
+  `uv run python infra/scripts/reset-hosted-tables.py --store <store> --inventory`; the listed row counts are catalog
+  estimates. Put the approved table names and their `drop` or `truncate` actions in one explicit manifest for that
+  store, then run the same command with `--manifest <file>` to read exact scope, actions, row estimates and the plan
+  digest. The manifest must contain only tables that the platform can rebuild or reload. Check the managed-mirror
+  record before dropping a mirrored table; any mirror lifecycle or membership change has its own approval.
+- Apply only the reviewed plan:
+  `uv run python infra/scripts/reset-hosted-tables.py --store <store> --manifest <file> --apply --words "<the operator's exact words>" --plan-sha256 <reviewed digest>`.
+  The script locks and changes only listed ordinary tables, in one store transaction. `DROP TABLE` has no `CASCADE`;
+  `TRUNCATE TABLE` has no `CASCADE`. A dependency, session, stale digest or database refusal rolls the transaction
+  back. It records the approval and result in the private stores folder. Each store is a separate transaction, so stop
+  after any failure and reconcile the completed receipts before continuing. Run the affected store's normal
+  `init`/table-deployment command after a drop; truncation retains the schema. Keep the captured extracts for reload.
+
+### Clear all MDM and Silver tables for a full reload
+
+Prepare a separate manifest for each store. List every resettable table from its
+inventory with `action: truncate`. Use `--require-all-tables` when planning
+and applying each manifest. The script checks the complete inventory during
+planning and again under the reset locks, and verifies all selected tables are
+empty before commit. Preserve `mdm.migration` and `silver.table_spec`:
+they record the installed migration and registered specifications that
+initialization checks. The script rejects either table in a reset manifest.
+Recover missing metadata from a verified backup or evidence of the installed
+schema and specifications. Keep RDM reference data and Rules configuration for this
+reload. Run the hosted initialization and readiness checks before loading.
+
+### Recover missing deployment metadata
+
+Restore metadata from a verified backup when available. For Silver, the
+registration command writes the spec SHA-256 in each physical table's
+comment. If the registry is empty, compare the full deployed table inventory
+and its comment hashes with the configured specs. Restore registry entries
+only when the inventories and hashes agree, then verify every restored entry
+through Silver's spec check.
+
+For MDM, the migration checksum records what was installed. Verify the
+installed schema against deployment evidence before restoring a missing
+record. A checksum calculated from a checkout alone is insufficient proof.
+If the operator explicitly overrides that verification, record the override
+and checksum, take the migration locks for the repair, and run `mdm init`.
+A successful init after an override confirms the initializer accepted the
+record. Run hosted readiness before loading.
+
+### Preserve Rules configuration
+
+Keep the Rules store out of hosted data reset manifests. It holds configuration
+needed for reload, including dataset readings and policies. A request to clear
+all hosted data tables does not include the Rules store. Change Rules only
+through its configuration deployment or a separately requested Rules migration.
+
+### Resetting the control stores
+
+A reset that includes Bookkeeping and Change Journal needs a backup of both
+stores and a verified way to rebuild the intended state. Bookkeeping retains
+run and checkpoint evidence. Change Journal retains publication receipts used
+to decide what to replay. Check the reload scope against retained captures
+before clearing either store. A run at run grain has no work items or leases,
+so zero leases does not establish that its run has finished. Record the run
+state separately and follow the recovery procedure for unresolved runs.
+
+### Truncate an append-only table
+
+Use the same manifest workflow for a table with a retention trigger. Before
+applying, verify a readable backup and confirm the plan names the exact trigger
+it will pause. The script checks the trigger and its function in PostgreSQL,
+locks the table, disables that trigger, truncates the table and restores the
+trigger in one transaction. It checks that the table is empty and the trigger
+is enabled before committing. A missing, changed or disabled expected trigger
+stops the plan. Other triggers remain enabled.
+
+The reset script recognizes `no_truncate_version` on `rdm.code_set_version`
+and `immutable_event` on `journal.event`. Back up RDM history and verify the
+source for restoring reference codes before applying the RDM plan.
+
+### Example: table reset manifest
+
+This invented example truncates one table while preserving its schema. A real manifest must list the exact tables chosen
+for the reset and must be reviewed before `--apply`:
+
+```yaml
+version: 1
+store: mdm
+tables:
+  - schema: mdm
+    table: example_table
+    action: truncate
+```
 
 ## Dropping objects nothing reads
 A store's objects that no code reads (tables, functions, views) are dropped in place on the operator's words, never by a
