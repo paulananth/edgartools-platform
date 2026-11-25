@@ -1,5 +1,5 @@
 # Data quality for Form ADV's private funds: a fund with no name is set aside as an open exception (never merges,
-# never stops the run), as Form ADV's advisers and custodians are (operator, 2026-11-24: "Set it aside (Recommended)").
+# never stops the run), as Form ADV's advisers and custodians are (operator, 2026-11-24 20:42 ET: "Set it aside (Recommended)").
 # Measured: none of 114,370 funds of 2026-03 or 37,280 of 2026-06.
 version: iapd-adv-fund-quality-v1
 quality:
