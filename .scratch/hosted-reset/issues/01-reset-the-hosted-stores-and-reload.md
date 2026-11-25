@@ -20,7 +20,11 @@ Codex owns and runs this ticket; other agents take a part only when Codex hands 
 ## Checklist
 
 ### A. Scope and drain (first)
-- [ ] Name what is reset and why (the schema or rule change the old stores cannot take), the stores in scope (MDM, RDM, Rules, Bookkeeping, Change Journal, Silver) and the stores kept
+- Claimed by: codex/codex-hosted-reset-load-20261124, 2026-11-24 18:40 ET
+- [x] Clarify that an empty `load_jobs.py --status` does not prove Bookkeeping has no open runs or leases; HOSTED-LOADS now requires independent run and lease checks (`git diff --check`), 2026-11-24 18:49 ET
+- [x] Add a generic table-level reset tool and hosted-load skill procedure; it accepts only explicit per-store `DROP`/`TRUNCATE` manifests and never drops databases (`py_compile`, CLI help and `git diff --check`), 2026-11-24 21:35 ET
+- [ ] Prepare and review the exact per-store table manifests and actions before applying them
+- [ ] Name the exact tables and why each is reset (the schema or rule change), the stores in scope (MDM, RDM, Rules, Bookkeeping, Change Journal, Silver) and the stores kept; preserve databases and schemas
 - [ ] Drain: no load, no extension worker and no other agent's session on the hosted Postgres (HOSTED-LOADS.md, "drain before reset"); say who was using it
 - [ ] Back up what is kept (counts before: rows per kept store)
 
@@ -47,3 +51,7 @@ Codex owns and runs this ticket; other agents take a part only when Codex hands 
 - [ ] Learning → skill: name the skill line changed (`data-operations/HOSTED-LOADS.md` or `data-platform/HOSTED-MIRRORING.md`), or write "none"
 
 ## Comments
+
+2026-11-24: Read-only preflight found two client sessions and two idle extension workers on the data database. `load_jobs.py --status` found no active steps (43 of 43 done), while Bookkeeping reported 59 runs in `running`, zero in `waiting` and zero in `blocked`. One sampled run had expected_count 0, no work items and no lease; all-run lease inspection was still running after about 60 seconds and was stopped without a total. These open runs and client sessions remain unresolved.
+
+2026-11-24: Operator clarified that this work preserves the hosted databases and uses explicit table-level drop/truncate actions. Live mirror readback found one configured mirror and 24 tables in `REPLICATING`. No table reset, PostgreSQL restart or reload has been performed.

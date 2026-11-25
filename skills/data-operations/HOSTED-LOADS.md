@@ -2,6 +2,13 @@
 
 Read before starting or resuming a load on the hosted instance. Each item is a cause met on a real load and its rule.
 
+## Prepare a fresh worktree for the local operations
+Before running a hosted-store operation script from a fresh worktree, install the project's runtime dependencies with
+`uv sync --extra s3 --extra mdm-runtime`. `uv run` alone may create `.venv` without installing SQLAlchemy and the
+other MDM dependencies, so a preflight can fail before it reaches the store. Run project Python commands with `uv run`;
+source the private hosted environment file in the same shell without printing its values. This prepares local tooling;
+the hosted load itself still runs from the CI-built loader image below.
+
 ## The gate: nothing loads until the infrastructure is ready and tested
 `scripts/readiness.py` reads twelve facts and writes `readiness.json` in the stores folder only on a full pass; `load_jobs.py`
 refuses to start, resume or finish a load without it (the read-only `--plan`, `--list`, `--status` and `--catalog-status` still
@@ -175,18 +182,41 @@ a batch before changing its size: the writer made three a batch (70 ms each) and
   the worker container's processes, end the lane process and the engine process (`kill -9` when `TERM` is ignored),
   and check the list is empty apart from the activity worker and exporter. Stop the watchers too. A step stopped
   mid-bundle redoes that bundle on restart; keep the run's bundle folders, since the restart resumes from them.
-- Before a hosted reset, follow the quiesce and drain procedure in the repository's Edgar Intelligence initialize
-  runbook: stop clients that can reconnect, confirm no open Bookkeeping runs or leases, resolve managed mirrors under
-  their own approval, restart the PostgreSQL service, wait for `READY`, and rerun the read-only reset preflight. An
-  empty load-jobs status alone does not prove that the databases have no sessions. The preflight must find no client
-  sessions or active transactions. It reports idle PostgreSQL extension workers separately; the approved reset records
-  and disconnects those with `DROP DATABASE ... WITH (FORCE)`. Stop for any client session or extension worker with an
-  open transaction; never terminate internal sessions directly or bypass the reset script's classification.
-- The reset script (`reset-hosted-databases.py --words "<the operator's words>"`, which records them) requires the
-  operator's sign-off and refuses while a client session or transaction remains. The approval record includes counts of
-  the idle extension worker sessions that `DROP DATABASE ... WITH (FORCE)` disconnects. After the reset, expect the
-  previous run's done steps to be set aside as another store's state. It deletes the dropped stores' run files
-  (`<manifest root>/load`) and keeps the extracts.
+- Before a hosted table reset, stop clients that can reconnect and check `load_jobs.py --status`. Independently inspect
+  Bookkeeping with `edgar-warehouse bookkeeping runs --state running`, `--state waiting` and `--state blocked`; for each
+  returned run, read `bookkeeping status <run-id>` and `bookkeeping leases <run-id>`. A load-jobs status with no active
+  steps does not establish that Bookkeeping has no open runs or leases. Let the default `load.sh` pipeline finish
+  retained load runs; use the Bookkeeping recovery procedure only when that pipeline cannot resolve one. Never call
+  `bookkeeping finalize` to bypass the loader, edit run state or delete leases by hand. Stop if any run or lease remains
+  unresolved. The table-reset command also refuses while another session is connected to the
+  selected store; it does not restart PostgreSQL or disconnect extension workers.
+- **A hosted table reset keeps the databases, schemas, roles and source extracts.** Inventory one store with
+  `uv run python infra/scripts/reset-hosted-tables.py --store <store> --inventory`; the listed row counts are catalog
+  estimates. Put the approved table names and their `drop` or `truncate` actions in one explicit manifest for that
+  store, then run the same command with `--manifest <file>` to read exact scope, actions, row estimates and the plan
+  digest. The manifest must contain only tables that the platform can rebuild or reload. Check the managed-mirror
+  record before dropping a mirrored table; any mirror lifecycle or membership change has its own approval.
+- Apply only the reviewed plan:
+  `uv run python infra/scripts/reset-hosted-tables.py --store <store> --manifest <file> --apply --words "<the operator's exact words>" --plan-sha256 <reviewed digest>`.
+  The script locks and changes only listed ordinary tables, in one store transaction. `DROP TABLE` has no `CASCADE`;
+  `TRUNCATE TABLE` has no `CASCADE`. A dependency, session, stale digest or database refusal rolls the transaction
+  back. It records the approval and result in the private stores folder. Each store is a separate transaction, so stop
+  after any failure and reconcile the completed receipts before continuing. Run the affected store's normal
+  `init`/table-deployment command after a drop; truncation retains the schema. Keep the captured extracts for reload.
+
+### Example: table reset manifest
+
+This invented example truncates one table while preserving its schema. A real manifest must list the exact tables chosen
+for the reset and must be reviewed before `--apply`:
+
+```yaml
+version: 1
+store: mdm
+tables:
+  - schema: mdm
+    table: example_table
+    action: truncate
+```
 
 ## Dropping objects nothing reads
 A store's objects that no code reads (tables, functions, views) are dropped in place on the operator's words, never by a
