@@ -1,7 +1,7 @@
 # data-quality: Make progress resumable
 
 Type: task
-Status: open
+Status: claimed
 Priority: P0
 Blocked by: 04, 10, 16, 27
 Labels: wayfinder:task
@@ -33,12 +33,47 @@ These blockers order skill-improvement work. They do not activate optional sourc
 
 ## Acceptance checklist
 
-- [ ] Specify resume, invalidate and blocked conditions for check definitions and versions, measured corpus, disposition decisions and unresolved defects.
-- [ ] Resume a staged interruption from the recorded artifacts and identify exactly the first unfinished action.
-- [ ] Show changed inputs cannot reuse stale proof and unchanged inputs do not repeat completed work.
+- [x] Specify reuse, invalidation and blocker conditions in [Resume Data Quality](../../../skills/data-quality/RESUME.md), including versions, measured corpus, dispositions and unresolved defects. (2026-11-25 08:04 ET)
+- [x] Resume after a staged interruption. A fresh process read the shared source log and both retained definitions, then selected **Measure the retained TestGen suite** without reimporting. (2026-11-25 08:04 ET)
+- [x] Resume after measurement. Matching hashes selected **Review dispositions and hand off** with no rerun. A changed corpus hash selected measurement; a changed draft hash selected drafting/import before any stale result could be used. (2026-11-25 08:04 ET)
+- [x] Add two [native TestGen draft rules](../evidence/quality-resume-testgen/testgen-rules.json); TestGen preview added nothing, strict import created two, and the suite counted one planted defect per check. No live rule or activation changed. (2026-11-25 08:04 ET)
 - [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md.
-- [ ] Learning → skill: name the verified reusable lesson and its owning skill section, or record none.
+- [x] Learning → skill: [Resume Data Quality](../../../skills/data-quality/RESUME.md#add-draft-rules-with-testgen) fingerprints the sorted definitions rather than the timestamped export envelope and resumes from the first unfinished step. (2026-11-25 08:04 ET)
 
 ## Completion evidence
 
 Record the answer and artifact links under `## Answer` when resolved. Keep private values out of the public record. A not-applicable phase needs evidence and an explicit applicability disposition, not a false PASS. Do not mark this ticket resolved while a checklist item remains open.
+
+## Answer
+
+Data Quality uses the existing source log for the versioned check definitions,
+mapped corpus, measurements, disposition evidence and next action. It reuses
+verified steps only while their evidence matches and leaves missing, stale or
+unapproved evidence visible. The configuration owner remains Data Onboarding
+for new feeds or Refining Rules for live feeds; Data Catalog owns business meaning.
+
+The operator requested actual TestGen draft authoring. The import document adds
+two built-in rules against an invented table: `Required` for a non-null label
+and `LOV_Match` for a declared set of permitted states. It uses stable manual
+rule IDs and zero tolerated failures. TestGen excludes null and empty state
+values from the allowed-list test; the label check counts nulls, not blanks.
+The platform's native enforcement and activation are separate.
+
+### Proof
+
+- Ran DataKitchen TestGen **5.134.0** against disposable local PostgreSQL 16.
+  The five-row fixture contained one null label and one out-of-list state,
+  as well as allowed, null-state and blank-state controls. The importer previewed
+  two creations without writing definitions, then strict import created both.
+- Stopped with the existing-format `## Resume` log pointing at the suite,
+  the draft and readback hashes, and the measured corpus hash. A fresh process
+  picked measurement through the existing source route and ran the real TestGen
+  suite. TestGen recorded **one** missing label and **one** invalid state; each
+  deliberately planted defect failed its zero-tolerance rule.
+- A third process read the persisted result and selected disposition/handoff
+  with unchanged evidence. Substituting a different corpus hash reopened
+  measurement; a different draft hash reopened draft/import. These branches
+  check resume routing, not additional TestGen executions.
+- The disposable proof called TestGen's native import/export service and
+  execution runner directly. No HTTP authentication, scheduled monitoring,
+  live feed, catalog publication, or production runtime change was exercised.

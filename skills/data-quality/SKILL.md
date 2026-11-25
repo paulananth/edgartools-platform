@@ -24,6 +24,9 @@ that analysis does not itself change quality configuration.
 
 ## Start here: route a quality phase
 
+For an interrupted phase or when asked to add draft checks with TestGen, use
+[Resume Data Quality](RESUME.md) before drafting or measuring again.
+
 1. **Choose the owner.** With no approved `findings.yaml`, return to [Data Profiling](../data-profiling/SKILL.md). For a new feed, [Data Onboarding](../data-onboarding/SKILL.md) owns the quality step; for a live feed, [Refining Rules](../refining-rules/SKILL.md) owns change-quality. Existing mastered-entity audits use [Trace a mastered entity through downstream data](#trace-a-mastered-entity-through-downstream-data).
 2. **Read [Hard stops](#hard-stops).** New-feed planning needs approved findings and a Dataset Contract field map; live-feed measurement starts from its current `quality.yaml` and one pinned capture.
    MDM checks/fixes use `quality.yaml`; silver checks belong in the contract/spec, written by the configuration owner. Stop if required evidence is missing or a check is unsupported; ticket new evaluator behavior.
@@ -366,7 +369,8 @@ A change worth a check becomes a check here (**plan**), not a note.
 
 Research note: `docs/research/datakitchen-testgen-test-types-2026-11-02.md` (the
 open-source TestGen repository, 89 test types, each one declarative file).
-Take its design, not its tool:
+Use these ideas for platform checks. To add native TestGen drafts in an approved
+test suite, follow [the TestGen workflow](RESUME.md#add-draft-rules-with-testgen).
 
 - **A check is a rule, never code.** Each check is a row in the rules file
   (`id`, `check` kind, the columns, the kind's parameters, `on_fail`, `why`).
