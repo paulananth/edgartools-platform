@@ -1695,6 +1695,7 @@ def test_each_step_resolves_to_the_folder_its_source_names():
         'adv-mastering-06': ('iapd.adv/p07-2026-06', 'captures'),
         'adv-silver-03': ('iapd.adv/p07-2026-03', 'captures'),
         'adv-silver-06': ('iapd.adv/p07-2026-06', 'captures'),
+        'adv-funds-06': ('iapd.adv/p07-2026-06', 'captures'),
         'ncen-fund-2025q4': ('sec.ncen-datasets/2025q4', 'captures'),
         'ncen-fund-2026q1': ('sec.ncen-datasets/2026q1', 'captures'),
         'ncen-fund-2026q2': ('sec.ncen-datasets/2026q2', 'captures'),

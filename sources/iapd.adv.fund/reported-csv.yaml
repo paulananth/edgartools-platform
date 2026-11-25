@@ -1,0 +1,40 @@
+pass:
+  name: read_reported
+  files: '*.zip'
+  units: {each: file}
+  context: {published: {fact: published}}
+# The reading of Form ADV Schedule D 7.B(1) (IA_Schedule_D_7B1) in one monthly
+# bulk file: one row per filing and private fund the filing adviser reports in
+# full. Profile of 2026-03: 68,253 rows, 63,746 funds (PFID, "Fund ID"), 5,529
+# filings, every one in IA_ADV_Base_A; a PFID at most once a filing; 3,833 funds
+# on two or more filings of the month (amendments, or several advisers).
+# `capacity` is the adviser's role as 7.B(1) states it ("Subadviser": Y or N),
+# in N-CEN's words (operator, 2026-11-24: "Reuse advisor/subadvisor
+# (Recommended)"); a row stating neither makes no link. Every row is a held
+# sighting (`held`: FilingID equals itself): Form ADV restates its funds in
+# every filing and states no end.
+execution: {profile: source.read, workers: 1, max_artifacts: 512}
+read:
+  format: csv
+  container: zip
+  member: "IA_Schedule_D_7B1_*.csv"
+  encoding: [utf-8, windows-1252]
+  limits: {max_bytes: 33554432, max_member_bytes: 33554432, max_records: 100000}
+  context:
+    published: {type: text, max_bytes: 64}
+  tables:
+    funds:
+      each: record
+      columns:
+        filing_id: {text: {path: FilingID, path_mode: literal}}
+        fund_id: {text: {path: "Fund ID", path_mode: literal, transforms: [{trim: true}], null_if: [""]}}
+        name: {text: {path: "Fund Name", path_mode: literal, null_if: [""]}}
+        # The master fund a feeder invests in, by its PFID (IS_FEEDER_TO; operator, 2026-11-24:
+        # "Yes, IS_FEEDER_TO by PFID (Recommended)"). Filled on 3,182 rows of 2026-03.
+        master_fund_id: {text: {path: "Master Fund ID", path_mode: literal, transforms: [{trim: true}], null_if: [""]}}
+        capacity: {text: {path: Subadviser, path_mode: literal, transforms: [{tokens: {N: advisor, Y: subadvisor}}], null_if: [""]}}
+        held:
+          equal:
+            left: {text: {path: FilingID, path_mode: literal}}
+            right: {text: {path: FilingID, path_mode: literal}}
+        published: {context: {name: published}}

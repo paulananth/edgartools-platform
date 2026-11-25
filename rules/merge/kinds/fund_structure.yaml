@@ -6,12 +6,15 @@
 # its LEI. SEC Form N-CEN's series (sources/sec.ncen.fund) join the
 # same way (operator, 2026-11-14 09:31 ET: "yes, use skills, rules, and
 # generic scripts, follow existing architecture"); N-PORT, filed monthly, wins
-# a field over N-CEN, filed once a year.
-version: fund_structure-2026-11-14.ncen-series
+# a field over N-CEN, filed once a year. Form ADV's private funds
+# (sources/iapd.adv.fund) join by their PFID alone (operator, 2026-11-24:
+# "Join by PFID only (Recommended)"); they rank last.
+version: fund_structure-2026-11-24.adv-private-funds
 defaults:
   sources:
   - sec.nport.fund.v1
   - sec.ncen.fund.v1
+  - iapd.adv.fund.v1
   allow_unknown_effective: true
 rules:
 # The SEC series id: a record joins the one Fund that holds it, or creates it.
@@ -78,6 +81,23 @@ rules:
   - primitive: identifier_cardinality@1
     args:
       namespace: lei
+# Form ADV's private funds join the one Fund that holds their PFID, or
+# create it. A name never joins.
+- rule_id: iapd-adv-fund-pfid
+  version: 2026-11-24.pfid
+  family: binding
+  source: iapd.adv.fund.v1
+  applies_to_verdict: fund_structure
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: pfid
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: pfid
 identifiers:
   sec_series_id:
     authority: SEC/EDGAR
@@ -106,6 +126,18 @@ identifiers:
       # One value per master (ticket 138): what the engine has always enforced
       # (a second value sends the master to review), now stated, since the
       # engine reads this limit and a Security's identifiers have none.
+      reverse: 1
+    compatibility:
+      field: kind
+      predicate: kind_equal@1
+  # rules/identifiers/pfid.yaml: 805, a hyphen and ten digits.
+  pfid:
+    authority: SEC IARD (Form ADV)
+    sources:
+    - iapd.adv.fund.v1
+    normalizer: normalize_identifier@pfid-v1
+    claim:
+      forward: 1
       reverse: 1
     compatibility:
       field: kind

@@ -187,6 +187,16 @@ steps:
     input: p07-2026-06
     minutes: 60
     attempts: 3
+  # Form ADV's private funds, after the adviser filings of the same months (lane C runs in order), so each
+  # INVESTMENT_ADVISER_TO link finds its adviser. March's step waits for ticket 02 of hosted-adv-private-fund-ingestion:
+  # the engine refuses March's IA 7.B(1), three of whose rows are malformed.
+  - name: adv-funds-06
+    lane: C
+    source: iapd.adv.fund
+    target: mastering
+    input: p07-2026-06
+    minutes: 60
+    attempts: 3
   - name: ncen-fund-2025q4
     lane: L
     source: sec.ncen.fund

@@ -144,6 +144,7 @@ PINNED = {
     ("loanx", 1): "781d1eb3655508412be932a9b1963a9c86932d74b9f7d6998fbfa258888752d3",
     ("ticker", 1): "469a9cdea42454f39527e893c9e3b2110d7af02eb532b69d0a3d1263538a73a5",
     ("filed_cusip", 1): "9d633cbd66ed144a664dd83572357ea139c9e786410e17e6135526142a3bb7db",
+    ("pfid", 1): "493ff2722d030949f7b0037a93033faf570b089a86ec7845b7b7c69e39911e4b",
 }
 
 
@@ -186,6 +187,14 @@ def test_the_sec_series_id_is_s_and_nine_digits():
     assert series.refusal(" s000012345 ") == ("S000012345", None)
     assert series.refusal("S12345")[1] == "invalid_sec_series_id"
     assert series.refusal("C000012345")[1] == "invalid_sec_series_id"
+
+
+def test_a_pfid_is_805_a_hyphen_and_ten_digits():
+    # Invented values; the shape is Form ADV Schedule D 7.B's (profile of 2026-03).
+    pfid = identifier_types.load()["pfid"]
+    assert pfid.refusal(" 805-0000012345 ") == ("805-0000012345", None)
+    for wrong in ("805-123", "580-0000012345", "8O5-0000012345", "805-00000123456", "8050000012345"):
+        assert pfid.refusal(wrong)[1] == "invalid_pfid", wrong
 
 
 def test_the_sec_class_id_is_c_and_nine_digits():

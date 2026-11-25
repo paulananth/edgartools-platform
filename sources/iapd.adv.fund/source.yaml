@@ -1,0 +1,127 @@
+# IAPD Form ADV private funds: Schedule D 7.B(1) and 7.B(2) of the monthly
+# Form ADV bulk file, read for the Fund Structure kind (a second kind from the
+# files `iapd.adv` reads, so its own folder). Ticket:
+# .scratch/hosted-adv-private-fund-ingestion/issues/01. Operator, 2026-11-24:
+# - "IA first, then ERA (Recommended)": these are the registered advisers'
+#   (IA) tables; the exempt reporting advisers' (ERA) tables come next.
+# - "Join by PFID only (Recommended)": a fund is one Fund Structure per PFID
+#   (rules/identifiers/pfid.yaml, rule `iapd-adv-fund-pfid`); a name never joins.
+# - "Reuse advisor/subadvisor (Recommended)": each filing that reports or lists
+#   the fund links its adviser to it, INVESTMENT_ADVISER_TO, in N-CEN's capacities.
+# - "Yes, IS_FEEDER_TO by PFID (Recommended)": a feeder links to its master.
+# - "Yes, by PFID (Recommended)": a fund only 7.B(2) lists is a record too.
+# The readings are beside this file: reported-csv.yaml (7.B(1)) and
+# listed-csv.yaml (7.B(2)); funds.yaml lists each fund once and combine.yaml
+# joins its latest 7.B(1) row and its advisers. Each file's month end comes in
+# as context (`published`).
+source: iapd.adv.fund
+execution: {profile: source.read, workers: 1, max_artifacts: 512}
+bronze:
+  # The files iapd.adv captures: reference/iapd_adv_bulk/<YYYY-MM>/ADV_Filing_Data_<from>_<to>.zip
+  family: iapd_adv_bulk
+# Bookkeeping. One target: the month's private funds through the Merge Stage. Run it after iapd.adv's
+# `mastering` of the same file, so each link finds its adviser's filing; a link whose adviser is not yet mastered
+# waits until it is. The month the file covers comes in as the run fact `published` (an ISO instant).
+bookkeeping:
+  version: 2
+  targets:
+    mastering:
+      grain: run
+      run: {facts: [published]}
+      delivered: {key: 'ADV_Filing_Data_\d{8}_(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})\.zip$', fact: published}
+      # The combine's rows are the records, one per fund; no record step.
+      extract: combine.yaml
+      master: {keys: {dataset: iapd.adv.fund.v1, table: fund}}
+dataset_contracts:
+  iapd.adv.fund.v1:
+    contract:
+      provider: SEC Investment Adviser Public Disclosure (IAPD)
+      family: iapd_adv_bulk
+      schema_version: iapd-adv-private-fund-csv-v1
+      record_key: the private fund's PFID; one record per fund in a monthly file, from its latest 7.B(1) row, else its 7.B(2) row
+      publication_key: exact captured monthly ADV bulk file (sha256)
+      effective_time: the end of the month the file covers (context `published`)
+      semantics: patch
+      completeness: the private funds named in one month's filings; no retirement by absence
+      nonblocking_deferred_reasons:
+      - invalid_field_shape
+      - invalid_time
+      adapter:
+        # The fund's name as the record states it: blank text is no value.
+        reading:
+          source: iapd.adv.fund
+          read:
+            format: json
+            limits: {max_bytes: 33554432, max_records: 1}
+            assertions:
+            - test: {test: {path: ., kind: object}}
+              reason: Mapped input must be an object
+            tables:
+              mapped:
+                each: .
+                columns:
+                  fields:
+                    object:
+                      fields:
+                        name: {value: {path: name, path_mode: literal, type: text, null_if_blank: true}}
+                  matching:
+                    object:
+                      fields: {}
+          input_fields:
+          - fund_id
+          - name
+          - published
+          - reported
+          - advisors
+          - subadvisors
+        version: iapd-adv-private-fund-2026-11-24.pfid
+        retain_deferred: true
+        source_record_provenance: true
+        kind: fund_structure
+        effective_at: published
+        record_key:
+        - fund_id
+        record_key_format: pfid
+        identifiers:
+          pfid: fund_id
+        identifier_formats:
+          pfid: pfid
+        profiles:
+        - role: fund
+          authority: SEC IAPD
+          registration: fund_id
+          valid_from: published
+        relationships:
+        # Each filing that reports (7.B(1)) or lists (7.B(2)) the fund: a dated sighting from the
+        # adviser's filing record (iapd.adv.filings.v2, the adviser's Company) to the fund. Several
+        # advisers of one fund are several links; one adviser's several filings are one.
+        - type: INVESTMENT_ADVISER_TO
+          capacity: advisor
+          each: advisors
+          source_key: [item.filing_id]
+          source_source: iapd.adv.filings.v2
+          target_key: [fund_id]
+          target_source: iapd.adv.fund.v1
+          on: item.published
+          held: item.held
+          time_format: instant
+          scope: IAPD Form ADV private fund
+        - type: INVESTMENT_ADVISER_TO
+          capacity: subadvisor
+          each: subadvisors
+          source_key: [item.filing_id]
+          source_source: iapd.adv.filings.v2
+          target_key: [fund_id]
+          target_source: iapd.adv.fund.v1
+          on: item.published
+          held: item.held
+          time_format: instant
+          scope: IAPD Form ADV private fund
+        # A feeder's master fund, by the master's PFID; the link waits until the master's own
+        # record is mastered, and never creates it.
+        - type: IS_FEEDER_TO
+          target_key: [reported.master_fund_id]
+          target_source: iapd.adv.fund.v1
+          valid_from: published
+          time_format: instant
+          scope: IAPD Form ADV private fund

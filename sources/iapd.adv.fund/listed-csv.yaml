@@ -1,0 +1,36 @@
+pass:
+  name: read_listed
+  files: '*.zip'
+  units: {each: file}
+  context: {published: {fact: published}}
+# The reading of Form ADV Schedule D 7.B(2) (IA_Schedule_D_7B2) in one monthly
+# bulk file: one row per filing and private fund the filing adviser advises
+# while another adviser reports it in full in its own 7.B(1). Profile of
+# 2026-03: 4,163 rows, 3,407 funds, 815 filings. Each row creates its fund by
+# PFID when no 7.B(1) row has (operator, 2026-11-24: "Yes, by PFID
+# (Recommended)"); 7.B(1) ranks first for every field. 7.B(2) states no role:
+# its link is in capacity `advisor` (operator, 2026-11-24: "advisor (Recommended)"),
+# written as a constant (the row's FilingID replaced). `held` is always true
+# (FilingID equals itself): Form ADV restates its funds and states no end.
+execution: {profile: source.read, workers: 1, max_artifacts: 512}
+read:
+  format: csv
+  container: zip
+  member: "IA_Schedule_D_7B2_*.csv"
+  encoding: [utf-8, windows-1252]
+  limits: {max_bytes: 33554432, max_member_bytes: 33554432, max_records: 100000}
+  context:
+    published: {type: text, max_bytes: 64}
+  tables:
+    funds:
+      each: record
+      columns:
+        filing_id: {text: {path: FilingID, path_mode: literal}}
+        fund_id: {text: {path: "Fund ID", path_mode: literal, transforms: [{trim: true}], null_if: [""]}}
+        name: {text: {path: "Fund Name", path_mode: literal, null_if: [""]}}
+        capacity: {text: {path: FilingID, path_mode: literal, transforms: [{regex_replace: {pattern: '^.*$', with: advisor}}]}}
+        held:
+          equal:
+            left: {text: {path: FilingID, path_mode: literal}}
+            right: {text: {path: FilingID, path_mode: literal}}
+        published: {context: {name: published}}

@@ -95,7 +95,7 @@ dataset_contracts:
                   matching:
                     object:
                       fields: {}
-        version: iapd-adv-filing-csv-2026-11-08.month-end-as-effective-time
+        version: iapd-adv-filing-csv-2026-11-24.adviser-profile
         retain_deferred: true
         source_record_provenance: true
         kind: company
@@ -125,6 +125,14 @@ dataset_contracts:
         cross_references:
           sec_file_number: sec_file_number
           adv_lei: lei
+        # The adviser role, from the month of the filing: Form ADV's private funds
+        # (sources/iapd.adv.fund) link their advisers to them (INVESTMENT_ADVISER_TO),
+        # and that link needs its start to hold the adviser role over its period.
+        profiles:
+        - role: adviser
+          authority: SEC IAPD
+          registration: crd
+          valid_from: published
         # The adviser's custodians (ticket 75; combine.yaml joins the filing's
         # `custodians`): each names the custodians contract's record of it in
         # the same monthly file, so the link waits until that record is

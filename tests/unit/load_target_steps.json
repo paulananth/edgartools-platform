@@ -538,6 +538,191 @@
    }
   ]
  },
+ "iapd.adv.fund/mastering": {
+  "run": {
+   "facts": [
+    "published"
+   ]
+  },
+  "steps": [
+   {
+    "name": "read_reported",
+    "operation": "source.read",
+    "requires": [],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "units": {
+     "each": "file"
+    },
+    "input": {
+     "contract": "reported-csv.yaml",
+     "files": "*.zip",
+     "context": {
+      "published": {
+       "fact": "published"
+      }
+     }
+    }
+   },
+   {
+    "name": "read_listed",
+    "operation": "source.read",
+    "requires": [],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "units": {
+     "each": "file"
+    },
+    "input": {
+     "contract": "listed-csv.yaml",
+     "files": "*.zip",
+     "context": {
+      "published": {
+       "fact": "published"
+      }
+     }
+    }
+   },
+   {
+    "name": "funds",
+    "operation": "source.combine",
+    "requires": [
+     "read_reported",
+     "read_listed"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.combined"
+    ],
+    "input": {
+     "contract": "funds.yaml",
+     "readings": {
+      "reported": {
+       "all": "read_reported"
+      },
+      "listed": {
+       "all": "read_listed"
+      }
+     }
+    }
+   },
+   {
+    "name": "combine",
+    "operation": "source.combine",
+    "requires": [
+     "funds",
+     "read_reported",
+     "read_listed"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.combined"
+    ],
+    "input": {
+     "contract": "combine.yaml",
+     "readings": {
+      "funds": {
+       "step": "funds"
+      },
+      "reported": {
+       "all": "read_reported"
+      },
+      "listed": {
+       "all": "read_listed"
+      }
+     }
+    }
+   },
+   {
+    "name": "prepare",
+    "operation": "mdm.prepare",
+    "requires": [
+     "combine"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "mdm.prepared"
+    ],
+    "input": {
+     "keys": {
+      "dataset": "iapd.adv.fund.v1",
+      "table": "fund"
+     },
+     "readings": {
+      "combine": {
+       "all": "combine"
+      }
+     }
+    }
+   },
+   {
+    "name": "merge",
+    "operation": "mastering.merge",
+    "requires": [
+     "prepare"
+    ],
+    "key": "{batch_id}",
+    "leases": [
+     "mdm:consumer:{consumer}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "mdm.committed"
+    ]
+   },
+   {
+    "name": "processed",
+    "operation": "journal.record",
+    "requires": [
+     "merge"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "journal.recorded"
+    ]
+   }
+  ],
+  "checks": [
+   "manifest.hash",
+   "work.accounting",
+   "journal.delivered"
+  ]
+ },
  "openfigi/mastering": {
   "checks": [
    "manifest.hash",
