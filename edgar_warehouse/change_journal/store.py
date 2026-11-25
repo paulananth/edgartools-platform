@@ -22,7 +22,7 @@ class JournalConflict(ValueError):
 
 
 def _default_url(store: str) -> str:
-    """`CONTROL_URL`, the control database that holds rules, bookkeeping and the change journal, each in its own schema
+    """`CONTROL_URL`, the control database that holds bookkeeping and the change journal, each in its own schema
     (skills/data-platform/CONNECTIONS.md). The package imports nothing outside itself, so it reads the variable itself. It must name its database."""
     value = os.environ.get("CONTROL_URL")
     if not value:

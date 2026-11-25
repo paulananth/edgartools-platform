@@ -158,7 +158,7 @@ def test_a_failure_shows_its_text_only_when_the_text_is_this_scripts_own_or_the_
     assert local.error_text(KeyError("password=invented")) == "KeyError"
 
 
-def test_every_duty_file_holds_the_data_and_the_control_url_each_naming_its_database(tmp_path, monkeypatch):
+def test_every_duty_file_holds_one_url_a_database_each_naming_its_database(tmp_path, monkeypatch):
     stores = local.LocalStores(tmp_path, tmp_path)
     stores.identity("one", create=True)
     named = []
@@ -177,10 +177,10 @@ def test_every_duty_file_holds_the_data_and_the_control_url_each_naming_its_data
     def exported(path):
         return [line.split("=", 1)[0][7:] for line in (stores.folder("one") / path).read_text().splitlines() if line.startswith("export ")]
 
-    assert exported("owner.env") == ["DATA_URL", "CONTROL_URL"]
-    assert exported("worker.env") == ["DATA_URL", "CONTROL_URL", "MDM_APPLICATION_ROLE", "BOOKKEEPING_MANIFEST_ROOT"]
-    assert exported("governance.env") == ["DATA_URL", "CONTROL_URL"]
-    assert sorted(set(named)) == ["control", "data"]
+    assert exported("owner.env") == ["DATA_URL", "CONTROL_URL", "CONFIG_URL"]
+    assert exported("worker.env") == ["DATA_URL", "CONTROL_URL", "CONFIG_URL", "MDM_APPLICATION_ROLE", "BOOKKEEPING_MANIFEST_ROOT"]
+    assert exported("governance.env") == ["DATA_URL", "CONTROL_URL", "CONFIG_URL"]
+    assert sorted(set(named)) == ["config", "control", "data"]
     assert not (stores.folder("one") / "connection.env").exists()
 
 

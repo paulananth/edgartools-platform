@@ -88,7 +88,7 @@ must target that exact database. Driver setup is in the central connection secti
 Select the command matching store state. Read back migration checksums, the
 engine's Journal-owned event storage/readback objects, restricted grants and event count.
 Checksum drift, the wrong database, or an untracked `journal` schema refuse.
-The journal shares the control database with Rules and Bookkeeping, each in its
+The journal shares the control database with Bookkeeping, each in its
 own schema ([CONNECTIONS](../data-platform/CONNECTIONS.md)); their tables, and a
 hosted instance's own extension schemas, sit beside it and never refuse it.
 Import no legacy events, checkpoints or pending delivery; preserve old archives.

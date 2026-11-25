@@ -38,7 +38,7 @@ edgar-warehouse load --source <name> --target <target> --capture <capture folder
 
 `load` does the whole path for one source's target ([data-operations](../data-operations/SKILL.md#load-a-capture)):
 
-1. It registers the merge rules and the source's Dataset Contracts from the files, in the control database's `rules` schema
+1. It registers the merge rules and the source's Dataset Contracts from the files, in the config database's `rules` schema
    (`rules register`; registering what is registered changes nothing).
 2. It cuts the capture into bundles and leaves out every document the Change Journal holds as processed
    under these rules.

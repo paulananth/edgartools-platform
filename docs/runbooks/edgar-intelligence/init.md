@@ -14,7 +14,7 @@ a connection value.
 `REGISTERED` check) but does not run them: a store reset and given its schemas, with the registration, rules and worker grants skipped, passed an
 earlier gate, and every load step then stopped within seconds at "permission denied for schema mdm".
 
-The stores folder is `~/.config/edgartools/hosted/`, one folder for the store: `owner.env` (the owner login, `DATA_URL` and `CONTROL_URL`),
+The stores folder is `~/.config/edgartools/hosted/`, one folder for the store: `owner.env` (the owner login, `DATA_URL`, `CONTROL_URL` and `CONFIG_URL`),
 `worker.env` (the runtime logins and the manifest root), `governance.env` (the registration login). `load --stores`
 takes it. A second copy of these files elsewhere goes stale, and a stale copy fails `doctor` with a login error.
 
@@ -50,8 +50,9 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    disruptive and needs the operator's approval; approval to reset the
    databases alone is not approval to disconnect every client.
 
-2. **Databases.** An instance that holds an old store keeps its logins and gets its databases made again: with the
-   operator's word, list them, then drop and create them with the owner and the grants each had:
+2. **Databases.** An instance that holds an old store keeps its logins and gets its data and control databases made again: with the
+   operator's word, list them, then drop and create them with the owner and the grants each had. The config database (rules) is
+   never dropped, so the registered rules stay for the reload:
    ```bash
    set -a; . ~/.config/edgartools/hosted/owner.env; set +a
    python infra/scripts/reset-hosted-databases.py             # lists sizes and session classes; drops nothing
@@ -60,7 +61,7 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    The drop also deletes the dropped stores' run files (`<manifest root>/load`, the root `worker.env` names): no store refers
    to them once Bookkeeping is dropped. Extracts (`<manifest root>/extracts`) stay, since a load reuses one by its content. A
    load deletes each bundle's files once its run is verified, so only a run that stopped keeps files, to resume.
-   A fresh instance gets its two databases (`data`: mdm, rdm and silver; `control`: rules, bookkeeping and the change journal,
+   A fresh instance gets its three databases (`data`: mdm, rdm and silver; `control`: bookkeeping and the change journal; `config`: rules,
    each store a schema) and their restricted logins from the stores folder's own files, each login with the password its URL already holds (no login
    is rotated; the first confirmed run also makes the diagnostic login `ops_reader`, with `pg_monitor` and no store, and its
    `reader.env`). Each login gets CONNECT on its databases, never TEMPORARY, and PUBLIC gets nothing: no load creates a
@@ -84,7 +85,7 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    a connection limit per login, statement and idle-transaction timeouts, a `work_mem` ceiling for the loader and the audit classes
    for the logins that change schemas, policy or approvals. Done when it prints that every login role holds its guards. The guards belong to
    the roles, which a reset of the databases keeps, so the step is safe to run again. Read [HOSTED-LOADS.md](../../../skills/data-operations/HOSTED-LOADS.md) before a load.
-3. **Schemas** (data-platform's step, [STORES.md](../../../skills/data-platform/STORES.md)), each by the owner login, in one shell that holds `owner.env`. Each command finds its store's database by its group: `DATA_URL` for mdm, rdm and silver, `CONTROL_URL` for rules, bookkeeping and the change journal:
+3. **Schemas** (data-platform's step, [STORES.md](../../../skills/data-platform/STORES.md)), each by the owner login, in one shell that holds `owner.env`. Each command finds its store's database by its group: `DATA_URL` for mdm, rdm and silver, `CONTROL_URL` for bookkeeping and the change journal, `CONFIG_URL` for rules:
    ```bash
    edgar-warehouse mdm init --application-role mdm_runtime
    edgar-warehouse rdm init --runtime-role rdm_runtime

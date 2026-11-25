@@ -16,7 +16,7 @@ or a worker change is the operator's call, made in data-operations.
 
 | Never | Instead |
 |---|---|
-| Connect as the owner, the loader or a runtime login to look | The diagnostic login (`DATA_URL` and `CONTROL_URL`, in the stores folder's `reader.env`) |
+| Connect as the owner, the loader or a runtime login to look | The diagnostic login (`DATA_URL`, `CONTROL_URL` and `CONFIG_URL`, in the stores folder's `reader.env`) |
 | Print the address, a password or a login's URL | The script prints none; do not echo the environment |
 | End a session, cancel a query, vacuum, or change a setting | Report the finding; the operator decides |
 | Paste a statement's literals, or a log's DETAIL, STATEMENT or CONTEXT lines (they quote values from the data) | The script replaces literals and drops those lines; keep it that way |

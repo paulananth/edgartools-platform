@@ -26,8 +26,8 @@ substituting PostgreSQL.
 
 A hosted instance is initialized in the order of the Edgar Intelligence initialize runbook; its schema and silver-table steps are this skill's.
 
-Apply these five schemas into the databases [Setup](SKILL.md#0-setup) created: `mdm`, `rdm`,
-`bookkeeping`, `change_journal`, and `silver`. Read each command's `--help` before the
+Apply these six schemas into the databases [Setup](SKILL.md#0-setup) created: `mdm`, `rdm` and `silver` in the data
+database, `bookkeeping` and `change_journal` in the control database, and `rules` in the config database. Read each command's `--help` before the
 first use. The required initialization path uses the same logical schema
 and supported command interface with a storage adapter for the selected
 engine. [sql-writer](../sql-writer/SKILL.md) compiles portable tables and
@@ -51,8 +51,9 @@ including the hosted Bookkeeping control group.
 |---|---|
 | MDM | `edgar-warehouse mdm init --application-role <role>` |
 | RDM | `edgar-warehouse rdm init --runtime-role <role>` |
-| Bookkeeping | `edgar-warehouse bookkeeping init --runtime-role <role>`. The database name is `bookkeeping`. |
-| Change Journal | `edgar-warehouse change-journal init --runtime-role <role>`. The database name is `change_journal`. |
+| Bookkeeping | `edgar-warehouse bookkeeping init --runtime-role <role>`, in the control database |
+| Change Journal | `edgar-warehouse change-journal init --runtime-role <role>`, in the control database |
+| Rules | `edgar-warehouse rules init --agent-role <role>`, in the config database |
 | Silver | `edgar-warehouse silver init --runtime-role <role>` |
 
 `init` is the whole step on a fresh store. `migrate` (each store has one) applies a schema file that arrives later and

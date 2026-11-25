@@ -18,7 +18,7 @@ def test_a_database_with_no_access_list_has_no_grants():
     assert reset.grants([], "admin") == []
 
 
-def test_every_database_the_platform_holds_is_named():
+def test_a_reset_names_only_the_data_and_control_databases():
     assert reset.DATABASES == ("data", "control")
 
 

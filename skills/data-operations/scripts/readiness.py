@@ -45,8 +45,7 @@ CHECKS = {
     "STATE": "The run's state file is this store's, or will be set aside, before any step runs",
     "REGISTERED": "The merge policy and every Dataset Contract are registered, and every worker profile is granted",
 }
-DUTY_DATABASES = {"owner.env": ("postgres",), "worker.env": ("data", "control"), "governance.env": ("data", "control"),
-                  "reader.env": ("data", "control")}
+DUTY_FILES = ("worker.env", "governance.env", "reader.env")  # each connects to every store database; owner.env to `postgres`
 
 
 def now() -> datetime:
@@ -220,8 +219,8 @@ def registration_facts(reader_env: dict, env: dict) -> dict | None:
             with psycopg2.connect(load_jobs.in_database(load_jobs.data_url(source), database), connect_timeout=10) as conn, conn.cursor() as cur:
                 cur.execute(sql)
                 return cur.fetchone()[0]
-        return {"policies": one(env, "control", "select count(*) from rules.policy"),
-                "datasets": one(env, "control", "select count(*) from rules.dataset_reading"),
+        return {"policies": one(env, "config", "select count(*) from rules.policy"),
+                "datasets": one(env, "config", "select count(*) from rules.dataset_reading"),
                 "profiles": len(PROFILES),
                 "profiles_granted": one(reader_env, "control", "select count(*) from pg_auth_members m join pg_roles r on r.oid = m.roleid "
                                         "join pg_roles u on u.oid = m.member where u.rolname = 'bookkeeping_runtime' and r.rolname like 'bk\\_worker\\_%'")}
@@ -270,25 +269,31 @@ def audit_failures(env: dict | None = None) -> list[str] | None:
 
 
 def login_facts(stores: Path) -> dict:
-    """Each duty file's login against each database of its duty: "answers", or the kind of failure. A driver's error text can hold
-    the address and the password, so only its class is kept."""
-    from urllib.parse import urlsplit, urlunsplit
+    """Each duty file's login against each database of its duty, by the URL the file names for it: "answers", or the kind of
+    failure. A duty file that names no URL for a store database is unreadable, so the gate never opens on a load that would
+    stop at its first store call. A driver's error text can hold the address and the password, so only its class is kept."""
+    import psycopg2
     sys.path.insert(0, str(HERE))
     import load_jobs
+    from edgar_warehouse.database_connections import DATABASES, store_url
+
     found = {}
-    for name, databases in DUTY_DATABASES.items():
+    for name in ("owner.env", *DUTY_FILES):
         try:
-            url = load_jobs.data_url(load_jobs.load_env(stores / name))
+            env = load_jobs.load_env(stores / name)
+            url = load_jobs.data_url(env)
             if url is None:
                 raise KeyError("no data database")
+            urls = [load_jobs.in_database(url, "postgres")] if name == "owner.env" else [
+                store_url(group[0], env).set(drivername="postgresql").render_as_string(hide_password=False)
+                for group in DATABASES.values()]
         except Exception as exc:  # noqa: BLE001
             found[name] = f"unreadable ({type(exc).__name__})"
             continue
         state = "answers"
         try:
-            import psycopg2
-            for database in databases:
-                psycopg2.connect(urlunsplit(urlsplit(url)._replace(path="/" + database)), connect_timeout=10).close()
+            for each in urls:
+                psycopg2.connect(each, connect_timeout=10).close()
         except Exception as exc:  # noqa: BLE001
             state = f"does not answer ({type(exc).__name__})"
         found[name] = state

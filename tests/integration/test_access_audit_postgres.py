@@ -18,8 +18,8 @@ def test_public_schema_audit_ignores_extension_objects_and_flags_application_obj
         admin.autocommit = True
         try:
             with admin.cursor() as cursor:
-                cursor.execute("CREATE DATABASE data")
-                cursor.execute("CREATE DATABASE control")
+                for database in ("data", "control", "config"):
+                    cursor.execute(f"CREATE DATABASE {database}")
         finally:
             admin.close()
 
@@ -31,16 +31,16 @@ def test_public_schema_audit_ignores_extension_objects_and_flags_application_obj
 
         assert schema_result()["result"] == "PASS"
 
-        for database in ("data", "control"):
+        for database in ("data", "control", "config"):
             with psycopg2.connect(instance.url(database, driver="postgresql")) as connection:
                 with connection.cursor() as cursor:
                     cursor.execute("CREATE EXTENSION pg_stat_statements")
 
         extension_only = schema_result()
         assert extension_only["result"] == "PASS"
-        assert extension_only["evidence"]["public_objects"] == {"data": 0, "control": 0}
+        assert extension_only["evidence"]["public_objects"] == {"data": 0, "control": 0, "config": 0}
 
-        for database in ("data", "control"):
+        for database in ("data", "control", "config"):
             with psycopg2.connect(instance.url(database, driver="postgresql")) as connection:
                 with connection.cursor() as cursor:
                     cursor.execute("CREATE TABLE public.application_table (id bigint)")

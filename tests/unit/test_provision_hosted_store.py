@@ -8,8 +8,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[2] / "skills/data-platform/scripts"))
 
-from provision_hosted_store import (DATABASES, DUTIES, Refused, ddl_free, duty_file, ensure_files, logins, main, provision,
-                                    read_url, read_urls, rewrite)
+from provision_hosted_store import (DATABASES, DUTIES, Refused, complete, ddl_free, duty_file, ensure_files, logins, main,
+                                    missing_settings, provision, read_url, read_urls, rewrite)
 
 OLD = "old.invalid"
 
@@ -28,7 +28,7 @@ def _folder(tmp_path, loader="l-invented", governance="g-invented", reader=None)
 def test_each_duty_file_names_its_login_with_the_password_it_holds(tmp_path):
     held = logins(_folder(tmp_path, reader="r-invented"), "admin")
     assert held["edgar_loader"] == ("l-invented", set(DATABASES))
-    assert held["governance"] == ("g-invented", {"data", "control"})
+    assert held["governance"] == ("g-invented", {"data", "control", "config"})
     assert held["ops_reader"] == ("r-invented", set(DATABASES))
     assert "admin" not in held
 
@@ -48,13 +48,14 @@ def test_a_missing_file_is_a_missing_duty_not_an_error(tmp_path):
 
 def test_every_file_moves_to_the_new_instance_and_only_the_administrator_takes_a_new_password(tmp_path):
     folder = _folder(tmp_path, reader="r-invented")
-    assert rewrite(folder, "new.invalid", 5432, "admin", "a-new") == 8  # two URLs a file
+    assert rewrite(folder, "new.invalid", 5432, "admin", "a-new") == 12  # three URLs a file
     assert read_urls(folder, "owner.env") == {"DATA_URL": "postgresql://admin:a-new@new.invalid:5432/data",
-                                               "CONTROL_URL": "postgresql://admin:a-new@new.invalid:5432/control"}
+                                               "CONTROL_URL": "postgresql://admin:a-new@new.invalid:5432/control",
+                                               "CONFIG_URL": "postgresql://admin:a-new@new.invalid:5432/config"}
     assert read_url(folder, "worker.env") == "postgresql://edgar_loader:l-invented@new.invalid:5432/data"
     assert OLD not in "".join((folder / name).read_text() for name in ("owner.env", "worker.env", "governance.env", "reader.env"))
     assert (folder / "worker.env").stat().st_mode & 0o777 == 0o600
-    assert (folder / "worker.env").read_text().startswith("unset DATA_URL CONTROL_URL\n")
+    assert (folder / "worker.env").read_text().startswith("unset DATA_URL CONTROL_URL CONFIG_URL\n")
 
 
 def test_missing_duty_files_are_made_private_with_a_new_password_and_none_is_replaced(tmp_path):
@@ -66,6 +67,28 @@ def test_missing_duty_files_are_made_private_with_a_new_password_and_none_is_rep
     assert reader.startswith("postgresql://ops_reader:") and reader.endswith("@new.invalid:5432/data") and "a-new" not in reader
     assert (tmp_path / "reader.env").stat().st_mode & 0o777 == 0o600
     assert ensure_files(tmp_path, "new.invalid", 5432, {"user": "admin", "password": "a-new"}) == []
+
+
+def test_a_duty_file_missing_a_database_is_given_it_for_its_own_login_and_keeps_its_other_settings(tmp_path):
+    path = tmp_path / "worker.env"
+    path.write_text("unset DATA_URL CONTROL_URL\n"
+                    "export DATA_URL='postgresql://edgar_loader:keep-invented@h:5432/data?sslmode=require'\n"
+                    "export CONTROL_URL='postgresql://edgar_loader:keep-invented@h:5432/control?sslmode=require'\n"
+                    "export MDM_APPLICATION_ROLE=mdm_runtime\n")
+    assert missing_settings(tmp_path, "worker.env") == ["CONFIG_URL"]
+    assert complete(tmp_path, "worker.env") == ["CONFIG_URL"]
+    assert read_urls(tmp_path, "worker.env")["CONFIG_URL"] == "postgresql://edgar_loader:keep-invented@h:5432/config?sslmode=require"
+    lines = path.read_text().splitlines()
+    assert lines[0] == "unset DATA_URL CONTROL_URL CONFIG_URL" and "export MDM_APPLICATION_ROLE=mdm_runtime" in lines
+    assert path.stat().st_mode & 0o777 == 0o600
+    assert complete(tmp_path, "worker.env") == [] and missing_settings(tmp_path, "worker.env") == []
+
+
+def test_a_duty_file_with_no_unset_line_also_clears_the_names_it_is_given(tmp_path):
+    (tmp_path / "governance.env").write_text("export DATA_URL='postgresql://governance:g-invented@h:5432/data'\n")
+    assert complete(tmp_path, "governance.env") == ["CONTROL_URL", "CONFIG_URL"]
+    assert (tmp_path / "governance.env").read_text().splitlines()[0] == "unset CONTROL_URL CONFIG_URL"
+    assert read_url(tmp_path, "governance.env") == "postgresql://governance:g-invented@h:5432/data"
 
 
 class _Server:
@@ -108,8 +131,9 @@ def test_the_logins_groups_and_memberships_of_each_duty_are_made():
     assert "give ops_reader pg_monitor: sessions, locks and statistics, no table" in steps
     assert "data: connect for edgar_loader, governance (never TEMPORARY: run-time code creates no table)" in steps
     assert "control: connect for edgar_loader, governance (never TEMPORARY: run-time code creates no table)" in steps
-    assert "control: connect for ops_reader" in steps
-    assert DATABASES == ("data", "control")
+    assert "config: connect for edgar_loader, governance (never TEMPORARY: run-time code creates no table)" in steps
+    assert "config: connect for ops_reader" in steps
+    assert DATABASES == ("data", "control", "config")
 
 
 def test_a_governance_role_of_an_earlier_layout_stops_being_a_login_and_stays_a_group():
@@ -139,7 +163,8 @@ def test_a_login_connects_to_its_databases_never_holds_temporary_and_public_gets
 def test_a_url_the_parser_refuses_prints_its_class_never_its_password(tmp_path, monkeypatch, capsys):
     stores = _folder(tmp_path)
     (stores / "worker.env").write_text("export DATA_URL='postgresql://edgar_loader:p-invented＃x@old.invalid:5432/data'\n"
-                                       "export CONTROL_URL='postgresql://edgar_loader:p-invented＃x@old.invalid:5432/control'\n")
+                                       "export CONTROL_URL='postgresql://edgar_loader:p-invented＃x@old.invalid:5432/control'\n"
+                                       "export CONFIG_URL='postgresql://edgar_loader:p-invented＃x@old.invalid:5432/config'\n")
     (tmp_path / "services").write_text("[invented]\nhost=new.invalid\nport=5432\nuser=admin\n")
     (tmp_path / "pgpass").write_text("new.invalid:5432:*:admin:a-new\n")
     monkeypatch.setenv("PGSERVICEFILE", str(tmp_path / "services"))
@@ -179,12 +204,12 @@ def test_a_login_holding_a_schema_create_or_an_object_is_refused():
 
 
 @pytest.mark.parametrize("text, refusal", [
-    ("export DATA_URL='postgresql://edgar_loader:x@h:5432/data'\n", "must hold DATA_URL and CONTROL_URL"),
     (duty_file("postgresql://edgar_loader:x@h:5432").replace("/control", "/data"), "CONTROL_URL must name the control database"),
+    (duty_file("postgresql://edgar_loader:x@h:5432").replace("/config", "/control"), "CONFIG_URL must name the config database"),
     (duty_file("postgresql://edgar_loader:x@h:5432").replace("edgar_loader:x@h:5432/control", "edgar_loader:y@h:5432/control"),
      "two logins"),
 ])
-def test_a_duty_file_holds_one_login_as_two_urls_one_a_database(tmp_path, text, refusal):
+def test_a_duty_file_holds_one_login_and_one_url_a_database(tmp_path, text, refusal):
     (tmp_path / "worker.env").write_text(text)
     with pytest.raises(Refused, match=refusal):
         read_url(tmp_path, "worker.env")

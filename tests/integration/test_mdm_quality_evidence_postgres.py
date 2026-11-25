@@ -53,7 +53,7 @@ def registered_quality_source(databases):
             }],
         }
         policy = json.loads((FIXTURE / "policy.json").read_text(encoding="utf-8"))
-        with databases.admin.begin() as conn:
+        with databases.rules_admin.begin() as conn:
             policy_digest = register_policy(conn, policy)
             register_dataset(conn, CODE, str(uuid4()), contract)
         yield data_admin, policy_digest
@@ -110,6 +110,7 @@ def test_mdm_quality_receipt_survives_lost_report_and_is_admitted_once(
     # All MDM worker connections point at the disposable integration databases.
     monkeypatch.setenv("DATA_URL", databases.loader["DATA_URL"])
     monkeypatch.setenv("CONTROL_URL", databases.loader["CONTROL_URL"])
+    monkeypatch.setenv("CONFIG_URL", databases.loader["CONFIG_URL"])
     monkeypatch.setenv("MDM_APPLICATION_ROLE", "clean_application")
     monkeypatch.setenv("MASTERING_MERGE_PROCESSES", "1")
     monkeypatch.setenv("MDM_QUALITY_EVIDENCE_V1", "enabled")

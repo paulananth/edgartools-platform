@@ -132,7 +132,7 @@ each database is one mirror, and each schema keeps its name in the target. Read 
 publications already held; when the databases to mirror outnumber the free publications, the answer is the store layout
 (every exposed store in the data database, [Connection URLs](CONNECTIONS.md)), not a support request or a dropped mirror. The
 data database gives one mirror, the `mirror.database` of `rules/snowflake.yaml`, with one schema per source schema; a plan with more than one target
-database for the exposed stores is a defect. Only the data database is mirrored, never the control database (rules, Bookkeeping, Change Journal):
+database for the exposed stores is a defect. Only the data database is mirrored, never the control database (Bookkeeping, Change Journal) nor the config database (Rules):
 `scripts/exposure/mirror_sql.py exists` reads back whether the target database exists (`SHOW DATABASES LIKE`, no administrator needed: it is absent before a create and after a retire). `scripts/exposure/mirror_sql.py plan --publication-limit <n> --publications-held <n>` writes the plan (tables per schema, the one publication) or refuses a record
 that names another database, a table whose layer is not on `DATA_URL`, or no free publication.
 
@@ -189,7 +189,7 @@ exist before a mirror can take it, so the order is the load, then:
    ([the single-database qualification](SINGLE-DATABASE-ICEBERG.md) pins the rest).
 
 **One mirror, of the data database.** Every exposed store is a schema of the one data database, so the listed tables get one mirror with one
-target database (`mirror.database`) and the schemas `MDM`, `RDM` and `SILVER`. Never one mirror per store, never one reading the control database.
+target database (`mirror.database`) and the schemas `MDM`, `RDM` and `SILVER`. Never one mirror per store, never one reading the control or the config database.
 The create plan names the one source database, its tables per schema, its target and its refresh interval, and is approved before it runs
 (`mirror_sql.py plan`). RDM lists the published-only table, never the tables that hold drafts: a mirror carries tables, not views.
 

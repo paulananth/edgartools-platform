@@ -45,14 +45,16 @@ def connect(value: str, selected: str, *, runtime_role: str | None = None):
 
 
 STORES = ("mdm", "rdm", "rules", "bookkeeping", "change_journal", "silver")
-# Two databases, each store in its own schema: what consumers read (one mirror carries it) and what runs the platform.
+# Three databases, each store in its own schema: what consumers read (one mirror carries it), what runs the platform, and
+# what says how data is processed. A reset of the data or the control database never reaches the configuration.
 DATA_STORES = ("mdm", "rdm", "silver")
-CONTROL_STORES = ("rules", "bookkeeping", "change_journal")
-DATABASES = {"data": DATA_STORES, "control": CONTROL_STORES}  # the database each group of stores shares
+CONTROL_STORES = ("bookkeeping", "change_journal")
+CONFIG_STORES = ("rules",)
+DATABASES = {"data": DATA_STORES, "control": CONTROL_STORES, "config": CONFIG_STORES}  # the database each group shares
 
 
 def database_of(store: str) -> str:
-    """The database that holds this store's schema: data or control."""
+    """The database that holds this store's schema: data, control or config."""
     for database, stores in DATABASES.items():
         if store in stores:
             return database
@@ -60,8 +62,8 @@ def database_of(store: str) -> str:
 
 
 def url_variable(store: str) -> str:
-    """The duty file's variable that names this store's database: DATA_URL or CONTROL_URL."""
-    return {"data": "DATA_URL", "control": "CONTROL_URL"}[database_of(store)]
+    """The duty file's variable that names this store's database: DATA_URL, CONTROL_URL or CONFIG_URL."""
+    return database_of(store).upper() + "_URL"
 
 
 def configured(store: str, environment=None) -> bool:
@@ -75,8 +77,8 @@ def instance_url(environment=None, database: str = "postgres"):
 
 
 def store_url(store: str, environment=None):
-    """The URL of the database that holds this store: `DATA_URL` for mdm, rdm and silver, `CONTROL_URL` for rules,
-    bookkeeping and change_journal, from the duty's file. Each must name its database; nothing is guessed."""
+    """The URL of the database that holds this store: `DATA_URL` for mdm, rdm and silver, `CONTROL_URL` for bookkeeping
+    and change_journal, `CONFIG_URL` for rules, from the duty's file. Each must name its database; nothing is guessed."""
     variable = url_variable(store)
     env = os.environ if environment is None else environment
     value = env.get(variable)

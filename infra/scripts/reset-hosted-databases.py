@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Drop and create again the platform's databases on a hosted instance, with the owner and the grants each had.
+"""Drop and create again the platform's data and control databases on a hosted instance, with the owner and the grants each had.
 
     set -a; . <stores folder>/owner.env; set +a
     python infra/scripts/reset-hosted-databases.py            # lists sizes and session classes; drops nothing
@@ -10,7 +10,7 @@ create databases. The roles stay (they belong to the instance), so no password c
 Each database's owner and CONNECT list are read before it is dropped and put back after, so the runtime, registration
 and any read-only logins reach it as before. Refuses while a client session or a session with an open transaction is
 connected. Idle PostgreSQL extension workers without a transaction are reported separately and disconnected by the
-approved database drop (`WITH (FORCE)`).
+approved database drop (`WITH (FORCE)`). The config database (rules) is never named, so a reset keeps it.
 The stores' schemas come next (docs/runbooks/edgar-intelligence/init.md, "Initialize a hosted store", step 3). Prints names and sizes only.
 
 Dropping needs a sign-off: --words is the operator's exact approval of this drop, and the run refuses without it.
@@ -35,7 +35,9 @@ from zoneinfo import ZoneInfo
 import sqlalchemy as sa
 from sqlalchemy.engine import make_url
 
-DATABASES = ("data", "control")  # the data database (mdm, rdm, silver) and the control database (rules, bookkeeping, change_journal)
+# The data database (mdm, rdm, silver) and the control database (bookkeeping, change_journal). The config database (rules) is
+# never reset: it says how the data is processed, and a reload needs it.
+DATABASES = ("data", "control")
 PRIVILEGES = {"C": "CREATE", "T": "TEMPORARY", "c": "CONNECT"}
 
 

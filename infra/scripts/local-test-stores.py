@@ -28,12 +28,12 @@ from sqlalchemy.engine import URL
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from edgar_warehouse.database_connections import DATABASES, database_of, url_variable  # noqa: E402
 
-# Two databases, each store a schema under its own owner (skills/data-platform/CONNECTIONS.md).
+# Three databases, each store a schema under its own owner (skills/data-platform/CONNECTIONS.md).
 STORES = ("mdm", "rdm", "rules", "bookkeeping", "change_journal")
 ALL_STORES = (*STORES, "silver")
-# Nothing lives in `public` (the audit's SCH control): mastering is in the `mdm` schema. MDM's owner owns the data database; the control database is
-# the server's, and each store's owner gets CREATE on its database for its own schema.
-DATABASE_OWNER = {"data": "mdm_owner", "control": "postgres"}
+# Nothing lives in `public` (the audit's SCH control): mastering is in the `mdm` schema. MDM's owner owns the data database; the control
+# and config databases are the server's, and each store's owner gets CREATE on its database for its own schema.
+DATABASE_OWNER = {"data": "mdm_owner", "control": "postgres", "config": "postgres"}
 
 
 def databases(stores) -> list[str]:
@@ -205,7 +205,7 @@ class LocalStores:
 
     def connections(self, name: str, *, include_silver=False):
         def duty(user: str) -> dict:
-            """One URL a database: the file names both, each with its database."""
+            """One URL a database: the file names each, with its database."""
             return {url_variable(DATABASES[database][0]): self.url(name, database, user).render_as_string(hide_password=False)
                     for database in DATABASES}
 

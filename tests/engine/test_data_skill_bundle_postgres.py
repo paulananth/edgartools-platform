@@ -298,7 +298,7 @@ print(json.dumps({{"shipped": shipped, "modules": modules, "absent": absent, "ru
 
 
 def _stores(databases):
-    return dict(databases.loader)  # one login holding each store's runtime privileges, the data and the control URL
+    return dict(databases.loader)  # one login holding each store's runtime privileges, the data, control and config URL
 
 
 def test_source_sequence_runs_from_installed_bundle_without_checkout(installed):
@@ -541,7 +541,7 @@ def empty_rules_database():
 def test_the_rules_creator_runs_from_the_bundle_on_an_empty_rules_database(installed, empty_rules_database, tmp_path):
     python, root = installed
     url = empty_rules_database
-    env = {"CONTROL_URL": url}
+    env = {"CONFIG_URL": url}
     cli = lambda *a: _run(python, "-m", "edgar_warehouse.cli", *a, env=env, cwd=root)
     folder = tmp_path / "rules"
     assert cli("skill", "install", "--home", str(tmp_path / "home"), "--rules", str(folder)).returncode == 0
@@ -709,7 +709,7 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
     mdm_admin = create_engine(databases.admin.url.set(database=mdm_name))
     mdm_app = create_engine(mdm_admin.url.set(username="clean_application", password="test"))
     migrate(mdm_admin, application_role="clean_application")
-    with databases.admin.begin() as conn:  # the registry is the Rules Database's, in the control database
+    with databases.rules_admin.begin() as conn:  # the registry is the Rules Database's, in the config database
         policy = register_policy(conn, {"version": 1, "required_consumers": ["export"], "automatic_rules": [],
                                         "kinds": {"company": {"version": "1", "defaults": {"sources": ["fixture.filers"]},
                                                               "fields": {"name": {"sources": ["fixture.filers"]}}}}})
@@ -718,7 +718,7 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
             "reading": mapped_reading({"name": "name"})}))
 
     if trial_mode == "raw-person":
-        with databases.admin.begin() as conn:
+        with databases.rules_admin.begin() as conn:
             policy = register_policy(conn, files.policy())
             register_dataset(conn, "sec.submissions.person.v1", "1",
                              files.mdm_contract("sec.submissions.person", "sec.submissions.person.v1"))

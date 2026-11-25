@@ -1,11 +1,11 @@
-"""A duty file holds two URLs, and one module knows their names: every other piece of code asks
+"""A duty file holds one URL a database, and one module knows their names: every other piece of code asks
 `edgar_warehouse.database_connections` (store_url, configured, instance_url, url_variable). Operator: "kiss 94 url will be
 nigthmree to maintain"."""
 import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-NAMES = re.compile(r"\b(DATA_URL|CONTROL_URL|DB_URL)\b")
+NAMES = re.compile(r"\b(DATA_URL|CONTROL_URL|CONFIG_URL|DB_URL)\b")
 # The resolver, and the two stores that ship alone and read their one URL themselves.
 OWNERS = {
     "edgar_warehouse/database_connections.py",

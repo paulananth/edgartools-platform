@@ -216,3 +216,36 @@ def test_a_checkout_holding_a_commit_file_is_still_a_checkout(tmp_path):
     (tmp_path / readiness.IMAGE_COMMIT).write_text("abc123\n")
     (tmp_path / ".git").write_text("gitdir: elsewhere\n")  # a worktree's .git is a file
     assert readiness.image_commit(tmp_path) == ""
+
+
+def test_a_duty_login_is_tried_on_each_database_by_its_own_url_and_a_missing_url_keeps_the_gate_shut(tmp_path, monkeypatch):
+    """A worker file without the config database's URL would pass a check that derives every database from DATA_URL, and its
+    load would then stop at the first Rules call."""
+    import psycopg2
+
+    from tests.support.patching import checked
+
+    def duty(login, databases):
+        return "".join(f"export {variable}='postgresql://{login}:invented@h.invalid:5432/{database}'\n"
+                       for variable, database in databases)
+
+    every = (("DATA_URL", "data"), ("CONTROL_URL", "control"), ("CONFIG_URL", "config"))
+    (tmp_path / "owner.env").write_text(duty("admin", every))
+    (tmp_path / "worker.env").write_text(duty("edgar_loader", every[:2]))
+    (tmp_path / "governance.env").write_text(duty("governance", every))
+    (tmp_path / "reader.env").write_text(duty("ops_reader", every))
+    tried = []
+
+    class Connection:
+        def close(self):
+            pass
+
+    def connect(*args, **kwargs):
+        tried.append(args[0].rsplit("@", 1)[1])
+        return Connection()
+
+    checked(monkeypatch, psycopg2, "connect", connect)
+    found = readiness.login_facts(tmp_path)
+    assert found["worker.env"] == "unreadable (KeyError)"
+    assert found["governance.env"] == found["reader.env"] == found["owner.env"] == "answers"
+    assert tried.count("h.invalid:5432/config") == 2 and "h.invalid:5432/postgres" in tried

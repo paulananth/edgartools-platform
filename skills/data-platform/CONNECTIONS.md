@@ -56,26 +56,29 @@ environment's ownership checks; do not adopt another workstream's databases.
 Missing store configuration never falls back to a legacy store, another
 store's URL, or a guessed database name.
 
-Six stores live in two databases, each store in its own schema: the **data database** holds `mdm`, `rdm` and `silver` (what
-consumers read and one mirror carries), the **control database** holds `rules`, `bookkeeping` and `change_journal` (what runs
-the platform). A duty is one login and one file in the stores folder, and every file holds two variables and no more: `DATA_URL`
-and `CONTROL_URL`, each naming its database (operator: "mdm, rdm, silver is data_url, others are control_db, control_url do
-not have too many urls"). Each store takes the URL of its group in one place (`edgar_warehouse.database_connections.store_url`);
-a missing URL or one that names no database is refused by name, never guessed. A script that needs the instance and no store
-(monitoring, role guards, the reset, the audit) uses `DATA_URL`. Nothing in the product is called a migration: a store has one
-`init`, which makes its schema or brings it to current.
+Six stores live in three databases, each store in its own schema: the **data database** holds `mdm`, `rdm` and `silver` (what
+consumers read and one mirror carries), the **control database** holds `bookkeeping` and `change_journal` (what runs the
+platform: runs, leases, receipts), and the **config database** holds `rules` (what says how data is processed). A duty is one
+login and one file in the stores folder, and every file holds one URL a database and no more: `DATA_URL`, `CONTROL_URL` and
+`CONFIG_URL`, each naming its database (operator: "mdm, rdm, silver is data_url, others are control_db, control_url do not have
+too many urls"; "control should only have control no configuration"). Each store takes the URL of its group in one place
+(`edgar_warehouse.database_connections.store_url`); a missing URL or one that names no database is refused by name, never
+guessed. A script that needs the instance and no store (monitoring, role guards, the reset, the audit) uses `DATA_URL`. Nothing
+in the product is called a migration: a store has one `init`, which makes its schema or brings it to current.
 
-**The data database holds data; anything that says how data is processed is in the control database.** The registered
-rules (the merge rules and the Dataset Contracts under their digests, and their pins) live in the control database's `rules`
-schema, beside `rules_used`, and the merge reads them there by digest (a policy by its digest, a contract by its
-reading number, which is hashed into every record id, so a move between databases keeps every number as it was); run evidence and build records live in `bookkeeping`.
-The data database keeps its golden records, reference codes and silver rows, the merge's working tables, and the merge's
-progress per file (`mastering_file`, `mastering_delivery`), since a file is marked merged in the same transaction that writes
-its masters. One init stamp records the data database's schema; it keeps no migration history. A table nothing reads or
-writes is deleted from init with its code, never kept empty.
+**The data database holds data, the control database holds run evidence, and the config database holds what says how data is
+processed.** The registered rules (the merge rules and the Dataset Contracts under their digests, and their pins) live in the
+config database's `rules` schema, beside `rules_used`, and the merge reads them there by digest (a policy by its digest, a
+contract by its reading number, which is hashed into every record id, so the registry is kept whole); run evidence and build
+records live in `bookkeeping`. The data database keeps its golden records, reference codes and silver rows, the merge's working
+tables, and the merge's progress per file (`mastering_file`, `mastering_delivery`), since a file is marked merged in the same
+transaction that writes its masters. One init stamp records the data database's schema; it keeps no migration history. A table
+nothing reads or writes is deleted from init with its code, never kept empty.
 
-Why two: a managed mirror reads one database, and the instance allows two CDC publications, so the stores consumers read share
-one database and one mirror; the control stores stay apart, so their churn and their grants never reach a consumer.
+Why three: a managed mirror reads one database, and the instance allows two CDC publications, so the stores consumers read share
+one database and one mirror; the control stores stay apart, so their churn and their grants never reach a consumer; and the
+configuration stays apart from both, so a reset of the data or the control database (`reset-hosted-databases.py`,
+`reset-hosted-tables.py`) never reaches it. Neither the control nor the config database is mirrored.
 
 | Duty | File | Login | Used by |
 |---|---|---|---|

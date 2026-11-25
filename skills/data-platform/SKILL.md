@@ -38,7 +38,7 @@ and the environment checks it needs. A route grants no approval, provider reques
 2. **Route** with `edgar-warehouse plan route --request <file>` (or `--request -`). Supply booleans for source configuration, delivery change and live-rule change, derived from retained evidence. No config routes to Data Onboarding; for configured sources, a live-rule change routes to Refining Rules, a changed delivery or repeat run to Data Operations, and both change flags to operator clarification.
    For `resume`, supply ordered phases (`owner`, `action`, `complete`, `hashes_match`); skip matching completed phases and choose the first unfinished/invalidated. The command only selects a route; it performs no load, provider request, approval or switch-on. Hand off to its owner/action; include no identifiers, data values or secrets.
 3. **Name the duty** in the [duty table](CONNECTIONS.md#database-connections-and-duties) (none to read captured files; a load
-   or a worker: Loader, `worker.env`). Check, without printing a value, that its file exists and sets `DATA_URL` and `CONTROL_URL`.
+   or a worker: Loader, `worker.env`). Check, without printing a value, that its file exists and sets `DATA_URL`, `CONTROL_URL` and `CONFIG_URL`.
 4. **Run `edgar-warehouse doctor`**, with that file, if any, sourced in a command-scoped subshell. Expected: exit 0 with `"ok": true`,
    `unresolved` empty, `engine` `loads`, `rules_root.exists` true, and `answers` for each of `rules`, `bookkeeping`,
    `change_journal` and `mdm` under `stores` (`not set` passes for a store the action does not use; RDM and silver are not probed).
