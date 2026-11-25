@@ -63,9 +63,9 @@ CODE read it in place of git.
   `minutes` bound carries on in the same run instead of starting another. Each job publishes its own revision (the time's digits, then its
   place in the file): a source's quarters carrying one revision stopped the second with "contradictory publications". Use a new `RUN`, say the estimate against the 2-hour window before
   starting.
-- **Read a load in the container, not on the host.** The load runs in the worker, so a host `ps` shows nothing of it: use
-  `docker exec <worker> ps`, the worker's `/proc/<pid>/io` (bytes read and written between two readings show a step that
-  works while its log is still empty), and the run's state file. The step's own log fills only when an attempt ends.
+- **Read hosted pipeline status inside its worker container.** Use
+  `docker exec <worker> python /app/skills/data-operations/scripts/load_jobs.py --status --json --run <RUN>`; a host status cannot see worker processes. Use
+  `docker exec <worker> ps` and `/proc/<pid>/io` for process details (bytes read and written between readings show work before the step log fills).
 - **One budget: the workers a compute carries over a job's workers, in no platform's terms.** A job's size is its `workers` (the load
   jobs file) and how many lanes run at once is the workers the compute carries (`--capacity`: `local`, this machine, or a profile of the
   file such as `aws-large`; its memory in worker-sized shares, at most four to a vCPU, the range a job's workers follow) over the
@@ -191,11 +191,12 @@ a batch before changing its size: the writer made three a batch (70 ms each) and
   the worker container's processes, end the lane process and the engine process (`kill -9` when `TERM` is ignored),
   and check the list is empty apart from the activity worker and exporter. Stop the watchers too. A step stopped
   mid-bundle redoes that bundle on restart; keep the run's bundle folders, since the restart resumes from them.
-- Before a hosted table reset, stop clients that can reconnect and check `load_jobs.py --status`. Independently inspect
-  Bookkeeping with `edgar-warehouse bookkeeping runs --state running`, `--state waiting` and `--state blocked`; for each
-  returned run, read `bookkeeping status <run-id>` and `bookkeeping leases <run-id>`. A load-jobs status with no active
-  steps does not establish that Bookkeeping has no open runs or leases. Let the default `load.sh` pipeline finish
-  retained load runs; use the Bookkeeping recovery procedure only when that pipeline cannot resolve one. Never call
+- Before a hosted table reset, stop clients that can reconnect and read the active run's status inside its worker container
+  (see "While a load runs"). Independently inspect Bookkeeping with `edgar-warehouse bookkeeping runs --state running`,
+  `--state waiting` and `--state blocked`; for each returned run, read `bookkeeping status <run-id>` and
+  `bookkeeping leases <run-id>`. A container status with no active steps does not establish that Bookkeeping has no open runs
+  or leases. Let the default `load.sh` pipeline finish retained load runs; use Bookkeeping recovery only when that pipeline
+  cannot resolve one. Never call
   `bookkeeping finalize` to bypass the loader, edit run state or delete leases by hand. Stop if any run or lease remains
   unresolved. The table-reset command checks for blocking sessions before and after taking
   exclusive locks. It allows managed `pg base extension worker` sessions only

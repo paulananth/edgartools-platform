@@ -119,13 +119,16 @@ def exporter_pid() -> int | None:
         return None
 
 
-def start_exporter() -> None:
+def start_exporter(run: str | None = None) -> None:
     if exporter_pid() or exporter_answer() != "not answering":  # the load pipeline's exporter already serves the port
         return
+    run = run or os.environ.get("RUN")
+    if not run:
+        sys.exit("start a standalone monitor with --run <label>")
     STATE.mkdir(parents=True, exist_ok=True)
     log = (STATE / "exporter.log").open("a")
-    child = subprocess.Popen([sys.executable, str(HERE / "exporter.py"), "serve"], cwd=ROOT, stdout=log, stderr=log,
-                             start_new_session=True)
+    child = subprocess.Popen([sys.executable, str(HERE / "exporter.py"), "serve", "--run", run], cwd=ROOT, stdout=log,
+                             stderr=log, start_new_session=True)
     PID.write_text(str(child.pid))
 
 
@@ -184,9 +187,9 @@ def status() -> int:
     return 1 if bad else 0
 
 
-def up() -> int:
+def up(run: str | None = None) -> int:
     preflight()
-    start_exporter()
+    start_exporter(run)
     compose("up", "-d", "--wait", "--wait-timeout", "300")
     provision()
     time.sleep(20)  # Prometheus scrapes every 15 s: the first reading must land before it is read back
@@ -204,7 +207,11 @@ def stop() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("command", choices=["up", "status", "stop"])
-    return {"up": up, "status": status, "stop": stop}[parser.parse_args().command]()
+    parser.add_argument("--run", help="load run whose status the exporter reads when started here")
+    args = parser.parse_args()
+    if args.run:
+        os.environ["RUN"] = args.run
+    return up(args.run) if args.command == "up" else {"status": status, "stop": stop}[args.command]
 
 
 if __name__ == "__main__":

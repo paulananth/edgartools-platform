@@ -153,8 +153,8 @@ A step that stops keeps the errors of that attempt in `chain-<RUN>-<step>.log.at
 ones `.2.gz` to `.5.gz`; at each rotation the files past five, or older than 30 days, are removed), and a step whose same failure comes back unchanged stops at once: a
 retry cannot change it. Read the step's own errors file first.
 
-Report a running load from `load_jobs.py --status` (progress, rate, processes, database sessions and a verdict for each
-step; see the data-operations skill), never as "running".
+Report a running load from `load_jobs.py --status --run <RUN>` (use the exact label passed to `load.sh`; the output names it). Report
+progress, rate, processes, database sessions and a verdict for each step; see the data-operations skill. Never report it merely as "running".
 
 Diagnose as the reader login (`reader.env`): it shows sessions, locks and waits and reads no table. A step that needs the
 owner or a runtime login to be understood is a gap in the reader, to fix there.

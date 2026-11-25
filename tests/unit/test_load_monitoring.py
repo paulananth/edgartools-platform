@@ -130,9 +130,28 @@ def test_the_monitor_starts_a_host_exporter_when_nothing_answers(monkeypatch, tm
     monkeypatch.setattr(monitoring, "exporter_answer", lambda: "not answering")
     monkeypatch.setattr(monitoring, "STATE", tmp_path)
     monkeypatch.setattr(monitoring, "PID", tmp_path / "exporter.pid")
+    monkeypatch.setenv("RUN", "after-clear")
     monkeypatch.setattr(monitoring.subprocess, "Popen", lambda argv, **k: started.append(argv) or type("P", (), {"pid": 1})())
     monitoring.start_exporter()
-    assert len(started) == 1 and started[0][-2:] == [str(monitoring.HERE / "exporter.py"), "serve"][-2:]
+    assert len(started) == 1 and started[0][-3:] == ["serve", "--run", "after-clear"]
+
+
+def test_monitor_passes_the_selected_run_to_standalone_exporter(monkeypatch):
+    seen = []
+    monkeypatch.setattr(sys, "argv", ["monitoring.py", "up", "--run", "after-clear"])
+    monkeypatch.setattr(monitoring, "up", lambda run: seen.append(run) or 0)
+
+    assert monitoring.main() == 0
+    assert seen == ["after-clear"]
+
+
+def test_exporter_passes_the_selected_run_to_load_status(monkeypatch):
+    seen = []
+    monkeypatch.setattr(sys, "argv", ["exporter.py", "serve", "--run", "after-clear"])
+    monkeypatch.setattr(exporter, "serve", lambda port, interval, sample, run: seen.append(run))
+
+    assert exporter.main() == 0
+    assert seen == ["after-clear"]
 
 
 def test_the_exporter_shows_the_lane_budget_beside_the_lanes_and_workers_running():

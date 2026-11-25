@@ -7,11 +7,12 @@ description: Watch a platform load in Grafana - one dashboard of lanes, steps, s
 
 The dashboard answers two questions at a glance: **is the load healthy, and why
 is a step not running?** Colour carries the answer; numbers back it. It reads the
-load jobs' own status (`load_jobs.py --status --json`) and changes nothing: the
-reader login, the process list and the log files only.
+`load_jobs.status_snapshot` for the selected `RUN` (reader login, process list and log files only):
 
-```
-uv run --no-sync python <this skill>/scripts/monitoring.py <up|status|stop>
+```bash
+uv run --no-sync python <this skill>/scripts/monitoring.py up --run <label>
+uv run --no-sync python <this skill>/scripts/monitoring.py status
+uv run --no-sync python <this skill>/scripts/monitoring.py stop
 ```
 
 Run it from a checkout at current `origin/main`, in the repository's environment.
@@ -23,15 +24,15 @@ and needs no login; the admin login is generated into a private file and never p
 
 | Need | Command | It answers |
 |---|---|---|
-| Bring it up | `up` | Containers healthy, exporter up, Prometheus scraping it, dashboard present. Exit 0 only when all are |
+| Bring it up | `up --run <label>` | Containers healthy, exporter up, Prometheus scraping it, dashboard present. Exit 0 only when all are |
 | Is it working? | `status` | The same readback; every `PROBLEM:` line says what is wrong |
 | Take it down | `stop` | Stops the exporter and the containers; Grafana's and Prometheus's data stay |
 
 ## Where the exporter runs
 
-The load pipeline's Compose project (`infra/load-pipeline`) runs the exporter from the loader image, beside the worker,
-sharing its process space, so it needs no checkout and sees a load that runs in a container. `monitoring.py up` starts a
-host exporter only when nothing answers on the port (a load run by hand, outside the pipeline).
+The load pipeline's Compose project (`infra/load-pipeline`) runs the exporter from the loader image beside the worker and
+inherits its `RUN`; it needs no checkout and sees a load running in a container. `monitoring.py up` starts a host exporter
+only when nothing answers on the port; pass `--run <label>` for a standalone load.
 
 `load.sh` recreates the worker, and the exporter with it, at every start: for a minute `monitoring.py status` says the
 exporter is not answering, then `load_monitor_up 1`. A host exporter served from a checkout goes blind when that

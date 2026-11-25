@@ -33,8 +33,8 @@ MARKER = ".installed-by-edgar-warehouse"
 # (` | `) ends the command: what follows is another program's. `a|b`, with no
 # spaces, is a skill's way to write two choices.
 _COMMAND = re.compile(r"edgar-warehouse ([a-z][a-z-]*)((?:(?! \| )[^`\n])*)")
-# Only an installed command is portable; these work in a checkout alone.
-_CHECKOUT_ONLY = re.compile(r"python -m edgar_warehouse|skills/[a-z-]+/scripts/")
+# `python -m` and relative `skills/...` script paths need a checkout; `/app/...` is the installed loader bundle.
+_CHECKOUT_ONLY = re.compile(r"python -m edgar_warehouse|(?<!/app/)skills/[a-z-]+/scripts/")
 _LINK = re.compile(r"\]\(([^)#\s]+)")
 # Written in a skill with a fallback, and marked "not built" there.
 NOT_BUILT = {("rules", "check")}

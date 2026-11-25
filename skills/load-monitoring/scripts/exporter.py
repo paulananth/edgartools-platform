@@ -1,8 +1,8 @@
 #!/usr/bin/env -S uv run --no-sync python
 """Serve the load jobs' status as Prometheus metrics: counts, states and times only, never a row or an address.
 
-    uv run --no-sync python exporter.py serve [--port 9108] [--interval 30] [--sample 10]
-    uv run --no-sync python exporter.py print        one reading, written as metrics, then exit
+    uv run --no-sync python exporter.py serve --run <label> [--port 9108] [--interval 30] [--sample 10]
+    uv run --no-sync python exporter.py print --run <label>        one reading, written as metrics
 
 A reading is `load_jobs.status_snapshot` (read-only: the reader login, `ps`, the log files). It is repeated every
 `--interval` seconds in the background; a scrape returns the last reading, so a slow reading never holds one up.
@@ -86,9 +86,10 @@ def down() -> str:
 class Reading:
     """The last reading, refreshed in the background."""
 
-    def __init__(self, interval: int, sample_seconds: int):
+    def __init__(self, interval: int, sample_seconds: int, run: str):
         self.text, self.at, self.interval, self.sample = down(), 0.0, interval, sample_seconds
         self.jobs = jobs_module()
+        self.jobs.RUN = run
 
     def refresh(self) -> None:
         steps = self.jobs.load_jobs()
@@ -107,8 +108,8 @@ class Reading:
             time.sleep(self.interval)
 
 
-def serve(port: int, interval: int, sample_seconds: int) -> None:
-    reading = Reading(interval, sample_seconds)
+def serve(port: int, interval: int, sample_seconds: int, run: str) -> None:
+    reading = Reading(interval, sample_seconds, run)
     threading.Thread(target=reading.loop, daemon=True).start()
 
     class Handler(BaseHTTPRequestHandler):
@@ -136,14 +137,19 @@ def main() -> int:
     one.add_argument("--port", type=int, default=9108)
     one.add_argument("--interval", type=int, default=30)
     one.add_argument("--sample", type=int, default=10)
-    sub.add_parser("print").add_argument("--sample", type=int, default=5)
+    one.add_argument("--run", default=os.environ.get("RUN"))
+    printer = sub.add_parser("print")
+    printer.add_argument("--sample", type=int, default=5)
+    printer.add_argument("--run", default=os.environ.get("RUN"))
     args = parser.parse_args()
+    if not args.run:
+        parser.error("--run or the RUN environment variable is required")
     if args.command == "print":
-        reading = Reading(30, args.sample)
+        reading = Reading(30, args.sample, args.run)
         reading.refresh()
         print(reading.text, end="")
         return 0
-    serve(args.port, args.interval, args.sample)
+    serve(args.port, args.interval, args.sample, args.run)
     return 0
 
 

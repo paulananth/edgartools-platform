@@ -11,8 +11,8 @@
     python load_jobs.py --finish             only what follows the loads, once every lane is done
     python load_jobs.py --catalog-status     publish the catalog status of every step already done (a catch-up)
     python load_jobs.py --finish --lookups   the same, with the name-search lookups built first (only the context search needs them)
-    python load_jobs.py --status             what each running step is doing: progress, rate, processes, a verdict
-    python load_jobs.py --status --json      the same as one JSON document: every step's state, the running steps, the stores and the machine
+    python load_jobs.py --status --run <label>  what the named load is doing: progress, rate, processes, a verdict
+    python load_jobs.py --status --json --run <label>  the named load's state and the running steps, stores and machine
     python load_jobs.py --auto [--slots N] [--hours H | --deadline HH:MM]
                                               watch the loads: start each step when its lane is free, move its
                                               workers (within --capacity) with the machine, report a missed deadline and go on (see `auto`)
@@ -903,7 +903,7 @@ def status_snapshot(steps: list[dict], state: Path, reader_url: str | None, samp
             "warning": outlook(left, elapsed, step["minutes"], attempt, step["attempts"])})
     kinds = {row["name"]: row["kind"] for row in rows}
     names = {s["name"] for s in steps}
-    return {"time": f"{clock():%H:%M}", "total": len(steps), "done": len(done & names), "failed": len(failed & names), "writes": rate,
+    return {"run": RUN, "time": f"{clock():%H:%M}", "total": len(steps), "done": len(done & names), "failed": len(failed & names), "writes": rate,
             "lock_waiters": waiters, "sessions": sessions, "machine": machine_reading(), "running": rows,
             "steps": [{"name": s["name"], "lane": s["lane"], "waits_for": sorted(s.get("waits_for") or []),
                        "state": "done" if s["name"] in done else "failed" if s["name"] in failed and s["name"] not in kinds
@@ -913,7 +913,8 @@ def status_snapshot(steps: list[dict], state: Path, reader_url: str | None, samp
 def status_lines(snapshot: dict) -> list[str]:
     """One report line a running step: how long, how far, how fast, what it holds, and a verdict from the evidence."""
     rate, running = snapshot["writes"], snapshot["running"]
-    lines = [f"{snapshot['time']} ET: {len(running)} running, {snapshot['done']} of {snapshot['total']} done; "
+    lines = [f"run {snapshot['run']} — {snapshot['time']} ET: {len(running)} running, "
+             f"{snapshot['done']} of {snapshot['total']} done; "
              f"database writes a minute: " + (", ".join(f"{k} {v:,.0f}" for k, v in rate.items() if v) or "none") +
              f"; lock waiters {snapshot['lock_waiters']} ({WRITES_NOTE})"]
     lines += [f"  {session_note(name, counts)}" for name, counts in sorted(snapshot["sessions"].items())
@@ -1591,6 +1592,7 @@ def finish(env: dict, state: Path, lookups: bool = False) -> None:
 
 
 def main() -> int:
+    global RUN
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     for flag in ("list", "plan", "finish", "lookups"):
         parser.add_argument(f"--{flag}", action="store_true")
@@ -1605,6 +1607,7 @@ def main() -> int:
                         help="keep a run state file that has done lines and no store marker, as this store's (otherwise it is set aside)")
     parser.add_argument("--catalog-status", action="store_true",
                         help="publish the catalog status of every step already done (a catch-up); needs the catalog configured")
+    parser.add_argument("--run", default=RUN, help="run label for state and log selection (defaults to RUN, then fresh-v1)")
     parser.add_argument("--status", action="store_true",
                         help="one line a running step: progress, rate, processes, database writes and a verdict")
     parser.add_argument("--json", action="store_true", help="with --status: the same readings as one JSON document (counts, states and times only)")
@@ -1625,6 +1628,7 @@ def main() -> int:
     parser.add_argument("--slots", type=int, default=max(2, min(os.cpu_count() or 2, int(
         os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") / 2**30 // 2))), help="loads running at once")
     args = parser.parse_args()
+    RUN = args.run
     if args.force:
         if args.finish or args.list or args.status or args.begin or args.plan:
             print("--force goes with loads (the whole run, --lane, --only or --auto): the rest has no document to force", file=sys.stderr)

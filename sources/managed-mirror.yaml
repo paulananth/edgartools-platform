@@ -15,7 +15,7 @@ approval:
   - "Finish the first three (with the line: the live mirror run (plan approved, create, readback))"
   # The entries below select the two final MDM consumer tables, published RDM codes, and every registered Silver output.
   # MDM/RDM workflow tables and Silver table_spec metadata stay internal; silver.master_binding is a required final link.
-verified: false                    # Set true only after a live read-back shows every table REPLICATING with equal counts
+verified: false                   # target absence or reset is unverified; set true only after live read-back shows every table REPLICATING with equal counts
 tables:
 - layer: mdm
   table: mastering_identifier
