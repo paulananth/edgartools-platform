@@ -1,7 +1,7 @@
 # data-profiling: Specify generic verification
 
 Type: task
-Status: claimed
+Status: resolved
 Priority: P0
 Blocked by: 05, 10
 Labels: wayfinder:task
@@ -35,8 +35,8 @@ These blockers order skill-improvement work. They do not activate optional sourc
 
 - [x] Prerequisites 05 and 10 are merged on `origin/main`: 05 PRs #1983/#1993 and 10 PRs #1986/#1992 are in the branch's history. (2026-11-21 19:43 ET)
 - [x] Record distinct Given–When–Then scenarios and obtain approval before test implementation. Main confirmed: “The operator approved the exact four scenarios you listed.” Approval was received before the scenario tests were written. (2026-11-21 19:43 ET)
-- [ ] Run and record the complete four-scenario set together on the current source and test paths. The exact-number and compare-preservation capability gaps are now resolved; leave the parent ticket open until the combined outcomes and affected checks are recorded.
-- [ ] Record stored outcomes, affected checks and limitations; no mock-call-only, static-text or tautological proof. New tests invoke the real `profile_data.main` path on invented files. Their outcomes are pending the parent's focused checks; known unsupported outcomes and prior probe evidence are below.
+- [x] Run and record the complete four-scenario set together on the current source and test paths. `tests/unit/test_profiling_run.py` and `tests/unit/test_data_profiling_exact_numbers.py` ran together against `origin/main`: **48 passed in 11.8 s**. Scenario 1: `test_run_reports_both_encodings_and_unreadable_archive_members`; scenario 2: the exact-number suite; scenario 3: `test_approved_archive_run_reuses_unchanged_findings_and_fingerprints`; scenario 4: `test_compare_lists_drift_and_preserves_approved_findings`. (2026-11-24 19:01 ET)
+- [x] Record stored outcomes, affected checks and limitations; no mock-call-only, static-text or tautological proof. The tests call the real `profile_data.main` path on invented files; outcomes are in the combined run above, limits under Stored outcomes below. (2026-11-24 19:01 ET)
 - [x] Publish the scenario tests through [test(profiling): cover generic archive and reuse scenarios](https://github.com/paulananth/edgartools-platform/pull/2010); the PR is merged and its current-head CI passed.
 - [x] Learning → skill: no skill edit. `Modes` already documents zip members/readme handling and `Profile once` already documents identical-run reuse; the new cases exercise those existing claims, not a new rule. (2026-11-21 19:43 ET)
 
@@ -73,7 +73,7 @@ The four scenarios below were approved by the operator before implementation; Ma
 
 ### Stored outcomes, limits and provenance
 
-- New scenario tests use the real profiler entrypoint and temporary invented inputs. Archive/unreadable and unchanged-run scenarios passed in PR2010 CI; the exact-number/input suite passed 59 tests locally on 2026-11-23. Ticket 11 remains open for the combined four-scenario run and recorded results.
+- New scenario tests use the real profiler entrypoint and temporary invented inputs. Archive/unreadable and unchanged-run scenarios passed in PR2010 CI; the exact-number/input suite passed 59 tests locally on 2026-11-23. The combined four-scenario run then passed (48 tests); the ticket is resolved.
 - Earlier generic tests listed in the original ticket evidence cover unreadable files, single non-UTF-8 CSVs, separate-output compare drift and same-input reuse. They do not cover the four approved scenarios as a whole.
 - The archive's top-level input has one overall sha256; a changed member causes the archive input to be profiled again. Reuse is whole-input, not per-member. After approval, a changed delivery uses `compare`.
 - The repository skill on this branch is the current `origin/main` copy. The installed `data-profiling` skill was read; it differs from the repository skill and does not include the repository's current `Run this phase` entrypoint/resume guidance. The repo test exercises `skills/data-profiling/scripts/profile_data.py`, not the installed copy.
