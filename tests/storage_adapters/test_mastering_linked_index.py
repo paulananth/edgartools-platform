@@ -44,8 +44,8 @@ def test_the_links_build_reads_the_same_links_from_the_cut_records_as_from_whole
     custodian = "iapd.adv.custodians.v1"
     link = {"type": "ISSUED_BY", "target_subject": subject_key(custodian, "issuer"), "scope": "invented",
             "valid_from": "2026-03-01T00:00:00+00:00", "valid_to": None, "valid_from_basis": "observed", "properties": {}}
-    share = assertion(source_code=NPORT, record_key="share", publication_key="invented", revision=1, effective_at=None,
-                      kind="security", fields={"name": "INVENTED SHARE", "note": "x" * 5000},
+    share = assertion(source_code=NPORT, record_key="share", publication_key="invented", revision=1,
+                      effective_at="2026-02-01T00:00:00+00:00", kind="security", fields={"name": "INVENTED SHARE", "note": "x" * 5000},
                       identifiers={"cusip": "037833100"}, relationships=[link])
     with installed(database_factory) as db:
         merge.merge_file(db, SECURITY, [share])
