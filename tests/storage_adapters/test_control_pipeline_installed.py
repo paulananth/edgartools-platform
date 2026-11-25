@@ -19,19 +19,18 @@ def test_installed_rules_and_real_workers_complete_and_resume_one_run(installed,
     with ExitStack() as stack:
         _, reader, reader_role = stack.enter_context(database_factory())
         owner, worker, role = stack.enter_context(database_factory())
-        # Rules, bookkeeping and the journal share the control database; one runtime login reaches them all.
-        # On MySQL each keeps its own database, named after the URL's (control_<store>).
-        mine = ("control",) if owner.dialect.name != "mysql" else ("control_bookkeeping", "control_change_journal", "control_rules")
+        # Bookkeeping and the journal share the control database, Rules has the config database; one runtime login reaches
+        # them all. On MySQL each store keeps its own database, named after the URL's (control_<store>, config_rules).
+        mine = ("control", "config") if owner.dialect.name != "mysql" else ("control_bookkeeping", "control_change_journal", "config_rules")
         prefix, stores = stack.enter_context(store_databases(owner, *mine))
-        control = lambda engine: engine.url.set(database=prefix + "control").render_as_string(hide_password=False)
-        owner_url, worker_url = control(owner), control(worker)
+        urls = lambda engine: {variable: engine.url.set(database=prefix + database).render_as_string(hide_password=False)
+                               for variable, database in (("CONTROL_URL", "control"), ("CONFIG_URL", "config"))}
         env = {"BOOKKEEPING_MANIFEST_ROOT": (root / "runs").as_uri()}
         def command(*args, verifier=False, report=True):
-            selected = {**env, "CONTROL_URL": worker_url}
             if args[:2] in (("rules", "init"), ("bookkeeping", "init"), ("change-journal", "init"), ("bookkeeping", "grant-profile")):
-                selected["CONTROL_URL"] = owner_url
-            elif verifier:
-                selected["CONTROL_URL"] = control(reader)
+                selected = {**env, **urls(owner)}
+            else:
+                selected = {**env, **urls(reader if verifier else worker)}
             result = _run(python, "-m", "edgar_warehouse.cli", *args, env=selected, cwd=root)
             if result.returncode:
                 (root / "private-control-pipeline.log").write_text(result.stdout + "\n" + result.stderr)

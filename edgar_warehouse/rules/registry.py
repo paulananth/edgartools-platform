@@ -1,5 +1,5 @@
 """The rules MDM registered: each Mastering Policy under its digest, each reading of a Dataset Contract
-under its version, in the Rules Database (the control database's `rules` schema).
+under its version, in the Rules Database (the config database's `rules` schema).
 
 The merge reads them here by digest and by version; `rules register` adds to them through
 `edgar_warehouse.mdm.store`, which checks each body first. A row is never changed: a policy is its digest,

@@ -41,7 +41,8 @@ class Databases:
     rules: Rules
     ledger: ChangeJournal
     ledger_admin: object
-    loader: dict  # a duty file: the data and the control URL of one login that holds every store's runtime privileges
+    rules_admin: object
+    loader: dict  # a duty file: the data, control and config URL of one login that holds every store's runtime privileges
 
 
 @pytest.fixture(scope="module")
@@ -63,13 +64,13 @@ def databases():
                 conn.exec_driver_sql("CREATE ROLE bk_control NOLOGIN")
                 conn.exec_driver_sql("GRANT bk_control TO bk_runtime")
                 conn.exec_driver_sql("GRANT bk_runtime, rules_agent, ledger_runtime, clean_application TO loader")
-                # The two databases of a store (skills/data-platform/CONNECTIONS.md): bookkeeping, rules and the journal share
-                # control, each in its own schema; mdm, rdm and silver share data.
-                for db in ("control", "data"):
+                # The three databases of a store (skills/data-platform/CONNECTIONS.md): bookkeeping and the journal share
+                # control, each in its own schema; mdm, rdm and silver share data; rules has config.
+                for db in ("control", "data", "config"):
                     conn.exec_driver_sql(f"CREATE DATABASE {db}")
             admin = engine("control")
             runtime = engine("control", "bk_runtime")
-            rules_admin = engine("control")
+            rules_admin = engine("config")
             ledger_admin = engine("control")
             with pytest.raises(Blocked, match="not initialized"):
                 migrate(admin, runtime_role="bk_control", existing_only=True, database_name="control")
@@ -81,9 +82,9 @@ def databases():
             migrate_rules(rules_admin, agent_role="rules_agent")
             migrate_journal(ledger_admin, runtime_role="ledger_runtime", database_name="control")
             loader = {variable: server.url(database, "loader", driver="postgresql")
-                      for variable, database in (("DATA_URL", "data"), ("CONTROL_URL", "control"))}
-            yield Databases(admin, runtime, Rules(engine("control", "rules_agent")),
-                            ChangeJournal(engine("control", "ledger_runtime")), ledger_admin, loader)
+                      for variable, database in (("DATA_URL", "data"), ("CONTROL_URL", "control"), ("CONFIG_URL", "config"))}
+            yield Databases(admin, runtime, Rules(engine("config", "rules_agent")),
+                            ChangeJournal(engine("control", "ledger_runtime")), ledger_admin, rules_admin, loader)
         finally:
             for value in engines:
                 value.dispose()

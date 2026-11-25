@@ -151,8 +151,8 @@ front of it silently orders by the wrong one, so order by the alias instead.
   (`tests/architecture/test_no_temporary_tables_at_run_time.py` refuses one). `provision_hosted_store.py` revokes PUBLIC
   from each database and grants its logins `CONNECT` only. A live store provisioned earlier keeps `TEMPORARY` until the
   next provisioning or reset.
-- **One instance holds all six stores.** The hosted instance carries the databases `mdm`, `rdm`, `rules`,
-  `bookkeeping`, `change_journal` and `silver`, not MDM alone. Before any drop, list its databases and name every
+- **One instance holds all six stores.** The hosted instance carries three databases, `data` (`mdm`, `rdm`, `silver`),
+  `control` (`bookkeeping`, `change_journal`) and `config` (`rules`), each store a schema, not MDM alone. Before any drop, list its databases and name every
   store it holds to the operator: `DROP POSTGRES INSTANCE` deletes them all, with no undrop and no backup unless one
   was taken first.
 - **A fresh instance** is created with the snowflake-postgres skill's `pg_connect.py --create` (it saves the

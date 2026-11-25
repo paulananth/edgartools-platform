@@ -29,8 +29,8 @@ submits one source.
    ```bash
    edgar-warehouse rules register --source <name>
    ```
-   It registers the merge rules and the source's Dataset Contracts in the control database's `rules` schema,
-   where the merge reads them (the governance file's `CONTROL_URL`, [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment)).
+   It registers the merge rules and the source's Dataset Contracts in the config database's `rules` schema,
+   where the merge reads them (the governance file's `CONFIG_URL`, [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment)).
    A source that lands silver, or masters records, needs the silver tables created first
    (data-platform or data-onboarding; `infra/scripts/deploy-silver.sh <name>`): a load creates no table and stops before it submits anything when one
    it writes is missing, or when an env file has no silver login.

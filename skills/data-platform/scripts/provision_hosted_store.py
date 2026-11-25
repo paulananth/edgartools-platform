@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Give a fresh hosted PostgreSQL instance the stores' logins and two databases, from the stores folder's duty files.
+"""Give a fresh hosted PostgreSQL instance the stores' logins and three databases, from the stores folder's duty files.
 
     python <this skill>/scripts/provision_hosted_store.py --service <pg service>            # lists what it would do
     python <this skill>/scripts/provision_hosted_store.py --service <pg service> --confirm  # does it
 
-A duty is one login and one file in the stores folder (default ~/.config/edgartools/hosted/), each holding two URLs of that login,
-one a database: the data database (mdm, rdm, silver) and the control database (rules, bookkeeping, change_journal), as
+A duty is one login and one file in the stores folder (default ~/.config/edgartools/hosted/), each holding one URL of that login a
+database: the data database (mdm, rdm, silver), the control database (bookkeeping, change_journal) and the config database (rules), as
 `edgar_warehouse.database_connections` names them. The files: `owner.env` (the instance's administrator), `worker.env` (the loader, `edgar_loader`), `governance.env` (the governance
-login) and `reader.env` (the diagnostic login, `ops_reader`). A missing duty file is made with a new password; a login is created with
+login) and `reader.env` (the diagnostic login, `ops_reader`). A missing duty file is made with a new password, and a file missing a
+database's URL is given it, for the same login; a login is created with
 the password its file already holds, so none is rotated. The administrator comes from the PostgreSQL service the instance's creation
 saved (~/.pg_service.conf and ~/.pgpass); every file then takes the new instance's address, and the owner file the administrator's
 new password. Prints names and counts only, never an address or a password.
@@ -29,7 +30,7 @@ from uuid import uuid4
 
 from edgar_warehouse.database_connections import DATABASES as GROUPS_OF_STORES, url_variable
 
-DATABASES = tuple(GROUPS_OF_STORES)  # data, control
+DATABASES = tuple(GROUPS_OF_STORES)  # data, control, config
 SETTINGS = {url_variable(stores[0]): database for database, stores in GROUPS_OF_STORES.items()}  # each URL and its database
 OWNER_FILE = "owner.env"
 # Each duty: its file, its login, the databases it connects to and the group roles that carry its privileges. A group holds
@@ -79,19 +80,42 @@ def read_urls(folder: Path, name: str) -> dict[str, str]:
 
 
 def read_url(folder: Path, name: str) -> str | None:
-    """The file's login as a URL: both of its URLs name the same login and password, each its own database. None when the
-    file holds neither; a file that holds one, or two logins, or a URL naming another database, is refused."""
+    """The file's login as a URL: its URLs name the same login and password, each its own database. None when the file holds
+    none; a file whose URLs name two logins, or a URL naming another database, is refused. A database it does not name yet is
+    added by `complete`."""
     found = read_urls(folder, name)
     if not found:
         return None
-    if set(found) != set(SETTINGS):
-        raise Refused(f"{name} must hold {' and '.join(SETTINGS)}")
     for setting, url in found.items():
         if urlsplit(url).path.strip("/") != SETTINGS[setting]:
             raise Refused(f"{name}: {setting} must name the {SETTINGS[setting]} database")
     if len({urlsplit(url).netloc for url in found.values()}) != 1:
-        raise Refused(f"{name}: its two URLs name two logins")
+        raise Refused(f"{name}: its URLs name two logins")
     return next(iter(found.values()))
+
+
+def missing_settings(folder: Path, name: str) -> list[str]:
+    """The databases' URLs a duty file that exists does not hold yet."""
+    found = read_urls(folder, name)
+    return [setting for setting in SETTINGS if setting not in found] if found else []
+
+
+def complete(folder: Path, name: str) -> list[str]:
+    """Add to a duty file the URL of each database it does not name: its own login on that database. Every other line stays
+    (a loader file's settings), and its `unset` line also clears the added names. The settings added."""
+    url = read_url(folder, name)
+    added = missing_settings(folder, name)
+    if url is None or not added:
+        return []
+    part = urlsplit(url)
+    lines = []
+    for line in (folder / name).read_text().splitlines():
+        if line.startswith("unset "):
+            line += "".join(f" {setting}" for setting in added if setting not in line.split())
+        lines.append(line)
+    lines += [f"export {setting}={shlex.quote(urlunsplit(part._replace(path='/' + SETTINGS[setting])))}" for setting in added]
+    private_write(folder / name, "\n".join(lines) + "\n")
+    return added
 
 
 def duty_file(url: str) -> str:
@@ -287,6 +311,10 @@ def main(argv: list[str] | None = None) -> int:
             missing = [name for name in (OWNER_FILE, *DUTIES) if not (args.stores / name).exists()]
             if missing:
                 print(f"would make {', '.join(missing)}")
+        for name in (OWNER_FILE, *DUTIES):
+            added = complete(args.stores, name) if args.confirm else missing_settings(args.stores, name)
+            if added:
+                print(f"{name}: {'added' if args.confirm else 'would add'} {', '.join(added)} (its own login, no new password)")
         held = logins(args.stores, admin["user"])
         conn = psycopg2.connect(host=admin["host"], port=admin["port"], user=admin["user"], password=admin["password"],
                                 dbname="postgres", sslmode="require", connect_timeout=10)

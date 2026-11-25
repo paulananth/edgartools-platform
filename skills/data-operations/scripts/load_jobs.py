@@ -731,7 +731,13 @@ def verdict(elapsed: float, bound: int, log_age: float, cpu: float, lock_waiters
     return f"{late}no sign of work: no CPU, no session of its own working, log silent for {log_age:.0f} min"
 
 
-STORE_DATABASES = ("data", "control")  # each store is a schema of one of them
+def store_databases() -> tuple[str, ...]:
+    """The databases the stores live in, each store a schema of one of them."""
+    from edgar_warehouse.database_connections import DATABASES
+
+    return tuple(DATABASES)
+
+
 SCHEMA_STORES = {"mdm": "mdm", "rdm": "rdm", "silver": "silver", "rules": "rules", "bookkeeping": "bookkeeping", "journal": "change_journal"}
 
 
@@ -741,7 +747,7 @@ def database_writes(reader_url: str) -> dict[str, int]:
     import psycopg2
 
     totals = {}
-    for name in STORE_DATABASES:
+    for name in store_databases():
         url = in_database(reader_url.replace("postgresql+psycopg2", "postgresql"), name)
         try:
             with psycopg2.connect(url, connect_timeout=10) as conn, conn.cursor() as cur:
@@ -776,7 +782,7 @@ def database_sessions(reader_url: str) -> dict[str, dict[str, int]]:
     try:
         with psycopg2.connect(reader_url.replace("postgresql+psycopg2", "postgresql"), connect_timeout=10) as conn, conn.cursor() as cur:
             cur.execute("""SELECT datname, state, count(*) FROM pg_stat_activity WHERE datname = ANY(%s)
-                           AND usename <> current_user AND state IS NOT NULL GROUP BY 1, 2""", (list(STORE_DATABASES),))
+                           AND usename <> current_user AND state IS NOT NULL GROUP BY 1, 2""", (list(store_databases()),))
             return session_summary(cur.fetchall())
     except Exception:  # noqa: BLE001  a driver error can quote the address: no reading
         return {}
@@ -1070,7 +1076,7 @@ def database_generation(url: str) -> str:
 
 
 def in_database(url: str, database: str) -> str:
-    """The same login on another database of the instance (a monitor reads the data and the control database in turn)."""
+    """The same login on another database of the instance (a monitor reads each store database in turn)."""
     part = urlsplit(url)
     return urlunsplit(part._replace(path="/" + database))
 

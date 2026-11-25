@@ -137,7 +137,7 @@ def test_migration_drift_wrong_database_and_runtime_owner_rejected(databases):
 
 
 def test_the_journal_shares_the_control_database_with_the_other_stores(databases):
-    """The control database holds rules, bookkeeping and the journal, each in its own schema (and a hosted instance's
+    """The control database holds bookkeeping and the journal, each in its own schema (and a hosted instance's
     `extension_base.workers`): another store's tables beside the journal never refuse its migration."""
     first = migrate(databases.ledger_admin, runtime_role="ledger_runtime", database_name="control")
     try:

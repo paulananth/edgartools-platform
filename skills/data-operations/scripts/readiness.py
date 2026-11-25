@@ -45,8 +45,7 @@ CHECKS = {
     "STATE": "The run's state file is this store's, or will be set aside, before any step runs",
     "REGISTERED": "The merge policy and every Dataset Contract are registered, and every worker profile is granted",
 }
-DUTY_DATABASES = {"owner.env": ("postgres",), "worker.env": ("data", "control"), "governance.env": ("data", "control"),
-                  "reader.env": ("data", "control")}
+DUTY_FILES = ("worker.env", "governance.env", "reader.env")  # each connects to every store database; owner.env to `postgres`
 
 
 def now() -> datetime:
@@ -220,8 +219,8 @@ def registration_facts(reader_env: dict, env: dict) -> dict | None:
             with psycopg2.connect(load_jobs.in_database(load_jobs.data_url(source), database), connect_timeout=10) as conn, conn.cursor() as cur:
                 cur.execute(sql)
                 return cur.fetchone()[0]
-        return {"policies": one(env, "control", "select count(*) from rules.policy"),
-                "datasets": one(env, "control", "select count(*) from rules.dataset_reading"),
+        return {"policies": one(env, "config", "select count(*) from rules.policy"),
+                "datasets": one(env, "config", "select count(*) from rules.dataset_reading"),
                 "profiles": len(PROFILES),
                 "profiles_granted": one(reader_env, "control", "select count(*) from pg_auth_members m join pg_roles r on r.oid = m.roleid "
                                         "join pg_roles u on u.oid = m.member where u.rolname = 'bookkeeping_runtime' and r.rolname like 'bk\\_worker\\_%'")}
@@ -276,7 +275,8 @@ def login_facts(stores: Path) -> dict:
     sys.path.insert(0, str(HERE))
     import load_jobs
     found = {}
-    for name, databases in DUTY_DATABASES.items():
+    duties = {"owner.env": ("postgres",), **{name: load_jobs.store_databases() for name in DUTY_FILES}}
+    for name, databases in duties.items():
         try:
             url = load_jobs.data_url(load_jobs.load_env(stores / name))
             if url is None:

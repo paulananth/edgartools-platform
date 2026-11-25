@@ -57,7 +57,7 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
         assert set(stores.stores(name)) == set(local.STORES)
         admin = engine("postgres", "postgres")
         with admin.connect() as conn:
-            assert [row[0] for row in conn.execute(text("SELECT datname FROM pg_database WHERE datname IN ('data','control','mdm','rules') ORDER BY 1"))] == ["control", "data"]
+            assert [row[0] for row in conn.execute(text("SELECT datname FROM pg_database WHERE datname IN ('data','control','config','mdm','rules') ORDER BY 1"))] == ["config", "control", "data"]
             assert not conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='silver_runtime')"))
         for filename in ("owner.env", "worker.env", "governance.env"):
             assert (stores.folder(name) / filename).stat().st_mode & 0o777 == 0o600
@@ -66,8 +66,8 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
         from sqlalchemy.engine import make_url
 
         for values, login in ((worker, "edgar_loader"), (governance, "governance")):
-            assert [(make_url(values[v]).username, make_url(values[v]).database) for v in ("DATA_URL", "CONTROL_URL")] == [
-                (login, "data"), (login, "control")]
+            assert [(make_url(values[v]).username, make_url(values[v]).database) for v in ("DATA_URL", "CONTROL_URL", "CONFIG_URL")] == [
+                (login, "data"), (login, "control"), (login, "config")]
             assert "DB_URL" not in values
         with engine("data", "postgres").connect() as conn:  # silver is never created
             assert not conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname='silver')"))
@@ -89,8 +89,8 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
         assert "acquisition" not in person
         files.write_source(person, root.parent / "sources" / "sec.submissions.person")
         files.write_source({**person, "source": "invented.other"}, root.parent / "sources" / "invented.other")
-        # The registry is the Rules Database's (the control database): governance adds to it.
-        governance = engine("control", "rules_governance")
+        # The registry is the Rules Database's (the config database): governance adds to it.
+        governance = engine("config", "rules_governance")
         with governance.begin() as conn:
             first = frozen.register(conn, ["sec.submissions.person"], root)
         with governance.begin() as conn:
@@ -103,7 +103,7 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
             frozen.register(conn, ["invented.other"], root)
         # The runtime reads the registry; neither login changes or deletes a row.
         for login in ("rules_runtime", "rules_governance"):
-            reader = engine("control", login)
+            reader = engine("config", login)
             with reader.connect() as conn:
                 assert conn.scalar(text("SELECT count(*) FROM rules.policy")) == 1
                 assert not conn.scalar(text("SELECT has_schema_privilege(current_user,'rules','CREATE')"))
@@ -141,7 +141,7 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
         active.dispose()
         with stores.locked(name):
             snapshot = stores.backup(name)
-        assert len(json.loads((snapshot / "manifest.json").read_text())["files"]) == 2  # one file a database
+        assert len(json.loads((snapshot / "manifest.json").read_text())["files"]) == 3  # one file a database
         with stores.locked(copy):
             stores.restore(copy, snapshot)
         assert stores.contents(copy) == expected

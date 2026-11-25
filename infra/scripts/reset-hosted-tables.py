@@ -25,10 +25,10 @@ from zoneinfo import ZoneInfo
 import sqlalchemy as sa
 import yaml
 
+# The stores of the data and control databases. Rules, in the config database, is never reset: a reload needs it.
 STORE_SCHEMAS = {
     "mdm": "mdm",
     "rdm": "rdm",
-    "rules": "rules",
     "bookkeeping": "bookkeeping",
     "change_journal": "journal",
     "silver": "silver",

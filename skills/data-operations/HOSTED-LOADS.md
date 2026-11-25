@@ -246,12 +246,12 @@ and checksum, take the migration locks for the repair, and run `mdm init`.
 A successful init after an override confirms the initializer accepted the
 record. Run hosted readiness before loading.
 
-### Preserve Rules configuration
+### Rules configuration is never reset
 
-Keep the Rules store out of hosted data reset manifests. It holds configuration
-needed for reload, including dataset readings and policies. A request to clear
-all hosted data tables does not include the Rules store. Change Rules only
-through its configuration deployment or a separately requested Rules migration.
+The Rules store lives in the config database, which no reset names: `reset-hosted-databases.py` drops the data and
+control databases only, and `reset-hosted-tables.py` offers no `rules` store. It holds configuration a reload needs
+(dataset readings and policies). Change Rules only through its configuration deployment or a separately requested Rules
+migration.
 
 ### Resetting the control stores
 

@@ -97,7 +97,7 @@ def plain(text: str | None, width: int = 70) -> str:
 
 
 def url(database: str | None) -> str:
-    """The reader file's login on the database asked for (`data`, `control`), else the `postgres` one."""
+    """The reader file's login on the database asked for (`data`, `control`, `config`), else the `postgres` one."""
     from edgar_warehouse.database_connections import instance_url
 
     try:
