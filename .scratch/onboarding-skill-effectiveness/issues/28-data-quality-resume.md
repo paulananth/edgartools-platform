@@ -1,7 +1,7 @@
 # data-quality: Make progress resumable
 
 Type: task
-Status: claimed
+Status: resolved
 Priority: P0
 Blocked by: 04, 10, 16, 27
 Labels: wayfinder:task
@@ -37,7 +37,7 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] Resume after a staged interruption. A fresh process read the shared source log and both retained definitions, then selected **Measure the retained TestGen suite** without reimporting. (2026-11-25 08:04 ET)
 - [x] Resume after measurement. Matching hashes selected **Review dispositions and hand off** with no rerun. A changed corpus hash selected measurement; a changed draft hash selected drafting/import before any stale result could be used. (2026-11-25 08:04 ET)
 - [x] Add two [native TestGen draft rules](../evidence/quality-resume-testgen/testgen-rules.json); TestGen preview added nothing, strict import created two, and the suite counted one planted defect per check. No live rule or activation changed. (2026-11-25 08:04 ET)
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md.
+- [x] Publish the skill and proof in [docs(quality): resume draft rules authored with TestGen](https://github.com/paulananth/edgartools-platform/pull/2134). Documentation genericity, guide paths and skill guards: **164 passed**. (2026-11-25 08:05 ET)
 - [x] Learning → skill: [Resume Data Quality](../../../skills/data-quality/RESUME.md#add-draft-rules-with-testgen) fingerprints the sorted definitions rather than the timestamped export envelope and resumes from the first unfinished step. (2026-11-25 08:04 ET)
 
 ## Completion evidence

@@ -95,6 +95,7 @@ No scenario or test code is approved by creating these tickets. Proposed Givenâ€
 - [data-modeling: Specify generic verification](issues/17-data-modeling-generic-verification.md): Invented fixtures proved shared identity, ambiguous-name review, lookup-only separation, stated relationship periods and Silver fact ownership.
 - [data-modeling: Measure effectiveness](issues/18-data-modeling-effectiveness.md): Revised guidance prompted fewer unsupported assumptions and proposed remaps, but final handoffs tied and the timing bar was missed.
 - [data-modeling: Distinguish Silver source keys from resolved master IDs](issues/97-data-modeling-silver-link.md): Source-key facts store the key; readers resolve the master ID through `silver.master_binding`.
+- [data-quality: Make progress resumable](issues/28-data-quality-resume.md): Shared source logs resume draft TestGen checks and reuse measurements only when the rule and corpus evidence matches.
 
 ## Not yet specified
 
