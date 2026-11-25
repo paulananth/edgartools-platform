@@ -1835,7 +1835,7 @@ def test_lanes_at_once_is_read_from_the_real_load_jobs_and_load_sh_sets_it_in_th
 
 
 def test_each_job_of_a_forced_load_publishes_its_own_revision_so_a_sources_quarters_never_clash(monkeypatch):
-    """A forced load stopped `ncen-registrant-2026q1` and `ncen-fund-2026q1` with "contradictory publications": every job of the run
+    """A forced load stopped two N-CEN jobs with "contradictory publications": every job of the run
     carried one revision, and the second quarter of a source published other content under the first quarter's revision."""
     monkeypatch.setenv(chain.FORCE, "2026-11-24T12:19:19Z")
     first = {"name": "q4", "source": "s", "target": "t", "capture": "a/b", "workers": 2, "bundles": 1, "minutes": 5, "capture_run": "l-q4", "position": 11}

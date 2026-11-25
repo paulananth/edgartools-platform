@@ -872,7 +872,8 @@ def status_snapshot(steps: list[dict], state: Path, reader_url: str | None, samp
         sharing = [o["name"] for o in running if o is not step and store_of(o["target"]) == store]
         evidence = tagged.get(step["name"])
         kind = verdict_kind(age, cpu, waiters, evidence)
-        left = minutes_left(*progress, elapsed, bundles_run(log.read_text())) if progress and progress[1] > 1 else None
+        one = len(step.get("deliveries", ())) < 2  # a step of several deliveries does not know the bundles still to come
+        left = minutes_left(*progress, elapsed, bundles_run(log.read_text())) if one and progress and progress[1] > 1 else None
         rows.append({
             "name": step["name"], "lane": step["lane"], "attempt": attempt, "attempts": step["attempts"],
             "workers": load_workers(listing, step["source"], step["target"]) or step.get("workers", 2),
