@@ -226,25 +226,17 @@ state separately and follow the recovery procedure for unresolved runs.
 
 ### Truncate an append-only table
 
-Use the normal manifest workflow for ordinary tables. If an append-only trigger
-rejects truncation, verify a readable backup, confirm the exact table is in the
-approved reset scope, and drain the database. As the store owner, run the
-following in one PostgreSQL transaction:
+Use the same manifest workflow for a table with a retention trigger. Before
+applying, verify a readable backup and confirm the plan names the exact trigger
+it will pause. The script checks the trigger and its function in PostgreSQL,
+locks the table, disables that trigger, truncates the table and restores the
+trigger in one transaction. It checks that the table is empty and the trigger
+is enabled before committing. A missing, changed or disabled expected trigger
+stops the plan. Other triggers remain enabled.
 
-1. Acquire an access exclusive lock on the exact table with `NOWAIT` and
-   recheck that the database is drained.
-2. Read the catalog to confirm the trigger name, function, and enabled state.
-   Disable only that trigger on that table.
-3. Truncate the table with `RESTRICT` and restore the trigger's original
-   enabled state.
-4. Confirm the table is empty and the trigger is enabled before committing.
-   Roll back on any failed check. After commit, read both facts back and
-   record the result and backup reference in the private reset receipt.
-
-For Change Journal, the table is `journal.event` and the trigger is
-`immutable_event`, backed by `journal.immutable()`. Keep this exception
-specific to the verified trigger. The generic reset tool leaves triggers
-enabled and rolls back if a trigger rejects truncation.
+The reset script recognizes `no_truncate_version` on `rdm.code_set_version`
+and `immutable_event` on `journal.event`. Back up RDM history and verify the
+source for restoring reference codes before applying the RDM plan.
 
 ### Example: table reset manifest
 

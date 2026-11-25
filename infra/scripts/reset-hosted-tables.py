@@ -33,6 +33,11 @@ STORE_SCHEMAS = {
     "change_journal": "journal",
     "silver": "silver",
 }
+# Only these verified retention triggers can be paused for a reviewed truncate.
+RETENTION_TRIGGERS = {
+    ("rdm", "code_set_version"): ("no_truncate_version", "rdm.govern_version()"),
+    ("journal", "event"): ("immutable_event", "journal.immutable()"),
+}
 IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
 PERSISTENT_TABLES = """
     SELECT c.relkind, c.relpersistence,
@@ -119,6 +124,21 @@ def load_manifest(path: Path, requested_store: str) -> list[dict[str, str]]:
     return sorted(found, key=lambda row: row["table"])
 
 
+def retention_trigger(conn, item: dict) -> str | None:
+    key = (item["schema"], item["table"])
+    if item["action"] != "truncate" or key not in RETENTION_TRIGGERS:
+        return None
+    trigger, function = RETENTION_TRIGGERS[key]
+    enabled = conn.scalar(sa.text("""
+        SELECT tgenabled FROM pg_trigger
+        WHERE tgrelid = to_regclass(:relation) AND tgname = :trigger
+          AND tgfoid = to_regprocedure(:function) AND NOT tgisinternal
+    """), {"relation": ".".join(key), "trigger": trigger, "function": function})
+    if enabled != "O":
+        raise ValueError("Expected retention trigger is missing, changed or disabled")
+    return trigger
+
+
 def read_plan(conn, engine, store: str, tables: list[dict[str, str]]) -> dict:
     schema = STORE_SCHEMAS[store]
     if engine.dialect.name != "postgresql":
@@ -136,7 +156,10 @@ def read_plan(conn, engine, store: str, tables: list[dict[str, str]]) -> dict:
         relkind, persistence, partitioned, estimate = relation
         if relkind != "r" or persistence != "p" or partitioned:
             raise ValueError("Only ordinary, persistent, non-partitioned tables can be reset")
-        plan_tables.append({**item, "rows_estimate": None if estimate < 0 else int(estimate)})
+        planned = {**item, "rows_estimate": None if estimate < 0 else int(estimate)}
+        if trigger := retention_trigger(conn, item):
+            planned["retention_trigger"] = trigger
+        plan_tables.append(planned)
     plan = {"store": store, "database": database, "postgres_major": version // 10000, "tables": plan_tables}
     canonical = json.dumps(plan, sort_keys=True, separators=(",", ":")).encode()
     plan["plan_sha256"] = hashlib.sha256(canonical).hexdigest()
@@ -192,6 +215,8 @@ def show_plan(plan: dict) -> None:
     for item in plan["tables"]:
         count = "unknown" if item["rows_estimate"] is None else f"about {item['rows_estimate']}"
         print(f"  {item['action']} {item['schema']}.{item['table']}: {count} rows (planner estimate)")
+        if trigger := item.get("retention_trigger"):
+            print(f"    pause and restore retention trigger: {trigger}")
     print(f"Plan SHA-256: {plan['plan_sha256']}")
 
 
@@ -213,11 +238,20 @@ def apply_plan(engine, store: str, tables: list[dict[str, str]], words: str, exp
                 raise ValueError("Plan changed since it was reviewed; generate and review a new plan")
             append_receipt({"at": datetime.now(ZoneInfo("America/New_York")).isoformat(), "status": "pending",
                             "words": words, **plan})
+            protected = [(item, f"{quote(engine, schema)}.{quote(engine, item['table'])}")
+                         for item in plan["tables"] if "retention_trigger" in item]
+            for item, qualified in protected:
+                trigger = quote(engine, item["retention_trigger"])
+                conn.exec_driver_sql(f"ALTER TABLE ONLY {qualified} DISABLE TRIGGER {trigger}")
             for action, command in (("truncate", "TRUNCATE TABLE"), ("drop", "DROP TABLE")):
                 targets = [f"{quote(engine, schema)}.{quote(engine, item['table'])}"
                            for item in plan["tables"] if item["action"] == action]
                 if targets:
                     conn.exec_driver_sql(f"{command} {', '.join(targets)}")
+            for item, qualified in protected:
+                trigger = quote(engine, item["retention_trigger"])
+                conn.exec_driver_sql(f"ALTER TABLE ONLY {qualified} ENABLE TRIGGER {trigger}")
+                retention_trigger(conn, item)
             for item in plan["tables"]:
                 qualified = f"{quote(engine, schema)}.{quote(engine, item['table'])}"
                 exists = bool(conn.scalar(sa.text("SELECT to_regclass(:name) IS NOT NULL"),
