@@ -66,7 +66,7 @@ CODE read it in place of git.
 - **Read hosted pipeline status inside its worker container.** Use
   `docker exec <worker> python /app/skills/data-operations/scripts/load_jobs.py --status --json --run <RUN>`; a host status cannot see worker processes. Use
   `docker exec <worker> ps` and `/proc/<pid>/io` for process details (bytes read and written between readings show work before the step log fills).
-- **Lanes and workers follow the container's memory now, never a number fixed before the load.** Every lane starts (the state machine
+- **Lanes and workers follow the container's free memory, never a number fixed before the load.** Every lane starts (the state machine
   takes no computed value, and a lane queued in the worker times out on its heartbeat). Each step is admitted just before its load
   starts, after its waits (`admit` in `load_jobs.py`): one step at a time, the lock held through a settle window so the next reads the
   memory this one takes, it waits until the container's free memory (cgroup limit less use, the file cache counted free) covers half
@@ -74,8 +74,8 @@ CODE read it in place of git.
   it starts at that half whatever the memory, so a load never waits for ever; a container with no limit to read gives every step its
   declared workers. The step's log names the workers it got. `lane_budget` (`--lanes-at-once`) stays the monitor's reference: the lanes
   the compute carries when every step runs its declared workers. If lanes wait while CPU idles, memory is the limit: more lanes need
-  more of it (a larger container-runtime ceiling or compute). Without the gate every lane started at once took the first jobs'
-  26 workers on 8 cores, the load average passed 20 and the heaviest merges were killed (status -9).
+  more of it (a larger container-runtime ceiling or compute). The gate exists because lanes started at once, each with its declared
+  workers, overload the CPU and the heaviest merges are killed for memory (status -9).
 - **One task per poller.** The worker's `ps` sees only its container, so QUIET's process count no longer covers the Mac; the
   loader's database sessions still do. Never start `load_jobs.py` on the Mac beside it.
 - **Mounts:** the logins and the captures are read-only; the stores folder, `LOGS` and the run documents' folder

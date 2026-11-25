@@ -1936,7 +1936,8 @@ def gate(tmp_path, want=4, free=None, running=lambda: True, sleeps=None, **more)
 def test_a_step_takes_its_declared_workers_when_the_memory_is_there_and_as_many_as_fit_when_it_is_not(tmp_path):
     assert gate(tmp_path, free=3.0) == 4  # 7 workers fit: the step's own four
     assert gate(tmp_path, free=1.3) == 3  # three at 0.4 GB
-    assert gate(tmp_path, free=0.85) == 2  # its floor, half of four
+    assert gate(tmp_path, free=0.85) == 2  # two fit at 0.4 GB, and two is half of four
+    assert gate(tmp_path, free=0.3, running=lambda: False) == 2  # nothing fits and nothing else runs: the floor, not fewer
     assert gate(tmp_path, want=1, free=0.1, running=lambda: False) == 1
 
 
@@ -1966,10 +1967,38 @@ def test_the_free_memory_is_the_cgroup_limit_less_the_use_but_not_the_file_cache
     assert chain.free_gb(tmp_path / "missing", tmp_path / "no-meminfo") is None
 
 
-def test_one_step_is_admitted_at_a_time_and_the_next_waits_until_the_first_has_settled(tmp_path):
-    import fcntl
-    first = chain.admit(4, 0.4, tmp_path / "gate", free=lambda: 3.0, running=lambda: True, sleep=lambda s: None, settle=3600)
-    other = (tmp_path / "gate").open("a")
-    with pytest.raises(BlockingIOError):  # the lock is held through the settle window
-        fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    assert first == 4
+def test_the_next_step_is_admitted_only_after_the_first_has_settled(tmp_path):
+    import threading
+    import time as clock
+    lock = tmp_path / "gate"
+    chain.admit(4, 0.4, lock, free=lambda: 3.0, running=lambda: True, sleep=lambda s: None, settle=0.4)
+    began, seen = clock.monotonic(), []
+    second = threading.Thread(target=lambda: seen.append((chain.admit(4, 0.4, lock, free=lambda: 3.0, running=lambda: True,
+                                                                      sleep=lambda s: None, settle=0), clock.monotonic() - began)))
+    second.start()
+    second.join(5)
+    assert seen and seen[0][0] == 4 and seen[0][1] >= 0.3  # it came in once the first's window had passed
+
+
+def test_a_read_that_fails_while_a_step_waits_does_not_keep_the_lock(tmp_path):
+    def broken():
+        raise OSError("unreadable")
+    with pytest.raises(OSError):
+        chain.admit(4, 0.4, tmp_path / "gate", free=broken, running=lambda: True, sleep=lambda s: None, settle=3600)
+    assert gate(tmp_path, free=3.0) == 4  # the lock is free again
+
+
+def test_a_step_says_once_that_it_waits_for_memory(tmp_path):
+    said = []
+    gate(tmp_path, free=[0.1, 0.1, 2.0], say=said.append)
+    assert len(said) == 1 and said[0].startswith("waits for 0.8 GB of free memory (0.1 GB now)")
+
+
+def test_a_load_of_another_lane_is_seen_by_its_command_line():
+    import subprocess
+    other = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)", "edgar-warehouse load --source x --target y "])
+    try:
+        assert chain.load_running()
+    finally:
+        other.kill()
+        other.wait()

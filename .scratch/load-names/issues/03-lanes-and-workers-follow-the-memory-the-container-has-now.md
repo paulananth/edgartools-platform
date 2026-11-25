@@ -31,9 +31,10 @@ queue; that is over-production (code for cases not seen) and was cut to the one 
 
 ## Checklist
 
-- [x] Ticket, tests first: `test_a_step_takes_its_declared_workers_...`, `test_a_step_waits_for_the_memory_of_its_floor_...`, `test_a_container_with_no_memory_limit_...`, `test_the_free_memory_is_the_cgroup_limit_...`, `test_one_step_is_admitted_at_a_time_...` failed first (no `admit`); 193 passed in `tests/unit/test_load_jobs.py` after (2026-11-25 15:13 ET)
+- [x] Ticket, tests first: `test_a_step_takes_its_declared_workers_...`, `test_a_step_waits_for_the_memory_of_its_floor_...`, `test_a_container_with_no_memory_limit_...`, `test_the_free_memory_is_the_cgroup_limit_...`, `test_the_next_step_is_admitted_only_after_the_first_has_settled`, `test_a_step_says_once_...` and `test_a_load_of_another_lane_is_seen_by_its_command_line` failed first with `AttributeError: module 'load_jobs' has no attribute 'admit'` (the lane-count test replaced one that asserted `--lanes-at-once` in `load.sh`; on the old script `--lane-count` is an unknown argument, exit 2); 193 passed in `tests/unit/test_load_jobs.py` after (2026-11-25 15:13 ET)
 - [x] `attempt_loop` admits each attempt and starts the load with the admitted workers (a copy of the step); its log line names them (2026-11-25 15:13 ET)
 - [x] `load.sh`: `MaxConcurrency` = the number of lanes (`--lane-count`); the monitor's lane budget is the reference of the declared widths; HOSTED-LOADS.md, the load-monitoring skill and the board's legend say so (2026-11-25 15:13 ET)
 - [x] Measured in the loader container, read only: free memory 1.46 GB with no load running; `admit` gives a step wanting 4 workers 3, wanting 8 gets 4, wanting 16 gets 8 (half) (2026-11-25 15:13 ET)
+- [x] Found by the Spec review: `load_running` used `pgrep -f "edgar-warehouse load"`, which misses the loader image's command line (a python one-liner); it now uses `external_loads` (`LOAD_COMMAND`), and a step that waits says so once in its log (2026-11-25 15:15 ET)
 - [ ] The hosted reload reads: more than 2 lanes at once, no step killed for memory (status -9), each step's workers named in its log. The reload now running was started before this merges
-- [x] Learning → skill: `skills/data-operations/HOSTED-LOADS.md`, "Lanes and workers follow the container's memory now" (2026-11-25 15:13 ET)
+- [x] Learning → skill: `skills/data-operations/HOSTED-LOADS.md`, "Lanes and workers follow the container's free memory" (2026-11-25 15:13 ET)

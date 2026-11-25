@@ -304,11 +304,11 @@ def free_gb(root: Path = CGROUP, meminfo: Path = Path("/proc/meminfo")) -> float
 
 
 def load_running() -> bool:
-    return subprocess.run(["pgrep", "-f", "edgar-warehouse load"], capture_output=True).returncode == 0
+    return bool(external_loads())
 
 
 def admit(want: int, worker_gb: float, lock: Path, free=free_gb, running=load_running, sleep=time.sleep,
-          settle: int = GATE_SETTLE_SECONDS, poll: int = GATE_POLL_SECONDS) -> int:
+          settle: int = GATE_SETTLE_SECONDS, poll: int = GATE_POLL_SECONDS, say=lambda text: None) -> int:
     """The workers a step starts with: its own `want` when the memory is there, fewer when it is not (at least half of them),
     and none until the memory of that floor is free, unless no other load runs, when waiting would never end. One step is
     admitted at a time: the lock is held through the settle window, so the next one reads the memory this one takes. A
@@ -316,8 +316,16 @@ def admit(want: int, worker_gb: float, lock: Path, free=free_gb, running=load_ru
     floor = max(1, want // 2)
     handle = lock.open("a")
     fcntl.flock(handle, fcntl.LOCK_EX)
-    while (room := free()) is not None and room < floor * worker_gb and running():
-        sleep(poll)
+    waited = False
+    try:
+        while (room := free()) is not None and room < floor * worker_gb and running():
+            if not waited:
+                say(f"waits for {floor * worker_gb:.1f} GB of free memory ({room:.1f} GB now)")
+                waited = True
+            sleep(poll)
+    except BaseException:
+        handle.close()
+        raise
     timer = threading.Timer(settle, handle.close)  # closing the file releases the lock
     timer.daemon = True
     timer.start()
@@ -1573,7 +1581,8 @@ def attempt_loop(step: dict, env: dict, state: Path, others_run: bool = True) ->
 
     errors, offset, previous = STORES / "load-errors.log", (0, 0), ""
     for attempt in range(1, step["attempts"] + 1):
-        workers = admit(step["workers"], step.get("worker_gb", WORKER_GB), state.with_name(state.name + ".gate"))
+        workers = admit(step["workers"], step.get("worker_gb", WORKER_GB), state.with_name(state.name + ".gate"),
+                         say=lambda text: note(f"{name} {text}", state))
         note(f"{name} attempt {attempt} start" + (f" with {workers} of its {step['workers']} workers" if workers != step["workers"] else ""), state)
         offset = error_log.position(errors)
         code, text = run_deliveries({**step, "workers": workers}, env, log)
