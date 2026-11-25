@@ -39,6 +39,7 @@ import subprocess
 import sys
 import threading
 import time
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit, urlunsplit
@@ -474,6 +475,158 @@ def stop(child: subprocess.Popen) -> None:
         child.wait(timeout=60)
 
 
+@dataclass
+class Memory:
+    """What choosing a move keeps from one cycle to the next."""
+    finished: dict[str, tuple[int, datetime]] = field(default_factory=dict)  # a step's bundles done, and when that count last changed
+    rates: dict[str, dict[int, float]] = field(default_factory=dict)  # a step's measured bundles a minute at each worker count
+    pressed: int = 0  # consecutive cycles at `high`
+
+
+def choose_move(level: str, workers: dict[str, int], length: dict[str, float], bounds: dict[str, tuple[int, int]],
+                logs: dict[str, str], since: dict[str, datetime], memory: Memory, now: datetime) -> tuple[str, int] | None:
+    """The one change of workers that pays in this cycle, or None. `workers`, `bounds`, `logs` and `since` (when the step last started
+    or moved) name the running steps. Raising a step waits for it to settle; a pressed machine sheds the step with the shortest chain,
+    whenever it last moved."""
+    settled = set(workers) if level == "high" else {name for name in workers if now - since[name] >= MOVE_EVERY}
+    memory.pressed = memory.pressed + 1 if level == "high" else 0
+    left_of: dict[str, float | None] = {}
+    for name, text in logs.items():  # what a move would cost and gain, read from each step's own log
+        progress = bundle_progress(text)
+        if progress is None:
+            continue
+        if memory.finished.get(name, (None, None))[0] != progress[0]:
+            memory.finished[name] = (progress[0], now)
+        attempt = (now - since[name]).total_seconds() / 60
+        ran = bundles_run(text)
+        if ran >= 2 and attempt >= 3:
+            memory.rates.setdefault(name, {})[workers[name]] = ran / attempt
+        left_of[name] = minutes_left(progress[0], progress[1], attempt, ran)
+    settled = {name for name in settled if movable(logs[name]) and worth_moving(
+        level, left=left_of.get(name), abandoned=(now - memory.finished.get(name, (0, now))[1]).total_seconds() / 60, pressed=memory.pressed,
+        rates=memory.rates.get(name, {}), workers=workers[name]) is None}  # a move abandons the bundle in flight
+    return rescale({n: workers[n] for n in settled}, {n: length[n] for n in settled}, level, {n: bounds[n] for n in settled})
+
+
+def memory_level(free: float | None) -> str:
+    """The container's free memory as a level: `high` under one worker's share (`WORKER_GB`), `low` with two or more free, else `ok`
+    (also where it cannot be read)."""
+    if free is None:
+        return "ok"
+    return "high" if free < WORKER_GB else "low" if free >= 2 * WORKER_GB else "ok"
+
+
+def both(one: str, other: str) -> str:
+    """Pressed if either is; room only where both have it."""
+    return "high" if "high" in (one, other) else "low" if one == other == "low" else "ok"
+
+
+def headroom(workers: int, span: tuple[int, int], free: float | None, worker_gb: float) -> tuple[int, int]:
+    """A running step's range: the capacity's, its top no higher than the free memory carries with one worker's share left over."""
+    extra = 0 if free is None else max(0, int((free - WORKER_GB) / worker_gb + 1e-9))
+    return span[0], min(span[1], workers + extra)
+
+
+def gate_path(state: Path) -> Path:
+    return state.with_name(state.name + ".gate")
+
+
+def move_path(state: Path, name: str) -> Path:
+    """The file that asks a running step to start again with another worker count."""
+    return state.with_name(f"{state.name}.move-{name}")
+
+
+def take_move(state: Path, name: str) -> int | None:
+    """The worker count asked of a step, once: the request is removed as it is read."""
+    try:
+        count = int(move_path(state, name).read_text())
+    except (OSError, ValueError):
+        count = None
+    move_path(state, name).unlink(missing_ok=True)
+    return count
+
+
+def last_starts(text: str, year: int) -> dict[str, datetime]:
+    """When each step's load last started, from the `attempt N start` lines of the state file (a moved step writes one again)."""
+    return {name: datetime.strptime(when, "%m-%d %H:%M:%S").replace(year=year, tzinfo=ZoneInfo("America/New_York"))
+            for when, name in re.findall(r"^(\d\d-\d\d \d\d:\d\d:\d\d) ET (\S+) attempt \d+ start", text, re.M)}
+
+
+def admitting(gate: Path) -> bool:
+    """A step is being admitted (it waits for memory, or has not yet shown what it takes): the gate's lock is held."""
+    with gate.open("a") as handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+    return False
+
+
+def ask_move(step: dict, count: int, state: Path) -> bool:
+    """Ask a running step's loop for `count` workers and end its load (the driver first, so that its exit is the signal's, then the
+    workers it started, which can outlive it). The loop starts the load again, where it stopped. False when its load has already
+    ended: nothing is left asked."""
+    listing = process_listing()
+    driver = load_driver(listing, step["source"], step["target"])
+    if not driver:
+        return False
+    move_path(state, step["name"]).write_text(str(count))
+    try:
+        os.kill(driver[0], signal.SIGTERM)
+    except ProcessLookupError:
+        move_path(state, step["name"]).unlink(missing_ok=True)
+        return False
+    for pid in load_pids(listing, step["source"], step["target"]):
+        if pid != driver[0]:
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(pid, signal.SIGTERM)
+    return True
+
+
+def control_cycle(steps: list[dict], state: Path, memory: Memory, reader_url: str | None = None, connections: int = 250) -> None:
+    """Move at most one running step of the lanes to another worker count, by the container's free memory, its CPU and the database.
+    Nothing is raised while a step is being admitted: the memory read then is not yet what its load takes."""
+    if not state.exists():
+        return
+    listing = process_listing()
+    text, over, now = state.read_text(), done_steps(state) | failed_steps(state), clock()
+    since = last_starts(text, now.year)
+    running = {s["name"]: (s, count) for s in steps if s["name"] in since and s["name"] not in over
+               for count in [load_workers(listing, s["source"], s["target"])] if count}
+    if not running:
+        return
+    free, reading = free_gb(), database_load(reader_url)
+    level = worst(both(memory_level(free), pressure(os.getloadavg()[0], os.cpu_count() or 1, None)), db_level(**reading) if reading else "ok")
+    if reading:
+        level = room(level, reading["connections"], connections)
+    if level == "low" and admitting(gate_path(state)):
+        level = "ok"
+    workers = {name: count for name, (_, count) in running.items()}
+    bounds = {name: headroom(count, bounds_for("local", s.get("worker_gb", WORKER_GB)), free, s.get("worker_gb", WORKER_GB))
+              for name, (s, count) in running.items()}
+    change = choose_move(level, workers, chain_length(steps, estimates(steps, measured(text))), bounds,
+                         {name: step_log_text(name) for name in running}, {name: since[name] for name in running}, memory, now)
+    if change and ask_move(running[change[0]][0], change[1], state):
+        name, count = change
+        note(f"controller moves {name} from {workers[name]} to {count} workers ({level} load, "
+             f"{'?' if free is None else f'{free:.1f}'} GB free)", state)
+        memory.finished.pop(name, None)
+        memory.pressed = 0  # the move shows in the readings before another is judged
+
+
+def control(poll: int = 30) -> None:
+    """The lane controller: a cycle every `poll` seconds for as long as the worker lives. A cycle that breaks is reported by its kind
+    (a driver error can quote an address) and the next one goes on."""
+    steps, state, memory = load_jobs(), LOGS / f"chain-{RUN}.log", Memory()
+    reader = STORES / "reader.env"
+    while True:
+        try:
+            control_cycle(steps, state, memory, data_url(load_env(reader)) if reader.exists() else None)
+        except Exception as error:  # noqa: BLE001
+            print(f"lane controller: {type(error).__name__}; next cycle", flush=True)
+        time.sleep(poll)
+
+
 def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: datetime | None = None,
          reader_url: str | None = None, connections: int = 250, bounds: tuple[int, int] | None = None,
          capacity: str = "local") -> int:
@@ -496,9 +649,7 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
     failed: set[str] = set()
     by_name = {step["name"]: step for step in steps}
     started, cycle, began, moved, missed = clock(), 0, {}, {}, False
-    finished: dict[str, tuple[int, datetime]] = {}  # a step's bundles done, and when that count last changed
-    rates: dict[str, dict[int, float]] = {}  # a step's measured bundles a minute at each worker count
-    pressed = 0
+    memory = Memory()
     total = sum(step["minutes"] for step in steps)
 
     def spawn(name: str, count: int) -> None:
@@ -551,33 +702,15 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
             count = min(max(by_name[name].get("workers", low), low), top)
             note(f"scheduler starts {name} (priority {by_name[name].get('priority', 3)}) at {count} workers", state)
             spawn(name, count)
-        # Raising a step waits for it to settle; a pressed machine sheds the step with the shortest chain at once, whenever it last moved
-        settled = set(workers) if level == "high" else {name for name in workers if clock() - moved.get(name, began[name]) >= MOVE_EVERY}
-        pressed = pressed + 1 if level == "high" else 0
-        left_of: dict[str, float | None] = {}
-        for name in workers:  # what a move would cost and gain, read from each step's own log
-            text = step_log_text(name)
-            progress = bundle_progress(text)
-            if progress is None:
-                continue
-            if finished.get(name, (None, None))[0] != progress[0]:
-                finished[name] = (progress[0], clock())
-            attempt = (clock() - moved.get(name, began[name])).total_seconds() / 60
-            ran = bundles_run(text)
-            if ran >= 2 and attempt >= 3:
-                rates.setdefault(name, {})[workers[name]] = ran / attempt
-            left_of[name] = minutes_left(progress[0], progress[1], attempt, ran)
-        settled = {name for name in settled if movable(step_log_text(name)) and worth_moving(
-            level, left=left_of.get(name), abandoned=(clock() - finished.get(name, (0, clock()))[1]).total_seconds() / 60, pressed=pressed,
-            rates=rates.get(name, {}), workers=workers[name]) is None}  # a move abandons the bundle in flight
-        if not starts and (change := rescale({n: workers[n] for n in settled}, {n: length[n] for n in settled}, level,
-                                             {n: range_of(n) for n in settled})):
+        change = choose_move(level, workers, length, {n: range_of(n) for n in workers}, {n: step_log_text(n) for n in workers},
+                             {n: moved.get(n, began[n]) for n in workers}, memory, clock())
+        if change and not starts:
             name, count = change
             note(f"scheduler moves {name} from {workers[name]} to {count} workers ({level} load)", state)
             stop(children[name])
             spawn(name, count)
             moved[name] = clock()
-            finished.pop(name, None)
+            memory.finished.pop(name, None)
         if not children and not busy and not ready(steps, done, set(), failed, len(steps)):
             left = sorted(set(by_name) - done)
             blockers = f"{', '.join(sorted(failed))} failed, so " if failed else "no step can follow what it waits for, so "
@@ -876,20 +1009,32 @@ def load_pids(listing: str, source: str, target: str) -> dict[int, float]:
     return {pid: rows[pid][1] for pid in sorted(found)}
 
 
-def load_workers(listing: str, source: str, target: str) -> int | None:
-    """The `--workers` the running load of one source and target was started with, from its driver's command line."""
+def process_listing() -> str:
+    return subprocess.run(["ps", "-Ao", "pid,ppid,time,rss,args"], check=False, capture_output=True, text=True).stdout
+
+
+def load_driver(listing: str, source: str, target: str) -> tuple[int, int | None] | None:
+    """The pid and the `--workers` of the running load's driver of one source and target, from its command line; a `--plan`, which
+    loads nothing, is none."""
     for line in listing.splitlines():
         parts = line.split(None, 4)
-        if len(parts) == 5 and LOAD_COMMAND.search(parts[4]) and is_load_process(parts[4], source, target):
+        if (len(parts) == 5 and parts[0].isdigit() and LOAD_COMMAND.search(parts[4]) and is_load_process(parts[4], source, target)
+                and not re.search(r" --plan( |$)", parts[4])):
             found = re.search(r"--workers (\d+)", parts[4])
-            return int(found.group(1)) if found else None
+            return int(parts[0]), int(found.group(1)) if found else None
     return None
+
+
+def load_workers(listing: str, source: str, target: str) -> int | None:
+    """The `--workers` the running load of one source and target was started with."""
+    driver = load_driver(listing, source, target)
+    return driver[1] if driver else None
 
 
 def process_use(source: str, target: str) -> tuple[dict[int, float], float]:
     """Each process's CPU seconds so far, by pid, and the memory in MB, of the load running one source and target (its
     driver and the workers it started); two readings give the CPU percent."""
-    listing = subprocess.run(["ps", "-Ao", "pid,ppid,time,rss,args"], check=False, capture_output=True, text=True).stdout
+    listing = process_listing()
     seconds = load_pids(listing, source, target)
     memory = 0.0
     for pid in seconds:
@@ -929,7 +1074,7 @@ def status_snapshot(steps: list[dict], state: Path, reader_url: str | None, samp
     time.sleep(sample if before or running else 0)
     rate = writes_per_minute(before, database_writes(reader_url), sample) if before else {}
     waiters = (database_load(reader_url) or {}).get("lock_waiters", 0)
-    listing = subprocess.run(["ps", "-Ao", "pid,ppid,time,rss,args"], check=False, capture_output=True, text=True).stdout
+    listing = process_listing()
     sessions = database_sessions(reader_url) if reader_url else {}
     tagged = step_sessions(reader_url) if reader_url else {}
     rows = []
@@ -1573,6 +1718,9 @@ def done_line(text: str) -> str:
     return lines[-1][:200] if lines else ""
 
 
+ENDED_BY_SIGNAL = (-signal.SIGTERM, 128 + signal.SIGTERM)  # as a child of this process, or through a shell or launcher
+
+
 def attempt_loop(step: dict, env: dict, state: Path, others_run: bool = True) -> bool:
     name, log = step["name"], LOGS / f"chain-{RUN}-{step['name']}.log"
     if wait_for(step, state, others_run=others_run):
@@ -1580,15 +1728,20 @@ def attempt_loop(step: dict, env: dict, state: Path, others_run: bool = True) ->
     from edgar_warehouse.rules import error_log
 
     errors, offset, previous = STORES / "load-errors.log", (0, 0), ""
-    for attempt in range(1, step["attempts"] + 1):
-        workers = admit(step["workers"], step.get("worker_gb", WORKER_GB), state.with_name(state.name + ".gate"),
-                         say=lambda text: note(f"{name} {text}", state))
+    attempt, want = 1, step["workers"]
+    while attempt <= step["attempts"]:
+        workers = admit(want, step.get("worker_gb", WORKER_GB), gate_path(state), say=lambda text: note(f"{name} {text}", state))
         note(f"{name} attempt {attempt} start" + (f" with {workers} of its {step['workers']} workers" if workers != step["workers"] else ""), state)
         offset = error_log.position(errors)
+        take_move(state, name)  # a request left for a load that had ended is not this one's
         code, text = run_deliveries({**step, "workers": workers}, env, log)
+        asked = take_move(state, name)
         if code == 0 and "Load stopped" not in text:
             note(f"{name} done: {done_line(text)}", state)
             return True
+        if asked and code in ENDED_BY_SIGNAL:  # moved, not failed: the same attempt goes on with other workers
+            want = asked
+            continue
         why = [line for line in text.splitlines() if re.search(r"stopped|did not finish|Error", line)]
         note(f"{name} attempt {attempt} stopped rc={code}: "
              f"{redact(why[-1])[:200] if why else ''}", state)
@@ -1602,6 +1755,7 @@ def attempt_loop(step: dict, env: dict, state: Path, others_run: bool = True) ->
                  f"{log.name}.attempt-{attempt}.errors)", state)
             return False
         previous = current
+        attempt += 1
     note(out_of_attempts(name, step["attempts"]), state)
     return False
 
