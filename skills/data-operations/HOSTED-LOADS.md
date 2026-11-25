@@ -209,11 +209,15 @@ a batch before changing its size: the writer made three a batch (70 ms each) and
 
 ### Clear all MDM and Silver tables for a full reload
 
-Prepare a separate manifest for each store. List every table from its
+Prepare a separate manifest for each store. List every resettable table from its
 inventory with `action: truncate`. Use `--require-all-tables` when planning
 and applying each manifest. The script checks the complete inventory during
 planning and again under the reset locks, and verifies all selected tables are
-empty before commit. Keep RDM reference data and Rules configuration for this
+empty before commit. Preserve `mdm.migration` and `silver.table_spec`:
+they record the installed migration and registered specifications that
+initialization checks. The script rejects either table in a reset manifest.
+Recover missing metadata from a verified backup or evidence of the installed
+schema and specifications. Keep RDM reference data and Rules configuration for this
 reload. Run the hosted initialization and readiness checks before loading.
 
 ### Preserve Rules configuration

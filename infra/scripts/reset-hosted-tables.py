@@ -38,6 +38,7 @@ RETENTION_TRIGGERS = {
     ("rdm", "code_set_version"): ("no_truncate_version", "rdm.govern_version()"),
     ("journal", "event"): ("immutable_event", "journal.immutable()"),
 }
+PRESERVED_TABLES = {"mdm": {"migration"}, "silver": {"table_spec"}}
 IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
 PERSISTENT_TABLES = """
     SELECT c.relkind, c.relpersistence,
@@ -117,6 +118,8 @@ def load_manifest(path: Path, requested_store: str) -> list[dict[str, str]]:
             raise ValueError("Manifest table must use the selected store schema and a valid table name")
         if not isinstance(action, str) or action not in {"drop", "truncate"}:
             raise ValueError("Table action must be drop or truncate")
+        if name in PRESERVED_TABLES.get(schema, ()):
+            raise ValueError("Reset manifest includes deployment metadata")
         if name in seen:
             raise ValueError("Manifest contains a duplicate table")
         seen.add(name)
@@ -149,7 +152,7 @@ def read_plan(conn, engine, store: str, tables: list[dict[str, str]], *, require
         raise ValueError("Hosted table reset requires PostgreSQL 16")
     if require_all:
         selected = {item["table"] for item in tables}
-        if selected != {row["table"] for row in inventory(conn, schema)}:
+        if selected != {row["table"] for row in inventory(conn, schema)} - PRESERVED_TABLES.get(schema, set()):
             raise ValueError("Manifest does not match the full store table inventory")
         if any(item["action"] != "truncate" for item in tables):
             raise ValueError("A full store reset requires truncate for every table")
@@ -189,6 +192,8 @@ def print_inventory(engine, store: str) -> int:
         supported = item["kind"] == "r" and item["persistence"] == "p" and not item["inherited"]
         estimate = "unknown" if item["rows_estimate"] is None else str(item["rows_estimate"])
         note = "supported" if supported else "unsupported table shape"
+        if item["table"] in PRESERVED_TABLES.get(schema, ()):
+            note = "preserved deployment metadata"
         print(f"  {item['table']}: {estimate} rows; {note}")
     print(f"{len(rows)} tables listed; nothing changed")
     return 0
@@ -287,7 +292,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--store", choices=sorted(STORE_SCHEMAS), required=True)
     parser.add_argument("--inventory", action="store_true", help="list tables and planner row estimates; change nothing")
     parser.add_argument("--manifest", type=Path, help="explicit per-table drop/truncate plan")
-    parser.add_argument("--require-all-tables", action="store_true", help="require a truncate entry for every table in the store")
+    parser.add_argument("--require-all-tables", action="store_true", help="require a truncate entry for every resettable table in the store")
     parser.add_argument("--apply", action="store_true", help="apply the reviewed plan")
     parser.add_argument("--words", help="operator's exact approval words; required with --apply")
     parser.add_argument("--plan-sha256", help="digest printed by the reviewed plan; required with --apply")
