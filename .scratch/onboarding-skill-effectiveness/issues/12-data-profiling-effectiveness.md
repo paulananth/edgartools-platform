@@ -1,7 +1,7 @@
 # data-profiling: Measure effectiveness
 
 Type: task
-Status: claimed
+Status: resolved
 Priority: P0
 Blocked by: 06, 11
 Labels: wayfinder:task
@@ -36,7 +36,7 @@ These blockers order skill-improvement work. They do not activate optional sourc
 - [x] Pin both revisions, the four paired repetitions, scoring and targets in [Comparison protocol](#comparison-protocol) before running the CLI. (2026-11-24 20:35 ET)
 - [x] Compare matching invented archive, numeric, repeat and changed-delivery tasks; recorded four trials per revision with the same local dependencies and no operator or queue wait. (2026-11-24 20:35 ET)
 - [x] Report observed pass counts, timing, regressions and limits in [Answer](#answer). (2026-11-24 20:35 ET)
-- [ ] Publish the scoped change and evidence in its own branch and PR; run the affected checks required by CLAUDE.md.
+- [x] Publish the comparison on its own branch in [docs(profiling): record paired effectiveness comparison](https://github.com/paulananth/edgartools-platform/pull/2125); documentation genericity: **155 passed**. (2026-11-24 20:36 ET)
 - [x] Learning → skill: none. The measured gains come from existing profiler fixes; this probe does not isolate skill wording or justify another wording change. (2026-11-24 20:35 ET)
 
 ## Completion evidence
