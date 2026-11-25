@@ -147,15 +147,11 @@ Take the class from approved findings and check it against the glossary. A class
 | Transaction data | records events or facts about masters over time; only grows | silver |
 | Metadata | describes the data itself (counts, files, runs) | bookkeeping, not modeled here |
 
-**One system of record: every master data field is on its master in MDM,
-and only there** (operator: "all master data fields must be on
-mdm"; operator: "silver must not have duplicate fields, it contredits the data governance principle one system of record"). A silver row holds the transaction's own facts and its links to
-masters (the link's source key, then the master id); it never copies a master
-field, not even the value that row filed. A field MDM lacks moves to MDM
-first; then silver drops it. A row's own unit is not a copy: the currency
-of an amount the row states stays beside that amount (operator:
-"Keep it on the row (Recommended)"), even when the master also holds a
-currency.
+**One system of record:** Master attributes belong in MDM. A Silver fact
+stores the transaction's own fields and [declared links](#6-a-transaction-part-its-silver-table),
+not copies of master attributes, even when the source reports them.
+Add a missing master attribute to MDM before excluding it from the fact.
+The unit of a transaction measure stays with that measure, even if the master has its own unit.
 
 **A retired column leaves a store by a new table, never by a drop**. The silver writer adds
 columns and never drops them, and a changed spec is refused for a registered table. So a spec that loses a
@@ -309,15 +305,14 @@ for identifier table"). For each identifier, decide which it is:
 
 ### 6. A transaction part: its silver table
 
-From the findings' silver spec: the grain (one row per what), the key, the
-links to masters (the source key and the MDM id, with the overlap measured),
-the time columns, and the load mode. The spec is advice; this skill does not
-build the table.
+From the findings' Silver spec, record what one row represents, its key,
+each master link and its measured overlap, time columns, and load mode.
+The spec is advice; this skill does not build the table.
 
-- **A transaction row links to its master by the master id only.** The
-  identifiers it reported are found through the Cross-reference; the one
-  source key a link reads stays, since the master is found from it by a join
-  on `master_binding` once that record is mastered.
+- **Source-key link:** Declare the master kind and Dataset Contract source
+  code; store the source key on the fact. At read time, join
+  `silver.master_binding` on the source code and key to resolve the master ID.
+  That ID is not a stored fact column.
 - **A fact every row repeats about the master** (a category, a country, a
   currency the instrument is in) is a master field, so it must reach MDM: the
   value most rows report, none on a tie, on the kind's fields and the Dataset
