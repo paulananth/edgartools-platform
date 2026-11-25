@@ -164,3 +164,60 @@ def test_a_later_month_that_names_another_adviser_keeps_the_earlier_advisers_lin
     masters.seed(database.application, advisers + funds)
     after = {(l["source_id"], l["target_id"], l["capacity"]) for l in masters.links(database.application, of_type="INVESTMENT_ADVISER_TO")}
     assert after == before and len([link for link in after if link[1] == ids[P1]]) == 3
+
+
+def test_a_feeder_two_advisers_report_with_different_masters_goes_to_the_latest_filings_master(database, tmp_path):
+    """Operator: "Latest filing wins, pinned by a test (Recommended)": the master named by the highest FilingID of the
+    month is the fund's one IS_FEEDER_TO target; the other filing's master is not."""
+    p7 = "805-9999900007"
+    base_rows = FILES[f"IA_ADV_Base_A_{JUNE[:7]}.csv"][1] + [filing("9000010", "EXAMPLE ADVISERS B LLC", "999102")]
+    tables = {**FILES,
+              f"IA_ADV_Base_A_{JUNE[:7]}.csv": (BASE, base_rows),
+              "IA_Schedule_D_7B1_x.csv": (REPORTED, FILES["IA_Schedule_D_7B1_x.csv"][1] + [
+                  ["9000010", "EXAMPLE FEEDER LP", P2, p7, "N"], ["9000010", "EXAMPLE SECOND MASTER LP", p7, "", "N"]])}
+    advisers, funds = month(tmp_path / "june", tables=tables)
+    ids = masters.seed(database.application, advisers + funds)
+    feeders = masters.links(database.application, of_type="IS_FEEDER_TO")
+    assert sorted((l["source_id"], l["target_id"]) for l in feeders if l["source_id"] == ids[P2]) == [(ids[P2], ids[p7])]
+
+
+
+def test_two_filings_of_one_adviser_naming_a_fund_in_different_roles_in_one_month_make_no_link(database, tmp_path):
+    """A known limit (operator, 2026-11-25: "Record it as a known limit (Recommended)"): each record restates its
+    capacities and a month's records carry one date, so adviser A's two filings stating fund 3 as adviser and as
+    subadviser contradict each other and neither link stands. Fund 3 keeps A's link when the filings agree."""
+    base = FILES[f"IA_ADV_Base_A_{JUNE[:7]}.csv"][1] + [filing("9000011", "EXAMPLE ADVISERS A LLC", "999101")]
+    tables = {**FILES, f"IA_ADV_Base_A_{JUNE[:7]}.csv": (BASE, base),
+              "IA_Schedule_D_7B1_x.csv": (REPORTED, FILES["IA_Schedule_D_7B1_x.csv"][1]
+                                          + [["9000011", "EXAMPLE MASTER LP", P3, "", "Y"]])}
+    advisers, funds = month(tmp_path / "june", tables=tables)
+    ids = masters.seed(database.application, advisers + funds)
+    named = {name: entity for entity, name in masters.names(database.application).items()}
+    a = named["EXAMPLE ADVISERS A LLC"]
+    advice = masters.links(database.application, of_type="INVESTMENT_ADVISER_TO")
+    assert [l["capacity"] for l in advice if (l["source_id"], l["target_id"]) == (a, ids[P3])] == []
+    assert [l["capacity"] for l in advice if (l["source_id"], l["target_id"]) == (a, ids[P1])] == ["advisor"]
+
+
+def test_the_latest_filing_is_the_larger_filing_number_whatever_its_width(database, tmp_path):
+    """FilingIDs are seven digits today; a later, wider one (ten million) still orders after a narrower one."""
+    wide = "10000000"
+    base_rows = FILES[f"IA_ADV_Base_A_{JUNE[:7]}.csv"][1] + [filing(wide, "EXAMPLE ADVISERS B LLC", "999102")]
+    tables = {**FILES, f"IA_ADV_Base_A_{JUNE[:7]}.csv": (BASE, base_rows),
+              "IA_Schedule_D_7B1_x.csv": (REPORTED, FILES["IA_Schedule_D_7B1_x.csv"][1] + [
+                  [wide, "EXAMPLE FEEDER LP", P2, "805-9999900007", "N"], [wide, "EXAMPLE SECOND MASTER LP", "805-9999900007", "", "N"]])}
+    advisers, funds = month(tmp_path / "june", tables=tables)
+    ids = masters.seed(database.application, advisers + funds)
+    feeders = masters.links(database.application, of_type="IS_FEEDER_TO")
+    assert [l["target_id"] for l in feeders if l["source_id"] == ids[P2]] == [ids["805-9999900007"]]
+
+
+def test_a_filing_stating_a_fund_in_two_tables_with_different_roles_keeps_the_first_tables_row(database, tmp_path):
+    """Conflicting duplicate rows: the filing's rows of one fund in the registered and the exempt reporting tables differ
+    in role; `distinct_on` keeps the first table's row (measured on 2026-03 and 2026-06: no filing does this)."""
+    tables = {**FILES, "ERA_Schedule_D_7B1_x.csv": (REPORTED, FILES["ERA_Schedule_D_7B1_x.csv"][1]
+                                                    + [["9000002", "EXAMPLE MASTER LP", P3, "", "Y"]])}
+    advisers, funds = month(tmp_path / "june", tables=tables)
+    held = [(r["record_key"], [(x["capacity"], x["held"]) for x in r["relationships"]])
+            for r in funds if r["source_code"] == FUND_FILING and P3 in r["record_key"]]
+    assert held == [('["9000002","805-9999900003"]', [("advisor", True), ("subadvisor", False)])]

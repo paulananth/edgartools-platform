@@ -1,8 +1,7 @@
 pass:
   readings: {funds: {step: funds.yaml}, reported: {all: reported-csv.yaml}, listed: {all: listed-csv.yaml}, era_reported: {all: era-reported-csv.yaml}, era_listed: {all: era-listed-csv.yaml}}
 # Each private fund of one monthly file (funds.yaml) with:
-# - `reported`: its latest 7.B(1) row (the highest FilingID; a FilingID is seven
-#   digits on every row of 2026-03, so text order is number order), for the
+# - `reported`: its latest 7.B(1) row (the largest filing number), for the
 #   fund's name and its master fund; none for a fund only 7.B(2) lists;
 # The exempt reporting advisers' tables (`era_reported`, `era_listed`) come in beside the registered advisers'.
 # - `name`: the 7.B(1) name, else the 7.B(2) one (sources in that order);
@@ -12,7 +11,7 @@ execution: {profile: source.combine}
 combine:
   max_rows: 1000000
   groups:
-    fund_reported: {source: [reported, era_reported], table: funds, key: fund_id, value: ., mode: last, order_by: [filing_id], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    fund_reported: {source: [reported, era_reported], table: funds, key: fund_id, value: ., mode: last, order_by: [filing_number], distinct: false, skip_null_values: true, checks: {}, where: {}}
     fund_name: {source: [reported, era_reported, listed, era_listed], table: funds, key: fund_id, value: name, mode: first, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
     fund_published: {source: [reported, era_reported, listed, era_listed], table: funds, key: fund_id, value: published, mode: first, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
   tables:

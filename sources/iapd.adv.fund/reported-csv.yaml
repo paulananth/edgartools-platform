@@ -29,6 +29,8 @@ read:
       each: record
       columns:
         filing_id: {text: {path: FilingID, path_mode: literal}}
+        # The filing's number, for ordering a fund's rows: a later filing has the larger number whatever its width.
+        filing_number: {integer: {path: FilingID, from: record, on_invalid: error}}
         fund_id: {text: {path: "Fund ID", path_mode: literal, transforms: [{trim: true}], null_if: [""]}}
         name: {text: {path: "Fund Name", path_mode: literal, null_if: [""]}}
         # The master fund a feeder invests in, by its PFID (IS_FEEDER_TO; operator, 2026-11-24:
