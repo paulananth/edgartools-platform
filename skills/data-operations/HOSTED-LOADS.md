@@ -191,7 +191,8 @@ a batch before changing its size: the writer made three a batch (70 ms each) and
   the worker container's processes, end the lane process and the engine process (`kill -9` when `TERM` is ignored),
   and check the list is empty apart from the activity worker and exporter. Stop the watchers too. A step stopped
   mid-bundle redoes that bundle on restart; keep the run's bundle folders, since the restart resumes from them.
-- Before a hosted table reset, stop clients that can reconnect and check `load_jobs.py --status`. Independently inspect
+- Before a hosted table reset, stop clients that can reconnect and check `load_jobs.py --status --run <RUN>` for the active
+  pipeline's exact label. Independently inspect
   Bookkeeping with `edgar-warehouse bookkeeping runs --state running`, `--state waiting` and `--state blocked`; for each
   returned run, read `bookkeeping status <run-id>` and `bookkeeping leases <run-id>`. A load-jobs status with no active
   steps does not establish that Bookkeeping has no open runs or leases. Let the default `load.sh` pipeline finish

@@ -1,5 +1,6 @@
 """The load jobs names every target a store loads, each with the facts its target declares."""
 import importlib.util
+import json
 import re
 import sys
 from pathlib import Path
@@ -1397,6 +1398,21 @@ def test_a_step_the_scheduler_gave_up_on_is_failed_until_it_starts_again(tmp_pat
                      "11-23 07:03:00 ET b1 attempt 1 start\n11-23 07:04:00 ET b1 stopped: the same failure came back\n"
                      "11-23 07:05:00 ET b1 attempt 1 start\n")
     assert chain.failed_steps(state) == {"a1"}  # an attempt's own stop is not the scheduler giving up; b1 started again
+
+
+def test_status_uses_the_explicit_run_label(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(chain, "LOGS", tmp_path)
+    monkeypatch.setattr(chain, "STORES", tmp_path)
+    monkeypatch.setattr(chain, "RUN", "fresh-v1")
+    monkeypatch.setattr(chain, "external_loads", lambda: set())
+    (tmp_path / "chain-after-clear.log").write_text("11-25 13:00:00 ET company done: loaded\n")
+    monkeypatch.setattr(sys, "argv", ["load_jobs.py", "--status", "--json", "--run", "after-clear"])
+
+    assert chain.main() == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["run"] == "after-clear"
+    assert report["done"] == 1
+    assert next(step for step in report["steps"] if step["name"] == "company")["state"] == "done"
 
 
 def test_finish_records_how_long_it_took_against_its_bound(monkeypatch):

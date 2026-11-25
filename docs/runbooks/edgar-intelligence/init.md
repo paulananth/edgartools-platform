@@ -29,8 +29,8 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    creates older schemas.
 1a. **Quiesce and drain (before step 2).** Before resetting an existing instance, stop scheduled
    loads and applications that can reconnect to its databases. Check
-   `load_jobs.py --status` and Bookkeeping's open runs and leases; all must be
-   clear. Inventory managed mirrors with the Snowflake Postgres mirror skill.
+   `load_jobs.py --status --run <RUN>` for each active pipeline label and Bookkeeping's open runs and leases; all must be clear.
+   Inventory managed mirrors with the Snowflake Postgres mirror skill.
    Resolve any mirror that reads a database being reset through that skill's
    approved drop or restart procedure first; approval to reset the hosted
    stores does not authorize a mirror operation.
@@ -289,7 +289,7 @@ table to that file):
 | 3 | every other step | Under 30 minutes of chain (the longest measured: 28) |
 
 Every other step is priority 3, and a step added without a `priority` is priority 3. Measure again after a load that changed the
-critical path (`load_jobs.py --status` shows each step's progress and `chain-<RUN>.log` its time) and move a step only on that evidence.
+critical path (`load_jobs.py --status --run <RUN>` shows its progress and `chain-<RUN>.log` its time) and move a step only on that evidence.
 
 ## Mirror the final tables
 
