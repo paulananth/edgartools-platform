@@ -359,11 +359,12 @@ impl Engine {
 
     fn document(&self, bytes: &[u8]) -> Result<El, Rejected> {
         let max_records = self.limits.max_records;
+        let set_aside = self.read.get("on_wrong_width").is_some();
         match setting(&self.read, "format").unwrap_or_default() {
             "json" => formats::json(bytes, self.json_integer, self.json_python_text || self.json_iteration_order),
             "jsonl" => formats::jsonl(bytes, max_records, self.json_integer, self.json_python_text),
-            "csv" => formats::csv(&formats::decode(bytes, &encodings(&self.read))?, max_records, self.read.get("on_wrong_width").is_some()),
-            "tsv" => formats::tsv(&formats::decode(bytes, &encodings(&self.read))?, max_records, self.read.get("on_wrong_width").is_some()),
+            "csv" => formats::csv(&formats::decode(bytes, &encodings(&self.read))?, max_records, set_aside),
+            "tsv" => formats::tsv(&formats::decode(bytes, &encodings(&self.read))?, max_records, set_aside),
             "html" => html::html(&formats::decode(bytes, &encodings(&self.read))?, max_records),
             _ => {
                 let parsed = match parse_xml(bytes) {

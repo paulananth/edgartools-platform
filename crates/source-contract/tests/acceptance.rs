@@ -187,7 +187,7 @@ fn a_reading_that_sets_aside_a_wrong_width_row_reads_the_others() {
         format!("read:\n  format: {format}\n{option}  tables:\n    rows:\n      each: record\n      columns:\n        a: {{ text: {{ path: a }} }}\n    names:\n      each: record\n      columns:\n        b: {{ text: {{ path: b }} }}\n")
     };
     let bytes = b"a,b\nx,1\nshort\nz,2\nw,3,4\n";
-    // Today: one row of the wrong width refuses the whole file.
+    // Without the option, one row of the wrong width refuses the whole file.
     let strict = configured(&contract("csv", ""), Steps::new()).unwrap();
     assert_eq!(strict.read(bytes, &Lookups::new()).unwrap_err().code, "malformed");
     let lenient = configured(&contract("csv", "  on_wrong_width: set_aside\n"), Steps::new()).unwrap();

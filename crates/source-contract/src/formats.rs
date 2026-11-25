@@ -122,25 +122,25 @@ pub fn jsonl(bytes: &[u8], max_records: usize, exact_numbers: bool, python_text:
     Ok(records(rows))
 }
 
-/// `wrong_width` reads a line whose field count differs from the header's as a
+/// `set_aside` reads a line whose field count differs from the header's as a
 /// record marked to be set aside; without it such a line refuses the file.
-pub fn csv(bytes: &[u8], max_records: usize, wrong_width: bool) -> Result<El, Rejected> {
-    delimited(bytes, b',', true, max_records, wrong_width)
+pub fn csv(bytes: &[u8], max_records: usize, set_aside: bool) -> Result<El, Rejected> {
+    delimited(bytes, b',', true, max_records, set_aside)
 }
 
 /// Tab-separated text, read as CSV is: a header line, then one record per
 /// line. A tab never occurs inside a value, so nothing is quoted: a quote
 /// mark is an ordinary character.
-pub fn tsv(bytes: &[u8], max_records: usize, wrong_width: bool) -> Result<El, Rejected> {
-    delimited(bytes, b'\t', false, max_records, wrong_width)
+pub fn tsv(bytes: &[u8], max_records: usize, set_aside: bool) -> Result<El, Rejected> {
+    delimited(bytes, b'\t', false, max_records, set_aside)
 }
 
-fn delimited(bytes: &[u8], delimiter: u8, quoting: bool, max_records: usize, wrong_width: bool) -> Result<El, Rejected> {
+fn delimited(bytes: &[u8], delimiter: u8, quoting: bool, max_records: usize, set_aside: bool) -> Result<El, Rejected> {
     let mut reader = ::csv::ReaderBuilder::new()
         .has_headers(true)
         .delimiter(delimiter)
         .quoting(quoting)
-        .flexible(wrong_width)
+        .flexible(set_aside)
         .from_reader(bytes);
     let headers = reader.headers().map_err(malformed)?.clone();
     let mut rows = Vec::new();

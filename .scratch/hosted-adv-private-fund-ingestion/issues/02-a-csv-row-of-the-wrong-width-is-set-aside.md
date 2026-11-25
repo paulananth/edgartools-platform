@@ -22,7 +22,13 @@ March's 63,746 IA private funds can be read. June's tables are clean.
   field count differs from the header's is not read as a record: it is set aside in the source extract's deferred
   rows with the reason `wrong_width` and its ordinal, as a row a check sets aside is, and every table of the
   reading counts it.
-- Every other malformed shape (an unclosed quote at the end, invalid bytes) still refuses the artifact.
+- Every other malformed shape (an unclosed quote at the end, invalid bytes) still refuses the artifact, and so does a
+  wrong-width record that spans a line break (a quote left open swallows the lines after it; a sound file's quoted
+  multi-line value has the header's width and is read as before).
+- Added when the proof showed the reading alone left March's funds refused (follows from the ruling: the rows are set
+  aside so the rest loads): a row set aside for its width can never be resolved by a steward, unlike a row a check sets
+  aside, so a reduction, combination, derived lookup or derived context over its reading uses the reading as if the row
+  were absent; the reading's receipt keeps its count. Any other set-aside row still refuses them.
 - `reported-csv.yaml` (sources/iapd.adv.fund) turns it on.
 
 ## Checklist
