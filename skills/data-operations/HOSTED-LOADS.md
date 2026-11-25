@@ -214,6 +214,28 @@ before clearing either store. A run at run grain has no work items or leases,
 so zero leases does not establish that its run has finished. Record the run
 state separately and follow the recovery procedure for unresolved runs.
 
+### Truncate an append-only table
+
+Use the normal manifest workflow for ordinary tables. If an append-only trigger
+rejects truncation, verify a readable backup, confirm the exact table is in the
+approved reset scope, and drain the database. As the store owner, run the
+following in one PostgreSQL transaction:
+
+1. Acquire an access exclusive lock on the exact table with `NOWAIT` and
+   recheck that the database is drained.
+2. Read the catalog to confirm the trigger name, function, and enabled state.
+   Disable only that trigger on that table.
+3. Truncate the table with `RESTRICT` and restore the trigger's original
+   enabled state.
+4. Confirm the table is empty and the trigger is enabled before committing.
+   Roll back on any failed check. After commit, read both facts back and
+   record the result and backup reference in the private reset receipt.
+
+For Change Journal, the table is `journal.event` and the trigger is
+`immutable_event`, backed by `journal.immutable()`. Keep this exception
+specific to the verified trigger. The generic reset tool leaves triggers
+enabled and rolls back if a trigger rejects truncation.
+
 ### Example: table reset manifest
 
 This invented example truncates one table while preserving its schema. A real manifest must list the exact tables chosen
