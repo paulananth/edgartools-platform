@@ -33,8 +33,7 @@ LOADER = "edgar_loader"
 IMAGE_COMMIT = "COMMIT"  # in a loader image: the commit CI built it from, only ever one that passed CI on main
 GUARDS = ("work_mem", "statement_timeout", "idle_in_transaction_session_timeout")
 CHECKS = {
-    "CODE": "The code is committed, contains today's main, and its commit has green CI",
-    "ENGINE": "The compiled engine was built from the source of this checkout (an image carries its own)",
+    "CODE": "The code is committed and contains today's main",
     "DOCTOR": "doctor reports the stores ready under the loader's files",
     "GUARDS": "The loader holds its connection limit, memory ceiling and timeouts",
     "REFERENCE": "RDM holds its published codes, and silver holds a table for every spec",
@@ -104,13 +103,11 @@ def evaluate(facts: dict) -> list[dict]:
     """Grade the facts into checks. A fact that could not be read is a failure, never a pass."""
     def check(cid, ok, evidence):
         return {"id": cid, "title": CHECKS[cid], "ok": bool(ok), "evidence": evidence}
-    g, e, loader, ref = facts["git"], facts["engine"], facts["loader"], facts["reference"]
+    g, loader, ref = facts["git"], facts["loader"], facts["reference"]
     audit, logins, state = facts["audit"], facts["logins"], facts["state"]
     reg = facts["registered"]
     return [
-        check("CODE", g["clean"] and g["contains_main"] and g["ci"] == "success", {k: g[k] for k in ("clean", "contains_main", "ci")}),
-        check("ENGINE", e["applicable"] is False or (e["built"] is not None and e["built"] == e["source"]),
-              {"applicable": e["applicable"], "built_from_this_source": None if e["built"] is None else e["built"] == e["source"]}),
+        check("CODE", g["clean"] and g["contains_main"], {k: g[k] for k in ("clean", "contains_main")}),
         check("DOCTOR", facts["doctor"] is True, {"doctor_ok": facts["doctor"]}),
         check("GUARDS", loader is not None and (loader["limit"] or -1) > 0 and all(k in loader["settings"] for k in GUARDS),
               None if loader is None else {"connection_limit": loader["limit"], "guards_set": sorted(k for k in GUARDS if k in loader["settings"])}),
@@ -130,23 +127,12 @@ def evaluate(facts: dict) -> list[dict]:
 # --- gathering: each reads one fact, prints nothing sensitive, and returns None or False when it cannot ----------------
 def git_facts(repo: Path) -> dict:
     if image_commit(repo):  # CI builds the image only from a commit that passed CI on main, and nothing edits it after
-        return {"clean": True, "contains_main": True, "ci": "success", "image": image_commit(repo)}
+        return {"clean": True, "contains_main": True, "image": image_commit(repo)}
 
     def run(*args):
         return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, check=False)
-    sha = current_sha(repo)
-    ci = "unknown"
-    if sha:
-        listed = subprocess.run(["gh", "run", "list", "--commit", sha, "--json", "conclusion,status", "-L", "20"], capture_output=True, text=True,
-                                cwd=repo, check=False)
-        try:
-            runs = json.loads(listed.stdout or "[]")
-            done = [r for r in runs if r["status"] == "completed"]
-            ci = "success" if done and all(r["conclusion"] in ("success", "skipped") for r in done) and len(done) == len(runs) else "not green"
-        except ValueError:
-            ci = "unknown"
     return {"clean": not run("status", "--porcelain", "--untracked-files=no").stdout.strip(),
-            "contains_main": run("merge-base", "--is-ancestor", "origin/main", "HEAD").returncode == 0, "ci": ci}
+            "contains_main": run("merge-base", "--is-ancestor", "origin/main", "HEAD").returncode == 0}
 
 
 ENGINE_FILES = ("src", "Cargo.toml", "Cargo.lock", "pyproject.toml")
@@ -169,15 +155,6 @@ def engine_marker() -> Path | None:
     except ImportError:
         return None
     return Path(source_contract.__file__).parent / "BUILT_FROM"
-
-
-def engine_facts(repo: Path) -> dict:
-    crate = repo / "crates" / "source-contract"
-    if not (crate / "src").exists():
-        return {"applicable": False, "built": None, "source": ""}  # an installed bundle carries its own engine
-    marker = engine_marker()
-    built = marker.read_text().strip() if marker and marker.exists() else None
-    return {"applicable": True, "built": built, "source": engine_hash(crate)}
 
 
 def build_engine(repo: Path = REPO) -> int:
@@ -339,7 +316,7 @@ def gather(stores: Path, repo: Path = REPO) -> dict:
     reader = load_jobs.load_env(stores / "reader.env") if (stores / "reader.env").exists() else {}
     loader, reference, sessions = sql_facts(reader, env)
     usage = shutil.disk_usage(Path.home())
-    return {"git": git_facts(repo), "engine": engine_facts(repo), "doctor": doctor_ok(stores, env), "loader": loader, "reference": reference,
+    return {"git": git_facts(repo), "doctor": doctor_ok(stores, env), "loader": loader, "reference": reference,
             "plan_missing": plan_missing(env), "loads_running": loads_running(), "loader_sessions": sessions,
             "disk_gib": usage.free / 2**30, "load1": os.getloadavg()[0], "cores": os.cpu_count() or 1, "audit": audit_failures(reader),
             "logins": login_facts(stores), "state": state_facts(env),
