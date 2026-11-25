@@ -45,7 +45,7 @@ def header() -> list[dict]:
         stat("Lanes running", "Lanes with a step running now. It should sit at the lane budget beside it while lanes wait: a lower number "
              "with lanes waiting means the budget is not being used.",
              "count(count by (lane) (load_step_workers)) or vector(0)", 18, steps((None, d.NEUTRAL), (1, d.GREEN))),
-        stat("Lane budget", "The lanes the compute carries at once, from the workers it carries over the widest first step of a lane "
+        stat("Lane budget", "The lanes the compute carries when every step runs its declared workers (the workers it carries over the widest first step of a lane); a step is admitted by the memory free then, so more can run "
              "(data-operations `lane_budget`). Its legend names the limit: memory or vcpu. More lanes need more of that limit.",
              "load_lane_budget", 21, steps((None, d.NEUTRAL)), graph="none"),
     ]

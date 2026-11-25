@@ -26,6 +26,7 @@ capture runs are the load jobs file's `capture_label`). The machine stays awake 
 """
 import argparse
 import contextlib
+import fcntl
 from collections import Counter
 import hashlib
 import json
@@ -36,6 +37,7 @@ import signal
 import statistics
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -276,6 +278,58 @@ def workers_range(vcpu: float, memory_gb: float, worker_gb: float = WORKER_GB) -
     unless a step has been measured smaller), at most four to a vCPU, never fewer than one. The range follows the compute
     (a 1 vCPU, 4 GB task carries up to 4; 2 vCPU, 8 GB up to 8), so it is the configuration's, never a fixed two to eight."""
     return 1, max(1, min(int(memory_gb / worker_gb + 1e-9), int(vcpu * WORKERS_PER_VCPU)))
+
+
+CGROUP = Path("/sys/fs/cgroup")
+GATE_SETTLE_SECONDS = 30  # a load takes this long to show its memory: the next step is admitted after it
+GATE_POLL_SECONDS = 30
+
+
+def free_gb(root: Path = CGROUP, meminfo: Path = Path("/proc/meminfo")) -> float | None:
+    """The memory this container has free now: its cgroup limit less its use (the file cache counted free), or, where the cgroup
+    has no limit (a container on a Docker VM, whose memory is the VM's), the memory the machine reports available; None where
+    neither can be read."""
+    try:
+        limit = (root / "memory.max").read_text().strip()
+        if limit != "max":
+            cache = next((int(line.split()[1]) for line in (root / "memory.stat").read_text().splitlines()
+                          if line.startswith("inactive_file ")), 0)
+            return (int(limit) - int((root / "memory.current").read_text()) + cache) / 2**30
+    except (OSError, ValueError):
+        pass
+    try:
+        return next(int(line.split()[1]) for line in meminfo.read_text().splitlines() if line.startswith("MemAvailable:")) / 2**20
+    except (OSError, ValueError, StopIteration):
+        return None
+
+
+def load_running() -> bool:
+    return bool(external_loads())
+
+
+def admit(want: int, worker_gb: float, lock: Path, free=free_gb, running=load_running, sleep=time.sleep,
+          settle: int = GATE_SETTLE_SECONDS, poll: int = GATE_POLL_SECONDS, say=lambda text: None) -> int:
+    """The workers a step starts with: its own `want` when the memory is there, fewer when it is not (at least half of them),
+    and none until the memory of that floor is free, unless no other load runs, when waiting would never end. One step is
+    admitted at a time: the lock is held through the settle window, so the next one reads the memory this one takes. A
+    container whose memory cannot be read gives the step its own workers. One load runs in one container."""
+    floor = max(1, want // 2)
+    handle = lock.open("a")
+    fcntl.flock(handle, fcntl.LOCK_EX)
+    waited = False
+    try:
+        while (room := free()) is not None and room < floor * worker_gb and running():
+            if not waited:
+                say(f"waits for {floor * worker_gb:.1f} GB of free memory ({room:.1f} GB now)")
+                waited = True
+            sleep(poll)
+    except BaseException:
+        handle.close()
+        raise
+    timer = threading.Timer(settle, handle.close)  # closing the file releases the lock
+    timer.daemon = True
+    timer.start()
+    return want if room is None else max(floor, min(want, int(room / worker_gb + 1e-9)))
 
 
 def capacity_profiles(path: Path = ROOT / "rules/load-jobs.yaml") -> dict[str, dict]:
@@ -1527,9 +1581,11 @@ def attempt_loop(step: dict, env: dict, state: Path, others_run: bool = True) ->
 
     errors, offset, previous = STORES / "load-errors.log", (0, 0), ""
     for attempt in range(1, step["attempts"] + 1):
-        note(f"{name} attempt {attempt} start", state)
+        workers = admit(step["workers"], step.get("worker_gb", WORKER_GB), state.with_name(state.name + ".gate"),
+                         say=lambda text: note(f"{name} {text}", state))
+        note(f"{name} attempt {attempt} start" + (f" with {workers} of its {step['workers']} workers" if workers != step["workers"] else ""), state)
         offset = error_log.position(errors)
-        code, text = run_deliveries(step, env, log)
+        code, text = run_deliveries({**step, "workers": workers}, env, log)
         if code == 0 and "Load stopped" not in text:
             note(f"{name} done: {done_line(text)}", state)
             return True
@@ -1602,6 +1658,7 @@ def main() -> int:
     parser.add_argument("--only")
     parser.add_argument("--lanes-at-once", action="store_true",
                         help="print how many lanes the --capacity carries at once (its vCPUs over the widest first step's workers)")
+    parser.add_argument("--lane-count", action="store_true", help="print how many lanes the load jobs file has")
     parser.add_argument("--force", action="store_true",
                         help="force publish: every load of this run ignores the Change Journal and processes every document of its source again")
     parser.add_argument("--lane")
@@ -1650,6 +1707,9 @@ def main() -> int:
         return 2
     if args.lanes_at_once:
         print(lanes_at_once(steps, args.capacity))
+        return 0
+    if args.lane_count:
+        print(len({step["lane"] for step in steps}))
         return 0
     if args.list:
         for step in steps:

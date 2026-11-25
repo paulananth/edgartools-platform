@@ -6,8 +6,8 @@
 #   infra/load-pipeline/load.sh [--plan] [--finish] <step>...   only those steps, in order
 #   infra/load-pipeline/load.sh [--force] --in-lanes <step>...  only those steps, each in its lane, the lanes at once (restart what is left)
 #
-# The lanes, their steps, order and waits come from the load jobs file in the image: every lane runs at once, and each step
-# with the workers the load jobs file gives it.
+# The lanes, their steps, order and waits come from the load jobs file in the image: every lane starts, and each step runs when
+# the container has the memory for it, with the workers that fit (up to the load jobs file's).
 # Runs on this machine's AWS Step Functions Local. It refuses when main's newest commit has no loader image yet (CI has not
 # passed on it, or the image is still building), and while another execution runs (one load at a time). It waits, up to
 # LOAD_DEADLINE_HOURS (default 2: the operator's window; a miss is reported once and the load goes on), and exits 0 only when the execution succeeded.
@@ -60,10 +60,9 @@ while IFS= read -r old; do
 done < <(sfn list-activities | jq -r '.activities[] | select(.name | startswith("edgartools-load")) | .activityArn')
 ACTIVITY_ARN="$(sfn create-activity --name "edgartools-load-$(date +%Y%m%d%H%M%S)-$$" | jq -r .activityArn)"
 export ACTIVITY_ARN
-# The lanes the compute carries at once (load_jobs.py owns the number, in no platform's terms; this script only applies it to the
-# state machine): its vCPUs over the widest first step's workers, read from the load jobs file in the image
-# (the emulator takes no computed value, and a lane queued in the worker times out on its heartbeat).
-at_once="$(docker run --rm --network none --entrypoint python "$image" /app/skills/data-operations/scripts/load_jobs.py --lanes-at-once --capacity "${CAPACITY:-local}")"
+# Every lane starts (the emulator takes no computed value, and a lane queued in the worker times out on its heartbeat): the
+# loader admits each step by the memory the container has then, with the workers that fit (`admit` in load_jobs.py).
+at_once="$(docker run --rm --network none --entrypoint python "$image" /app/skills/data-operations/scripts/load_jobs.py --lane-count)"
 definition="$(sed "s|\${activity}|${ACTIVITY_ARN}|g" "$here/state-machine.asl.json" | jq -c --argjson n "$at_once" '.States["Run lanes"].MaxConcurrency = $n')"
 if [ -n "$machine" ]; then
   sfn update-state-machine --state-machine-arn "$machine" --definition "$definition" >/dev/null
