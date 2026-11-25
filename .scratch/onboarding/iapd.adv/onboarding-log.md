@@ -21,7 +21,7 @@ Operator, 2026-11-24 19:11 ET: "implement hosted-adv-private-fund-load". The tic
 ## Discover (measured on the March and June captures; counts only)
 
 Profile: `~/.local/share/edgartools/mdm/profiling/iapd.adv-7b-2026-03/findings.yaml` (private, outside Git), one
-run over IA and ERA 7.B(1), 7.B(2) and both Base tables of March. Not yet approved.
+run over IA and ERA 7.B(1), 7.B(2) and both Base tables of March. Operator, 2026-11-24 19:26 ET: "Approve the findings (Recommended)" (recorded with `profile_data.py approve`). IA 7.B(1) is not in that profile (the profiler refused it for the malformed rows); its counts above were measured with Python's CSV reader on the same file.
 
 | Table | Rows | PFIDs | Filings |
 |---|---|---|---|
@@ -50,7 +50,12 @@ run over IA and ERA 7.B(1), 7.B(2) and both Base tables of March. Not yet approv
 
 ## Questions and answers
 
-(none yet)
+- Scope, IA or ERA funds (asked with the counts above; recommendation IA first). Operator, 2026-11-24 19:26 ET: "IA first, then ERA (Recommended)". IA funds are part 1; ERA funds, with ERA adviser filings mastered by CRD, are part 2 of this ticket.
+- Fund identity (asked: join by PFID only, or PFID plus a lookup-only name id). Operator, 2026-11-24 19:26 ET: "Join by PFID only (Recommended)". A new identifier type `pfid`, one matching rule, one PFID per Fund Structure; a name never joins.
+- Capacities (asked: reuse N-CEN's `advisor`/`subadvisor`, Form ADV's own `adviser`/`subadviser`, or none). Operator, 2026-11-24 19:26 ET: "Reuse advisor/subadvisor (Recommended)". Their reference-data definitions gain Form ADV 7.B(1)'s subadviser answer.
+- Feeder link (asked: `IS_FEEDER_TO` from "Master Fund ID" by PFID, or not now). Operator, 2026-11-24 19:26 ET: "Yes, IS_FEEDER_TO by PFID (Recommended)".
+- 7.B(2) funds (asked: a 7.B(2) row creates its fund by PFID, or only links). Operator, 2026-11-24 19:26 ET: "Yes, by PFID (Recommended)". 7.B(1) ranks first for every field.
+- The 3 malformed March rows (asked: an engine change that sets a wrong-width row aside, counted, off by default; or load June only). Operator, 2026-11-24 19:26 ET: "Code: set the row aside (Recommended)". GoF consult before code; test first.
 
 ## Commands named by the skill that did not exist
 

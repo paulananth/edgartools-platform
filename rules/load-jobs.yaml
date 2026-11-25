@@ -187,6 +187,22 @@ steps:
     input: p07-2026-06
     minutes: 60
     attempts: 3
+  # Form ADV's private funds, after the adviser filings of the same months (lane C runs in order), so each
+  # INVESTMENT_ADVISER_TO link finds its adviser.
+  - name: adv-funds-03
+    lane: C
+    source: iapd.adv.fund
+    target: mastering
+    input: p07-2026-03
+    minutes: 60
+    attempts: 3
+  - name: adv-funds-06
+    lane: C
+    source: iapd.adv.fund
+    target: mastering
+    input: p07-2026-06
+    minutes: 60
+    attempts: 3
   - name: ncen-fund-2025q4
     lane: L
     source: sec.ncen.fund

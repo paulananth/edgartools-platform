@@ -1,0 +1,8 @@
+# The files this source loads from: each delivery by name, its folder under the captures root (or `root: proving`).
+# A load step names one with `input:`, or none when this source has one. Read by the load only: no rules version holds it.
+# The same monthly Form ADV files iapd.adv captures.
+inputs:
+  p07-2026-03:
+    folder: iapd.adv/p07-2026-03
+  p07-2026-06:
+    folder: iapd.adv/p07-2026-06

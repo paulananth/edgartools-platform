@@ -21,6 +21,11 @@ sources:
     target: mastering
     requires: []
     after: [sec.submissions.person]
+  # Form ADV's private funds (7.B) after its adviser filings of the same month, so each link finds its adviser.
+  iapd.adv.fund:
+    target: mastering
+    requires: []
+    after: [iapd.adv]
   sec.ownership:
     target: mastering
     requires: []

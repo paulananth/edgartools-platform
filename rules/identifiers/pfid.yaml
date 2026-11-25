@@ -1,0 +1,19 @@
+# Private fund ID (PFID): the id SEC's IARD system gives each private fund an
+# adviser reports on Form ADV Schedule D 7.B ("805-" and ten digits, no check
+# digit). From the Form ADV profile of 2026-03 (IA and ERA 7.B(1), 7.B(2)):
+# every row's "Fund ID" and every filled "Master Fund ID" has this shape.
+# A change to this file is a new version: its normalizer gets a new name.
+identifier: pfid
+version: 1
+description: "805, a hyphen and ten digits, given by SEC's IARD system to each private fund on Form ADV."
+parts:
+  - length: 1
+    characters: ["8"]
+  - length: 1
+    characters: ["0"]
+  - length: 1
+    characters: ["5"]
+  - length: 1
+    characters: ["-"]
+  - length: 10
+    characters: [digits]

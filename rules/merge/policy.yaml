@@ -127,6 +127,12 @@ automatic_rules:
   rule_id: ncen-fund-lei
   rule_version: 2026-11-14.series-lei
   verdict: bind
+# Form ADV's private funds by PFID (operator, 2026-11-24: "Join by PFID only (Recommended)").
+- kind: fund_structure
+  family: binding
+  rule_id: iapd-adv-fund-pfid
+  rule_version: 2026-11-24.pfid
+  verdict: bind
 - kind: security
   family: binding
   rule_id: openfigi-security-cusip

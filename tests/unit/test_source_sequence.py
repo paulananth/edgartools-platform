@@ -142,7 +142,7 @@ def test_default_inventory_accounts_for_each_committed_source(capsys):
     assert set(result["sources"]) == expected_sources
     assert result["order"] == ["sec.company", "gleif", "sec.nport.registrant", "sec.company-facts",
                                "sec.registration", "sec.prospectus", "sec.ipo", "sec.submissions.person", "sec.nport.fund", "sec.ncen.registrant", "iapd.adv",
-                               "sec.ownership", "openfigi", "sec.ncen.fund", "sec.ncen.adviser", "sec.thirteenf.securities",
+                               "sec.ownership", "openfigi", "sec.ncen.fund", "iapd.adv.fund", "sec.ncen.adviser", "sec.thirteenf.securities",
                                "sec.nport.security", "sec.thirteenf.filings", "sec.ncen.class"]
     # OpenFIGI is one target; sec.registration, sec.prospectus and sec.ipo each have a silver target:
     # every source is configured, none blocked.
@@ -150,7 +150,7 @@ def test_default_inventory_accounts_for_each_committed_source(capsys):
 
 
 @pytest.mark.parametrize("name", [
-    "sec.company", "gleif", "sec.submissions.person", "iapd.adv", "sec.ownership",
+    "sec.company", "gleif", "sec.submissions.person", "iapd.adv", "iapd.adv.fund", "sec.ownership",
     "sec.thirteenf.securities", "sec.nport.registrant", "sec.nport.fund", "sec.ncen.fund", "sec.ncen.adviser", "sec.nport.security", "openfigi",
     "sec.company-facts", "sec.registration", "sec.prospectus", "sec.ipo", "sec.thirteenf.filings", "sec.ncen.class", "sec.ncen.registrant",
 ])
@@ -164,7 +164,7 @@ def test_each_committed_source_can_be_checked_on_its_own(capsys, name):
     assert code == (0 if name in {"sec.company", "gleif", "sec.submissions.person",
                                   "sec.nport.registrant", "sec.nport.fund", "sec.ncen.fund", "sec.ncen.adviser", "sec.nport.security",
                                   "openfigi", "sec.company-facts", "sec.thirteenf.securities", "sec.thirteenf.filings",
-                                  "sec.ownership", "iapd.adv", "sec.registration", "sec.prospectus", "sec.ipo", "sec.ncen.class",
+                                  "sec.ownership", "iapd.adv", "iapd.adv.fund", "sec.registration", "sec.prospectus", "sec.ipo", "sec.ncen.class",
                                   "sec.ncen.registrant"} else 3)
 
 
