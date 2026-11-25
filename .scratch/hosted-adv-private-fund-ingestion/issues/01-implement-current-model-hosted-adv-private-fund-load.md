@@ -1,7 +1,8 @@
 # Implement the Current-Model Hosted ADV Private-Fund Load
 
 Type: task
-Status: open
+Status: claimed
+Claimed by: claude/adv-private-funds, 2026-11-24 19:11 ET (operator: "implement hosted-adv-private-fund-load")
 Blocked by: none
 Blocks: none
 Labels: wayfinder:task
@@ -17,6 +18,8 @@ Build and qualify an isolated hosted load of the retained Form ADV Schedule D 7.
 - `docs/release-readiness/adviser-fund-source-contract.md` still describes the older separate Adviser identity and `MANAGES_FUND` graph contract. Reconcile that legacy contract to the current domain model rather than copying its obsolete entity names into the new source.
 - `docs/specs/source-readiness.md` reports `iapd.adv` as unwired; the current source file now declares Bookkeeping targets, so qualify actual runtime support rather than treating either static statement as proof.
 - The retained 13-month archive evidence is not itself a current Bookkeeping capture: the proof directory has no `receipts.jsonl` or producer `capture-run` identity. A complete supported capture is a load prerequisite.
+- Correction (2026-11-24 19:11 ET): two months have receipt-backed captures, `iapd.adv/p07-2026-03` and `iapd.adv/p07-2026-06` (`sources/iapd.adv/inputs.yaml`). The other eleven months of the window have none; capturing them is a provider request that needs the operator's permission.
+- The source moved: its rules are under `sources/iapd.adv/` now, not `rules/sources/`.
 
 ### Required work
 
@@ -41,4 +44,8 @@ Build and qualify an isolated hosted load of the retained Form ADV Schedule D 7.
 - [ ] Establish a complete supported capture manifest/receipts and its producer run identity for the intended monthly window; if unavailable, leave this part open and name the acquisition authorization needed.
 - [ ] Run the isolated Bookkeeping load against hosted connections; verify Silver, MDM, Journal and graph outcomes and record counts/run IDs privately.
 - [ ] Update the current source/runbook documentation to match the shipped path.
+- [x] Discover: one profiling run over March's IA and ERA 7.B(1), 7.B(2) and Base tables; findings and counts in the [onboarding log](../../onboarding/iapd.adv/onboarding-log.md) (2026-11-24 19:11 ET).
+- [ ] Operator decisions, one at a time: IA and ERA scope; PFID identifier and its matching rule; adviser capacities; `IS_FEEDER_TO` from Master Fund ID; Fund Structures from 7.B(2) rows; findings approval.
+- [ ] March's IA 7.B(1) has 3 malformed rows (a stray quote mark); the engine's CSV reader refuses the whole table. Needs an engine change (a code ticket, the operator's word before coding), or that month's IA funds wait.
+- [ ] The ADV fund steps join the hosted reset's reload (`.scratch/hosted-reset`, part F) as entries in `rules/load-jobs.yaml`, not a separate hosted run: the hosted stores are not drained.
 - [ ] Learning → skill: record the verified hosted ADV source/load procedure in the owning skill.
