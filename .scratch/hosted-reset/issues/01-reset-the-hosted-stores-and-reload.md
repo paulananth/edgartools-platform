@@ -50,6 +50,10 @@ Codex owns and runs this ticket; other agents take a part only when Codex hands 
 - [ ] Counts match the pre-reset record for what was kept, and the new stores' counts are reported (counts only, no data values)
 - [ ] Learning → skill: name the skill line changed (`data-operations/HOSTED-LOADS.md` or `data-platform/HOSTED-MIRRORING.md`), or write "none"
 
+## Configuration follow-up
+
+- [ ] Move MDM migration records and Silver table specifications into the configuration managed by deployment. Preserve `mdm.migration` and `silver.table_spec` during every data clear until the replacement is deployed and verified. Keep installed schema evidence tied to the deployment that produced it.
+
 ## Comments
 
 2026-11-24: Read-only preflight found two client sessions and two idle extension workers on the data database. `load_jobs.py --status` found no active steps (43 of 43 done), while Bookkeeping reported 59 runs in `running`, zero in `waiting` and zero in `blocked`. One sampled run had expected_count 0, no work items and no lease; all-run lease inspection was still running after about 60 seconds and was stopped without a total. These open runs and client sessions remain unresolved.
