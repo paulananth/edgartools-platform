@@ -33,9 +33,8 @@ are initialized, on its own (the init runbook's catalog step, `docs/runbooks/edg
 
 ## Report a running load from its evidence
 
-Never report a load as "running". Run `load_jobs.py --status --run <label>` with the exact `RUN` passed to
-`infra/load-pipeline/load.sh`; the output names the selected run. Omitting `--run` may inspect a different run's state file.
-`--json` feeds [load-monitoring](../load-monitoring/SKILL.md). Report, for each running step, what it prints:
+Never report a load as "running". Run `load_jobs.py --status --run <label>` with the exact `RUN` passed to `infra/load-pipeline/load.sh`; the output names it.
+Omitting `--run` may inspect a different run's state. `--json` feeds [load-monitoring](../load-monitoring/SKILL.md). For each step, report:
 how long against its bound, how far (bundles done and the minutes left at the rate so far), what it wrote (rows a minute
 in its store, and which other running steps share that store), its processes' CPU and memory, the age of its log, and its
 verdict. The database sessions are shown by store (working, or waiting on the client), read as the reader login.
