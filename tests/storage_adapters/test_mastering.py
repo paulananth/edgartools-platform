@@ -575,16 +575,16 @@ def test_a_link_waits_for_its_other_end_and_keeps_its_earliest_start(database_fa
 
     with opened(database_factory) as db:
         merge.merge_file(db, SECURITY, [filed("2026-03-01T00:00:00+00:00", 1)])
-        edges, waiting = links.calculate(db, POLICY, AS_OF, {})
+        edges, waiting = links.calculate(db, POLICY, AS_OF, [])
         assert edges == [] and waiting == {"unresolved_endpoint": 1}
         merge.merge_file(db, COMPANY, [record(custodian, "issuer", lei="529900T8BM49AURSDO55")])
-        edges, waiting = links.calculate(db, POLICY, AS_OF, {})
+        edges, waiting = links.calculate(db, POLICY, AS_OF, [])
         assert not waiting
         (row,) = links.rows_of(edges)["relationship"]
         assert (row["relationship_type"], row["valid_from_basis"]) == ("ISSUED_BY", "observed")
         assert {row["source_master_id"], row["target_master_id"]} == set(live(db))
         merge.merge_file(db, SECURITY, [filed("2026-06-01T00:00:00+00:00", 2)])
-        later, _ = links.calculate(db, POLICY, AS_OF, links.stored_of([row]))
+        later, _ = links.calculate(db, POLICY, AS_OF, [row])
         assert [r["valid_from"] for r in links.rows_of(later)["relationship"]] == [row["valid_from"]]
 
 
@@ -607,7 +607,7 @@ def test_a_link_reads_only_the_kind_status_and_profiles_of_its_golden_records(da
             raise AssertionError("the links build read whole golden records")
 
         monkeypatch.setattr(db, "master_bodies", whole)
-        edges, waiting = links.calculate(db, POLICY, AS_OF, {})
+        edges, waiting = links.calculate(db, POLICY, AS_OF, [])
         assert not waiting
         assert [row["relationship_type"] for row in links.rows_of(edges)["relationship"]] == ["ISSUED_BY"]
 
