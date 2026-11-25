@@ -648,7 +648,7 @@ def summarize_sessions(rows) -> dict[str, dict]:
         if not str(tag).startswith("chain-"):
             continue
         one = found.setdefault(tag[len("chain-"):], {"active": 0, "idle_in_transaction": 0, "changed_min": None, "waits": Counter(),
-                                                     "statement": "", "newest": None})
+                                                     "statement": "", "newest": None, "lock_waiting": 0})
         if state == "active":
             one["active"] += 1
             one["waits"][f"{wtype}:{wevent}" if wtype else "-"] += 1
@@ -656,13 +656,14 @@ def summarize_sessions(rows) -> dict[str, dict]:
             one["idle_in_transaction"] += 1
             one["waits"][f"{wtype}:{wevent}" if wtype else "-"] += 1
         if state in ("active", "idle in transaction"):
+            one["lock_waiting"] += wtype == "Lock"
             minutes = max(float(seconds), 0.0) / 60
             one["changed_min"] = minutes if one["changed_min"] is None else min(one["changed_min"], minutes)
             if one["newest"] is None or minutes < one["newest"]:
                 shape = re.match(r"\s*(insert\s+into|update|delete\s+from|select\b.*?\bfrom|copy)\s+([\w.\"]+)", statement or "", re.I | re.S)
                 one["newest"], one["statement"] = minutes, (
                     f"{shape.group(1).split()[0].lower()} {shape.group(2)}" if shape else (statement or "").split(" ")[0].lower())
-    return {step: {"active": one["active"], "idle_in_transaction": one["idle_in_transaction"],
+    return {step: {"active": one["active"], "idle_in_transaction": one["idle_in_transaction"], "lock_waiting": one["lock_waiting"],
                    "changed_min": 1e9 if one["changed_min"] is None else one["changed_min"], "statement": one["statement"],
                    "wait": one["waits"].most_common(1)[0][0] if one["waits"] else "-"} for step, one in found.items()}
 
@@ -682,11 +683,11 @@ def step_sessions(reader_url: str) -> dict[str, dict]:
 
 
 def verdict_kind(log_age: float, cpu: float, lock_waiters: int, evidence: dict | None = None) -> str:
-    """A step's state by its own evidence, never by a neighbour's: `locked` (its own sessions wait on locks while the store has three
+    """A step's state by its own evidence, never by a neighbour's: `locked` (a session of its own waits on a lock while the store has three
     or more waiting), `progressing` (its processes work, its log moved, or one of its own database sessions is active or changed
     state lately) or `stalled` (none of them). A step whose work is on the database side uses no CPU and writes no log, so its own
     sessions are the evidence."""
-    if lock_waiters >= 3 and evidence and evidence["wait"].startswith("Lock:"):  # three waiting is the scheduler's own threshold: one is normal
+    if lock_waiters >= 3 and evidence and evidence["lock_waiting"]:  # three waiting is the scheduler's own threshold: one is normal
         return "locked"
     if cpu >= 5 or log_age < IDLE_MINUTES or (evidence and (evidence["active"] > 0 or evidence["changed_min"] < IDLE_MINUTES)):
         return "progressing"

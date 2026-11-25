@@ -620,7 +620,7 @@ def test_the_minutes_left_follow_the_rate_so_far_and_are_unknown_before_one_bund
     assert chain.minutes_left(done=120, total=149, elapsed=7.0, ran=0) is None  # nothing run yet this attempt: no rate
 
 
-LOCK_WAITING = {"active": 1, "idle_in_transaction": 0, "changed_min": 0.1, "statement": "update silver.t", "wait": "Lock:transactionid"}
+LOCK_WAITING = {"active": 1, "idle_in_transaction": 0, "lock_waiting": 1, "changed_min": 0.1, "statement": "update silver.t", "wait": "Lock:transactionid"}
 
 
 def test_a_step_is_progressing_waiting_on_locks_or_possibly_stalled_by_its_own_evidence():
@@ -1458,7 +1458,7 @@ def test_the_sessions_of_each_step_are_read_from_their_tag_and_a_statement_is_na
 
 def test_a_step_with_a_working_session_is_progressing_at_no_cpu_and_never_unclear():
     quiet = dict(log_age=120.0, cpu=0.0, lock_waiters=0)
-    working = {"active": 1, "idle_in_transaction": 0, "changed_min": 0.03, "statement": "insert silver.t", "wait": "IO:DataFileRead"}
+    working = {"active": 1, "idle_in_transaction": 0, "lock_waiting": 0, "changed_min": 0.03, "statement": "insert silver.t", "wait": "IO:DataFileRead"}
     waiting = {"active": 0, "idle_in_transaction": 1, "changed_min": 25.0, "statement": "update silver.t", "wait": "Client:ClientRead"}
     assert chain.verdict_kind(**quiet, evidence=working) == "progressing"  # the work is the database's
     assert chain.verdict_kind(**quiet, evidence=waiting) == "stalled"  # idle in a transaction for 25 minutes
@@ -1914,3 +1914,13 @@ def test_a_lane_of_a_load_that_named_its_steps_runs_only_those_and_a_load_that_n
     every = tmp_path / "every.log"
     chain.begin_load(every)
     assert chain.run_steps(steps, {}, every, lane="A") is True and ran == ["a1", "a2", "a3"]
+
+
+def test_a_step_with_one_session_waiting_on_a_lock_among_sessions_waiting_on_the_client_is_locked():
+    rows = [("chain-s", "active", "Lock", "transactionid", 5, "update silver.t set a = 1"),
+            ("chain-s", "idle in transaction", "Client", "ClientRead", 5, "select 1 from silver.t"),
+            ("chain-s", "idle in transaction", "Client", "ClientRead", 5, "select 1 from silver.t")]
+    mine = chain.summarize_sessions(rows)["s"]
+    assert mine["wait"] == "Client:ClientRead" and mine["lock_waiting"] == 1  # the commonest wait is not the one that locks
+    assert chain.verdict_kind(log_age=120.0, cpu=0.0, lock_waiters=3, evidence=mine) == "locked"
+    assert chain.verdict_kind(log_age=120.0, cpu=0.0, lock_waiters=2, evidence=mine) == "progressing"  # one or two waiters are normal

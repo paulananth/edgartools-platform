@@ -7,7 +7,7 @@ STATES = (
     ("waiting", 0, "#8b949e", "not started: it waits for a step of another lane, or for a free slot"),
     ("progressing", 1, "#2da44e", "running, and its own evidence shows work: a database session of its own, CPU, or a log that moved"),
     ("stalled", 3, "#cf222e", "running with no CPU, no session of its own working and a silent log: the Why column says why"),
-    ("locked", 4, "#cf222e", "running, its own sessions wait on database locks and three or more sessions wait on the store"),
+    ("locked", 4, "#cf222e", "running, one of its own sessions waits on a database lock and three or more sessions wait on the store"),
     ("done", 5, "#2da44e", "finished"),
     ("failed", 6, "#cf222e", "the scheduler gave up: the same failure came back"),
 )
