@@ -55,6 +55,9 @@ CODE read it in place of git.
 - **A failure stops only what depends on it.** A step that fails stops its lane and records the lane's later steps as not
   started; a step of another lane that needs one of them stops at once, never waiting on work that cannot come. The other
   lanes go on, and the execution fails at the end, with no finish. Fix, merge, and start again: done steps cost one call each.
+- **A finish build that fails fails the load.** The state file then has `finish stopped: links rc=<n>` (or `lookups`) and no
+  `chain done`, and the execution fails. The build's own log is `chain-<RUN>-links.log` (or `-lookups.log`). Once it is fixed,
+  start `load.sh` again: done steps cost one call each, then the finish runs.
 - **The catalog takes no part in a load.** Readiness has no catalog check, a finished step publishes nothing to it, and its server
   (OpenMetadata) stays stopped during a load: it holds memory the lanes need. Publish its text after a change under `rules/` and its
   step statuses after the load (`--catalog-status`), each on its own.

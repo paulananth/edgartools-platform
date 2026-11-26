@@ -1434,6 +1434,47 @@ def test_finish_records_how_long_it_took_against_its_bound(monkeypatch):
     assert any(m.startswith("finish took ") and "min" in m for m in notes) and notes[-1] == "chain done"
 
 
+@pytest.mark.parametrize("failing", ["links", "build-lookups"])
+def test_a_failed_finish_build_fails_the_finish_and_the_load_is_not_complete(failing, tmp_path, monkeypatch):
+    """A build that exits non-zero leaves no `chain done`, and `--finish` exits non-zero, so the load's execution fails."""
+    monkeypatch.setattr(chain, "LOGS", tmp_path)
+    monkeypatch.setattr(chain, "STORES", tmp_path)
+    monkeypatch.setattr(chain, "RUN", "finish-fails")
+    monkeypatch.setattr(chain, "run", lambda args, env, log=None: 1 if failing in args else 0)
+    state = tmp_path / "chain-finish-fails.log"
+    state.write_text("11-26 05:00:00 ET load begins\n")
+
+    def note(message, path):
+        with path.open("a") as out:
+            out.write(f"11-26 05:07:00 ET {message}\n")
+
+    monkeypatch.setattr(chain, "note", note)
+
+    assert chain.finish({}, state, lookups=True) is False
+    text = state.read_text()
+    assert not chain.load_complete(text)
+    assert "finish stopped:" in text and "rc=1" in text
+
+
+def test_a_failed_links_build_makes_the_finish_command_exit_non_zero(tmp_path, monkeypatch):
+    """`--finish`'s exit code is what the activity worker reports to the state machine, and so what `load.sh` exits with."""
+    (tmp_path / "worker.env").write_text("")
+    monkeypatch.setattr(chain, "STORES", tmp_path)
+    monkeypatch.setattr(chain, "LOGS", tmp_path)
+    monkeypatch.setattr(chain, "RUN", "finish-fails")
+    monkeypatch.syspath_prepend(str(ROOT / "skills/data-operations/scripts"))
+    import readiness
+
+    monkeypatch.setattr(readiness, "image_commit", lambda root: "0" * 40)
+    monkeypatch.setattr(readiness, "gate", lambda *a: None)
+    monkeypatch.setattr(readiness, "current_sha", lambda: "0" * 40)
+    monkeypatch.setattr(chain.subprocess, "Popen", lambda *a, **k: None)
+    monkeypatch.setattr(chain, "run", lambda args, env, log=None: 1 if "links" in args else 0)
+    monkeypatch.setattr(sys, "argv", ["load_jobs.py", "--finish"])
+    assert chain.main() == 1
+    assert not chain.load_complete((tmp_path / "chain-finish-fails.log").read_text())
+
+
 def test_a_running_steps_minutes_are_read_from_the_state_file_so_a_scheduler_restart_does_not_reset_them():
     text = ("11-23 10:00:00 ET company attempt 1 start\n11-23 11:00:00 ET gleif attempt 1 start\n"
             "11-23 11:30:00 ET gleif attempt 2 start\n11-23 11:45:00 ET person attempt 1 start\n")
