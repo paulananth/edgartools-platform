@@ -76,6 +76,9 @@ def test_thresholds_are_the_chains_own_limits():
     steps = lambda title: [s["value"] for s in by_title[title]["fieldConfig"]["defaults"]["thresholds"]["steps"]]
     assert steps("Lock waiters") == [None, *design.LOCK_WAITERS]
     assert steps("Memory free") == [None, *design.MEMORY_FREE]
+    memory = [s["color"] for s in by_title["Memory free"]["fieldConfig"]["defaults"]["thresholds"]["steps"]]
+    running = next(c for n, _, c, _ in design.STATES if n == "progressing")
+    assert memory == ["#cf222e", "#d4a72c", "#2da44e"] and running not in memory
     log_age = next(o for o in by_title["Running now"]["fieldConfig"]["overrides"] if o["matcher"]["options"] == "Log age min")
     assert [s["value"] for s in log_age["properties"][0]["value"]["steps"]] == [None, *design.LOG_AGE_MINUTES]
 

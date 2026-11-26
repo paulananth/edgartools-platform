@@ -67,7 +67,7 @@ decorated, and a number is never rounded to look calm.
 | "Why is a running step not working?" | The Why panel: the five whys of each stalled or locked step (symptom, its own database sessions, its latest statement, what it waits on, the cause or what was not measured); the Why column of Running now holds the last. A step is never "unclear" |
 | A failure | The Failed tile turns red from one, the bar goes red, an annotation marks the moment |
 | Database pressure | Lock waiters: amber at one, red at three (the scheduler's own limit) |
-| Memory pressure | Memory free: orange under a quarter, red under a tenth (the controller's own limits) |
+| Memory pressure | Memory free: amber under a quarter, red under a tenth (the controller's own limits) |
 | A rate that has gone flat | Rows written a minute per store, beside the bars |
 
 Grafana recolours and redraws; it does not animate. A pulse, a rewind shake or
