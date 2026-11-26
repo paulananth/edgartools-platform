@@ -2,8 +2,7 @@
 
 The rule box holds the quality block as JSON. The inputs are the record's fields and
 its matching copy, each a JSON object. The answer is what `quality.apply` returns for
-the record, or, when an `exception` check fails, the reason the record is held out
-beside the stored word `exception`.
+the record, or, when an `exception` check fails, `{"held out": "quality_<id>"}`.
 """
 
 import json
@@ -34,8 +33,7 @@ def run(inputs, rule):
         check_quality(block)
         return apply(block, fields["object"], matching["object"])
     except UnsupportedRecord as held:
-        failed = held.detail["quality"]["checks"][held.reason.removeprefix("quality_")]
-        return {"held out": held.reason, "on_fail": failed["failure_action"]}
+        return {"held out": held.reason}
     except (QualityError, TypeError, ValueError) as error:
         return {"refused": str(error)}
 

@@ -28,8 +28,8 @@ def test_a_present_name_passes_and_the_check_is_counted():
     assert tried["passed"] is True
 
 
-def test_a_missing_name_is_held_out_with_exception_beside_it():
-    held = {"held out": "quality_name_required", "on_fail": "exception"}
+def test_a_missing_name_is_held_out_with_the_reason_alone():
+    held = {"held out": "quality_name_required"}
     for fields in ('{}', '{"name": ""}', '{"name": null}'):
         tried = _try(fields=fields, expected=held)
         assert tried["actual"] == held, fields
@@ -53,7 +53,7 @@ def test_a_fix_runs_before_the_check_so_a_cleared_stand_in_is_held_out():
     block = _block(fixes=[{"id": "clear_unknown", "fix": "blank_values@1",
                            "args": {"field": "fields.name", "values": ["UNKNOWN"]}}])
     held = _try(rule=block, fields='{"name": "UNKNOWN"}')["actual"]
-    assert held == {"held out": "quality_name_required", "on_fail": "exception"}
+    assert held == {"held out": "quality_name_required"}
     kept = _try(rule=block, fields='{"name": "Example Works"}')["actual"]
     assert "held out" not in kept
 

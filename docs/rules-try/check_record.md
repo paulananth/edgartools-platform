@@ -53,10 +53,10 @@ Pasting the full block with the first record and no matching input returns what 
 {"version": "example-quality-v1", "checks": {"name_required": {"kind": "present@1", "failure_action": "exception", "rows_checked": 1, "rows_failed": 0}}}
 ```
 
-The same block with the record that has no name is held out. The reason is `quality_` and the check id, and `exception` is shown beside "held out":
+The same block with the record that has no name is held out. The reason is `quality_` and the check id. The stored word `exception` is the one Show the full rule printed beside "hold the record out":
 
 ```json
-{"held out": "quality_name_required", "on_fail": "exception"}
+{"held out": "quality_name_required"}
 ```
 
 With `on_fail` set to `keep off matching` (`withhold`), the same record is not held out. The value stays and no matching rule may use it:
