@@ -1975,14 +1975,21 @@ def test_a_step_takes_its_declared_workers_when_the_memory_is_there_and_as_many_
 
 
 def test_a_step_of_one_document_waits_for_all_its_workers_since_it_can_never_be_raised_later(tmp_path):
-    """A move abandons a step of one document, so the controller never raises it: started at half its workers, it stays at
-    half (`gleif`, 4 of 8 workers, stopped by its bound). It waits for the memory of every worker instead."""
+    """The controller never moves a step of one document, so it waits for the memory of every worker it declares."""
     waited = []
     assert gate(tmp_path, free=[0.85, 1.3, 2.0], sleeps=waited, one_document=True) == 4  # 2, then 3 fit: it waits for 4
     assert waited == [chain.GATE_POLL_SECONDS] * 2
     waited.clear()
     assert gate(tmp_path, free=[0.1], running=lambda: False, sleeps=waited, one_document=True) == 4  # nothing else runs
     assert waited == []
+
+
+@pytest.mark.parametrize("value", [1, 0, "yes"])
+def test_one_document_is_a_boolean_in_the_load_jobs_file(value, tmp_path):
+    jobs = tmp_path / "load-jobs.yaml"
+    jobs.write_text(yaml.safe_dump({"capture_label": "t", "steps": [{"name": "a", "lane": "A", "one_document": value}]}))
+    with pytest.raises(ValueError, match="one_document is true or false"):
+        chain.load_jobs(jobs, tmp_path)
 
 
 def test_a_step_declared_one_document_is_admitted_as_one(tmp_path, monkeypatch):
@@ -2185,9 +2192,10 @@ def test_a_step_is_settled_from_the_last_start_its_state_file_names():
     assert chain.last_starts(text, 2026) == {"a1": NOW.replace(hour=15, minute=31)}
 
 
-def _controlled(monkeypatch, tmp_path, free, load=0.2, started="15:00:00", counts=(2, 2), reading=None):
+def _controlled(monkeypatch, tmp_path, free, load=0.2, started="15:00:00", counts=(2, 2), reading=None, one_document=()):
     """Two lanes' steps running, their logs at a bundle just completed; returns a cycle and what it asked."""
-    steps = [_step("long", "A", minutes=900), _step("short", "B", minutes=100)]
+    steps = [{**_step(name, lane, minutes=minutes), **({"one_document": True} if name in one_document else {})}
+             for name, lane, minutes in (("long", "A", 900), ("short", "B", 100))]
     state, asked = tmp_path / "state.log", []
     state.write_text("".join(f"11-25 {started} ET {s['name']} attempt 1 start\n" for s in steps))
     listing = "".join(f"{i} 1 0:01 100 edgar-warehouse load --source {s['source']} --target mastering --workers {n}\n"
@@ -2220,6 +2228,18 @@ def test_the_controller_raises_nothing_without_cpu_memory_or_connections_or_befo
     _, asked, cycle = _controlled(monkeypatch, tmp_path, **{"free": 2.5, **more})
     cycle()
     assert asked == []
+
+
+@pytest.mark.parametrize("free, load", [(2.5, 0.2), (0.1, 7.0)])
+def test_the_controller_never_moves_a_step_declared_one_document(monkeypatch, tmp_path, free, load):
+    """A move abandons its one document, whatever its log shows: with room or pressed, only the other step is ever moved."""
+    for declared in ({"long", "short"}, {"long"}):
+        _, asked, cycle = _controlled(monkeypatch, tmp_path, free=free, load=load, counts=(4, 4), one_document=declared)
+        for _ in range(4):
+            cycle()
+        assert {name for name, _ in asked} <= {"long", "short"} - declared
+    if free > 1:
+        assert asked and {name for name, _ in asked} == {"short"}  # with room the other step is raised in its place
 
 
 def test_nothing_is_raised_while_a_step_is_being_admitted(monkeypatch, tmp_path):

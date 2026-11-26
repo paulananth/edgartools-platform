@@ -177,6 +177,7 @@ steps:
     target: subfund-pairs
     input: publisher
     minutes: 60
+    one_document: true  # the publisher file, as `gleif`'s below
     attempts: 3
   - name: gleif
     lane: G
@@ -191,7 +192,7 @@ steps:
     # and vCPUs for more, and read the effect from the status.
     worker_gb: 0.4
     workers: 8
-    # Its delivery is one document (the publisher file): a move would abandon it, so the controller never raises it, and it
+    # Its delivery is one document (the publisher file): a move would abandon it, so the controller never moves it, and it
     # waits for the memory of all its workers rather than starting with half.
     one_document: true
     attempts: 40

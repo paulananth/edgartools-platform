@@ -76,8 +76,8 @@ CODE read it in place of git.
   memory this one takes, it waits until the container's free memory (cgroup limit less use, the file cache counted free) covers half
   its declared workers at their `worker_gb`, then starts with as many as fit, up to its declared workers. With no other load running
   it starts at that half whatever the memory, so a load never waits for ever. A step whose delivery is one document
-  (`one_document: true` in the load jobs file) waits for all its workers instead of half, since a move would abandon it and the
-  controller never raises it. A container with no limit to read gives every step its
+  (`one_document: true` in the load jobs file) waits for all its workers instead of half, since a move would abandon it: the
+  controller never moves it. A container with no limit to read gives every step its
   declared workers. The step's log names the workers it got. `lane_budget` (`--lanes-at-once`) stays the monitor's reference: the lanes
   the compute carries when every step runs its declared workers. If lanes wait while CPU idles, memory is the limit: more lanes need
   more of it (a larger container-runtime ceiling or compute). The gate exists because lanes started at once, each with its declared
