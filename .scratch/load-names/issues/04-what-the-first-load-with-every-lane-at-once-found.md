@@ -34,43 +34,47 @@ the OrbStack change), last step 05:06 ET, finish 07:47 ET. The run before it (`h
 5. **A failed links build reports success**: `links rc=1` was followed by `chain done`, and `load.sh` exited 0 (05:07 ET).
 6. **The writes were held by this machine's upload, not by the store**: MDM writes fell from about 100,000 rows a minute to about
    10,000, the long steps' processes waited at 0 to 10% CPU, and the links build took 146 min against 7.8 before. The store's own
-   monitoring (below) shows it was not the limit; one connection's upload from this machine was.
-9. **The loader's login was refused twelve times** (`Snowflake authentication failed`, user `edgar_loader`, database `data`) at
-   21:41, 22:44, 22:54 and 23:05 ET, minutes before the `adv-funds` and `person` drops; the same env file's logins worked before and
-   after.
+   monitoring (below) shows it was not the limit; one connection's upload from this machine was, and that rate varies.
+7. **Exited workers are not reaped**: about 100 zombie `python` processes in the worker container, children of moves and stops,
+   whose parent is the activity worker as PID 1.
+8. **The links differ slightly from the run before**: 417,640 links (+797) and 4,459,121 bindings (−1,119) from the same captures.
+9. **The loader's login was refused six times** (`Snowflake authentication failed`, user `edgar_loader`): once on `control` at
+   21:41 ET and five times on `data` (22:44, twice at 22:54, twice at 23:05 ET), minutes before the `adv-funds` and `person` drops;
+   the same env file's logins worked before and after.
 
 ## What the store's own monitoring shows (finding 6, read 2026-11-26)
 
-Read with the diagnostic login (`pg_stat_*`, `pg_stat_statements`) and the read-only log login (the account's event table:
-the instance's metrics and server log), then a live rerun of the links build alone (08:55 ET, stopped once read).
+Read with the diagnostic login (`pg_stat_*`, `pg_stat_statements`, `pg_db_role_setting`) and the read-only log login (the
+account's event table: the instance's metrics by minute and its server log), the exporter's Prometheus history, timed uploads and
+downloads, and a live rerun of the links build alone (08:55 ET, stopped at 09:25 once read).
 
 - **The store was not pressed.** The instance is an AWS `m8g.medium` in us-east-2: 1 vCPU, 4.2 GB, a fixed-performance type
   (no burst credits). Hour by hour from 21:00 to 08:00 ET it was 46 to 83% idle (25% at 03:00, its busiest hour), steal 0,
   disk wait at most 21%, swap flat at about 260 MB. Transactions waiting on a lock averaged 0 to 1.4 an hour (none after 02:00).
   Its sessions mostly waited on the client: 1 to 10 `data` sessions idle against 0 to 4 active.
-- **This machine was idle too**: load 0.00 to 0.14 a core from 23:30 (the exporter's `load_machine_load_per_core`), and no packet
-  loss: the worker container's TCP counters over the whole links build retransmitted 4,674 of 38.8 million segments (0.01%).
+- **This machine was idle too**: load 0.00 to 0.14 a core from 23:30 ET (the exporter's `load_machine_load_per_core`). Packet loss
+  on its path is not measured: macOS shows its TCP counters only to an administrator.
 - **The links build read in 4 minutes and wrote for 140.** The store sent it 1.8 to 7.5 MB/s from 05:22 to 05:25 ET (the scan of
-  the records table, 11.4 GB), then received 5 to 100 KB/s until 07:46 ET while the build landed its rows on one connection. The
-  rerun did the same: the scan ended in about 5.5 min, and landing ran at 50 to 380 KB/s with the client blocked sending a batch
-  (about 2.2 MB in its socket's send queue, the store waiting in `ClientRead`, the client's stack in `do_execute` of the landing
-  merge, `relational.py:183`).
-- **One connection's upload from this machine is capped at about 0.3 to 0.7 MB/s**, to the store and to Apple's speed-test server
-  alike: one 32 MB upload ran at 0.34 MB/s; three at once at 0.48, 0.58 and 0.68 MB/s each; many at once (macOS `networkQuality`)
-  at 88 Mbps up and 289 down, with a 100 ms base round trip. Downloads from the store ran at 23 to 33 MB/s on one connection. So
-  the load's writes go as fast as the number of connections uploading at once: the store received 1.5 to 2.5 MB/s while several
-  lanes wrote (02:41 to 04:05 ET) and under 0.2 MB/s once one lane was left (from 04:06).
-- **Production runs in the store's region** (AWS Step Functions), so this cap is a figure of this machine's loads only: no engine
-  change follows from it.
-- **The drops of finding 4 are the store's own kills.** The loader login's `idle_in_transaction_session_timeout` is 10 min
+  the records table, 11.4 GB), then received 695 MB at 5 to 100 KB/s until 07:46 ET while the build landed its rows on one
+  connection. The rerun did the same: the scan ended in about 5.5 min, and landing ran at 50 to 380 KB/s with the client blocked
+  sending a batch (about 2.2 MB in its socket's send queue, the store waiting in `ClientRead`, the client's stack in `do_execute`
+  of the landing merge, `relational.py:183`).
+- **One connection's upload from this machine varies, and is low now.** The 7.8-min build of the run before landed on one
+  connection at 1.6 to 2.4 MB/s (19:11 to 19:13 ET, 11-25), against 5 to 100 KB/s overnight. This morning, one connection to the
+  store sent its first 4 MB at 2.2 to 2.9 MB/s and 32 MB at 0.36 MB/s; one 32 MB upload to Apple's speed-test server ran at
+  0.34 MB/s, three at once at 0.48, 0.58 and 0.68 MB/s each, and many at once (macOS `networkQuality`) at 88 Mbps up and 289 down,
+  with a 100 ms base round trip. Downloads from the store ran at 23 to 33 MB/s on one connection. So a write's rate follows its
+  connections: one lane's 8 or so `data` sessions (`load_lanes_running` 1 from 02:30 ET) gave the store 1.5 to 2.5 MB/s from 02:41
+  to 04:05, about 0.25 MB/s each; it fell to near 0 by 04:20 when that lane's writes ended (`gleif` attempt 2 finished its document).
+- **Production runs in AWS, not over this machine's connection**, so this upload rate is a figure of this machine's loads only:
+  no engine change follows from it.
+- **Three of finding 4's drops are the store's own kills.** The loader login's `idle_in_transaction_session_timeout` is 10 min
   (`infra/scripts/harden-hosted-roles.py`). The server log ended six `edgar_loader` sessions on `data` for it: 23:08:24
   (`adv-funds` failed 23:08:27), 23:13:14 (`person`, 23:13:17), 00:52:20, 02:33:19 and 02:34:42 (`gleif` attempt 1, 02:34:16),
-  04:29:44 (`gleif` attempt 2, the silent one: the client never saw the close). The links build's drop is no kill: the store
-  logged only `connection to client lost` at 05:07:12, after the build's `rc=1` at 05:07. A session is idle in its transaction while a statement is still arriving, so a batch sent
-  slower than the limit is killed as one idle.
-7. **Exited workers are not reaped**: about 100 zombie `python` processes in the worker container, children of moves and stops,
-   whose parent is the activity worker as PID 1.
-8. **The links differ slightly from the run before**: 417,640 links (+797) and 4,459,121 bindings (−1,119) from the same captures.
+  and 04:29:44 (`gleif` attempt 2, the silent one: the client never saw the close; its writes had ended about 10 minutes before).
+  The links build's drop is no kill: the store logged only `connection to client lost` at 05:07:12, after the build's `rc=1` at
+  05:07. What each client did inside the open transaction is not read yet: a statement still arriving after 10 minutes, or client
+  work with the transaction open.
 
 ## Parts
 
@@ -79,10 +83,10 @@ the instance's metrics and server log), then a live rerun of the links build alo
 - [ ] A step's memory at admission is its measured peak where one is known, not `worker_gb` alone (finding 3)
 - [ ] The engine's database connections carry client keepalives and a timeout, so a dropped connection fails within minutes (finding 4)
 - [ ] A failed links build fails the load: no `chain done`, `load.sh` exits non-zero (finding 5)
-- [x] The store's slowdown read from its own monitoring (throughput limits, connection drops) before any engine change (finding 6): the store was not the limit, one connection's upload from this machine was, and finding 4's drops are the store's idle-in-transaction kills; read from the instance's event-table metrics and server log, `pg_stat_*`, and a live rerun of the links build (2026-11-26 09:25 ET)
+- [x] The store's slowdown read from its own monitoring (throughput limits, connection drops) before any engine change (finding 6): the store was not the limit, one connection's upload from this machine was (a rate that varies: about 2 MB/s on 11-25, 5 to 100 KB/s overnight), and three of finding 4's drops are the store's idle-in-transaction kills; read from the instance's event-table metrics and server log, `pg_stat_*`, and a live rerun of the links build (2026-11-26 09:25 ET)
 - [ ] Each of the six idle-in-transaction kills traced to what its client did inside the open transaction: a statement sent slower than the 10-minute limit, or client work with the transaction open (finding 4)
 - [ ] The links build's drop at 05:07 explained: no store kill was logged before it (finding 4)
-- [ ] The twelve refused loader logins explained (finding 9)
+- [ ] The six refused loader logins explained (finding 9)
 - [ ] `db_monitor.py` reads the instance's own telemetry (CPU by state, network by minute, waiting transactions, machine type) and times one connection's upload, so this reading is one command (finding 6)
 - [ ] The worker container reaps exited children (`init: true` or a reaper) (finding 7)
 - [ ] The links differences explained from the two runs' rows, or shown to be expected (finding 8)
