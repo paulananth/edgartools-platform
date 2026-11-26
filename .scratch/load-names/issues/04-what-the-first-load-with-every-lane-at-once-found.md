@@ -121,7 +121,7 @@ connection whose path still answers probes while its data stalls.
 - [ ] The links build's drop at 05:07 explained: no store kill was logged before it (finding 4)
 - [ ] The six refused loader logins explained (finding 9)
 - [ ] `db_monitor.py` reads the instance's own telemetry (CPU by state, network by minute, waiting transactions, machine type) and times one connection's upload, so this reading is one command (finding 6)
-- [ ] The worker container reaps exited children (`init: true` or a reaper) (finding 7)
+- [x] The worker container reaps exited children (`init: true` or a reaper) (finding 7): the worker service runs with `init: true`, so Docker's init is PID 1; on the loader image, 20 orphaned children that exited stayed as 20 zombies under the activity worker as PID 1 and none under `--init`; `test_the_worker_runs_under_an_init_that_reaps_its_exited_children` (on the old file `KeyError: 'init'`); it applies when `load.sh` next brings the worker up (2026-11-26 12:40 ET)
 - [ ] The links differences explained from the two runs' rows, or shown to be expected (finding 8)
 - [ ] A hosted reload with no step killed for memory (status -9), more than 2 lanes at once and each step's workers named in its log (from ticket 03)
 - [ ] Learning → skill
