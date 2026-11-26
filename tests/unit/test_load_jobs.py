@@ -1959,6 +1959,24 @@ def test_the_free_memory_is_the_cgroup_limit_less_the_use_but_not_the_file_cache
     assert chain.free_gb(tmp_path / "missing", tmp_path / "no-meminfo") is None
 
 
+def test_the_share_of_memory_free_is_the_free_memory_over_the_cgroup_limit_or_the_machines_total(tmp_path):
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text(f"MemTotal: {6 * 2**20} kB\nMemAvailable: {3 * 2**19} kB\n")  # 1.5 of 6 GB
+    (tmp_path / "memory.max").write_text(str(4 * 2**30))
+    (tmp_path / "memory.current").write_text(str(3 * 2**30))
+    (tmp_path / "memory.stat").write_text(f"inactive_file {2**29}\n")
+    assert chain.free_share(tmp_path, meminfo) == 0.375  # 1.5 free of a 4 GB limit
+    (tmp_path / "memory.max").write_text("max\n")
+    assert chain.free_share(tmp_path, meminfo) == 0.25  # no limit: 1.5 available of the machine's 6 GB
+    assert chain.free_share(tmp_path / "missing", tmp_path / "no-meminfo") is None
+
+
+def test_the_status_reads_the_share_of_memory_free_inside_a_linux_container(monkeypatch):
+    monkeypatch.setattr(chain.sys, "platform", "linux")
+    monkeypatch.setattr(chain, "free_share", lambda: 0.3)
+    assert chain.machine_reading()["memory_free"] == 0.3
+
+
 def test_the_next_step_is_admitted_only_after_the_first_has_settled(tmp_path):
     import threading
     import time as clock

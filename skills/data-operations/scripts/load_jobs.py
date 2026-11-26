@@ -304,6 +304,23 @@ def free_gb(root: Path = CGROUP, meminfo: Path = Path("/proc/meminfo")) -> float
         return None
 
 
+def free_share(root: Path = CGROUP, meminfo: Path = Path("/proc/meminfo")) -> float | None:
+    """The share of memory free: `free_gb` over the cgroup limit, or over the machine's total where the cgroup has none;
+    None where either cannot be read."""
+    free = free_gb(root, meminfo)
+    try:
+        limit = (root / "memory.max").read_text().strip()
+        total = int(limit) / 2**30 if limit != "max" else None
+    except (OSError, ValueError):
+        total = None
+    if total is None:
+        try:
+            total = next(int(line.split()[1]) for line in meminfo.read_text().splitlines() if line.startswith("MemTotal:")) / 2**20
+        except (OSError, ValueError, StopIteration):
+            return None
+    return free / total if free is not None and total else None
+
+
 def load_running() -> bool:
     return bool(external_loads())
 
@@ -1050,10 +1067,13 @@ WRITES_NOTE = "rows written a minute are counted when a transaction commits, so 
 
 
 def machine_reading() -> dict:
-    """The machine now: one-minute load average, cores, and the share of memory free (None where it cannot be read)."""
-    memory = subprocess.run(["memory_pressure"], check=False, capture_output=True,
-                            text=True).stdout if sys.platform == "darwin" else ""
-    return {"load": os.getloadavg()[0], "cores": os.cpu_count() or 1, "memory_free": memory_free_fraction(memory)}
+    """The machine now: one-minute load average, cores, and the share of memory free (macOS's own reading, else the
+    container's; None where it cannot be read)."""
+    if sys.platform == "darwin":
+        free = memory_free_fraction(subprocess.run(["memory_pressure"], check=False, capture_output=True, text=True).stdout)
+    else:
+        free = free_share()
+    return {"load": os.getloadavg()[0], "cores": os.cpu_count() or 1, "memory_free": free}
 
 
 def status_snapshot(steps: list[dict], state: Path, reader_url: str | None, sample: int = 20) -> dict:
