@@ -1918,10 +1918,10 @@ def test_a_step_with_one_session_waiting_on_a_lock_among_sessions_waiting_on_the
     assert chain.verdict_kind(log_age=120.0, cpu=0.0, lock_waiters=2, evidence=mine) == "progressing"  # one or two waiters are normal
 
 
-def gate(tmp_path, want=4, free=None, running=lambda: True, sleeps=None, **more):
-    """`admit` with a memory reading from a list (one per look) and a sleep that records."""
+def gate(tmp_path, want=4, free=None, running=lambda: True, sleeps=None, pressed=lambda: False, **more):
+    """`admit` with a memory reading from a list (one per look), a CPU that is not pressed unless said, and a sleep that records."""
     looks = iter(free if isinstance(free, list) else [free])
-    return chain.admit(want, 0.4, tmp_path / "gate", free=lambda: next(looks), running=running,
+    return chain.admit(want, 0.4, tmp_path / "gate", free=lambda: next(looks), running=running, pressed=pressed,
                        sleep=lambda seconds: sleeps.append(seconds) if sleeps is not None else None, settle=0, **more)
 
 
@@ -1940,6 +1940,14 @@ def test_a_step_waits_for_the_memory_of_its_floor_while_other_loads_run_and_star
     waited.clear()
     assert gate(tmp_path, free=[0.1], running=lambda: False, sleeps=waited) == 2  # nothing runs: waiting would be forever
     assert waited == []
+
+
+def test_a_step_waits_while_the_cpu_is_pressed_though_the_memory_is_there_and_not_when_nothing_else_runs(tmp_path):
+    waited, looks = [], iter([True, True, False])
+    assert gate(tmp_path, free=[3.0, 3.0, 3.0], pressed=lambda: next(looks), sleeps=waited) == 4
+    assert waited == [chain.GATE_POLL_SECONDS] * 2  # the controller would take back what a pressed machine admits
+    waited.clear()
+    assert gate(tmp_path, free=[3.0], pressed=lambda: True, running=lambda: False, sleeps=waited) == 4 and waited == []
 
 
 def test_a_container_with_no_memory_limit_to_read_gives_the_declared_workers_without_waiting(tmp_path):
@@ -1981,10 +1989,10 @@ def test_the_next_step_is_admitted_only_after_the_first_has_settled(tmp_path):
     import threading
     import time as clock
     lock = tmp_path / "gate"
-    chain.admit(4, 0.4, lock, free=lambda: 3.0, running=lambda: True, sleep=lambda s: None, settle=0.4)
+    chain.admit(4, 0.4, lock, free=lambda: 3.0, running=lambda: True, pressed=lambda: False, sleep=lambda s: None, settle=0.4)
     began, seen = clock.monotonic(), []
     second = threading.Thread(target=lambda: seen.append((chain.admit(4, 0.4, lock, free=lambda: 3.0, running=lambda: True,
-                                                                      sleep=lambda s: None, settle=0), clock.monotonic() - began)))
+                                                                      pressed=lambda: False, sleep=lambda s: None, settle=0), clock.monotonic() - began)))
     second.start()
     second.join(5)
     assert seen and seen[0][0] == 4 and seen[0][1] >= 0.3  # it came in once the first's window had passed
@@ -1994,7 +2002,7 @@ def test_a_read_that_fails_while_a_step_waits_does_not_keep_the_lock(tmp_path):
     def broken():
         raise OSError("unreadable")
     with pytest.raises(OSError):
-        chain.admit(4, 0.4, tmp_path / "gate", free=broken, running=lambda: True, sleep=lambda s: None, settle=3600)
+        chain.admit(4, 0.4, tmp_path / "gate", free=broken, running=lambda: True, pressed=lambda: False, sleep=lambda s: None, settle=3600)
     assert gate(tmp_path, free=3.0) == 4  # the lock is free again
 
 
