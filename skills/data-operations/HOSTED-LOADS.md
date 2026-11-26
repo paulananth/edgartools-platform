@@ -46,8 +46,9 @@ CODE read it in place of git.
 - **The load jobs file alone decides the lane schedule.** The first task returns lanes in first-appearance order from
   `rules/load-jobs.yaml`; Step Functions dispatches them all. Each lane runs steps in file order; a step waits for its
   cross-lane dependencies and memory admission. Keep independent long lanes ahead of the long critical-path lane:
-  Company Facts is scheduled before GLEIF, while `adv-custodians` stays after GLEIF because it depends on it. `priority`
-  orders `load_jobs.py --auto`, not the hosted Map. A failure belongs to its lane; a stop before the load's start is not counted.
+  Company Facts is scheduled before GLEIF to overlap the long source step. `adv-custodians` must follow GLEIF,
+  and `--finish` follows every lane; target GLEIF as the last long source step, not the exact final event.
+  `priority` orders `load_jobs.py --auto`, not the hosted Map. A failure belongs to its lane; a stop before the load's start is not counted.
 - **A load never waits on what cannot come.** Before the first step, `load_jobs.py --begin` refuses the load when a
   step waits on a step that does not exist, on lanes that cannot finish, or, for named steps, on a step neither done
   nor earlier in the run (name it first). A plan runs the same check. While running, a needed step that failed, or a
