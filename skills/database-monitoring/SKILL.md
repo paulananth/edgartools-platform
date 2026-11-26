@@ -47,9 +47,9 @@ object per reading.
 | Which store spills or rolls back? | `databases` | `temp_mb` and `temp_files` are sorts and hashes that did not fit `work_mem`; `deadlocks` and a high `rollbacks` against `commits` name the store to look at |
 | What did the server log? | `logs --minutes 60` | See Postgres logs |
 | Is the instance itself the limit? | `telemetry --minutes 120 --every 10` | Its machine type, then per interval its CPU by state (`idle` high and `steal` 0 is a store with room), the KB a second it received and sent, the mean transactions waiting on locks and the most connections. Read through the log connection (Postgres logs) |
-| Is one connection's upload the limit? | `upload` | The diagnostic login's round trip, a download, and eight sends of 4 MB: the first send can be a burst, the rest the sustained rate. A load that writes on few connections at that rate is held by the client's path, not the store |
+| Is one connection's upload the limit? | `upload` | The diagnostic login's round trip, a download, and up to eight sends of 4 MB, none started after 60 s (a send in flight runs to its end: the statement timeout starts once it has arrived; a send over 2 s is written to the server log with its 4 MB of `x`): the first send can be a burst, the rest the sustained rate. A load that writes on few connections at that rate is held by the client's path, not the store |
 | Is it costing more than it should? | `budget` | See Cost watch |
-| All of it | `all` | Every reading above (the log only when its connection is set) |
+| All of it | `all` | Every reading above but `telemetry` and `upload` (the log only when its connection is set) |
 
 ## Postgres logs
 

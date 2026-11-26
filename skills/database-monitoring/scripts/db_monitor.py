@@ -17,7 +17,9 @@ CONTEXT lines, which quote values from the data. Addresses and literals are repl
 `telemetry` reads the instance's own metrics from the same event table and connection: its machine type, and for each
 `--every` minutes its CPU by state, the bytes it received and sent (eth0), the transactions waiting on locks and the
 connections. `upload` times one connection of the diagnostic login: its round trip, a download, and `select length(%s)` of
-4 MB sent eight times, each under the session's statement timeout, so the sustained upload rate shows beside the first burst.
+4 MB sent up to eight times, none started after 60 s, so the sustained upload rate shows beside the first burst. The statement
+timeout starts once a statement has arrived, so it never bounds a send: a send in flight runs to its end. A send over the
+server's `log_min_duration_statement` (2 s) is written to its log with its text: 4 MB of `x`, no value from the data.
 """
 from __future__ import annotations
 
@@ -234,9 +236,9 @@ def telemetry(minutes: int, every: int) -> list[dict]:
     return [{"machine": m["MACHINE"], "region": m["REGION"]} for m in machines] + rows_
 
 
-def upload(cursor, clock=None, sends: int = 8, mb: int = 4) -> dict:
-    """One connection's round trip (median of ten `select 1`), a download of `mb` MB, and `sends` uploads of `mb` MB each, in
-    MB a second. An upload the statement timeout cuts off ends the uploads; the ones before it are shown."""
+def upload(cursor, clock=None, sends: int = 8, mb: int = 4, seconds: float = 60.0) -> dict:
+    """One connection's round trip (median of ten `select 1`), a download of `mb` MB, and up to `sends` uploads of `mb` MB each,
+    in MB a second. No send starts once the uploads have taken `seconds`; one that fails ends them, and those before it show."""
     import time
 
     clock = clock or time.perf_counter
@@ -248,11 +250,17 @@ def upload(cursor, clock=None, sends: int = 8, mb: int = 4) -> dict:
         trips.append((clock() - began) * 1000)
     found = {"round_trip_ms": round(sorted(trips)[len(trips) // 2], 1)}
     began = clock()
-    cursor.execute("select repeat('x', 1024) from generate_series(1, %s)", [mb * 1024])
-    got = sum(len(row[0]) for row in cursor.fetchall())
-    found["download_mb_s"] = round(got / 2**20 / (clock() - began), 2)
+    try:
+        cursor.execute("select repeat('x', 1024) from generate_series(1, %s)", [mb * 1024])
+        got = sum(len(row[0]) for row in cursor.fetchall())
+        found["download_mb_s"] = round(got / 2**20 / (clock() - began), 2)
+    except Exception as stopped:  # its message names no value: the rows are only `x`
+        found["download_stopped"] = type(stopped).__name__
     payload, rates, spent = "x" * (mb * 2**20), [], 0.0
     for sent in range(1, sends + 1):
+        if spent >= seconds:
+            found["upload_stopped"] = f"{sent - 1} sends took {spent:.0f} s: no more were started"
+            break
         began = clock()
         try:
             cursor.execute("select length(%s)", [payload])

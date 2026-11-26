@@ -225,3 +225,18 @@ def test_an_upload_cut_off_by_the_statement_timeout_is_named_and_the_rest_still_
     found = monitor.upload(TimedCursor(clock, up_mb_s=0.5, down_mb_s=25.0, fail_after=2), clock=lambda: clock[0], sends=3, mb=4)
     assert found["upload_mb_s"] == [0.5] * 2
     assert "statement timeout" in found["upload_stopped"]
+
+
+def test_no_upload_starts_once_the_uploads_have_taken_their_time():
+    clock = [0.0]
+    found = monitor.upload(TimedCursor(clock, up_mb_s=0.05, down_mb_s=25.0), clock=lambda: clock[0], sends=8, mb=4, seconds=60)
+    assert found["upload_mb_s"] == [0.05]  # one send of 4 MB took 80 s: the second never starts
+    assert "no more were started" in found["upload_stopped"]
+
+
+def test_cpu_shares_of_a_two_cpu_instance_use_both_cpus_seconds():
+    raw = [{"AT": "a", "NAME": "system.cpu.time", "KEY": "user", "TOTAL": 150.0, "MEAN": None, "TOP": None, "CPUS": 2},
+           {"AT": "a", "NAME": "system.cpu.time", "KEY": "idle", "TOTAL": 450.0, "MEAN": None, "TOP": None, "CPUS": 2},
+           {"AT": "a", "NAME": "system.network.io", "KEY": "receive", "TOTAL": 307200.0, "MEAN": None, "TOP": None, "CPUS": 0}]
+    [row] = monitor.telemetry_rows(raw, every=5)  # 600 CPU seconds over 2 CPUs: 300 s of wall time
+    assert (row["cpu_user_pct"], row["cpu_idle_pct"], row["receive_kb_s"]) == (25.0, 75.0, 1.0)
