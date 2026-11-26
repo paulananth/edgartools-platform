@@ -94,7 +94,7 @@ retained progress before making a new run.
 When deploying tested configuration to an environment, follow **Configuration
 promotion** in the Edgar Intelligence CI/CD runbook. Reuse the existing Rules approval procedure and exact
 release evidence; distinguish an approved release from its active deployment.
-For timing reports, use the [five-minute workflow](TIMING-REPORTS.md).
+For how long each load took, use [retained load timings](TIMING-REPORTS.md): resolve the configured log directory and run label, report every step and total wall time, and distinguish the timing evidence from catalog summaries and live monitoring.
 
 ## Tables are created elsewhere
 
