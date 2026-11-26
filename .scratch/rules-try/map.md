@@ -26,6 +26,7 @@ A person hand-writes one rule, supplies the input and the expected output, and t
 - Ticket 03: Store this draft calls `Rules.save` under the `version` in the pasted rule and keeps the case beside that draft. A rule with no version is not stored. The draft is not switched on.
 - Ticket 04: `read_file` takes the read document as the rule, the file text and the lookup lists as inputs, and returns what `SourceEngine.read` returns. The folder test checks that every family declares a page.
 - Ticket 05: a short read rule is a read document that may use the listed words for a stored key. Show the full rule returns the words used with their stored keys and the full document, which the engine must load. A bare stored key from the list is refused with the word to type.
+- Ticket 06: `docs/rules-try/read_file.md` records each word, its stored key, the invented R1 file and the output Try returns for it.
 - Ticket 16: `entity_type` takes the classification rule as the rule, the record and the doc as inputs, and returns what `classify` decides: `{"entity type": ...}` or `{"held back": "deferred"}`. A rule with no `otherwise` step is the engine's refusal.
 - Ticket 17: `entity_type_full` has the words `field is one of`, `these fields are empty`, `name tokens match` (`token_match@2`, with its own long word for `token_match@1`), `held back`, `probable entity type` and `otherwise`. A bare stored key is refused naming the word to type.
 
