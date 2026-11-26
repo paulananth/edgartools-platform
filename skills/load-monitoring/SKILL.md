@@ -52,9 +52,9 @@ failed load; read the new execution and the run's state file.
 
 ## The design
 
-A step has one of six states (the codes are never renumbered: Prometheus keeps what it stored, and a changed number repaints history; code 2, once `unclear`, stays unused), each with one of four colours that mean the same wherever a
+A step has one of seven states (the codes are never renumbered: Prometheus keeps what it stored, and a changed number repaints history; code 2, once `unclear`, stays unused), each with one of four colours that mean the same wherever a
 step's state is shown (`scripts/design.py` is the only place that names them):
-grey is not running (waiting), orange is running (progressing), green is finished (done), red needs a
+grey is not running (waiting, and every step once the whole load is complete), orange is running (progressing), green is finished (done), red needs a
 look (failed, stalled, locked); the state's name, on hover and in the tiles, tells two of one colour apart. A change of colour is the event: nothing is
 decorated, and a number is never rounded to look calm.
 
@@ -66,6 +66,7 @@ decorated, and a number is never rounded to look calm.
 | A stall | Log age turns amber at ten minutes and red at twenty; the bar and the Stalled-or-locked tile turn red from one |
 | "Why is a running step not working?" | The Why panel: the five whys of each stalled or locked step (symptom, its own database sessions, its latest statement, what it waits on, the cause or what was not measured); the Why column of Running now holds the last. A step is never "unclear" |
 | A failure | The Failed tile turns red from one, the bar goes red, an annotation marks the moment |
+| The load ends | A green "Load complete" annotation at the `chain done` line; every lane goes grey, the tiles keep their counts |
 | Database pressure | Lock waiters: amber at one, red at three (the scheduler's own limit) |
 | Memory pressure | Memory free: amber under a quarter, red under a tenth (the controller's own limits) |
 | A rate that has gone flat | Rows written a minute per store, beside the bars |

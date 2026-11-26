@@ -55,7 +55,7 @@ def lanes() -> dict:
     mappings = {str(code): {"text": name, "color": colour, "index": code} for name, code, colour, _ in design.STATES}
     return {"type": "state-timeline", "title": "Lanes", "datasource": SOURCE,
             "description": "One row a step, grouped by lane. A step is grey while it is not running, orange while it "
-                           "works, green when it is done, red when it failed, stalled or locked. A change of colour is the event; hover a bar for the step and its state. "
+                           "works, green when it is done, grey again once the whole load is complete, red when it failed, stalled or locked. A change of colour is the event; hover a bar for the step and its state. "
                            + " ".join(f"{name}: {meaning}." for name, _, _, meaning in design.STATES),
             "gridPos": {"h": 16, "w": 24, "x": 0, "y": 4},
             "targets": [target("load_step_state", legend="{{lane}} · {{step}}")],
@@ -128,11 +128,13 @@ def rate() -> dict:
 
 
 def annotations() -> list[dict]:
-    def note(name: str, colour: str, expr: str, title: str) -> dict:
+    def note(name: str, colour: str, expr: str, title: str, text: str = "{{step}} (lane {{lane}})") -> dict:
         return {"datasource": SOURCE, "enable": True, "name": name, "iconColor": colour, "expr": expr, "step": "30s",
-                "titleFormat": title, "textFormat": "{{step}} (lane {{lane}})"}
+                "titleFormat": title, "textFormat": text}
     return [note("Restarts", design.AMBER, "changes(load_step_attempt[1m]) > 0", "Attempt restarted"),
-            note("Failures", design.RED, f"(changes(load_step_state[1m]) > 0) and (load_step_state == {design.CODE['failed']})", "Step failed")]
+            note("Failures", design.RED, f"(changes(load_step_state[1m]) > 0) and (load_step_state == {design.CODE['failed']})", "Step failed"),
+            note("Load complete", design.GREEN, "(changes(load_complete[1m]) > 0) and (load_complete == 1)", "Load complete",
+                 "every step has finished; the lanes are grey until the next load")]
 
 
 def build() -> dict:

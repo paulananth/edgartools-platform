@@ -31,13 +31,21 @@ SNAPSHOT = {
                  "kind": "stalled", "why": ["a", "b", "c", "d", 'the store reads the table from disk ("cache misses")']}]}
 
 
-def test_every_state_has_one_code_and_not_running_is_grey_running_orange_done_green_the_rest_red():
+def test_every_state_has_one_code_and_not_running_or_complete_is_grey_running_orange_done_green_the_rest_red():
     names, codes, colours = zip(*[(n, c, k) for n, c, k, _ in design.STATES])
-    assert len(set(names)) == len(set(codes)) == 6
+    assert len(set(names)) == len(set(codes)) == 7
     assert dict(zip(names, colours)) == {"waiting": "#8b949e", "progressing": "#e16f24", "done": "#2da44e",
-                                         "failed": "#cf222e", "stalled": "#cf222e", "locked": "#cf222e"}
+                                         "failed": "#cf222e", "stalled": "#cf222e", "locked": "#cf222e", "complete": "#8b949e"}
     # Prometheus keeps the codes it stored: dropping `unclear` leaves code 2 unused, and no other state is renumbered (history would repaint)
-    assert sorted(codes) == [0, 1, 3, 4, 5, 6] and "unclear" not in names
+    assert sorted(codes) == [0, 1, 3, 4, 5, 6, 7] and "unclear" not in names
+
+
+def test_once_the_load_is_complete_every_step_is_grey_and_the_done_count_stays():
+    text = exporter.render({**SNAPSHOT, "complete": True})
+    assert 'load_step_state{lane="A",step="a1"} 7' in text and 'load_step_state{lane="C",step="c1"} 7' in text
+    assert "load_complete 1" in text and 'load_steps{state="done"} 1' in text
+    running = exporter.render(SNAPSHOT)
+    assert "load_complete 0" in running and 'load_step_state{lane="A",step="a1"} 5' in running
 
 
 def test_the_exporter_writes_a_code_per_step_and_a_count_per_state_zeros_included():
@@ -86,7 +94,9 @@ def test_thresholds_are_the_chains_own_limits():
 def test_the_dashboard_is_code_in_eastern_time_with_restart_and_failure_marks():
     board = dashboard.build()
     assert board["editable"] is False and board["timezone"] == "America/New_York"
-    assert {a["name"] for a in board["annotations"]["list"]} == {"Restarts", "Failures"}
+    assert {a["name"] for a in board["annotations"]["list"]} == {"Restarts", "Failures", "Load complete"}
+    complete = next(a for a in board["annotations"]["list"] if a["name"] == "Load complete")
+    assert "load_complete" in complete["expr"] and "{{step}}" not in complete["textFormat"]
 
 
 def test_a_stale_or_checkout_bound_compose_file_is_refused():

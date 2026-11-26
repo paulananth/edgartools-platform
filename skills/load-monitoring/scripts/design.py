@@ -10,6 +10,7 @@ STATES = (
     ("locked", 4, "#cf222e", "running, one of its own sessions waits on a database lock and three or more sessions wait on the store"),
     ("done", 5, "#2da44e", "finished"),
     ("failed", 6, "#cf222e", "the scheduler gave up: the same failure came back"),
+    ("complete", 7, "#8b949e", "the load has finished: nothing runs until the next load begins"),
 )
 CODE = {name: code for name, code, _, _ in STATES}
 
