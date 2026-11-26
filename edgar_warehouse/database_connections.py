@@ -4,7 +4,7 @@ import os
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import make_url
 
-DRIVERS = {"postgresql": "postgresql+psycopg2", "mysql": "mysql+pymysql", "mssql": "mssql+pymssql"}
+from edgar_warehouse.control_contract import DRIVERS, keep_alive
 
 
 def connect(value: str, selected: str, *, runtime_role: str | None = None):
@@ -18,6 +18,7 @@ def connect(value: str, selected: str, *, runtime_role: str | None = None):
     # A connection older than the bound is replaced at checkout, which finds one the server dropped while it sat
     # idle; a ping on every checkout is three round trips (BEGIN, SELECT 1, ROLLBACK), each a delay on a hosted store.
     engine = create_engine(url, hide_parameters=True, pool_recycle=30)
+    event.listen(engine, "connect", keep_alive)
     if runtime_role is not None:
         quoted = engine.dialect.identifier_preparer.quote(runtime_role)
 
