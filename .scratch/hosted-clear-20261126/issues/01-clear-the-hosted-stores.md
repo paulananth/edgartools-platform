@@ -15,7 +15,7 @@ Operator, 2026-11-26: "using skills clear out the hosted postgress". Scope: the 
 - [x] Verify the clear: every resettable table of MDM, Silver, Bookkeeping and Change Journal reads 0 rows; `mdm.migration` 1 and `silver.table_spec` 21 stay; the config database is untouched (2 policies, 21 dataset readings, 21 rules used, 0 drafts); both retention triggers read enabled (`O`). 2026-11-26 11:16 ET
 - [x] Set the run's state files aside: `chain-fresh-v1.log` and `chain-hosted-lanes-20261125.log` named the store's old generation and were renamed, never deleted. The next load starts a fresh state file. 2026-11-26 11:16 ET
 - [x] `readiness.py` full pass: READY on all eleven checks (CODE, DOCTOR, GUARDS, REFERENCE, CAPTURES, QUIET, ROOM, AUDIT, LOGINS, STATE, REGISTERED). 2026-11-26 11:16 ET
-- [ ] Learning → skill: `data-operations/HOSTED-LOADS.md` records that a table reset leaves the run's state file naming the old generation, which the next load must set aside; the RDM backup is a schema-scoped `pg_dump`.
+- [x] Learning → skill: `data-operations/HOSTED-LOADS.md` records that a table reset leaves the run's state file naming the old generation, which the next load must set aside, and that the RDM backup is a schema-scoped `pg_dump`. 2026-11-26 11:20 ET
 
 ## Comments
 
