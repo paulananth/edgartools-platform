@@ -73,7 +73,8 @@ CODE read it in place of git.
   takes no computed value, and a lane queued in the worker times out on its heartbeat). Each step is admitted just before its load
   starts, after its waits (`admit` in `load_jobs.py`), and never while the CPU is pressed (the controller's own reading, which would
   take the workers back): one step at a time, the lock held through a settle window so the next reads the
-  memory this one takes, it waits until the container's free memory (cgroup limit less use, the file cache counted free) covers half
+  memory this one takes (a step that waits holds it only to read, so a step that fits starts meanwhile, and nothing is raised
+  while one waits), it waits until the container's free memory (cgroup limit less use, the file cache counted free) covers half
   its declared workers at their `worker_gb`, then starts with as many as fit, up to its declared workers. With no other load running
   it starts at that half whatever the memory, so a load never waits for ever. A step whose delivery is one document
   (`one_document: true` in the load jobs file) waits for all its workers instead of half, since a move would abandon it: the

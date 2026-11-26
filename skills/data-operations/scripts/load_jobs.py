@@ -342,16 +342,17 @@ def admit(want: int, worker_gb: float, lock: Path, free=free_gb, running=load_ru
     """The workers a step starts with: its own `want` when the memory is there, fewer when it is not (at least half of them;
     all of them for a step of one document, which the controller never moves), and none until the memory of that floor is free and the CPU is not pressed (the controller would take back what a pressed
     machine admits), unless no other load runs, when waiting would never end. One step is
-    admitted at a time: the lock is held through the settle window, so the next one reads the memory this one takes. A
+    admitted at a time: the lock is held through the settle window, so the next one reads the memory this one takes; a step
+    that waits holds it only while it reads, so a step that fits is admitted meanwhile. A
     container whose memory cannot be read gives the step its own workers. One load runs in one container. The floor's memory is
     at least the step's measured `peak_gb`, and the free memory read leaves out what the running steps have yet to reach of
     theirs (`reserved`, `unreached_peaks`): a step still growing to its peak is not free memory."""
     floor = want if one_document else max(1, want // 2)
-    handle = lock.open("a")
-    fcntl.flock(handle, fcntl.LOCK_EX)
-    waited = False
-    try:
-        while True:
+    waited, waiting = False, None  # a waiter holds `<gate>.wait` shared, so the controller raises nothing meanwhile
+    while True:  # the lock is held for a reading and an admission only: a step that waits lets the others be admitted
+        handle = lock.open("a")
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
             room, held = free(), 0.0
             if room is not None:
                 held = reserved()
@@ -359,17 +360,29 @@ def admit(want: int, worker_gb: float, lock: Path, free=free_gb, running=load_ru
             need = max(floor * worker_gb, peak_gb)
             short = room is not None and room < need
             busy = not short and pressed()
-            if not (short or busy) or not running():
-                break
-            if not waited:
-                say(f"waits for {need:.1f} GB of free memory ({room:.1f} GB now"
-                    + (f", {held:.1f} GB more held for running steps' peaks)" if held else ")") if short else
-                    "waits for the CPU (the machine is pressed)")
-                waited = True
-            sleep(poll)
-    except BaseException:
+        except BaseException:
+            handle.close()
+            if waiting:
+                waiting.close()
+            raise
+        if not (short or busy) or not running():
+            break
         handle.close()
-        raise
+        if waiting is None:
+            waiting = wait_path(lock).open("a")
+            fcntl.flock(waiting, fcntl.LOCK_SH)
+        if not waited:
+            say(f"waits for {need:.1f} GB of free memory ({room:.1f} GB now"
+                + (f", {held:.2f} GB more held for running steps' peaks)" if held else ")") if short else
+                "waits for the CPU (the machine is pressed)")
+            waited = True
+        try:
+            sleep(poll)
+        except BaseException:
+            waiting.close()
+            raise
+    if waiting:
+        waiting.close()
     timer = threading.Timer(settle, handle.close)  # closing the file releases the lock
     timer.daemon = True
     timer.start()
@@ -623,13 +636,19 @@ def last_starts(text: str, year: int) -> dict[str, datetime]:
             for when, name in re.findall(r"^(\d\d-\d\d \d\d:\d\d:\d\d) ET (\S+) attempt \d+ start", text, re.M)}
 
 
+def wait_path(gate: Path) -> Path:
+    return gate.with_name(gate.name + ".wait")
+
+
 def admitting(gate: Path) -> bool:
-    """A step is being admitted (it waits for memory, or has not yet shown what it takes): the gate's lock is held."""
-    with gate.open("a") as handle:
-        try:
-            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            return True
+    """A step is being admitted: it waits for memory (it holds the wait file shared) or has not yet shown what it takes (the gate's
+    lock is held through its settle window)."""
+    for path in (gate, wait_path(gate)):
+        with path.open("a") as handle:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return True
     return False
 
 

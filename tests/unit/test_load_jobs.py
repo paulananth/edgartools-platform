@@ -2153,6 +2153,27 @@ def test_the_next_step_is_admitted_only_after_the_first_has_settled(tmp_path):
     assert seen and seen[0][0] == 4 and seen[0][1] >= 0.3  # it came in once the first's window had passed
 
 
+def test_a_step_waiting_for_memory_lets_a_step_that_fits_be_admitted_meanwhile(tmp_path):
+    """A step waiting for all its workers' memory never holds the gate while it waits: steps of other lanes that fit start."""
+    lock, room, admitted = tmp_path / "gate", [1.0], []
+    big = threading.Thread(target=lambda: admitted.append(("big", chain.admit(
+        8, 0.4, lock, free=lambda: room[0], running=lambda: True, pressed=lambda: False, sleep=lambda s: chain.time.sleep(0.02),
+        settle=0, one_document=True))), daemon=True)
+    big.start()
+    chain.time.sleep(0.1)  # the big step is waiting for 3.2 GB
+    assert chain.admitting(lock)  # the controller raises nothing while a step waits for memory
+    small = threading.Thread(target=lambda: admitted.append(("small", chain.admit(
+        1, 0.4, lock, free=lambda: room[0], running=lambda: True, pressed=lambda: False, sleep=lambda s: None, settle=0))),
+        daemon=True)
+    small.start()
+    small.join(2)
+    assert admitted == [("small", 1)]  # admitted while the big step still waits
+    room[0] = 4.0
+    big.join(2)
+    assert admitted == [("small", 1), ("big", 8)]
+    assert not chain.admitting(lock)  # nothing waits, and both settle windows have passed
+
+
 def test_a_read_that_fails_while_a_step_waits_does_not_keep_the_lock(tmp_path):
     def broken():
         raise OSError("unreadable")
