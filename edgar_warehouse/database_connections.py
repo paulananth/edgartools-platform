@@ -11,8 +11,8 @@ DRIVERS = {"postgresql": "postgresql+psycopg2", "mysql": "mysql+pymysql", "mssql
 SOCKETS = {"postgresql+psycopg2": lambda dbapi_connection: dbapi_connection.fileno(),
            "mysql+pymysql": lambda dbapi_connection: dbapi_connection._sock.fileno()}
 # A connection whose server or path went silent fails within about two minutes: the kernel probes it after a minute idle,
-# every ten seconds, six times, and on Linux gives up on data the server has not acknowledged after two minutes. The
-# operating system's own keepalive starts after two hours, so a dropped connection held its step until the step's bound.
+# every ten seconds, six times, and on Linux gives up on data the server has not acknowledged after two minutes, well
+# before the operating system's own keepalive (two hours idle) or a step's bound.
 _TCP = socket.IPPROTO_TCP
 KEEPALIVE = ((socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1),
              (_TCP, socket.TCP_KEEPALIVE if sys.platform == "darwin" else socket.TCP_KEEPIDLE, 60),

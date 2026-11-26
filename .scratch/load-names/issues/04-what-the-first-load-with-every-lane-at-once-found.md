@@ -91,7 +91,7 @@ idle transaction.
   stopped arriving on that one connection while the store's other connections still received 1.2 to 2.4 MB/s (median of each
   minute's total, the 10 minutes before the first two kills) and about 140 KB/s (before `gleif`'s). `person`'s session had no
   transaction id: its first write never landed, 10 minutes after it connected. `adv-funds` and `person` saw the close 3 s after
-  the kill; `gleif`'s client never did.
+  the kill; `gleif`'s client did not until it was stopped by hand at 04:54, when its error file was written.
 - **00:52:20, 02:33:19 and 02:34:42: three sessions opened together at 23:07:17**, alive 1 h 45 min to 3 h 27 min, each with
   a transaction id (it had written), last logged statement a 2.2 to 2.3 s read of `mastering_record`. Their client wrote no
   error: `gleif` attempt 1 ended at its bound (02:34:16), so the client of the 00:52 kill never noticed it for 1 h 42 min, and
@@ -102,16 +102,17 @@ idle transaction.
   its records scan, and then the store's send to the client timed out (`could not send data to client: Connection timed
   out`): the path stopped acknowledging the store's data within a minute.
 
-All of it points at the path between this machine and the store, not at the store or the engine's transactions: a
-connection's traffic stops while its neighbours flow, and a close is lost in either direction. The client's keepalive now
-bounds the silent half of it to about two minutes (the part below).
+These point at the path between this machine and the store rather than at the store or the engine's transactions (a
+connection's traffic stops while its neighbours flow, and a close is lost in either direction); the cause is an open part.
+The client's keepalive bounds a connection whose path no longer answers to about two minutes; it does not bound a
+connection whose path still answers probes while its data stalls.
 
 ## Parts
 
 - [ ] A step whose work is one document starts with its declared workers or waits for them (finding 1)
 - [ ] The controller moves a step only between runs, never one it shed earlier in the same attempt (finding 2)
 - [ ] A step's memory at admission is its measured peak where one is known, not `worker_gb` alone (finding 3)
-- [x] The engine's database connections carry client keepalives and a timeout, so a dropped connection fails within minutes (finding 4): every store's engine comes from `database_connections.engine_for`, whose connections probe after 60 s idle, every 10 s, 6 times, and on Linux give up on unacknowledged data after 120 s; `tests/storage_adapters/test_connection_keepalives.py` read the socket's options on PostgreSQL and MySQL (before the change: 7,200 s idle, 75 s, 8 probes); a disposable PostgreSQL 16 whose network was cut under `select pg_sleep(600)` failed the new engine's query after 125 s, while the old engine's was still waiting at 4 min (2026-11-26 11:48 ET)
+- [x] The engine's database connections carry client keepalives and a timeout, so a dropped connection fails within minutes (finding 4): every store's engine comes from `database_connections.engine_for` (`bundle.py`'s 5 s readiness probe aside), whose connections probe after 60 s idle, every 10 s, 6 times, and on Linux give up on unacknowledged data after 120 s (macOS has no such option); `tests/storage_adapters/test_connection_keepalives.py` read the socket's options on PostgreSQL and MySQL (before the change: 7,200 s idle, 75 s, 8 probes); two Linux containers on the loader image (OrbStack) against a disposable PostgreSQL 16 whose network was cut under `select pg_sleep(600)` failed the new engine's query after 125 s, while the old engine's was still waiting at 4 min (2026-11-26 11:48 ET)
 - [ ] A failed links build fails the load: no `chain done`, `load.sh` exits non-zero (finding 5)
 - [x] The store's slowdown read from its own monitoring (throughput limits, connection drops) before any engine change (finding 6): the store was not the limit, one connection's upload from this machine was (a rate that varies: about 2 MB/s on 11-25, 5 to 100 KB/s overnight), and three of finding 4's drops are the store's idle-in-transaction kills; read from the instance's event-table metrics and server log, `pg_stat_*`, and a live rerun of the links build (2026-11-26 09:25 ET)
 - [x] The `adv-funds`, `person` and `gleif` attempt 2 kills traced to what their client did inside the open transaction (finding 4): each was inside the execute of a multi-row insert the store never finished receiving, while the store's other connections still received data; read from the server log by session and the steps' error files (2026-11-26 11:48 ET)
