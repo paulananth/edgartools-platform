@@ -30,6 +30,7 @@ A person hand-writes one rule, supplies the input and the expected output, and t
 - Ticket 16: `entity_type` takes the classification rule as the rule, the record and the doc as inputs, and returns what `classify` decides: `{"entity type": ...}` or `{"held back": "deferred"}`. A rule with no `otherwise` step is the engine's refusal.
 - Ticket 17: `entity_type_full` has the words `field is one of`, `these fields are empty`, `name tokens match` (`token_match@2`, with its own long word for `token_match@1`), `held back`, `probable entity type` and `otherwise`. A bare stored key is refused naming the word to type.
 - Ticket 18: `docs/rules-try/entity_type.md` records the words and the empty-ticker case: an empty `ticker` is held back (`deferred`), a ticker with the `OPERATING` category is a `company`, and a rule with no `otherwise` step is refused.
+- Ticket 25: `link_masters` takes the one link a stating record makes as the rule (`type`, `target_key`, `valid_from`, `valid_to`, `scope`); the claims, state, entities, as-of time and link types are the inputs, and Try returns the links and reviews `mdm.relationships.project` returns. A claim with no start waits as `unknown_relationship_start`; an end that is not named or not bound waits as `unresolved_endpoint`.
 
 ## Not yet specified
 
