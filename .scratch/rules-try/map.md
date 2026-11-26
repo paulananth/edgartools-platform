@@ -48,6 +48,7 @@ A person hand-writes one rule, supplies the input and the expected output, and t
 - Ticket 27: `docs/rules-try/link_masters.md` records the four words, the emitted `ISSUED_BY` link between two invented masters, and the missing-start wait (`unknown_relationship_start`, no link), from a run of tickets 25 and 26.
 - Ticket 28: `link_periods` takes the sightings as the rule (a `sightings` list) and returns what `fold_sightings` returns, the periods and the contradictions. A period ends only on a dropping sighting; a missing later file leaves the end empty.
 - Ticket 34: `prepare_by_type_rule` takes a contract with `classification` as the rule, the row, source code, publication and policy as inputs, and returns what `normalize` returns; the entity type is the one the pasted rule decides.
+- Ticket 35: `prepare_by_type_rule_full.py` takes the four words of ticket 32 and "entity type rule" → `classification`. It is the only file that accepts "entity type rule".
 - Ticket 37: the primer's opening points to `docs/rules-try/` and the try command. The primitive catalog stays in the primer until ticket 38.
 - Ticket 38: the primitive catalog is the source-expression primitives. They live in `docs/engine-rules-reference.md`, and a file-only test checks that each is read by the evaluator. The primer points to it.
 
