@@ -191,6 +191,9 @@ steps:
     # and vCPUs for more, and read the effect from the status.
     worker_gb: 0.4
     workers: 8
+    # Its delivery is one document (the publisher file): a move would abandon it, so the controller never raises it, and it
+    # waits for the memory of all its workers rather than starting with half.
+    one_document: true
     attempts: 40
   - name: adv-custodians
     lane: G

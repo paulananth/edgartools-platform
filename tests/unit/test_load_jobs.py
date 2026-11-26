@@ -1974,6 +1974,32 @@ def test_a_step_takes_its_declared_workers_when_the_memory_is_there_and_as_many_
     assert gate(tmp_path, want=1, free=0.1, running=lambda: False) == 1
 
 
+def test_a_step_of_one_document_waits_for_all_its_workers_since_it_can_never_be_raised_later(tmp_path):
+    """A move abandons a step of one document, so the controller never raises it: started at half its workers, it stays at
+    half (`gleif`, 4 of 8 workers, stopped by its bound). It waits for the memory of every worker instead."""
+    waited = []
+    assert gate(tmp_path, free=[0.85, 1.3, 2.0], sleeps=waited, one_document=True) == 4  # 2, then 3 fit: it waits for 4
+    assert waited == [chain.GATE_POLL_SECONDS] * 2
+    waited.clear()
+    assert gate(tmp_path, free=[0.1], running=lambda: False, sleeps=waited, one_document=True) == 4  # nothing else runs
+    assert waited == []
+
+
+def test_a_step_declared_one_document_is_admitted_as_one(tmp_path, monkeypatch):
+    seen = []
+    monkeypatch.setattr(chain, "LOGS", tmp_path)
+    monkeypatch.setattr(chain, "STORES", tmp_path)
+    monkeypatch.setattr(chain, "wait_for", lambda *a, **k: set())
+    monkeypatch.setattr(chain, "admit", lambda want, gb, lock, one_document=False, **k: seen.append(one_document) or want)
+    monkeypatch.setattr(chain, "run_deliveries", lambda step, env, log: (0, "Done: 1 documents loaded, 0 already loaded before"))
+    state = tmp_path / "state.log"
+    for declared in (True, False):
+        step = {**_step("g", "G"), "workers": 8, "attempts": 1, "source": "s", "target": "t",
+                **({"one_document": True} if declared else {})}
+        assert chain.attempt_loop(step, {}, state)
+    assert seen == [True, False]
+
+
 def test_a_step_waits_for_the_memory_of_its_floor_while_other_loads_run_and_starts_at_its_floor_when_none_runs(tmp_path):
     waited = []
     assert gate(tmp_path, free=[0.3, 0.5, 2.0], sleeps=waited) == 4  # 0.8 GB is the floor of two workers
@@ -2072,7 +2098,7 @@ def _engine(monkeypatch, tmp_path, body):
     monkeypatch.setattr(chain, "LOGS", tmp_path)
     monkeypatch.setattr(chain, "STORES", tmp_path)
     monkeypatch.setattr(chain, "ROOT", tmp_path)
-    checked(monkeypatch, chain, "admit", lambda want, worker_gb, lock, say: want)
+    checked(monkeypatch, chain, "admit", lambda want, worker_gb, lock, say, one_document: want)
     return {**_step("a1", "A"), "attempts": 1, "workers": 8, "bundles": 1, "deliveries": [{"delivery": "d", "capture": "c", "capture_run": "r"}]}
 
 
