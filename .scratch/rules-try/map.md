@@ -52,6 +52,7 @@ A person hand-writes one rule, supplies the input and the expected output, and t
 - Ticket 30: `docs/rules-try/link_periods.md` records the words, the invented sighting, and the period Try returns: the start is the sighting's date and the end stays empty until a sighting drops the capacity.
 - Ticket 34: `prepare_by_type_rule` takes a contract with `classification` as the rule, the row, source code, publication and policy as inputs, and returns what `normalize` returns; the entity type is the one the pasted rule decides.
 - Ticket 35: `prepare_by_type_rule_full.py` takes the four words of ticket 32 and "entity type rule" → `classification`. It is the only file that accepts "entity type rule".
+- Ticket 36: the "Prepare a record whose entity type comes from a rule" guide records the five words and the rule-decided case, with the two set-aside answers, from a run of the family.
 - Ticket 37: the primer's opening points to `docs/rules-try/` and the try command. The primitive catalog stays in the primer until ticket 38.
 - Ticket 38: the primitive catalog is the source-expression primitives. They live in `docs/engine-rules-reference.md`, and a file-only test checks that each is read by the evaluator. The primer points to it.
 
