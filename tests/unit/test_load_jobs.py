@@ -2305,6 +2305,13 @@ def test_the_controller_never_moves_a_step_it_shed_earlier_in_the_same_attempt(m
     assert [name for name, _ in asked] == ["short"]  # with room, the step not shed is raised in its place
 
 
+def test_the_controller_raises_nothing_into_a_running_steps_unreached_peak(monkeypatch, tmp_path):
+    _, asked, cycle = _controlled(monkeypatch, tmp_path, free=2.5)
+    monkeypatch.setattr(chain, "unreached_peaks", lambda steps, listing, besides=None: 2.0)  # 2.5 GB free, 2.0 still to come
+    cycle()
+    assert asked == []
+
+
 def test_nothing_is_raised_while_a_step_is_being_admitted(monkeypatch, tmp_path):
     state, asked, cycle = _controlled(monkeypatch, tmp_path, free=2.5)
     with chain.gate_path(state).open("a") as held:

@@ -351,16 +351,18 @@ def admit(want: int, worker_gb: float, lock: Path, free=free_gb, running=load_ru
     waited = False
     try:
         while True:
-            room = free()
+            room, held = free(), 0.0
             if room is not None:
-                room -= reserved()
+                held = reserved()
+                room -= held
             need = max(floor * worker_gb, peak_gb)
             short = room is not None and room < need
             busy = not short and pressed()
             if not (short or busy) or not running():
                 break
             if not waited:
-                say(f"waits for {need:.1f} GB of free memory ({room:.1f} GB now)" if short else
+                say(f"waits for {need:.1f} GB of free memory ({room:.1f} GB now"
+                    + (f", {held:.1f} GB more held for running steps' peaks)" if held else ")") if short else
                     "waits for the CPU (the machine is pressed)")
                 waited = True
             sleep(poll)
@@ -664,6 +666,8 @@ def control_cycle(steps: list[dict], state: Path, memory: Memory, reader_url: st
     if not running:
         return
     free, reading = free_gb(), database_load(reader_url)
+    if free is not None:  # a running step still growing to its measured peak holds that memory already, for a raise too
+        free -= unreached_peaks(steps, listing)
     level = worst(both(memory_level(free), cpu_level()), db_level(**reading) if reading else "ok")
     if reading:
         level = room(level, reading["connections"], connections)
@@ -1834,7 +1838,7 @@ def attempt_loop(step: dict, env: dict, state: Path, others_run: bool = True) ->
     while attempt <= step["attempts"]:
         workers = admit(want, step.get("worker_gb", WORKER_GB), gate_path(state), say=lambda text: note(f"{name} {text}", state),
                         one_document=step.get("one_document", False), peak_gb=step.get("peak_gb", 0.0),
-                        reserved=lambda: unreached_peaks(peaked, process_listing(), besides=name))
+                        reserved=(lambda: unreached_peaks(peaked, process_listing(), besides=name)) if peaked else lambda: 0.0)
         note(f"{name} attempt {attempt} start" + (f" with {workers} of its {step['workers']} workers" if workers != step["workers"] else ""), state)
         offset = error_log.position(errors)
         take_move(state, name)  # a request left for a load that had ended is not this one's

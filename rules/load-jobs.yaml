@@ -76,9 +76,9 @@ steps:
     target: mastering
     input: nport-answers
     workers: 4
-    # `peak_gb` is the most memory the step's load was measured to hold: its source extract was killed for memory holding
-    # 0.86 GB (the kernel's `anon-rss`, 2026-11-25), so at least that. Admission waits for it, and holds back what is left of
-    # it from the steps admitted while this one runs.
+    # `peak_gb` is the least the step's load is known to reach: its source extract was killed for memory while holding 0.86 GB
+    # (the kernel's `anon-rss`) and still growing, so its true peak is higher and not measured. Admission waits for it, and
+    # neither an admission nor a raise takes what the step has yet to reach of it while it runs.
     peak_gb: 0.9
     bundles: 3
     minutes: 420
