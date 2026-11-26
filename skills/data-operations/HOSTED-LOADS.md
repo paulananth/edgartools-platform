@@ -43,10 +43,11 @@ CODE read it in place of git.
   only on success. A load runs no plan: its first state is readiness, which refuses a load that cannot start. `--plan` is for a
   changed pipeline or a doubt about one step, never a standing step before a load (it repeats readiness). `--force` (never with `--plan`) is force
   publish for every load of the run; `LOAD_DEADLINE_HOURS` is the operator's window (default 2): a miss is reported once, never a stop.
-- **The load jobs file alone decides what runs.** The state machine names no lane and no step: its first task asks the loader for
-  the lanes, and each lane runs its steps in order, each with the workers the load jobs file gives it, each holding until the
-  steps it needs (in any lane) are done. Every lane runs at once: a cap would let a lane hold a slot while it waits
-  on a lane still queued. A failure belongs to its load: a stop before the load's start is not counted.
+- **The load jobs file alone decides the lane schedule.** The first task returns lanes in first-appearance order from
+  `rules/load-jobs.yaml`; Step Functions dispatches them all. Each lane runs steps in file order; a step waits for its
+  cross-lane dependencies and memory admission. Keep independent long lanes ahead of the long critical-path lane:
+  Company Facts is scheduled before GLEIF, while `adv-custodians` stays after GLEIF because it depends on it. `priority`
+  orders `load_jobs.py --auto`, not the hosted Map. A failure belongs to its lane; a stop before the load's start is not counted.
 - **A load never waits on what cannot come.** Before the first step, `load_jobs.py --begin` refuses the load when a
   step waits on a step that does not exist, on lanes that cannot finish, or, for named steps, on a step neither done
   nor earlier in the run (name it first). A plan runs the same check. While running, a needed step that failed, or a

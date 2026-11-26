@@ -15,9 +15,8 @@
 # a machine's size: a load waits only for the source whose golden records its own records join. Links set no order:
 # the links table is built once, after the last load (`load_jobs.py --finish`).
 # Eleven lanes: A the Companies the others follow; P the Persons; S the Securities; C the other Companies; L funds and
-# share classes; Q N-PORT Securities (they wait for no fund); G GLEIF and what follows it (it joins only the SEC Company masters, so it starts when
-# those are done); N N-PORT silver (no master first: a row lands with its link key and finds its master through `master_binding`, built by `--finish`);
-# O ownership; D the other silver-only sources; F company-facts.
+# share classes; Q N-PORT Securities; N N-PORT silver; F company-facts (independent work to overlap GLEIF); G GLEIF and
+# what follows it (it joins only SEC Company masters, so it starts when those are done); O ownership; D other silver-only sources.
 version: 1
 # The compute a load runs on, as vCPUs and gigabytes, and so how many workers a step can carry (load_jobs.py
 # `--capacity <name>`; `local` is this machine, measured). The AWS sizes are the ECS tasks of the production state
@@ -170,6 +169,15 @@ steps:
     target: silver
     minutes: 240
     attempts: 3
+  - name: company-facts
+    lane: F
+    priority: 2
+    source: sec.company-facts
+    target: silver
+    workers: 4
+    bundles: 1
+    minutes: 240
+    attempts: 4
   - name: gleif-pairs
     lane: G
     priority: 1
@@ -225,15 +233,6 @@ steps:
     target: silver
     minutes: 60
     attempts: 3
-  - name: company-facts
-    lane: F
-    priority: 2
-    source: sec.company-facts
-    target: silver
-    workers: 4
-    bundles: 1
-    minutes: 240
-    attempts: 4
   - name: registration
     lane: D
     priority: 1

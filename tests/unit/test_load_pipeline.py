@@ -148,6 +148,7 @@ def test_the_worker_runs_a_lane_and_reads_the_lanes_from_the_load_jobs_file_in_o
     assert started.pop(0) == ["--begin"]  # every wait checked and the start marked before the lanes
     chain = yaml.safe_load((REPO / "rules" / "load-jobs.yaml").read_text())
     lanes = list(dict.fromkeys(step["lane"] for step in chain["steps"]))
+    assert lanes.index("F") < lanes.index("G")  # independent Company Facts must overlap the long GLEIF lane
     assert client.reports[0] == ("success", "t0", {"lanes": lanes}) and len(lanes) > 1
     assert started == [["--lane", "A", "--plan"]]
 
