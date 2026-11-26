@@ -1,6 +1,6 @@
 # 03: The lanes at once and each step's workers follow the container's live memory
 
-Status: open
+Status: resolved
 Type: task
 Blocked by: none
 Blocks: none
@@ -43,6 +43,6 @@ queue; that is over-production (code for cases not seen) and was cut to the one 
 - [x] Known limit: a raise can come back at its old count when a waiting lane takes the memory its restart frees; the restart waits out the old run's lease (120 s at most, read in code, not measured) (2026-11-25 15:53 ET)
 - [x] Found on the hosted load `hosted-lanes-20261125`: the gate admitted steps on memory alone while the load average was 11.5 on 8 cores, and the controller then shed `company`, the step `gleif` waits on, from 2 workers to 1 (21:26 ET). The gate now waits while the CPU is pressed (`cpu_level`, the controller's own reading), unless no other load runs (operator, 2026-11-25: "yes build it and merge on green"). `test_a_step_waits_while_the_cpu_is_pressed_...` failed first with `TypeError: admit() got an unexpected keyword argument 'pressed'`; 271 passed after (2026-11-25 21:32 ET)
 - [ ] ~~The gate's queue lets in first the step with the most work waiting behind it~~ deferred to a ticket of its own: lanes wait on one `flock`, and ordering them needs a shared queue with a check for waiters whose process has died; first read on the next load whether the CPU wait alone stops the shedding of long-chain steps
-- [ ] A hosted load shows a move of the controller in its state file, and the moved step finishes with the same documents
-- [ ] The hosted reload reads: more than 2 lanes at once, no step killed for memory (status -9), each step's workers named in its log. The reload now running was started before this merges
+- [x] A hosted load shows a move of the controller in its state file, and the moved step finishes with the same documents: `hosted-lanes-20261125` (image `4bbeaefc`) logged 16 moves; the moved steps finished with the last run's document counts: `ownership` 5,356 (2,796 + 2,560 already loaded), `company` 76,380 (39,004 + 37,376), `openfigi-answers` 7,730 (50 + 7,680), read from both runs' state files (2026-11-26 07:48 ET)
+- [ ] ~~The hosted reload reads: more than 2 lanes at once, no step killed for memory (status -9), each step's workers named in its log~~ moved to ticket 04: `hosted-lanes-20261125` ran up to 7 lanes at once and named each step's workers, but `openfigi-answers` was killed for memory once (status -9, the VM's `oom-kill` of its source reading, 22:51 ET)
 - [x] Learning → skill: `skills/data-operations/HOSTED-LOADS.md`, "Lanes and workers follow the container's free memory" (2026-11-25 15:13 ET)
