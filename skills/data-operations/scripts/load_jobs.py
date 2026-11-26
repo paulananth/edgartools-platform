@@ -1830,16 +1830,25 @@ def run_steps(steps: list[dict], env: dict, state: Path, lane: str | None = None
     return True
 
 
-def finish(env: dict, state: Path, lookups: bool = False) -> None:
+def finish(env: dict, state: Path, lookups: bool = False) -> bool:
     """After the loads: the links tables and master_binding are built once (a silver row finds its master by a join on master_binding, so no id is filled). The name-search lookups are built only when asked
-    (`lookups`): a load reads none of them, only the context search does, and building them re-derives every master."""
+    (`lookups`): a load reads none of them, only the context search does, and building them re-derives every master.
+    The load is done (`chain done`) only when every build exits 0; otherwise a `finish stopped:` line names the build that failed."""
     began = time.monotonic()
+    codes = {}
     if lookups:
         note("lookups start", state)
-        note(f"lookups rc={run(['mdm', 'build-lookups'], env, LOGS / f'chain-{RUN}-lookups.log')}", state)
-    note(f"links rc={run(['silver', 'links'], env, LOGS / f'chain-{RUN}-links.log')}", state)
+        codes["lookups"] = run(['mdm', 'build-lookups'], env, LOGS / f'chain-{RUN}-lookups.log')
+        note(f"lookups rc={codes['lookups']}", state)
+    codes["links"] = run(['silver', 'links'], env, LOGS / f'chain-{RUN}-links.log')
+    note(f"links rc={codes['links']}", state)
     note(f"finish took {(time.monotonic() - began) / 60:.1f} min (the bound is 5 min without lookups)", state)
+    failed = [f"{name} rc={code}" for name, code in codes.items() if code]
+    if failed:
+        note(f"finish stopped: {', '.join(failed)}: the load is not done; its log is chain-{RUN}-<build>.log", state)
+        return False
     note("chain done", state)
+    return True
 
 
 def main() -> int:
@@ -1981,8 +1990,7 @@ def main() -> int:
         if auto(steps, state, args.slots, deadline=deadline, connections=args.connections, capacity=args.capacity,
                 reader_url=data_url(load_env(STORES / "reader.env")) if (STORES / "reader.env").exists() else None):
             return 1
-        finish(env, state, args.lookups)
-        return 0
+        return 0 if finish(env, state, args.lookups) else 1
     if not args.finish:
         if not (args.lane or args.only):  # all the load jobs, one step after another in file order
             order = [step["name"] for step in steps]
@@ -1992,8 +2000,7 @@ def main() -> int:
             return 1
         if args.only or args.lane:
             return 0
-    finish(env, state, args.lookups)
-    return 0
+    return 0 if finish(env, state, args.lookups) else 1
 
 
 if __name__ == "__main__":
