@@ -25,6 +25,7 @@ A person hand-writes one rule, supplies the input and the expected output, and t
 - Ticket 02: Keep a copy writes the case JSON to the path the person names. No path is not confirmed and is not written. A path under `rules/` is refused. Store this draft still refuses.
 - Ticket 03: Store this draft calls `Rules.save` under the `version` in the pasted rule and keeps the case beside that draft. A rule with no version is not stored. The draft is not switched on.
 - Ticket 04: `read_file` takes the read document as the rule, the file text and the lookup lists as inputs, and returns what `SourceEngine.read` returns. The folder test checks that every family declares a page.
+- Ticket 05: a short read rule is a read document that may use the listed words for a stored key. Show the full rule returns the words used with their stored keys and the full document, which the engine must load. A bare stored key from the list is refused with the word to type.
 
 ## Not yet specified
 
