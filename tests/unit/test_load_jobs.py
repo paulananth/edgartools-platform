@@ -1443,7 +1443,12 @@ def test_a_failed_finish_build_fails_the_finish_and_the_load_is_not_complete(fai
     monkeypatch.setattr(chain, "run", lambda args, env, log=None: 1 if failing in args else 0)
     state = tmp_path / "chain-finish-fails.log"
     state.write_text("11-26 05:00:00 ET load begins\n")
-    monkeypatch.setattr(chain, "note", lambda message, path: path.open("a").write(f"11-26 05:07:00 ET {message}\n"))
+
+    def note(message, path):
+        with path.open("a") as out:
+            out.write(f"11-26 05:07:00 ET {message}\n")
+
+    monkeypatch.setattr(chain, "note", note)
 
     assert chain.finish({}, state, lookups=True) is False
     text = state.read_text()
