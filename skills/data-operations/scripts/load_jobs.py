@@ -276,6 +276,7 @@ MIN_LEFT_MINUTES = 30  # a step with less than this to go is left alone: a move 
 SHED_AFTER = 4  # consecutive pressed cycles before a step is shed: a spike that passes costs a restart for nothing
 RAISE_GAIN = 1.2  # a step is raised again only if the last raise raised its measured rate by this factor
 WORKER_GB = 0.5  # the memory a worker is sized for
+PEAK_SAMPLE_SECONDS = 10  # how often a running step's memory is read for the peak its done or stopped line names
 WORKERS_PER_VCPU = 4  # a worker waits on the database much of the time, so a vCPU carries several
 
 
@@ -1085,22 +1086,52 @@ def load_pids(listing: str, source: str, target: str) -> dict[int, float]:
     return {pid: rows[pid][1] for pid in sorted(found)}
 
 
-def unreached_peaks(steps: list[dict], listing: str, besides: str | None = None) -> float:
-    """The gigabytes the running steps (other than `besides`) have yet to reach of their measured `peak_gb`: each one's peak less
-    the resident memory its driver and workers hold now, from `listing` (`ps -Ao pid,ppid,time,rss,args`, rss in KB)."""
+def held_gb(listing: str, source: str, target: str) -> float | None:
+    """The resident memory, in GB, of the running load of one source and target (its driver and the workers it started), from
+    `listing` (`ps -Ao pid,ppid,time,rss,args`, rss in KB); None when no such load runs."""
     rss = {}
     for line in listing.splitlines():
         parts = line.split(None, 4)
         if len(parts) >= 4 and parts[0].isdigit() and parts[3].isdigit():
             rss[int(parts[0])] = int(parts[3])
+    pids = load_pids(listing, source, target)
+    return sum(rss.get(pid, 0) for pid in pids) / 2**20 if pids else None
+
+
+def unreached_peaks(steps: list[dict], listing: str, besides: str | None = None) -> float:
+    """The gigabytes the running steps (other than `besides`) have yet to reach of their measured `peak_gb`: each one's peak less
+    the resident memory its driver and workers hold now (`held_gb`)."""
     held = 0.0
     for step in steps:
         if "peak_gb" not in step or step["name"] == besides:
             continue
-        pids = load_pids(listing, step["source"], step["target"])
-        if pids:
-            held += max(0.0, step["peak_gb"] - sum(rss.get(pid, 0) for pid in pids) / 2**20)
+        now = held_gb(listing, step["source"], step["target"])
+        if now is not None:
+            held += max(0.0, step["peak_gb"] - now)
     return held
+
+
+@contextlib.contextmanager
+def sampled_peak(source: str, target: str):
+    """While the block runs, the most resident memory the load of one source and target is seen to hold, read every
+    `PEAK_SAMPLE_SECONDS`: a list whose one value is the peak in GB so far. A peak between two readings is missed, and resident
+    memory counts a page the processes share once for each, so the sum can be more than the memory they take together."""
+    peak, done = [0.0], threading.Event()
+
+    def sample() -> None:
+        while not done.wait(PEAK_SAMPLE_SECONDS):
+            with contextlib.suppress(Exception):  # a reading that fails is skipped: it never fails the load
+                now = held_gb(process_listing(), source, target)
+                if now is not None:
+                    peak[0] = max(peak[0], now)
+
+    thread = threading.Thread(target=sample, daemon=True)
+    thread.start()
+    try:
+        yield peak
+    finally:
+        done.set()
+        thread.join()
 
 
 def process_listing() -> str:
@@ -1834,7 +1865,7 @@ def attempt_loop(step: dict, env: dict, state: Path, others_run: bool = True) ->
 
     errors, offset, previous = STORES / "load-errors.log", (0, 0), ""
     peaked = [one for one in load_jobs() if "peak_gb" in one]  # the steps whose unreached peak this one's admission leaves out
-    attempt, want = 1, step["workers"]
+    attempt, want, attempt_peak = 1, step["workers"], 0.0  # the peak of every load of this attempt, moves included
     while attempt <= step["attempts"]:
         workers = admit(want, step.get("worker_gb", WORKER_GB), gate_path(state), say=lambda text: note(f"{name} {text}", state),
                         one_document=step.get("one_document", False), peak_gb=step.get("peak_gb", 0.0),
@@ -1842,17 +1873,20 @@ def attempt_loop(step: dict, env: dict, state: Path, others_run: bool = True) ->
         note(f"{name} attempt {attempt} start" + (f" with {workers} of its {step['workers']} workers" if workers != step["workers"] else ""), state)
         offset = error_log.position(errors)
         take_move(state, name)  # a request left for a load that had ended is not this one's
-        code, text = run_deliveries({**step, "workers": workers}, env, log)
+        with sampled_peak(step["source"], step["target"]) as peak:
+            code, text = run_deliveries({**step, "workers": workers}, env, log)
+        attempt_peak = max(attempt_peak, peak[0])
         asked = take_move(state, name)
+        sampled = f"; sampled peak {attempt_peak:.2f} GB" if attempt_peak else ""
         if code == 0 and "Load stopped" not in text:
-            note(f"{name} done: {done_line(text)}", state)
+            note(f"{name} done: {done_line(text)}{sampled}", state)
             return True
         if asked and code in ENDED_BY_SIGNAL:  # moved, not failed: the same attempt goes on with other workers
             want = asked
             continue
         why = [line for line in text.splitlines() if re.search(r"stopped|did not finish|Error", line)]
         note(f"{name} attempt {attempt} stopped rc={code}: "
-             f"{redact(why[-1])[:200] if why else ''}", state)
+             f"{redact(why[-1])[:200] if why else ''}{sampled}", state)
         log.rename(log.with_name(log.name + f".attempt-{attempt}"))
         kept = errors_since(errors, offset, step["source"], step["target"])
         if kept:
@@ -1864,6 +1898,7 @@ def attempt_loop(step: dict, env: dict, state: Path, others_run: bool = True) ->
             return False
         previous = current
         attempt += 1
+        attempt_peak = 0.0
     note(out_of_attempts(name, step["attempts"]), state)
     return False
 

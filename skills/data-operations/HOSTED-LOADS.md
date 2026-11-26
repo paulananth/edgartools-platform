@@ -78,7 +78,8 @@ CODE read it in place of git.
   it starts at that half whatever the memory, so a load never waits for ever. A step whose delivery is one document
   (`one_document: true` in the load jobs file) waits for all its workers instead of half, since a move would abandon it: the
   controller never moves it. A step with a measured `peak_gb`
-  waits for at least that much, and while it runs the memory it has yet to reach of its peak is not free to the steps admitted
+  (a load's `done` and `stopped` lines end with the `sampled peak` its processes were seen to hold, read every 10 s; resident
+  memory counts a shared page once a process, so it can be more than they take together: declare it from there) waits for at least that much, and while it runs the memory it has yet to reach of its peak is not free to the steps admitted
   after it. A container with no limit to read gives every step its
   declared workers. The step's log names the workers it got. `lane_budget` (`--lanes-at-once`) stays the monitor's reference: the lanes
   the compute carries when every step runs its declared workers. If lanes wait while CPU idles, memory is the limit: more lanes need
