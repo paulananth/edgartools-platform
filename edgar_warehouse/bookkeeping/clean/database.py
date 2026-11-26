@@ -6,8 +6,10 @@ import json
 import os
 from pathlib import Path
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.engine import make_url
+
+from edgar_warehouse.database_connections import engine_for
 
 from .config import Blocked, canonical
 
@@ -26,13 +28,7 @@ def default_url(store: str = "bookkeeping") -> str:
 
 
 def get_engine(url: str | None = None):
-    target = make_url(url or default_url())
-    drivers = {"postgresql": "postgresql+psycopg2", "mysql": "mysql+pymysql", "mssql": "mssql+pymssql"}
-    if target.drivername in drivers:
-        target = target.set(drivername=drivers[target.drivername])
-    # A connection older than the bound is replaced at checkout, which finds one the server dropped while it sat
-    # idle; a ping on every checkout is three round trips (BEGIN, SELECT 1, ROLLBACK), each a delay on a hosted store.
-    return create_engine(target, pool_recycle=30, hide_parameters=True)
+    return engine_for(url or default_url())
 
 
 def migrate(engine, *, runtime_role: str, existing_only: bool = False, database_name: str = "bookkeeping") -> dict:

@@ -29,8 +29,8 @@ the OrbStack change), last step 05:06 ET, finish 07:47 ET. The run before it (`h
    `SSL connection has been closed unexpectedly` / `SSL SYSCALL error: EOF detected`; once silently: `gleif`'s attempt 2 had
    finished its document and then waited on a socket the store no longer held (no session in `pg_stat_activity`, the kernel's
    socket established with empty queues, keepalive timer about 40 min away). It was ended by hand at 04:54 ET (the same stop its
-   bound would have made at 06:34); attempt 3 found the document loaded. The engine's connections have no client keepalive or
-   timeout of their own.
+   bound would have made at 06:34); attempt 3 found the document loaded. The engine's connections kept the operating system's
+   keepalive: libpq turns it on, and the kernel first probes after 2 hours idle, then every 75 s, 8 times.
 5. **A failed links build reports success**: `links rc=1` was followed by `chain done`, and `load.sh` exited 0 (05:07 ET).
 6. **The writes were held by this machine's upload, not by the store**: MDM writes fell from about 100,000 rows a minute to about
    10,000, the long steps' processes waited at 0 to 10% CPU, and the links build took 146 min against 7.8 before. The store's own
@@ -40,7 +40,9 @@ the OrbStack change), last step 05:06 ET, finish 07:47 ET. The run before it (`h
 8. **The links differ slightly from the run before**: 417,640 links (+797) and 4,459,121 bindings (−1,119) from the same captures.
 9. **The loader's login was refused six times** (`Snowflake authentication failed`, user `edgar_loader`): once on `control` at
    21:41 ET and five times on `data` (22:44, twice at 22:54, twice at 23:05 ET), minutes before the `adv-funds` and `person` drops;
-   the same env file's logins worked before and after.
+   the same env file's logins worked before and after. At 21:41:54, the second of the `control` refusal, the store logged
+   `Connection reset by peer` on dozens of loader sessions on `data`, `control` and `config` at once: an event on this
+   machine's side, not one session's.
 
 ## What the store's own monitoring shows (finding 6, read 2026-11-26)
 
@@ -73,18 +75,48 @@ downloads, and a live rerun of the links build alone (08:55 ET, stopped at 09:25
   (`adv-funds` failed 23:08:27), 23:13:14 (`person`, 23:13:17), 00:52:20, 02:33:19 and 02:34:42 (`gleif` attempt 1, 02:34:16),
   and 04:29:44 (`gleif` attempt 2, the silent one: the client never saw the close; its writes had ended about 10 minutes before).
   The links build's drop is no kill: the store logged only `connection to client lost` at 05:07:12, after the build's `rc=1` at
-  05:07. What each client did inside the open transaction is not read yet: a statement still arriving after 10 minutes, or client
-  work with the transaction open.
+  05:07. What each client did inside the open transaction is below.
+
+## What each killed session was doing (finding 4, read 2026-11-26)
+
+Read from each session's lines in the store's server log (process id, session start, the transaction id, statements over
+2 s), the failed steps' error files, and the instance's network metric by minute. The store's own keepalive is 2 s idle, then
+every 2 s, 4 times (`tcp_keepalives_*`), so a client host that vanished is noticed in seconds and logged as a reset, not as an
+idle transaction.
+
+- **`adv-funds` (23:08:24), `person` (23:13:14) and `gleif` attempt 2 (04:29:44): an insert in flight.** Each client's error
+  file shows it inside `cursor.execute` of a multi-row insert when the close came: `write_masters`' insert into the golden
+  records (`adv-funds`, `gleif`) and `add_deferred`'s insert (`person`), each up to 2,000 rows a statement (`BLOCK`). The store
+  meanwhile waited 10 minutes for that client's next message. So no client work sat inside the transaction: the statement
+  stopped arriving on that one connection while the store's other connections still received 1.2 to 2.4 MB/s (median of each
+  minute's total, the 10 minutes before the first two kills) and about 140 KB/s (before `gleif`'s). `person`'s session had no
+  transaction id: its first write never landed, 10 minutes after it connected. `adv-funds` and `person` saw the close 3 s after
+  the kill; `gleif`'s client never did.
+- **00:52:20, 02:33:19 and 02:34:42: three sessions opened together at 23:07:17**, alive 1 h 45 min to 3 h 27 min, each with
+  a transaction id (it had written), last logged statement a 2.2 to 2.3 s read of `mastering_record`. Their client wrote no
+  error: `gleif` attempt 1 ended at its bound (02:34:16), so the client of the 00:52 kill never noticed it for 1 h 42 min, and
+  the store logged the 02:34:42 kill 26 s after that stop, so the stopped client's close never reached it either. Which step
+  opened them, and what each was sending, is not read: the store was emptied at 10:18 ET today, and its log keeps no statement
+  under 2 s.
+- **The links build (05:07:12) is a different failure.** The session opened at 05:06:16, ran a 32 s `FETCH FORWARD 50000` of
+  its records scan, and then the store's send to the client timed out (`could not send data to client: Connection timed
+  out`): the path stopped acknowledging the store's data within a minute.
+
+All of it points at the path between this machine and the store, not at the store or the engine's transactions: a
+connection's traffic stops while its neighbours flow, and a close is lost in either direction. The client's keepalive now
+bounds the silent half of it to about two minutes (the part below).
 
 ## Parts
 
 - [ ] A step whose work is one document starts with its declared workers or waits for them (finding 1)
 - [ ] The controller moves a step only between runs, never one it shed earlier in the same attempt (finding 2)
 - [ ] A step's memory at admission is its measured peak where one is known, not `worker_gb` alone (finding 3)
-- [ ] The engine's database connections carry client keepalives and a timeout, so a dropped connection fails within minutes (finding 4)
+- [x] The engine's database connections carry client keepalives and a timeout, so a dropped connection fails within minutes (finding 4): every store's engine comes from `database_connections.engine_for`, whose connections probe after 60 s idle, every 10 s, 6 times, and on Linux give up on unacknowledged data after 120 s; `tests/storage_adapters/test_connection_keepalives.py` read the socket's options on PostgreSQL and MySQL (before the change: 7,200 s idle, 75 s, 8 probes); a disposable PostgreSQL 16 whose network was cut under `select pg_sleep(600)` failed the new engine's query after 125 s, while the old engine's was still waiting at 4 min (2026-11-26 11:48 ET)
 - [ ] A failed links build fails the load: no `chain done`, `load.sh` exits non-zero (finding 5)
 - [x] The store's slowdown read from its own monitoring (throughput limits, connection drops) before any engine change (finding 6): the store was not the limit, one connection's upload from this machine was (a rate that varies: about 2 MB/s on 11-25, 5 to 100 KB/s overnight), and three of finding 4's drops are the store's idle-in-transaction kills; read from the instance's event-table metrics and server log, `pg_stat_*`, and a live rerun of the links build (2026-11-26 09:25 ET)
-- [ ] Each of the six idle-in-transaction kills traced to what its client did inside the open transaction: a statement sent slower than the 10-minute limit, or client work with the transaction open (finding 4)
+- [x] The `adv-funds`, `person` and `gleif` attempt 2 kills traced to what their client did inside the open transaction (finding 4): each was inside the execute of a multi-row insert the store never finished receiving, while the store's other connections still received data; read from the server log by session and the steps' error files (2026-11-26 11:48 ET)
+- [ ] The kills at 00:52, 02:33 and 02:34 (three sessions opened together at 23:07:17) traced to their step and to what each was sending: the store's log keeps no statement under 2 s, and its tables were emptied on 2026-11-26 (finding 4)
+- [ ] Why one connection's statement stops arriving at the store while its neighbours flow, and why a close is lost in either direction, read on the path between this machine and the store (finding 4)
 - [ ] The links build's drop at 05:07 explained: no store kill was logged before it (finding 4)
 - [ ] The six refused loader logins explained (finding 9)
 - [ ] `db_monitor.py` reads the instance's own telemetry (CPU by state, network by minute, waiting transactions, machine type) and times one connection's upload, so this reading is one command (finding 6)
