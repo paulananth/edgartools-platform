@@ -38,6 +38,7 @@ A person hand-writes one rule, supplies the input and the expected output, and t
 - Ticket 25: `link_masters` takes the one link a stating record makes as the rule (`type`, `target_key`, `valid_from`, `valid_to`, `scope`); the claims, state, entities, as-of time and link types are the inputs, and Try returns the links and reviews `mdm.relationships.project` returns. A claim with no start waits as `unknown_relationship_start`; an end that is not named or not bound waits as `unresolved_endpoint`.
 - Ticket 27: `docs/rules-try/link_masters.md` records the four words, the emitted `ISSUED_BY` link between two invented masters, and the missing-start wait (`unknown_relationship_start`, no link), from a run of tickets 25 and 26.
 - Ticket 37: the primer's opening points to `docs/rules-try/` and the try command. The primitive catalog stays in the primer until ticket 38.
+- Ticket 38: the primitive catalog is the source-expression primitives. They live in `docs/engine-rules-reference.md`, and a file-only test checks that each is read by the evaluator. The primer points to it.
 
 ## Not yet specified
 
