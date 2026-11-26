@@ -141,6 +141,8 @@ def load_jobs(path: Path = ROOT / "rules/load-jobs.yaml", sources: Path = ROOT /
         priority = step.get("priority", 3)
         if type(priority) is not int or priority not in (1, 2, 3):  # `true` and `2.0` are not tiers
             raise ValueError(f"{step['name']}: priority must be 1, 2 or 3, not {priority!r}")
+        if type(step.get("one_document", False)) is not bool:  # `1` and `0.0` compare equal to a boolean
+            raise ValueError(f"{step['name']}: one_document is true or false, not {step['one_document']!r}")
         measured = step.get("worker_gb")
         if measured is not None and not (isinstance(measured, (int, float)) and 0.01 <= measured <= 64):
             raise ValueError(f"{step['name']}: worker_gb must be a number from 0.01 to 64 gigabytes, not {measured!r}")
@@ -331,13 +333,14 @@ def cpu_level() -> str:
 
 
 def admit(want: int, worker_gb: float, lock: Path, free=free_gb, running=load_running, pressed=lambda: cpu_level() == "high",
-          sleep=time.sleep, settle: int = GATE_SETTLE_SECONDS, poll: int = GATE_POLL_SECONDS, say=lambda text: None) -> int:
-    """The workers a step starts with: its own `want` when the memory is there, fewer when it is not (at least half of them),
-    and none until the memory of that floor is free and the CPU is not pressed (the controller would take back what a pressed
+          sleep=time.sleep, settle: int = GATE_SETTLE_SECONDS, poll: int = GATE_POLL_SECONDS, say=lambda text: None,
+          one_document: bool = False) -> int:
+    """The workers a step starts with: its own `want` when the memory is there, fewer when it is not (at least half of them;
+    all of them for a step of one document, which the controller never moves), and none until the memory of that floor is free and the CPU is not pressed (the controller would take back what a pressed
     machine admits), unless no other load runs, when waiting would never end. One step is
     admitted at a time: the lock is held through the settle window, so the next one reads the memory this one takes. A
     container whose memory cannot be read gives the step its own workers. One load runs in one container."""
-    floor = max(1, want // 2)
+    floor = want if one_document else max(1, want // 2)
     handle = lock.open("a")
     fcntl.flock(handle, fcntl.LOCK_EX)
     waited = False
@@ -512,10 +515,16 @@ class Memory:
     pressed: int = 0  # consecutive cycles at `high`
 
 
+def one_documents(steps: list[dict]) -> frozenset[str]:
+    """The steps the load jobs file declares to be one document each (`one_document: true`)."""
+    return frozenset(step["name"] for step in steps if step.get("one_document"))
+
+
 def choose_move(level: str, workers: dict[str, int], length: dict[str, float], bounds: dict[str, tuple[int, int]],
-                logs: dict[str, str], since: dict[str, datetime], memory: Memory, now: datetime) -> tuple[str, int] | None:
+                logs: dict[str, str], since: dict[str, datetime], memory: Memory, now: datetime,
+                one_document: frozenset[str] = frozenset()) -> tuple[str, int] | None:
     """The one change of workers that pays in this cycle, or None. `workers`, `bounds`, `logs` and `since` (when the step last started
-    or moved) name the running steps. Raising a step waits for it to settle; a pressed machine sheds the step with the shortest chain,
+    or moved) name the running steps; a step of `one_document` is never moved, since a move abandons its document. Raising a step waits for it to settle; a pressed machine sheds the step with the shortest chain,
     whenever it last moved."""
     settled = set(workers) if level == "high" else {name for name in workers if now - since[name] >= MOVE_EVERY}
     memory.pressed = memory.pressed + 1 if level == "high" else 0
@@ -531,7 +540,7 @@ def choose_move(level: str, workers: dict[str, int], length: dict[str, float], b
         if ran >= 2 and attempt >= 3:
             memory.rates.setdefault(name, {})[workers[name]] = ran / attempt
         left_of[name] = minutes_left(progress[0], progress[1], attempt, ran)
-    settled = {name for name in settled if movable(logs[name]) and worth_moving(
+    settled = {name for name in settled if name not in one_document and movable(logs[name]) and worth_moving(
         level, left=left_of.get(name), abandoned=(now - memory.finished.get(name, (0, now))[1]).total_seconds() / 60, pressed=memory.pressed,
         rates=memory.rates.get(name, {}), workers=workers[name]) is None}  # a move abandons the bundle in flight
     return rescale({n: workers[n] for n in settled}, {n: length[n] for n in settled}, level, {n: bounds[n] for n in settled})
@@ -634,7 +643,8 @@ def control_cycle(steps: list[dict], state: Path, memory: Memory, reader_url: st
     bounds = {name: headroom(count, bounds_for("local", s.get("worker_gb", WORKER_GB)), free, s.get("worker_gb", WORKER_GB))
               for name, (s, count) in running.items()}
     change = choose_move(level, workers, chain_length(steps, estimates(steps, measured(text))), bounds,
-                         {name: step_log_text(name) for name in running}, {name: since[name] for name in running}, memory, now)
+                         {name: step_log_text(name) for name in running}, {name: since[name] for name in running}, memory, now,
+                         one_documents(steps))
     if change and ask_move(running[change[0]][0], change[1], state):
         name, count = change
         note(f"controller moves {name} from {workers[name]} to {count} workers ({level} load, "
@@ -732,7 +742,7 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
             note(f"scheduler starts {name} (priority {by_name[name].get('priority', 3)}) at {count} workers", state)
             spawn(name, count)
         change = choose_move(level, workers, length, {n: range_of(n) for n in workers}, {n: step_log_text(n) for n in workers},
-                             {n: moved.get(n, began[n]) for n in workers}, memory, clock())
+                             {n: moved.get(n, began[n]) for n in workers}, memory, clock(), one_documents(steps))
         if change and not starts:
             name, count = change
             note(f"scheduler moves {name} from {workers[name]} to {count} workers ({level} load)", state)
@@ -1770,7 +1780,8 @@ def attempt_loop(step: dict, env: dict, state: Path, others_run: bool = True) ->
     errors, offset, previous = STORES / "load-errors.log", (0, 0), ""
     attempt, want = 1, step["workers"]
     while attempt <= step["attempts"]:
-        workers = admit(want, step.get("worker_gb", WORKER_GB), gate_path(state), say=lambda text: note(f"{name} {text}", state))
+        workers = admit(want, step.get("worker_gb", WORKER_GB), gate_path(state), say=lambda text: note(f"{name} {text}", state),
+                        one_document=step.get("one_document", False))
         note(f"{name} attempt {attempt} start" + (f" with {workers} of its {step['workers']} workers" if workers != step["workers"] else ""), state)
         offset = error_log.position(errors)
         take_move(state, name)  # a request left for a load that had ended is not this one's
