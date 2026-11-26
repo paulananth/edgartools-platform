@@ -5,7 +5,7 @@ import shutil
 from edgar_warehouse.rules.try_page import FAMILY_DIR, families, load_full, press, show_full
 
 VERSION = "example-quality-v1"
-HELD = {"held out": "quality_name_required", "on_fail": "exception"}
+HELD = {"held out": "quality_name_required"}
 
 
 def _short(test="is present", on_fail="hold the record out", **check):
