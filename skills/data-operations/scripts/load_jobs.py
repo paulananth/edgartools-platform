@@ -515,6 +515,26 @@ class Memory:
     pressed: int = 0  # consecutive cycles at `high`
 
 
+MOVE_LINE = re.compile(r" ET (?:controller|scheduler) moves (\S+) from (\d+) to (\d+) workers")
+ATTEMPT_LINE = re.compile(r" ET (\S+) attempt (\d+) start")
+
+
+def shed_this_attempt(text: str) -> set[str]:
+    """The steps a move took workers from in their current attempt (a state file's lines). Such a step is not moved again in it:
+    each move abandons its run in flight, and a step shed, raised and shed again loses run after run."""
+    attempt: dict[str, str] = {}
+    shed: set[str] = set()
+    for line in text.splitlines():
+        if started := ATTEMPT_LINE.search(line):
+            name, number = started.groups()
+            if attempt.get(name) != number:
+                shed.discard(name)
+            attempt[name] = number
+        elif (moved := MOVE_LINE.search(line)) and int(moved.group(3)) < int(moved.group(2)):
+            shed.add(moved.group(1))
+    return shed
+
+
 def one_documents(steps: list[dict]) -> frozenset[str]:
     """The steps the load jobs file declares to be one document each (`one_document: true`)."""
     return frozenset(step["name"] for step in steps if step.get("one_document"))
@@ -522,9 +542,10 @@ def one_documents(steps: list[dict]) -> frozenset[str]:
 
 def choose_move(level: str, workers: dict[str, int], length: dict[str, float], bounds: dict[str, tuple[int, int]],
                 logs: dict[str, str], since: dict[str, datetime], memory: Memory, now: datetime,
-                one_document: frozenset[str] = frozenset()) -> tuple[str, int] | None:
+                fixed: frozenset[str] | set[str] = frozenset()) -> tuple[str, int] | None:
     """The one change of workers that pays in this cycle, or None. `workers`, `bounds`, `logs` and `since` (when the step last started
-    or moved) name the running steps; a step of `one_document` is never moved, since a move abandons its document. Raising a step waits for it to settle; a pressed machine sheds the step with the shortest chain,
+    or moved) name the running steps. A step in `fixed` is never moved: a step of one document (a move abandons it) or one shed
+    earlier in its attempt (`shed_this_attempt`). Raising a step waits for it to settle; a pressed machine sheds the step with the shortest chain,
     whenever it last moved."""
     settled = set(workers) if level == "high" else {name for name in workers if now - since[name] >= MOVE_EVERY}
     memory.pressed = memory.pressed + 1 if level == "high" else 0
@@ -540,7 +561,7 @@ def choose_move(level: str, workers: dict[str, int], length: dict[str, float], b
         if ran >= 2 and attempt >= 3:
             memory.rates.setdefault(name, {})[workers[name]] = ran / attempt
         left_of[name] = minutes_left(progress[0], progress[1], attempt, ran)
-    settled = {name for name in settled if name not in one_document and movable(logs[name]) and worth_moving(
+    settled = {name for name in settled if name not in fixed and movable(logs[name]) and worth_moving(
         level, left=left_of.get(name), abandoned=(now - memory.finished.get(name, (0, now))[1]).total_seconds() / 60, pressed=memory.pressed,
         rates=memory.rates.get(name, {}), workers=workers[name]) is None}  # a move abandons the bundle in flight
     return rescale({n: workers[n] for n in settled}, {n: length[n] for n in settled}, level, {n: bounds[n] for n in settled})
@@ -644,7 +665,7 @@ def control_cycle(steps: list[dict], state: Path, memory: Memory, reader_url: st
               for name, (s, count) in running.items()}
     change = choose_move(level, workers, chain_length(steps, estimates(steps, measured(text))), bounds,
                          {name: step_log_text(name) for name in running}, {name: since[name] for name in running}, memory, now,
-                         one_documents(steps))
+                         one_documents(steps) | shed_this_attempt(text))
     if change and ask_move(running[change[0]][0], change[1], state):
         name, count = change
         note(f"controller moves {name} from {workers[name]} to {count} workers ({level} load, "
@@ -689,6 +710,7 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
     by_name = {step["name"]: step for step in steps}
     started, cycle, began, moved, missed = clock(), 0, {}, {}, False
     memory = Memory()
+    shed: set[str] = set()  # the steps this scheduler took workers from since it started them
     total = sum(step["minutes"] for step in steps)
 
     def spawn(name: str, count: int) -> None:
@@ -740,12 +762,16 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
             low, top = range_of(name)
             count = min(max(by_name[name].get("workers", low), low), top)
             note(f"scheduler starts {name} (priority {by_name[name].get('priority', 3)}) at {count} workers", state)
+            shed.discard(name)
             spawn(name, count)
         change = choose_move(level, workers, length, {n: range_of(n) for n in workers}, {n: step_log_text(n) for n in workers},
-                             {n: moved.get(n, began[n]) for n in workers}, memory, clock(), one_documents(steps))
+                             {n: moved.get(n, began[n]) for n in workers}, memory, clock(),
+                             one_documents(steps) | shed | shed_this_attempt(state.read_text() if state.exists() else ""))
         if change and not starts:
             name, count = change
             note(f"scheduler moves {name} from {workers[name]} to {count} workers ({level} load)", state)
+            if count < workers[name]:
+                shed.add(name)
             stop(children[name])
             spawn(name, count)
             moved[name] = clock()
@@ -781,10 +807,12 @@ def raise_pays(rates: dict[int, float], workers: int) -> bool:
 
 def worth_moving(level: str, *, left: float | None, abandoned: float, pressed: int, rates: dict[int, float], workers: int) -> str | None:
     """None when moving a step (a restart that abandons the bundle in flight) pays; otherwise why not, in a sentence.
-    Shedding needs pressure that has lasted. Raising needs enough left to repay the restart, a moment just after a bundle completed
-    (so nothing is abandoned), and a measured gain from the last raise."""
+    Either needs a moment just after a bundle completed, so nothing is abandoned. Shedding needs pressure that has lasted. Raising
+    needs enough left to repay the restart and a measured gain from the last raise."""
     if level == "high":
-        return None if pressed >= SHED_AFTER else "the pressure has not lasted"
+        if pressed < SHED_AFTER:
+            return "the pressure has not lasted"
+        return "a bundle is in flight" if abandoned > BOUNDARY_MINUTES else None
     if level == "low":
         if left is None or left < MIN_LEFT_MINUTES:
             return "too little left to repay a restart"

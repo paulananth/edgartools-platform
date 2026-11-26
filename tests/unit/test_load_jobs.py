@@ -1,5 +1,6 @@
 """The load jobs names every target a store loads, each with the facts its target declares."""
 import importlib.util
+import itertools
 import json
 import os
 import re
@@ -513,12 +514,27 @@ def test_a_short_spike_of_pressure_sheds_nothing_and_lasting_pressure_does(monke
     ("low", {"left": None, "abandoned": 0.0}, "too little left"),
     ("low", {"left": 300.0, "abandoned": 3.0}, "bundle is in flight"),
     ("high", {"left": 300.0, "abandoned": 0.0, "pressed": 1}, "has not lasted"),
+    ("high", {"left": 300.0, "abandoned": 3.0, "pressed": 4}, "bundle is in flight"),
 ])
 def test_a_move_that_would_not_repay_its_restart_names_why(level, kwargs, reason):
     base = {"left": 300.0, "abandoned": 0.0, "pressed": 0, "rates": {}, "workers": 4}
     assert reason in chain.worth_moving(level, **{**base, **kwargs})
     assert chain.worth_moving("low", **base) is None  # plenty left, a bundle just completed, nothing measured against it
     assert chain.worth_moving("high", **{**base, "pressed": 4}) is None
+
+
+def test_a_step_shed_in_this_attempt_is_read_from_the_state_file_and_a_new_attempt_clears_it():
+    """`openfigi-answers` was shed, raised and shed again in one attempt: six moves, each one abandoning its run in flight."""
+    text = ("11-25 21:09:26 ET a1 attempt 1 start\n"
+            "11-25 21:12:41 ET controller moves a1 from 4 to 2 workers (high load, 0.1 GB free)\n"
+            "11-25 21:12:45 ET a1 attempt 1 start with 2 of its 4 workers\n"
+            "11-25 21:13:00 ET b1 attempt 1 start\n"
+            "11-25 21:20:00 ET scheduler moves b1 from 2 to 4 workers (low load)\n"
+            "11-25 21:30:00 ET c1 attempt 1 start\n"
+            "11-25 21:31:00 ET scheduler moves c1 from 4 to 2 workers (high load)\n"
+            "11-25 22:00:00 ET c1 attempt 1 stopped rc=1: broken\n"
+            "11-25 22:00:01 ET c1 attempt 2 start with 2 of its 4 workers\n")
+    assert chain.shed_this_attempt(text) == {"a1"}  # b1 was raised, not shed; c1's shed was in its first attempt
 
 
 def test_a_raise_pays_only_when_the_last_one_raised_the_measured_rate_by_a_fifth():
@@ -541,7 +557,7 @@ def test_the_database_is_pressed_by_lock_waits_or_by_connections_and_pressure_ta
 
 
 def test_workers_fall_while_the_database_is_locking_even_when_the_machine_has_room(monkeypatch, tmp_path):
-    monkeypatch.setattr(chain, "step_log_text", lambda name: LOG)  # many bundles: a move loses only those in flight
+    monkeypatch.setattr(chain, "step_log_text", completing_log())  # many bundles, each reading just after one completed
     steps = [_step("a1", "A", minutes=600), _step("b1", "B", minutes=60)]
     for step in steps:
         step["workers"] = 8
@@ -599,6 +615,12 @@ def test_room_to_scale_up_needs_connections_below_the_target_as_well_as_a_machin
     assert chain.room("low", connections=250, target=250) == "ok"  # the target is used: more workers add nothing
     assert chain.room("high", connections=10, target=250) == "high"
     assert chain.room("ok", connections=10, target=250) == "ok"
+
+
+def completing_log():
+    """A step log that has just completed one more bundle each time it is read: every reading is a bundle boundary."""
+    done = itertools.count(1)
+    return lambda name: LOG + "".join(f"  run x{i} complete in 1.0 min\n" for i in range(next(done)))
 
 
 LOG = """Delivery of 2026-06-30, read from the capture: revision 1
@@ -1270,8 +1292,8 @@ def test_a_running_step_is_moved_at_most_once_in_ten_minutes_however_the_pressur
     assert len(started) - 1 <= 2  # a swing that does not last sheds nothing; a raise waits for a bundle boundary and ten minutes
 
 
-def test_a_pressed_machine_sheds_the_step_with_the_shortest_chain_even_when_it_moved_lately(monkeypatch, tmp_path):
-    monkeypatch.setattr(chain, "step_log_text", lambda name: LOG)  # many bundles: a move loses only those in flight
+def test_a_pressed_machine_sheds_the_step_with_the_shortest_chain_and_the_next_shed_lands_on_another_step(monkeypatch, tmp_path):
+    monkeypatch.setattr(chain, "step_log_text", completing_log())  # many bundles, each reading just after one completed
     steps = [_step("long", "A", minutes=600), _step("short", "B", minutes=60)]
     for step in steps:
         step["workers"] = 8
@@ -1280,7 +1302,7 @@ def test_a_pressed_machine_sheds_the_step_with_the_shortest_chain_even_when_it_m
     monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: next(levels, "high"))
     _run_auto(steps, state, slots=2)
     moves = [move for move in started[2:]]
-    assert moves[:2] == [("short", 4), ("short", 2)]  # the second shed lands on the same step: its last move does not shield it
+    assert moves[:2] == [("short", 4), ("long", 4)]  # a step shed in this attempt is not moved again in it
 
 
 def test_a_higher_priority_step_starts_before_one_with_a_longer_chain_behind_it():
@@ -2240,6 +2262,15 @@ def test_the_controller_never_moves_a_step_declared_one_document(monkeypatch, tm
         assert {name for name, _ in asked} <= {"long", "short"} - declared
     if free > 1:
         assert asked and {name for name, _ in asked} == {"short"}  # with room the other step is raised in its place
+
+
+def test_the_controller_never_moves_a_step_it_shed_earlier_in_the_same_attempt(monkeypatch, tmp_path):
+    state, asked, cycle = _controlled(monkeypatch, tmp_path, free=2.5)
+    with state.open("a") as out:
+        out.write("11-25 15:01:00 ET controller moves long from 4 to 2 workers (high load, 0.1 GB free)\n"
+                  "11-25 15:01:05 ET long attempt 1 start with 2 of its 4 workers\n")
+    cycle()
+    assert [name for name, _ in asked] == ["short"]  # with room, the step not shed is raised in its place
 
 
 def test_nothing_is_raised_while_a_step_is_being_admitted(monkeypatch, tmp_path):
