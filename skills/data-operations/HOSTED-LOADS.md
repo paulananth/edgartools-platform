@@ -45,9 +45,9 @@ CODE read it in place of git.
   publish for every load of the run; `LOAD_DEADLINE_HOURS` is the operator's window (default 2): a miss is reported once, never a stop.
 - **The load jobs file alone decides the lane schedule.** The first task returns lanes in first-appearance order from
   `rules/load-jobs.yaml`; Step Functions dispatches them all. Each lane runs steps in file order; a step waits for its
-  cross-lane dependencies and memory admission. Keep independent long lanes ahead of the long critical-path lane:
-  Company Facts is scheduled before GLEIF to overlap the long source step. `adv-custodians` must follow GLEIF,
-  and `--finish` follows every lane; target GLEIF as the last long source step, not the exact final event.
+  cross-lane dependencies and memory admission.
+  Keep independent long-running lanes before the longest critical-path lane to overlap work. Dependent work and the final
+  finish still follow their required inputs.
   `priority` orders `load_jobs.py --auto`, not the hosted Map. A failure belongs to its lane; a stop before the load's start is not counted.
 - **A load never waits on what cannot come.** Before the first step, `load_jobs.py --begin` refuses the load when a
   step waits on a step that does not exist, on lanes that cannot finish, or, for named steps, on a step neither done
