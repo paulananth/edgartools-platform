@@ -25,7 +25,6 @@ A person hand-writes one rule, supplies the input and the expected output, and t
 - Ticket 02: Keep a copy writes the case JSON to the path the person names. No path is not confirmed and is not written. A path under `rules/` is refused. Store this draft still refuses.
 - Ticket 03: Store this draft calls `Rules.save` under the `version` in the pasted rule and keeps the case beside that draft. A rule with no version is not stored. The draft is not switched on.
 - Ticket 04: `read_file` takes the read document as the rule, the file text and the lookup lists as inputs, and returns what `SourceEngine.read` returns. The folder test checks that every family declares a page.
-<<<<<<< Updated upstream
 - Ticket 05: a short read rule is a read document that may use the listed words for a stored key. Show the full rule returns the words used with their stored keys and the full document, which the engine must load. A bare stored key from the list is refused with the word to type.
 - Ticket 06: `docs/rules-try/read_file.md` records each word, its stored key, the invented R1 file and the output Try returns for it.
 - Ticket 07: `group_rows` takes the combination contract as the rule and the input tables as JSON, checks the contract with the combine worker's check, and returns what `combine_tables` returns, with the worker's `canonical` as the equality.
@@ -36,11 +35,9 @@ A person hand-writes one rule, supplies the input and the expected output, and t
 - Ticket 17: `entity_type_full` has the words `field is one of`, `these fields are empty`, `name tokens match` (`token_match@2`, with its own long word for `token_match@1`), `held back`, `probable entity type` and `otherwise`. A bare stored key is refused naming the word to type.
 - Ticket 18: `docs/rules-try/entity_type.md` records the words and the empty-ticker case: an empty `ticker` is held back (`deferred`), a ticker with the `OPERATING` category is a `company`, and a rule with no `otherwise` step is refused.
 - Ticket 22: `attach_record` takes the policy as the rule and the records, the masters that exist (with the values each holds) and the bound list as inputs. It calls `plan_record_matches`, answers the lookup from the pasted masters, and names each record's outcome: attach, create a master, or send to review. A rule that merges two masters is refused.
+- Ticket 23: `attach_record_full` replaces the five words (same identifier, how many that identifier allows, attach, create a master, send to review) with their stored keys, refuses a bare stored key, refuses a word for combining two existing masters (that stays on `rules test`), and refuses the words of Group and attach rows and Read the file.
 - Ticket 25: `link_masters` takes the one link a stating record makes as the rule (`type`, `target_key`, `valid_from`, `valid_to`, `scope`); the claims, state, entities, as-of time and link types are the inputs, and Try returns the links and reviews `mdm.relationships.project` returns. A claim with no start waits as `unknown_relationship_start`; an end that is not named or not bound waits as `unresolved_endpoint`.
 - Ticket 27: `docs/rules-try/link_masters.md` records the four words, the emitted `ISSUED_BY` link between two invented masters, and the missing-start wait (`unknown_relationship_start`, no link), from a run of tickets 25 and 26.
-=======
-- Ticket 23: `attach_record_full` replaces the five words (same identifier, how many that identifier allows, attach, create a master, send to review) with their stored keys, refuses a bare stored key, refuses a word for combining two existing masters (that stays on `rules test`), and refuses the words of Group and attach rows and Read the file.
->>>>>>> Stashed changes
 
 ## Not yet specified
 
