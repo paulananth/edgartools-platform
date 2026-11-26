@@ -1136,7 +1136,8 @@ def status_snapshot(steps: list[dict], state: Path, reader_url: str | None, samp
             "warning": outlook(left, elapsed, step["minutes"], attempt, step["attempts"])})
     kinds = {row["name"]: row["kind"] for row in rows}
     names = {s["name"] for s in steps}
-    return {"run": RUN, "time": f"{clock():%H:%M}", "total": len(steps), "done": len(done & names), "failed": len(failed & names), "writes": rate,
+    return {"run": RUN, "time": f"{clock():%H:%M}", "total": len(steps), "done": len(done & names), "failed": len(failed & names),
+            "complete": load_complete(text), "writes": rate,
             "lock_waiters": waiters, "sessions": sessions, "machine": machine_reading(), "running": rows,
             "steps": [{"name": s["name"], "lane": s["lane"], "waits_for": sorted(s.get("waits_for") or []),
                        "state": "done" if s["name"] in done else "failed" if s["name"] in failed and s["name"] not in kinds
@@ -1524,6 +1525,12 @@ def begin(steps: list[dict], state: Path, named: list[str] | None = None, plan: 
     if not plan:
         begin_load(state, named)
     return 0
+
+
+def load_complete(text: str) -> bool:
+    """The load has finished: a `chain done` line follows its last `load begins` line in the state file."""
+    lines = text.splitlines()
+    return any(line.endswith(" ET chain done") for line in lines[this_load(lines)[0] + 1:])
 
 
 def failed_steps(state: Path) -> set[str]:

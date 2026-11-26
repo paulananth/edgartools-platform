@@ -2242,3 +2242,10 @@ def test_a_load_that_ends_as_it_is_asked_leaves_no_request(monkeypatch, tmp_path
     checked(monkeypatch, chain.os, "kill", gone)
     assert not chain.ask_move(_step("a1", "A"), 4, tmp_path / "state.log")
     assert list(tmp_path.iterdir()) == []
+
+
+def test_a_load_is_complete_once_chain_done_follows_its_last_load_begins():
+    assert chain.load_complete("11-25 21:08:23 ET load begins\n11-26 05:07:00 ET links rc=0\n11-26 05:07:00 ET chain done\n")
+    assert not chain.load_complete("11-25 21:08:23 ET load begins\n11-26 05:07:00 ET chain done\n11-26 05:14:37 ET load begins\n")
+    assert not chain.load_complete("11-25 21:08:23 ET load begins\n11-25 21:08:26 ET a attempt 1 start\n")
+    assert not chain.load_complete("")

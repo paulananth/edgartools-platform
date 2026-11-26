@@ -45,10 +45,12 @@ def render(snapshot: dict, age: float = 0.0) -> str:
     lines = ["# Counts, states and times of the load jobs; no row values.",
              sample("load_monitor_up", 1), sample("load_monitor_snapshot_age_seconds", age),
              sample("load_steps_total", snapshot["total"])]
+    complete = bool(snapshot.get("complete"))
+    lines.append(sample("load_complete", int(complete)))
     counts = {name: 0 for name, *_ in design.STATES}
     for step in snapshot["steps"]:
-        counts[step["state"]] += 1
-        lines.append(sample("load_step_state", design.CODE[step["state"]], lane=step["lane"], step=step["name"]))
+        counts[step["state"]] += 1  # the tiles keep their counts; the lanes go grey once the load has finished
+        lines.append(sample("load_step_state", design.CODE["complete" if complete else step["state"]], lane=step["lane"], step=step["name"]))
         lines.append(sample("load_step_info", 1, lane=step["lane"], step=step["name"], state=step["state"],
                             waits_for=", ".join(step["waits_for"])))
     lines += [sample("load_steps", count, state=state) for state, count in counts.items()]
