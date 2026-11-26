@@ -79,6 +79,7 @@ steps:
     # `peak_gb` is the least the step's load is known to reach: its source extract was killed for memory while holding 0.86 GB
     # (the kernel's `anon-rss`) and still growing, so its true peak is higher and not measured. Admission waits for it, and
     # neither an admission nor a raise takes what the step has yet to reach of it while it runs.
+    # A load's `done` line ends with the `sampled peak` it reached: the next reload declares the measured value from it.
     peak_gb: 0.9
     bundles: 3
     minutes: 420

@@ -2014,6 +2014,33 @@ def test_one_document_is_a_boolean_in_the_load_jobs_file(value, tmp_path):
         chain.load_jobs(jobs, tmp_path)
 
 
+@pytest.mark.parametrize("code, text, line", [
+    (0, "Done: 1 documents loaded, 0 already loaded before", "g done: Done: 1 documents loaded"),
+    (1, "Load stopped: 1 of 1 did not finish", "g attempt 1 stopped rc=1"),
+])
+def test_a_step_writes_the_peak_memory_its_load_was_sampled_at(code, text, line, tmp_path, monkeypatch):
+    """The next reload declares a step's `peak_gb` from what its last load was seen to hold."""
+    monkeypatch.setattr(chain, "LOGS", tmp_path)
+    monkeypatch.setattr(chain, "STORES", tmp_path)
+    monkeypatch.setattr(chain, "PEAK_SAMPLE_SECONDS", 0.01)
+    monkeypatch.setattr(chain, "wait_for", lambda *a, **k: set())
+    monkeypatch.setattr(chain, "admit", lambda want, gb, lock, **k: want)
+    held = iter([262144, 524288, 131072])  # KB: 0.25, 0.5, then 0.125 GiB
+    monkeypatch.setattr(chain, "process_listing",
+                        lambda: f"10 1 0:01 {next(held, 0)} edgar-warehouse load --source s --target t --workers 2\n")
+
+    def load(step, env, log):
+        chain.time.sleep(0.3)
+        log.write_text(text)
+        return code, text
+
+    monkeypatch.setattr(chain, "run_deliveries", load)
+    state = tmp_path / "state.log"
+    chain.attempt_loop({**_step("g", "G", source="s", target="t"), "workers": 2, "attempts": 1}, {}, state)
+    written = next(entry for entry in state.read_text().splitlines() if line in entry)
+    assert written.endswith("; sampled peak 0.50 GB")
+
+
 def test_a_step_declared_one_document_is_admitted_as_one(tmp_path, monkeypatch):
     seen = []
     monkeypatch.setattr(chain, "LOGS", tmp_path)
