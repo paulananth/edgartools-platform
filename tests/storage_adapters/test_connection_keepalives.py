@@ -9,6 +9,7 @@ import pytest
 
 from edgar_warehouse.bookkeeping.clean import database as bookkeeping
 from edgar_warehouse.change_journal import store as journal
+from edgar_warehouse.control_contract import connection_socket
 from edgar_warehouse.database_connections import connect
 
 FACTORIES = {
@@ -23,8 +24,7 @@ if hasattr(socket, "TCP_USER_TIMEOUT"):
     EXPECTED[(socket.IPPROTO_TCP, socket.TCP_USER_TIMEOUT)] = 120_000
 
 
-def _socket_options(dbapi_connection) -> dict:
-    fileno = dbapi_connection.fileno() if hasattr(dbapi_connection, "fileno") else dbapi_connection._sock.fileno()
+def _socket_options(fileno: int) -> dict:
     with socket.socket(fileno=os.dup(fileno)) as sock:
         # SO_KEEPALIVE reads back as any non-zero value when on
         return {key: bool(sock.getsockopt(*key)) if key[1] == socket.SO_KEEPALIVE else sock.getsockopt(*key)
@@ -36,7 +36,10 @@ def test_a_connection_gives_up_on_a_silent_server_within_minutes(name, server_co
     engine = FACTORIES[name](server_connection)
     try:
         with engine.connect() as conn:
-            found = _socket_options(conn.connection.dbapi_connection)
-        assert found == EXPECTED
+            fileno = connection_socket(conn.connection.dbapi_connection)
+            if server_connection.engine == "mssql":
+                assert fileno is None  # pymssql gives no socket: it keeps the operating system's keepalive
+                return
+            assert _socket_options(fileno) == EXPECTED
     finally:
         engine.dispose()
