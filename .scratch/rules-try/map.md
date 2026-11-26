@@ -29,6 +29,7 @@ A person hand-writes one rule, supplies the input and the expected output, and t
 - Ticket 06: `docs/rules-try/read_file.md` records each word, its stored key, the invented R1 file and the output Try returns for it.
 - Ticket 16: `entity_type` takes the classification rule as the rule, the record and the doc as inputs, and returns what `classify` decides: `{"entity type": ...}` or `{"held back": "deferred"}`. A rule with no `otherwise` step is the engine's refusal.
 - Ticket 17: `entity_type_full` has the words `field is one of`, `these fields are empty`, `name tokens match` (`token_match@2`, with its own long word for `token_match@1`), `held back`, `probable entity type` and `otherwise`. A bare stored key is refused naming the word to type.
+- Ticket 18: `docs/rules-try/entity_type.md` records the words and the empty-ticker case: an empty `ticker` is held back (`deferred`), a ticker with the `OPERATING` category is a `company`, and a rule with no `otherwise` step is refused.
 
 ## Not yet specified
 
