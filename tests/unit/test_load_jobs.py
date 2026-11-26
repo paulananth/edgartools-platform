@@ -2290,3 +2290,18 @@ def test_a_load_is_complete_once_chain_done_follows_its_last_load_begins():
     assert not chain.load_complete("11-25 21:08:23 ET load begins\n11-26 05:07:00 ET chain done\n11-26 05:14:37 ET load begins\n")
     assert not chain.load_complete("11-25 21:08:23 ET load begins\n11-25 21:08:26 ET a attempt 1 start\n")
     assert not chain.load_complete("")
+
+
+def test_a_catalog_command_cut_off_at_its_timeout_is_reaped(monkeypatch):
+    """The killed command leaves no zombie of the scheduler: it is waited on, not only killed."""
+    started = []
+    real = chain.subprocess.Popen
+
+    def popen(*args, **kwargs):
+        started.append(real(*args, **kwargs))
+        return started[-1]
+
+    monkeypatch.setattr(chain.subprocess, "Popen", popen)
+    assert chain.run_catalog_status([sys.executable, "-c", "import time; time.sleep(30)"], {**os.environ}, timeout=1) == \
+        ("", "the command did not answer in time")
+    assert started[0].returncode is not None  # waited on: no zombie left behind
