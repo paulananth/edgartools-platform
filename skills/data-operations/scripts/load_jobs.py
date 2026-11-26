@@ -1112,13 +1112,14 @@ def unreached_peaks(steps: list[dict], listing: str, besides: str | None = None)
 
 
 @contextlib.contextmanager
-def sampled_peak(source: str, target: str, every: float | None = None):
+def sampled_peak(source: str, target: str):
     """While the block runs, the most resident memory the load of one source and target is seen to hold, read every
-    `PEAK_SAMPLE_SECONDS`: a list whose one value is the peak in GB so far (a peak between two readings is missed)."""
+    `PEAK_SAMPLE_SECONDS`: a list whose one value is the peak in GB so far. A peak between two readings is missed, and resident
+    memory counts a page the processes share once for each, so the sum can be more than the memory they take together."""
     peak, done = [0.0], threading.Event()
 
     def sample() -> None:
-        while not done.wait(PEAK_SAMPLE_SECONDS if every is None else every):
+        while not done.wait(PEAK_SAMPLE_SECONDS):
             with contextlib.suppress(Exception):  # a reading that fails is skipped: it never fails the load
                 now = held_gb(process_listing(), source, target)
                 if now is not None:

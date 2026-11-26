@@ -2023,18 +2023,18 @@ def test_a_step_writes_the_peak_memory_its_load_was_sampled_at(code, text, line,
     monkeypatch.setattr(chain, "LOGS", tmp_path)
     monkeypatch.setattr(chain, "STORES", tmp_path)
     monkeypatch.setattr(chain, "PEAK_SAMPLE_SECONDS", 0.01)
-    monkeypatch.setattr(chain, "wait_for", lambda *a, **k: set())
-    monkeypatch.setattr(chain, "admit", lambda want, gb, lock, **k: want)
+    checked(monkeypatch, chain, "wait_for", lambda step, state, poll=30, others_run=True: set())
+    checked(monkeypatch, chain, "admit", lambda want, worker_gb, lock, **more: want)
     held = iter([262144, 524288, 131072])  # KB: 0.25, 0.5, then 0.125 GiB
-    monkeypatch.setattr(chain, "process_listing",
-                        lambda: f"10 1 0:01 {next(held, 0)} edgar-warehouse load --source s --target t --workers 2\n")
+    checked(monkeypatch, chain, "process_listing",
+            lambda: f"10 1 0:01 {next(held, 0)} edgar-warehouse load --source s --target t --workers 2\n")
 
     def load(step, env, log):
         chain.time.sleep(0.3)
         log.write_text(text)
         return code, text
 
-    monkeypatch.setattr(chain, "run_deliveries", load)
+    checked(monkeypatch, chain, "run_deliveries", load)
     state = tmp_path / "state.log"
     chain.attempt_loop({**_step("g", "G", source="s", target="t"), "workers": 2, "attempts": 1}, {}, state)
     written = next(entry for entry in state.read_text().splitlines() if line in entry)
