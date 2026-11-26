@@ -39,9 +39,9 @@ def header() -> list[dict]:
              'sum(load_steps{state=~"stalled|locked"})', 9, zero_green(d.RED), graph="none"),
         stat("Lock waiters", "Sessions waiting on database locks: one is normal (amber), three is the scheduler's limit (red).",
              "load_lock_waiters", 12, steps((None, d.GREEN), (d.LOCK_WAITERS[0], d.AMBER), (d.LOCK_WAITERS[1], d.RED)), graph="none"),
-        stat("Memory free", "Share of memory free. Short under a quarter (orange), pressed under a tenth (red): the controller holds lanes back.",
+        stat("Memory free", "Share of memory free. Short under a quarter (amber), pressed under a tenth (red): the controller holds lanes back.",
              "load_machine_memory_free_ratio", 15,
-             steps((None, d.RED), (d.MEMORY_FREE[0], d.ORANGE), (d.MEMORY_FREE[1], d.GREEN)), unit="percentunit"),
+             steps((None, d.RED), (d.MEMORY_FREE[0], d.AMBER), (d.MEMORY_FREE[1], d.GREEN)), unit="percentunit"),
         stat("Lanes running", "Lanes with a step running now. It should sit at the lane budget beside it while lanes wait: a lower number "
              "with lanes waiting means the budget is not being used.",
              "count(count by (lane) (load_step_workers)) or vector(0)", 18, steps((None, d.NEUTRAL), (1, d.GREEN))),
