@@ -42,6 +42,7 @@ A person hand-writes one rule, supplies the input and the expected output, and t
 - Ticket 25: `link_masters` takes the one link a stating record makes as the rule (`type`, `target_key`, `valid_from`, `valid_to`, `scope`); the claims, state, entities, as-of time and link types are the inputs, and Try returns the links and reviews `mdm.relationships.project` returns. A claim with no start waits as `unknown_relationship_start`; an end that is not named or not bound waits as `unresolved_endpoint`.
 - Ticket 26: `link_masters_full` names four keys of the link rule: link type → `type`, other master's key → `target_key`, link starts → `valid_from`, link ends → `valid_to`. A missing end is not invented, and a missing other master stays the engine's `unresolved_endpoint` wait.
 - Ticket 27: `docs/rules-try/link_masters.md` records the four words, the emitted `ISSUED_BY` link between two invented masters, and the missing-start wait (`unknown_relationship_start`, no link), from a run of tickets 25 and 26.
+- Ticket 28: `link_periods` takes the sightings as the rule (a `sightings` list) and returns what `fold_sightings` returns, the periods and the contradictions. A period ends only on a dropping sighting; a missing later file leaves the end empty.
 - Ticket 37: the primer's opening points to `docs/rules-try/` and the try command. The primitive catalog stays in the primer until ticket 38.
 
 ## Not yet specified
