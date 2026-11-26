@@ -275,6 +275,22 @@ before clearing either store. A run at run grain has no work items or leases,
 so zero leases does not establish that its run has finished. Record the run
 state separately and follow the recovery procedure for unresolved runs.
 
+Back up the control database whole and the RDM store by schema: `pg_dump` of
+the whole data database also carries MDM and Silver, which a reset does not
+restore from git. A dump of one schema is `pg_dump --schema=rdm`; list the
+dump with `pg_restore --list` and read it before the clear.
+
+### A reset leaves the run's state file naming the old generation
+
+A table reset empties the store without making its database again, so the
+database's generation is unchanged and the run's state file still reads as this
+store's: the gate's STATE check says `same` and passes, while the file's `done`
+lines name steps whose records are gone. Set the file aside (rename it; never
+delete it) before the next load starts. A load that runs every step ignores the
+earlier `done` lines, but a load that names steps in lanes counts an earlier
+load's `done` lines for the steps it does not run, and after a reset those
+steps' records do not exist. `fresh` is the verdict a cleared store wants.
+
 ### Truncate an append-only table
 
 Use the same manifest workflow for a table with a retention trigger. Before
