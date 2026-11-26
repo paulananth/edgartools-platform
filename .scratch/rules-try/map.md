@@ -37,6 +37,7 @@ A person hand-writes one rule, supplies the input and the expected output, and t
 - Ticket 22: `attach_record` takes the policy as the rule and the records, the masters that exist (with the values each holds) and the bound list as inputs. It calls `plan_record_matches`, answers the lookup from the pasted masters, and names each record's outcome: attach, create a master, or send to review. A rule that merges two masters is refused.
 - Ticket 25: `link_masters` takes the one link a stating record makes as the rule (`type`, `target_key`, `valid_from`, `valid_to`, `scope`); the claims, state, entities, as-of time and link types are the inputs, and Try returns the links and reviews `mdm.relationships.project` returns. A claim with no start waits as `unknown_relationship_start`; an end that is not named or not bound waits as `unresolved_endpoint`.
 - Ticket 27: `docs/rules-try/link_masters.md` records the four words, the emitted `ISSUED_BY` link between two invented masters, and the missing-start wait (`unknown_relationship_start`, no link), from a run of tickets 25 and 26.
+- Ticket 28: `link_periods` takes the sightings as the rule (a `sightings` list) and returns what `fold_sightings` returns, the periods and the contradictions. A period ends only on a dropping sighting; a missing later file leaves the end empty.
 - Ticket 37: the primer's opening points to `docs/rules-try/` and the try command. The primitive catalog stays in the primer until ticket 38.
 
 ## Not yet specified
