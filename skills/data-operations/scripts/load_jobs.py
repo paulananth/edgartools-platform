@@ -349,40 +349,36 @@ def admit(want: int, worker_gb: float, lock: Path, free=free_gb, running=load_ru
     theirs (`reserved`, `unreached_peaks`): a step still growing to its peak is not free memory."""
     floor = want if one_document else max(1, want // 2)
     waited, waiting = False, None  # a waiter holds `<gate>.wait` shared, so the controller raises nothing meanwhile
-    while True:  # the lock is held for a reading and an admission only: a step that waits lets the others be admitted
-        handle = lock.open("a")
-        fcntl.flock(handle, fcntl.LOCK_EX)
-        try:
-            room, held = free(), 0.0
-            if room is not None:
-                held = reserved()
-                room -= held
-            need = max(floor * worker_gb, peak_gb)
-            short = room is not None and room < need
-            busy = not short and pressed()
-        except BaseException:
+    try:
+        while True:  # the lock is held for a reading and an admission only: a step that waits lets the others be admitted
+            handle = lock.open("a")
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX)
+                room, held = free(), 0.0
+                if room is not None:
+                    held = reserved()
+                    room -= held
+                need = max(floor * worker_gb, peak_gb)
+                short = room is not None and room < need
+                busy = not short and pressed()
+                if not (short or busy) or not running():
+                    break  # admitted: the gate stays held through the settle window
+                if waiting is None:  # marked before the gate is let go, so the controller never sees a moment with neither held
+                    waiting = wait_path(lock).open("a")
+                    fcntl.flock(waiting, fcntl.LOCK_SH)
+            except BaseException:
+                handle.close()
+                raise
             handle.close()
-            if waiting:
-                waiting.close()
-            raise
-        if not (short or busy) or not running():
-            break
-        handle.close()
-        if waiting is None:
-            waiting = wait_path(lock).open("a")
-            fcntl.flock(waiting, fcntl.LOCK_SH)
-        if not waited:
-            say(f"waits for {need:.1f} GB of free memory ({room:.1f} GB now"
-                + (f", {held:.2f} GB more held for running steps' peaks)" if held else ")") if short else
-                "waits for the CPU (the machine is pressed)")
-            waited = True
-        try:
+            if not waited:
+                say(f"waits for {need:.1f} GB of free memory ({room:.1f} GB now"
+                    + (f", {held:.2f} GB more held for running steps' peaks)" if held else ")") if short else
+                    "waits for the CPU (the machine is pressed)")
+                waited = True
             sleep(poll)
-        except BaseException:
+    finally:
+        if waiting is not None:
             waiting.close()
-            raise
-    if waiting:
-        waiting.close()
     timer = threading.Timer(settle, handle.close)  # closing the file releases the lock
     timer.daemon = True
     timer.start()

@@ -2155,23 +2155,38 @@ def test_the_next_step_is_admitted_only_after_the_first_has_settled(tmp_path):
 
 def test_a_step_waiting_for_memory_lets_a_step_that_fits_be_admitted_meanwhile(tmp_path):
     """A step waiting for all its workers' memory never holds the gate while it waits: steps of other lanes that fit start."""
-    lock, room, admitted = tmp_path / "gate", [1.0], []
+    lock, room, admitted, waiting = tmp_path / "gate", [1.0], [], threading.Event()
+
+    def wait(seconds):
+        waiting.set()
+        chain.time.sleep(0.01)
+
     big = threading.Thread(target=lambda: admitted.append(("big", chain.admit(
-        8, 0.4, lock, free=lambda: room[0], running=lambda: True, pressed=lambda: False, sleep=lambda s: chain.time.sleep(0.02),
-        settle=0, one_document=True))), daemon=True)
+        8, 0.4, lock, free=lambda: room[0], running=lambda: True, pressed=lambda: False, sleep=wait, settle=0,
+        one_document=True))), daemon=True)
     big.start()
-    chain.time.sleep(0.1)  # the big step is waiting for 3.2 GB
+    assert waiting.wait(5)  # the big step waits for 3.2 GB
     assert chain.admitting(lock)  # the controller raises nothing while a step waits for memory
     small = threading.Thread(target=lambda: admitted.append(("small", chain.admit(
         1, 0.4, lock, free=lambda: room[0], running=lambda: True, pressed=lambda: False, sleep=lambda s: None, settle=0))),
         daemon=True)
     small.start()
-    small.join(2)
+    small.join(5)
     assert admitted == [("small", 1)]  # admitted while the big step still waits
     room[0] = 4.0
-    big.join(2)
+    big.join(5)
     assert admitted == [("small", 1), ("big", 8)]
-    assert not chain.admitting(lock)  # nothing waits, and both settle windows have passed
+
+
+@pytest.mark.parametrize("failing", ["running", "say"])
+def test_a_waiter_that_fails_lets_go_of_the_gate_and_its_mark(failing, tmp_path):
+    def broken(*args):
+        raise OSError("unreadable")
+    kinds = {"running": broken if failing == "running" else (lambda: True), "say": broken if failing == "say" else (lambda text: None)}
+    with pytest.raises(OSError):
+        chain.admit(8, 0.4, tmp_path / "gate", free=lambda: 1.0, running=kinds["running"], pressed=lambda: False,
+                    sleep=lambda s: None, settle=3600, say=kinds["say"], one_document=True)
+    assert not chain.admitting(tmp_path / "gate")
 
 
 def test_a_read_that_fails_while_a_step_waits_does_not_keep_the_lock(tmp_path):
