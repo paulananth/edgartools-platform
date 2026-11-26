@@ -53,6 +53,7 @@ A person hand-writes one rule, supplies the input and the expected output, and t
 - Ticket 30: `docs/rules-try/link_periods.md` records the words, the invented sighting, and the period Try returns: the start is the sighting's date and the end stays empty until a sighting drops the capacity.
 - Ticket 31: `prepare_record` takes a contract with a fixed entity type as the rule, the row, source code and publication as inputs, and returns what `normalize` returns. A contract that contains `classification` is refused before `normalize` runs.
 - Ticket 32: `prepare_record_full.py` takes four words for the fixed-type contract (entity type, record key, identifier, lookup only). A bare stored key is refused with the word to type. "entity type rule" is refused.
+- Ticket 33: the "Prepare the MDM record" guide records the four words, the fixed-type case and the missing-key refusal, from a run of the family.
 - Ticket 34: `prepare_by_type_rule` takes a contract with `classification` as the rule, the row, source code, publication and policy as inputs, and returns what `normalize` returns; the entity type is the one the pasted rule decides.
 - Ticket 35: `prepare_by_type_rule_full.py` takes the four words of ticket 32 and "entity type rule" → `classification`. It is the only file that accepts "entity type rule".
 - Ticket 36: the "Prepare a record whose entity type comes from a rule" guide records the five words and the rule-decided case, with the two set-aside answers, from a run of the family.
