@@ -143,6 +143,9 @@ def load_jobs(path: Path = ROOT / "rules/load-jobs.yaml", sources: Path = ROOT /
             raise ValueError(f"{step['name']}: priority must be 1, 2 or 3, not {priority!r}")
         if type(step.get("one_document", False)) is not bool:  # `1` and `0.0` compare equal to a boolean
             raise ValueError(f"{step['name']}: one_document is true or false, not {step['one_document']!r}")
+        peak = step.get("peak_gb")
+        if peak is not None and (type(peak) not in (int, float) or peak <= 0):
+            raise ValueError(f"{step['name']}: peak_gb is a positive number of gigabytes, not {peak!r}")
         measured = step.get("worker_gb")
         if measured is not None and not (isinstance(measured, (int, float)) and 0.01 <= measured <= 64):
             raise ValueError(f"{step['name']}: worker_gb must be a number from 0.01 to 64 gigabytes, not {measured!r}")
@@ -334,12 +337,14 @@ def cpu_level() -> str:
 
 def admit(want: int, worker_gb: float, lock: Path, free=free_gb, running=load_running, pressed=lambda: cpu_level() == "high",
           sleep=time.sleep, settle: int = GATE_SETTLE_SECONDS, poll: int = GATE_POLL_SECONDS, say=lambda text: None,
-          one_document: bool = False) -> int:
+          one_document: bool = False, peak_gb: float = 0.0, reserved=lambda: 0.0) -> int:
     """The workers a step starts with: its own `want` when the memory is there, fewer when it is not (at least half of them;
     all of them for a step of one document, which the controller never moves), and none until the memory of that floor is free and the CPU is not pressed (the controller would take back what a pressed
     machine admits), unless no other load runs, when waiting would never end. One step is
     admitted at a time: the lock is held through the settle window, so the next one reads the memory this one takes. A
-    container whose memory cannot be read gives the step its own workers. One load runs in one container."""
+    container whose memory cannot be read gives the step its own workers. One load runs in one container. The floor's memory is
+    at least the step's measured `peak_gb`, and the free memory read leaves out what the running steps have yet to reach of
+    theirs (`reserved`, `unreached_peaks`): a step still growing to its peak is not free memory."""
     floor = want if one_document else max(1, want // 2)
     handle = lock.open("a")
     fcntl.flock(handle, fcntl.LOCK_EX)
@@ -347,12 +352,15 @@ def admit(want: int, worker_gb: float, lock: Path, free=free_gb, running=load_ru
     try:
         while True:
             room = free()
-            short = room is not None and room < floor * worker_gb
+            if room is not None:
+                room -= reserved()
+            need = max(floor * worker_gb, peak_gb)
+            short = room is not None and room < need
             busy = not short and pressed()
             if not (short or busy) or not running():
                 break
             if not waited:
-                say(f"waits for {floor * worker_gb:.1f} GB of free memory ({room:.1f} GB now)" if short else
+                say(f"waits for {need:.1f} GB of free memory ({room:.1f} GB now)" if short else
                     "waits for the CPU (the machine is pressed)")
                 waited = True
             sleep(poll)
@@ -1071,6 +1079,24 @@ def load_pids(listing: str, source: str, target: str) -> dict[int, float]:
                 found.add(pid)
                 grown = True
     return {pid: rows[pid][1] for pid in sorted(found)}
+
+
+def unreached_peaks(steps: list[dict], listing: str, besides: str | None = None) -> float:
+    """The gigabytes the running steps (other than `besides`) have yet to reach of their measured `peak_gb`: each one's peak less
+    the resident memory its driver and workers hold now, from `listing` (`ps -Ao pid,ppid,time,rss,args`, rss in KB)."""
+    rss = {}
+    for line in listing.splitlines():
+        parts = line.split(None, 4)
+        if len(parts) >= 4 and parts[0].isdigit() and parts[3].isdigit():
+            rss[int(parts[0])] = int(parts[3])
+    held = 0.0
+    for step in steps:
+        if "peak_gb" not in step or step["name"] == besides:
+            continue
+        pids = load_pids(listing, step["source"], step["target"])
+        if pids:
+            held += max(0.0, step["peak_gb"] - sum(rss.get(pid, 0) for pid in pids) / 2**20)
+    return held
 
 
 def process_listing() -> str:
@@ -1803,10 +1829,12 @@ def attempt_loop(step: dict, env: dict, state: Path, others_run: bool = True) ->
     from edgar_warehouse.rules import error_log
 
     errors, offset, previous = STORES / "load-errors.log", (0, 0), ""
+    peaked = [one for one in load_jobs() if "peak_gb" in one]  # the steps whose unreached peak this one's admission leaves out
     attempt, want = 1, step["workers"]
     while attempt <= step["attempts"]:
         workers = admit(want, step.get("worker_gb", WORKER_GB), gate_path(state), say=lambda text: note(f"{name} {text}", state),
-                        one_document=step.get("one_document", False))
+                        one_document=step.get("one_document", False), peak_gb=step.get("peak_gb", 0.0),
+                        reserved=lambda: unreached_peaks(peaked, process_listing(), besides=name))
         note(f"{name} attempt {attempt} start" + (f" with {workers} of its {step['workers']} workers" if workers != step["workers"] else ""), state)
         offset = error_log.position(errors)
         take_move(state, name)  # a request left for a load that had ended is not this one's
