@@ -46,8 +46,10 @@ object per reading.
 | Can the memory settings overrun the machine? | `memory` | `work_mem` is per sort or hash step, per session: `work_mem_if_each_active_sorts_once_mb` is a floor, since one query can hold several steps; compare it with the instance size, `shared_buffers` included |
 | Which store spills or rolls back? | `databases` | `temp_mb` and `temp_files` are sorts and hashes that did not fit `work_mem`; `deadlocks` and a high `rollbacks` against `commits` name the store to look at |
 | What did the server log? | `logs --minutes 60` | See Postgres logs |
+| Is the instance itself the limit? | `telemetry --minutes 120 --every 10` | Its machine type, then per interval its CPU by state (`idle` high and `steal` 0 is a store with room), the KB a second it received and sent, the mean transactions waiting on locks and the most connections. Read through the log connection (Postgres logs) |
+| Is one connection's upload the limit? | `upload` | The diagnostic login's round trip, a download, and up to eight sends of 4 MB, none started after 60 s (a send in flight runs to its end: the statement timeout starts once it has arrived; a send over 2 s is written to the server log with its 4 MB of `x`): the first send can be a burst, the rest the sustained rate. A load that writes on few connections at that rate is held by the client's path, not the store |
 | Is it costing more than it should? | `budget` | See Cost watch |
-| All of it | `all` | Every reading above (the log only when its connection is set) |
+| All of it | `all` | Every reading above but `telemetry` and `upload` (the log only when its connection is set) |
 
 ## Postgres logs
 
@@ -103,6 +105,8 @@ python scripts/db_monitor.py budget --rate <cost per hour of the instance> --lim
    merge locks); a blocker idle in a transaction is a client that did not commit.
 3. `sessions`: an `active` session on `IO` is the disk; on `Client` the worker is the bottleneck, not the database.
    `logs`: a memory line in the window means memory, whatever the step's own message says.
+   `telemetry` and `upload`: a store mostly idle while its sessions wait on `ClientRead`, and an upload under 1 MB/s on one
+   connection, put a slow write on the client's path; production runs in AWS, so a local upload rate is a local figure only.
    A step that dies with `out of memory` is `work_mem` times its sort and hash steps times its sessions against the
    instance's memory: `memory` shows the setting, and the fix is a role-level `work_mem` ceiling for the loader and fewer
    workers, never a retry at the same size.
