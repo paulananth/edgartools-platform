@@ -520,8 +520,8 @@ ATTEMPT_LINE = re.compile(r" ET (\S+) attempt (\d+) start")
 
 
 def shed_this_attempt(text: str) -> set[str]:
-    """The steps a move took workers from in their current attempt (a state file's lines). Such a step is not moved again in it:
-    each move abandons its run in flight, and a step shed, raised and shed again loses run after run."""
+    """The steps a move took workers from in their current attempt (a state file's lines, as `controller moves` and `scheduler
+    moves` write them). Such a step is not moved again in it."""
     attempt: dict[str, str] = {}
     shed: set[str] = set()
     for line in text.splitlines():
@@ -535,9 +535,10 @@ def shed_this_attempt(text: str) -> set[str]:
     return shed
 
 
-def one_documents(steps: list[dict]) -> frozenset[str]:
-    """The steps the load jobs file declares to be one document each (`one_document: true`)."""
-    return frozenset(step["name"] for step in steps if step.get("one_document"))
+def unmovable(steps: list[dict], text: str) -> frozenset[str]:
+    """The steps no move may touch: those the load jobs file declares one document each (`one_document: true`) and those shed
+    earlier in their attempt (`shed_this_attempt` of the state file's `text`)."""
+    return frozenset(step["name"] for step in steps if step.get("one_document")) | shed_this_attempt(text)
 
 
 def choose_move(level: str, workers: dict[str, int], length: dict[str, float], bounds: dict[str, tuple[int, int]],
@@ -665,7 +666,7 @@ def control_cycle(steps: list[dict], state: Path, memory: Memory, reader_url: st
               for name, (s, count) in running.items()}
     change = choose_move(level, workers, chain_length(steps, estimates(steps, measured(text))), bounds,
                          {name: step_log_text(name) for name in running}, {name: since[name] for name in running}, memory, now,
-                         one_documents(steps) | shed_this_attempt(text))
+                         unmovable(steps, text))
     if change and ask_move(running[change[0]][0], change[1], state):
         name, count = change
         note(f"controller moves {name} from {workers[name]} to {count} workers ({level} load, "
@@ -710,7 +711,6 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
     by_name = {step["name"]: step for step in steps}
     started, cycle, began, moved, missed = clock(), 0, {}, {}, False
     memory = Memory()
-    shed: set[str] = set()  # the steps this scheduler took workers from since it started them
     total = sum(step["minutes"] for step in steps)
 
     def spawn(name: str, count: int) -> None:
@@ -762,16 +762,13 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
             low, top = range_of(name)
             count = min(max(by_name[name].get("workers", low), low), top)
             note(f"scheduler starts {name} (priority {by_name[name].get('priority', 3)}) at {count} workers", state)
-            shed.discard(name)
             spawn(name, count)
         change = choose_move(level, workers, length, {n: range_of(n) for n in workers}, {n: step_log_text(n) for n in workers},
                              {n: moved.get(n, began[n]) for n in workers}, memory, clock(),
-                             one_documents(steps) | shed | shed_this_attempt(state.read_text() if state.exists() else ""))
+                             unmovable(steps, state.read_text() if state.exists() else ""))
         if change and not starts:
             name, count = change
             note(f"scheduler moves {name} from {workers[name]} to {count} workers ({level} load)", state)
-            if count < workers[name]:
-                shed.add(name)
             stop(children[name])
             spawn(name, count)
             moved[name] = clock()

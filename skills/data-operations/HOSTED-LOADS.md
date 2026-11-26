@@ -91,7 +91,8 @@ CODE read it in place of git.
   raised the measured rate. Nothing is raised while a step is being admitted. A move writes `<state>.move-<step>` with the count and
   ends the step's load (driver first, then the workers it started); the step's loop starts the load again in the same attempt,
   through the same admission. The state file says `controller moves <step> from N to M workers`. A shed, like a raise, comes just
-  after a bundle completes, so a move abandons next to nothing. A step of one bundle, one declared `one_document`, or one shed earlier
+  after a bundle completes, so a move abandons next to nothing; a pressed machine whose running steps are all mid-bundle sheds
+  nothing until one of them completes a bundle. A step of one bundle, one declared `one_document`, or one shed earlier
   in its attempt is never moved: a move abandons its run in flight, and a step shed, raised and shed again loses run after run.
 - **One task per poller.** The worker's `ps` sees only its container, so QUIET's process count no longer covers the Mac; the
   loader's database sessions still do. Never start `load_jobs.py` on the Mac beside it.

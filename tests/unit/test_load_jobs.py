@@ -524,7 +524,6 @@ def test_a_move_that_would_not_repay_its_restart_names_why(level, kwargs, reason
 
 
 def test_a_step_shed_in_this_attempt_is_read_from_the_state_file_and_a_new_attempt_clears_it():
-    """`openfigi-answers` was shed, raised and shed again in one attempt: six moves, each one abandoning its run in flight."""
     text = ("11-25 21:09:26 ET a1 attempt 1 start\n"
             "11-25 21:12:41 ET controller moves a1 from 4 to 2 workers (high load, 0.1 GB free)\n"
             "11-25 21:12:45 ET a1 attempt 1 start with 2 of its 4 workers\n"
@@ -1298,6 +1297,7 @@ def test_a_pressed_machine_sheds_the_step_with_the_shortest_chain_and_the_next_s
     for step in steps:
         step["workers"] = 8
     state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=5, cycles=6)
+    monkeypatch.setattr(chain, "note", lambda message, path: path.open("a").write(f"11-25 15:00:00 ET {message}\n") and None)
     levels = iter(["ok", "ok", "high", "high", "high", "high"])
     monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: next(levels, "high"))
     _run_auto(steps, state, slots=2)
