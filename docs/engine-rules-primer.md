@@ -6,6 +6,9 @@ arbitrary programming language. This primer explains the supported families
 and gives invented examples; linked references own the complete argument and
 limit contracts.
 
+To try one rule on invented input with the words you type, run `edgar-warehouse rules try --family <name>`;
+[docs/rules-try/](rules-try/) holds one guide per family with each word and its stored key.
+
 ## Find the function you need
 
 | Function | Rule location / interpreter | Start here |
