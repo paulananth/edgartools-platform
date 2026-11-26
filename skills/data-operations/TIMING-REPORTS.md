@@ -6,7 +6,8 @@ Use this procedure for load-time and initialization-to-entity reports. Limit rep
 
 Before starting the report clock, use a project environment with MDM runtime dependencies. In a fresh worktree, initialize it once with `uv sync --extra s3 --extra mdm-runtime`. `uv run --no-sync` does not install dependencies; on an empty worktree it can create an environment where the profiler fails to import SQLAlchemy. If setup is not ready, report from retained evidence and mark live profiling unavailable. Do not spend the report deadline bootstrapping dependencies.
 
-Invoke the skill's `scripts/profile_load.py` from its directory using the prepared project environment. Always pass the exact `--run` to `steps`. The profiler's `steps` view reads Bookkeeping; use it only when the environment and access gates permit that connection.
+Invoke the skill's `scripts/profile_load.py` from its directory using the prepared project environment. `steps --run` expects one Bookkeeping `pipeline_run.run_id` UUID, not the human-readable `RUN` passed to `load.sh`; it reports one Bookkeeping invocation.
+For a full hosted load's per-step intervals, read retained `chain-<RUN>.log` with `load_jobs.measured`: each interval runs from the first attempt start to `done`. Concurrent lanes overlap, so their intervals do not sum to pipeline wall time. Report total wall time separately from the completed `load.sh` run.
 
 ## Five-minute workflow
 
