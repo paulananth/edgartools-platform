@@ -34,6 +34,7 @@ A person hand-writes one rule, supplies the input and the expected output, and t
 - Ticket 17: `entity_type_full` has the words `field is one of`, `these fields are empty`, `name tokens match` (`token_match@2`, with its own long word for `token_match@1`), `held back`, `probable entity type` and `otherwise`. A bare stored key is refused naming the word to type.
 - Ticket 18: `docs/rules-try/entity_type.md` records the words and the empty-ticker case: an empty `ticker` is held back (`deferred`), a ticker with the `OPERATING` category is a `company`, and a rule with no `otherwise` step is refused.
 - Ticket 25: `link_masters` takes the one link a stating record makes as the rule (`type`, `target_key`, `valid_from`, `valid_to`, `scope`); the claims, state, entities, as-of time and link types are the inputs, and Try returns the links and reviews `mdm.relationships.project` returns. A claim with no start waits as `unknown_relationship_start`; an end that is not named or not bound waits as `unresolved_endpoint`.
+- Ticket 26: `link_masters_full` names four keys of the link rule: link type → `type`, other master's key → `target_key`, link starts → `valid_from`, link ends → `valid_to`. A missing end is not invented, and a missing other master stays the engine's `unresolved_endpoint` wait.
 - Ticket 27: `docs/rules-try/link_masters.md` records the four words, the emitted `ISSUED_BY` link between two invented masters, and the missing-start wait (`unknown_relationship_start`, no link), from a run of tickets 25 and 26.
 
 ## Not yet specified
