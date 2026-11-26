@@ -7,7 +7,6 @@ from edgar_warehouse.cli import main
 from edgar_warehouse.rules.bench_keep import keep_copy
 from edgar_warehouse.rules.bench_store import store_draft
 from edgar_warehouse.rules.try_page import (
-    FAMILY_DIR,
     attempt,
     build_case,
     families,
@@ -207,9 +206,9 @@ def test_try_refuses_until_the_family_can_run_and_returns_one_object(tmp_path):
     assert attempt("example", "", {}, tmp_path) == {"refused": "The result is not one JSON object."}
 
 
-def test_the_product_family_folder_has_no_family():
-    assert families() == []
-    assert {path.name for path in FAMILY_DIR.glob("*.py")} == {"__init__.py"}
+def test_every_product_family_declares_a_page():
+    for name in families():
+        assert present(name)
 
 
 def test_rules_try_names_the_family_and_does_not_open_a_database(capsys, monkeypatch):

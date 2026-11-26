@@ -24,6 +24,7 @@ A person hand-writes one rule, supplies the input and the expected output, and t
 - Ticket 01 opens the try page. A family is the file `bench_families/<name>.py`. Store this draft refuses until its own ticket.
 - Ticket 02: Keep a copy writes the case JSON to the path the person names. No path is not confirmed and is not written. A path under `rules/` is refused. Store this draft still refuses.
 - Ticket 03: Store this draft calls `Rules.save` under the `version` in the pasted rule and keeps the case beside that draft. A rule with no version is not stored. The draft is not switched on.
+- Ticket 04: `read_file` takes the read document as the rule, the file text and the lookup lists as inputs, and returns what `SourceEngine.read` returns. The folder test checks that every family declares a page.
 
 ## Not yet specified
 
