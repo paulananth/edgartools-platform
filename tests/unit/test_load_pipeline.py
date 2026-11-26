@@ -249,6 +249,13 @@ def test_a_lane_that_ends_without_success_has_its_unfinished_steps_recorded():
     assert client.reports == [("failure", "t0", "Exit-9")]
 
 
+def test_the_worker_runs_under_an_init_that_reaps_its_exited_children():
+    """Measured on the loader image: with the activity worker as PID 1, 20 orphaned children that exited stayed as 20
+    zombies; under Docker's init (`init: true`, `docker-init` as PID 1) none stayed. A move or a stop leaves such orphans."""
+    worker = yaml.safe_load((MACHINE.parent / "compose.yml").read_text())["services"]["worker"]
+    assert worker["init"] is True
+
+
 def test_the_exporter_runs_in_the_pipeline_from_the_same_image_and_sees_the_workers_processes():
     """Measured: the exporter served from a deleted checkout reported `load_monitor_up 0`, and a host `ps` cannot see a load
     that runs in a container; so the exporter shares the worker's process space and mounts only what it reads."""

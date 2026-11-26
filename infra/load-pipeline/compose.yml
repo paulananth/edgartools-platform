@@ -11,6 +11,7 @@ services:
     image: ghcr.io/paulananth/edgartools-platform:loader-sha-${COMMIT:?load.sh names the commit}
     network_mode: host
     restart: unless-stopped
+    init: true  # Docker's init is PID 1 and reaps the orphans a move or a stop leaves; the activity worker never waits on them
     depends_on: [stepfunctions]
     environment:
       HOME: ${HOME}

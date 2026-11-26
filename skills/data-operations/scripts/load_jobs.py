@@ -1641,6 +1641,7 @@ def run_catalog_status(command: list[str], env: dict, timeout: int = 60) -> tupl
     except subprocess.TimeoutExpired:
         with contextlib.suppress(ProcessLookupError):
             os.killpg(child.pid, signal.SIGKILL)
+        child.communicate()  # reaped, so the killed command leaves no zombie
         return "", "the command did not answer in time"
 
 
