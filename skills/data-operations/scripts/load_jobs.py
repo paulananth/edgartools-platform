@@ -325,10 +325,16 @@ def load_running() -> bool:
     return bool(external_loads())
 
 
-def admit(want: int, worker_gb: float, lock: Path, free=free_gb, running=load_running, sleep=time.sleep,
-          settle: int = GATE_SETTLE_SECONDS, poll: int = GATE_POLL_SECONDS, say=lambda text: None) -> int:
+def cpu_level() -> str:
+    """The machine's CPU pressure now, as the controller reads it: `high` above one and a half times the cores in load average."""
+    return pressure(os.getloadavg()[0], os.cpu_count() or 1, None)
+
+
+def admit(want: int, worker_gb: float, lock: Path, free=free_gb, running=load_running, pressed=lambda: cpu_level() == "high",
+          sleep=time.sleep, settle: int = GATE_SETTLE_SECONDS, poll: int = GATE_POLL_SECONDS, say=lambda text: None) -> int:
     """The workers a step starts with: its own `want` when the memory is there, fewer when it is not (at least half of them),
-    and none until the memory of that floor is free, unless no other load runs, when waiting would never end. One step is
+    and none until the memory of that floor is free and the CPU is not pressed (the controller would take back what a pressed
+    machine admits), unless no other load runs, when waiting would never end. One step is
     admitted at a time: the lock is held through the settle window, so the next one reads the memory this one takes. A
     container whose memory cannot be read gives the step its own workers. One load runs in one container."""
     floor = max(1, want // 2)
@@ -336,9 +342,15 @@ def admit(want: int, worker_gb: float, lock: Path, free=free_gb, running=load_ru
     fcntl.flock(handle, fcntl.LOCK_EX)
     waited = False
     try:
-        while (room := free()) is not None and room < floor * worker_gb and running():
+        while True:
+            room = free()
+            short = room is not None and room < floor * worker_gb
+            busy = not short and pressed()
+            if not (short or busy) or not running():
+                break
             if not waited:
-                say(f"waits for {floor * worker_gb:.1f} GB of free memory ({room:.1f} GB now)")
+                say(f"waits for {floor * worker_gb:.1f} GB of free memory ({room:.1f} GB now)" if short else
+                    "waits for the CPU (the machine is pressed)")
                 waited = True
             sleep(poll)
     except BaseException:
@@ -613,7 +625,7 @@ def control_cycle(steps: list[dict], state: Path, memory: Memory, reader_url: st
     if not running:
         return
     free, reading = free_gb(), database_load(reader_url)
-    level = worst(both(memory_level(free), pressure(os.getloadavg()[0], os.cpu_count() or 1, None)), db_level(**reading) if reading else "ok")
+    level = worst(both(memory_level(free), cpu_level()), db_level(**reading) if reading else "ok")
     if reading:
         level = room(level, reading["connections"], connections)
     if level == "low" and admitting(gate_path(state)):
