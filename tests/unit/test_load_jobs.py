@@ -2029,6 +2029,38 @@ def test_a_step_declared_one_document_is_admitted_as_one(tmp_path, monkeypatch):
     assert seen == [True, False]
 
 
+def test_a_step_waits_for_the_peak_a_running_step_has_yet_to_reach(tmp_path):
+    """Free memory now is not free while a running step is still growing to its measured peak: that share is held back."""
+    waited, held = [], iter([0.7, 0.0])  # a running step declares 1.0 GB and holds 0.3 GB, then it has reached its peak
+    assert chain.admit(4, 0.5, tmp_path / "gate", free=lambda: 1.5, running=lambda: True, pressed=lambda: False,
+                       sleep=lambda seconds: waited.append(seconds), settle=0, reserved=lambda: next(held)) == 3
+    assert waited == [chain.GATE_POLL_SECONDS]  # 1.5 GB less 0.7 held back is under the 1.0 GB of two workers
+
+
+def test_a_step_with_a_measured_peak_waits_for_it_though_its_workers_need_less(tmp_path):
+    waited = []
+    assert gate(tmp_path, want=1, free=[0.6, 1.0], sleeps=waited, peak_gb=0.9) == 1  # one worker is 0.4 GB, its peak 0.9
+    assert waited == [chain.GATE_POLL_SECONDS]
+
+
+def test_the_unreached_peak_of_the_running_steps_is_their_declared_peak_less_what_they_hold():
+    steps = [{**_step("big", "A", source="s1"), "peak_gb": 1.0}, {**_step("plain", "B", source="s2")},
+             {**_step("idle", "C", source="s3"), "peak_gb": 4.0}]
+    listing = ("10 1 0:01 196608 edgar-warehouse load --source s1 --target mastering --workers 2\n"
+               "11 10 0:01 65536 python -m worker\n"
+               "20 1 0:01 512000 edgar-warehouse load --source s2 --target mastering --workers 2\n")
+    assert chain.unreached_peaks(steps, listing) == 0.75  # big holds 0.25 GB of its 1.0; plain declares none; idle runs not
+    assert chain.unreached_peaks(steps, listing, besides="big") == 0.0
+
+
+@pytest.mark.parametrize("value", [0, -1.0, "1 GB", True])
+def test_a_peak_is_a_positive_number_of_gigabytes(value, tmp_path):
+    jobs = tmp_path / "load-jobs.yaml"
+    jobs.write_text(yaml.safe_dump({"capture_label": "t", "steps": [{"name": "a", "lane": "A", "peak_gb": value}]}))
+    with pytest.raises(ValueError, match="peak_gb is a positive number of gigabytes"):
+        chain.load_jobs(jobs, tmp_path)
+
+
 def test_a_step_waits_for_the_memory_of_its_floor_while_other_loads_run_and_starts_at_its_floor_when_none_runs(tmp_path):
     waited = []
     assert gate(tmp_path, free=[0.3, 0.5, 2.0], sleeps=waited) == 4  # 0.8 GB is the floor of two workers
@@ -2127,7 +2159,7 @@ def _engine(monkeypatch, tmp_path, body):
     monkeypatch.setattr(chain, "LOGS", tmp_path)
     monkeypatch.setattr(chain, "STORES", tmp_path)
     monkeypatch.setattr(chain, "ROOT", tmp_path)
-    checked(monkeypatch, chain, "admit", lambda want, worker_gb, lock, say, one_document: want)
+    checked(monkeypatch, chain, "admit", lambda want, worker_gb, lock, say, **more: want)
     return {**_step("a1", "A"), "attempts": 1, "workers": 8, "bundles": 1, "deliveries": [{"delivery": "d", "capture": "c", "capture_run": "r"}]}
 
 
@@ -2271,6 +2303,13 @@ def test_the_controller_never_moves_a_step_it_shed_earlier_in_the_same_attempt(m
                   "11-25 15:01:05 ET long attempt 1 start with 2 of its 4 workers\n")
     cycle()
     assert [name for name, _ in asked] == ["short"]  # with room, the step not shed is raised in its place
+
+
+def test_the_controller_raises_nothing_into_a_running_steps_unreached_peak(monkeypatch, tmp_path):
+    _, asked, cycle = _controlled(monkeypatch, tmp_path, free=2.5)
+    monkeypatch.setattr(chain, "unreached_peaks", lambda steps, listing, besides=None: 2.0)  # 2.5 GB free, 2.0 still to come
+    cycle()
+    assert asked == []
 
 
 def test_nothing_is_raised_while_a_step_is_being_admitted(monkeypatch, tmp_path):
