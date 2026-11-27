@@ -42,9 +42,9 @@ Gold is published through the mirror: one managed mirror of the data database
 (schemas `MDM`, `RDM`, `SILVER`) carries the tables `sources/managed-mirror.yaml`
 lists, and Gold is dbt views over it (`edgar_warehouse/gold/views.py` writes the
 project from `destination/gold/gold.yaml`). The mirror exists only while it
-replicates: a store reset removes it, and it is made again after the next load
-and its finish ([HOSTED-MIRRORING](../data-platform/HOSTED-MIRRORING.md#after-the-first-load-mirror-only-what-gold-reads)).
-Until then a Gold view fails when queried, since its tables are absent. `verified` in `sources/managed-mirror.yaml`
+replicates: a store reset removes it, and init makes it again once the tables exist, before any load
+([HOSTED-MIRRORING](../data-platform/HOSTED-MIRRORING.md#at-init-mirror-only-what-gold-reads)); the readiness gate's `MIRRORED` check
+refuses a load without it. Without it a Gold view fails when queried, since its tables are absent. `verified` in `sources/managed-mirror.yaml`
 says whether the current mirror passed its read-back. A dropped target's name
 cannot be reused, so a mirror made again takes a new `mirror.database` in
 `rules/snowflake.yaml`. Follow
@@ -244,7 +244,9 @@ notes is not the live one. The order:
   creates views (never tables) in the Gold schema only. dbt reads its settings from the private file
   `~/.config/edgartools/gold-writer/gold-writer.env` (account, user, role, warehouse and the private key's path; the key stays in that
   folder, mode 0600). Prove a new writer by connecting with the key and checking that a view in its schema is created and dropped, and
-  that a table, a view in another schema and an account-usage read are refused.
+  that a table, a view in another schema and an account-usage read are refused. It reads the mirror through the target's
+  `<target>_ADMIN` database role, which `CREATE_MIRROR` gives its caller with grant option: the mirror operator grants it
+  (`GRANT DATABASE ROLE <target>.<target>_ADMIN TO ROLE <writer role>`) after each create, since a new target has a new role.
 - The mirror operator makes, reads back and changes the managed Postgres mirrors, and nothing else: a key-pair service user
   (`~/.config/edgartools/mirror-operator/mirror-operator.env`, key in that folder, mode 0600) whose role holds the
   `SNOWFLAKE.POSTGRES_MIRROR_ADMIN` application role and owns the Postgres instance, since `CREATE_MIRROR` refuses any role

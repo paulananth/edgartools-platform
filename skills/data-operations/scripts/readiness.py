@@ -44,7 +44,9 @@ CHECKS = {
     "LOGINS": "Every duty file's login connects to the databases of its duty",
     "STATE": "The run's state file is this store's, or will be set aside, before any step runs",
     "REGISTERED": "The merge policy and every Dataset Contract are registered, and every worker profile is granted",
+    "MIRRORED": "The managed mirror holds exactly the tables its record lists, each replicating, so Gold reads what the load writes",
 }
+MIRROR_OPERATOR = Path.home() / ".config" / "edgartools" / "mirror-operator" / "mirror-operator.env"
 DUTY_FILES = ("worker.env", "governance.env", "reader.env")  # each connects to every store database; owner.env to `postgres`
 
 
@@ -120,6 +122,7 @@ def evaluate(facts: dict) -> list[dict]:
         check("LOGINS", bool(logins) and all(v == "answers" for v in logins.values()), logins),
         check("STATE", state is not None and state["verdict"] in ("fresh", "set aside", "same"), state),
         check("REGISTERED", reg is not None and reg["policies"] > 0 and reg["datasets"] > 0 and reg["profiles_granted"] >= reg["profiles"] > 0, reg),
+        check("MIRRORED", facts["mirror"] == "exact", {"mirror": facts["mirror"]}),
     ]
 
 
@@ -315,6 +318,35 @@ def state_facts(env: dict) -> dict | None:
         return None
 
 
+def mirror_fact(listing=None) -> str:
+    """"exact" when the mirror's listing is its record, every table REPLICATING; else what differs, or why it was not read. The
+    listing is read as the mirror operator, the one identity that may (a key pair; nothing of its file is printed)."""
+    sys.path.insert(0, str(REPO / "skills" / "data-platform" / "scripts" / "exposure"))
+    import mirror_sql
+    try:
+        managed, exposure = mirror_sql.load(mirror_sql.MANAGED), mirror_sql.load(mirror_sql.EXPOSURE)
+        rows = (listing or mirror_listing)(mirror_sql.verify(managed))
+        if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+            return "unreadable (the mirror operator could not list the mirror)"
+        mirror_sql.readback(managed, exposure, [{k.lower(): v for k, v in row.items()} for row in rows])
+    except SystemExit as refused:
+        return str(refused) or "the listing is empty"
+    except Exception as exc:  # noqa: BLE001
+        return f"unreadable ({type(exc).__name__})"
+    return "exact"
+
+
+def mirror_listing(sql: str) -> list[dict] | None:
+    sys.path.insert(0, str(HERE))
+    import load_jobs
+    env = load_jobs.load_env(MIRROR_OPERATOR)
+    done = subprocess.run(["snow", "sql", "-x", "--account", env["MIRROR_SNOWFLAKE_ACCOUNT"], "--user", env["MIRROR_SNOWFLAKE_USER"],
+                           "--authenticator", "SNOWFLAKE_JWT", "--private-key-file", env["MIRROR_SNOWFLAKE_PRIVATE_KEY_PATH"],
+                           "--role", env["MIRROR_SNOWFLAKE_ROLE"], "--warehouse", env["MIRROR_SNOWFLAKE_WAREHOUSE"], "--format", "JSON", "-q", sql],
+                          capture_output=True, text=True, check=False, timeout=120)
+    return json.loads(done.stdout) if done.returncode == 0 else None  # its error text can name the account: not kept
+
+
 def gather(stores: Path, repo: Path = REPO) -> dict:
     sys.path.insert(0, str(HERE))
     import load_jobs
@@ -326,7 +358,7 @@ def gather(stores: Path, repo: Path = REPO) -> dict:
             "plan_missing": plan_missing(env), "loads_running": loads_running(), "loader_sessions": sessions,
             "disk_gib": usage.free / 2**30, "load1": os.getloadavg()[0], "cores": os.cpu_count() or 1, "audit": audit_failures(reader),
             "logins": login_facts(stores), "state": state_facts(env),
-            "registered": registration_facts(reader, env)}
+            "registered": registration_facts(reader, env), "mirror": mirror_fact()}
 
 
 def main(argv: list[str] | None = None) -> int:

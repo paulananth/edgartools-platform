@@ -58,7 +58,7 @@ def facts(**changes):
             "reference": {"codes": 7000, "specs": 20, "silver_tables": 20}, "plan_missing": 0, "loads_running": 0, "loader_sessions": 0,
             "disk_gib": 500, "load1": 1.0, "cores": 8, "audit": [],
             "logins": {"worker.env": "answers", "reader.env": "answers"}, "state": {"verdict": "fresh", "done_steps": 0},
-            "registered": {"policies": 1, "datasets": 18, "profiles": 10, "profiles_granted": 10}}
+            "registered": {"policies": 1, "datasets": 18, "profiles": 10, "profiles_granted": 10}, "mirror": "exact"}
     base.update(changes)
     return base
 
@@ -249,3 +249,32 @@ def test_a_duty_login_is_tried_on_each_database_by_its_own_url_and_a_missing_url
     assert found["worker.env"] == "unreadable (KeyError)"
     assert found["governance.env"] == found["reader.env"] == found["owner.env"] == "answers"
     assert tried.count("h.invalid:5432/config") == 2 and "h.invalid:5432/postgres" in tried
+
+
+@pytest.mark.parametrize("fact", ["missing: silver.adv_custody", "not replicating: mdm.mastering_master (SNAPSHOTTING)",
+                                  "unreadable (the mirror operator could not list the mirror)"])
+def test_a_load_waits_for_the_mirror_that_init_makes(fact):
+    assert failed(facts(mirror=fact)) == {"MIRRORED"}
+
+
+def test_the_mirror_is_exact_only_when_its_listing_is_the_record_every_table_replicating():
+    import sys
+    sys.path.insert(0, str(Path(readiness.REPO) / "skills" / "data-platform" / "scripts" / "exposure"))
+    import mirror_sql
+    record = mirror_sql.tables(mirror_sql.load(mirror_sql.MANAGED), mirror_sql.load(mirror_sql.EXPOSURE))
+    rows = [{"SOURCE_SCHEMA_NAME": t.split(".")[0], "SOURCE_TABLE_NAME": t.split(".")[1], "STATE": "REPLICATING"} for t in record]
+    assert readiness.mirror_fact(lambda sql: rows) == "exact"
+    assert readiness.mirror_fact(lambda sql: rows[1:]).startswith("missing:")
+    assert "not replicating" in readiness.mirror_fact(lambda sql: [{**rows[0], "STATE": "SNAPSHOTTING"}, *rows[1:]])
+    assert readiness.mirror_fact(lambda sql: None).startswith("unreadable")
+    assert readiness.mirror_fact(lambda sql: {"error": "invented"}).startswith("unreadable")
+
+
+def test_a_failed_listing_keeps_none_of_its_error_text(monkeypatch, tmp_path):
+    secret_file = tmp_path / "mirror-operator.env"
+    secret_file.write_text("\n".join(f"export MIRROR_SNOWFLAKE_{k}=invented" for k in ("ACCOUNT", "USER", "PRIVATE_KEY_PATH", "ROLE", "WAREHOUSE")))
+    monkeypatch.setattr(readiness, "MIRROR_OPERATOR", secret_file)
+    failed_run = type("Done", (), {"returncode": 1, "stdout": "account invented-account not found", "stderr": "invented-account"})
+    monkeypatch.setattr(readiness.subprocess, "run", lambda *a, **k: failed_run)
+    assert readiness.mirror_listing("CALL x();") is None
+    assert "invented" not in readiness.mirror_fact()
