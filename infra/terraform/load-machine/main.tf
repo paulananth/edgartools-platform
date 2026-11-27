@@ -188,13 +188,13 @@ data "aws_vpc" "prod" {
 # The load exporter's port, open to the operator's Mac only. The task's other traffic goes through the cluster's own group.
 resource "aws_security_group" "metrics" {
   name        = "${local.name}-metrics"
-  description = "The load exporter, read by the operator's Prometheus"
+  description = "The load exporter, read by the operator Mac Prometheus"
   vpc_id      = data.aws_vpc.prod.id
 
   dynamic "ingress" {
     for_each = var.metrics_cidr == null ? [] : [var.metrics_cidr]
     content {
-      description = "Prometheus on the operator's Mac"
+      description = "Prometheus on the operator Mac"
       protocol    = "tcp"
       from_port   = local.exporter_port
       to_port     = local.exporter_port
