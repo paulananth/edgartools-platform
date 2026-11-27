@@ -1,6 +1,21 @@
 # Retained load timing reports
 
-Use this procedure for load-time and initialization-to-entity reports. Limit report generation to **five minutes**; this is not a production load benchmark.
+Use the two-read answer for current elapsed time and per-step durations. Use the detailed report below for initialization-to-entity qualification or an explicit request for complete lineage. Limit either path to **five minutes**.
+
+## Current load timings: two batched reads
+
+1. **Identify the execution and log.** Reuse the known environment, state machine and run label. On AWS, call `stepfunctions list-executions --state-machine-arn <machine>` and retain `executionArn`, `status`, `startDate` and `stopDate`. Select the requested execution; otherwise select the sole running execution. Multiple running executions require an exact match to the known launch record; if that match is unavailable, report the ambiguity. If none is running, say so and select the most recently started finished execution. Match the worker task through the launch record; resolve an unknown `RUN` from that task's worker container in `ecs describe-task-definition` (`containerDefinitions[].environment`, entry named `RUN`), with any same-named task override taking precedence. Read only these named fields, never secret environment values. The launch script defines the object as `<configured bronze prefix>/runs/<RUN>/logs/chain-<RUN>.log`. Locally, use the selected pipeline's `RUN`, `LOGS` and retained execution endpoints. Finish this read with one execution identity and its exact log location, or name the missing mapping.
+2. **Read and calculate together.** Call `stepfunctions describe-execution --execution-arn <execution>` for status and start/end, and `s3 cp <exact log object> <private local file>` for the single chain log. Read the configured step inventory once and calculate every interval in one pass. Total elapsed is `(stopDate if finished, otherwise observation time) - startDate`; each completed step is `done - first attempt start` within this execution. When a log endpoint is missing, read the known worker stream with `logs get-log-events`, keeping event timestamps and matching only that step's events. A quiet log alone does not establish a stale copy; report its latest event/copy time. Return total elapsed, observation time in ET, and one table of step, status and duration. Stop once those fields are answered; name any missing evidence directly.
+
+Batch here means one tool call that sequences dependent commands and calculations; the ordinary answer takes two tool calls, or one when execution identity and log location are already known. It needs no runtime installation, database profiling, individual bundle reads, catalog publication or new report file. Save a reusable snapshot only when requested or at load closeout.
+
+**Execution boundary:** a run label can span restarts. Select the `load begins` segment inside the chosen execution's start/end interval (observation time is the upper bound while running); readiness precedes that line. If multiple segments fit, resolve the boundary from that worker's timestamped log or mark it ambiguous. Calculate that execution's step durations from its own first attempt start to its final `done`, including retries and worker moves. Label a step completed before this execution as previously completed when retained state skips it. A step that runs again and loads zero documents is an already-loaded check, whose duration is not a full ingestion measurement. If the requested scope is the whole run label, retain all segments and label restart gaps separately.
+
+**Timing limits:** a started step with no completion record has provisional elapsed time through the observation, not proof that its worker is progressing. Unstarted and waiting steps have no execution duration; report their wait separately when recorded. Report finish phases separately and include them in total elapsed. Concurrent step intervals overlap and do not add up to execution wall time. Require dated, timezone-qualified endpoints for spans crossing midnight, year or daylight-saving boundaries; mark ambiguous durations unavailable.
+
+## Detailed qualification report
+
+The sections below apply to qualification and closeout reports, rather than the routine timing answer.
 
 ## Prepare the runtime before timing
 

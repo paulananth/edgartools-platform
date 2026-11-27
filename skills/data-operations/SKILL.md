@@ -1,6 +1,6 @@
 ---
 name: data-operations
-description: Operates every domain and applies the DDL for MDM, RDM, Bookkeeping, Change Journal and silver on PostgreSQL, MySQL or SQL Server Express. Use when making those stores operational, applying a schema or an approved silver spec, operating daily loads, loading with grain: run / no bookkeeping, checking source readiness, reporting load timings, managing a backlog, monitoring a run or maintaining its operational runbook.
+description: "Operates every domain and applies the DDL for MDM, RDM, Bookkeeping, Change Journal and silver on PostgreSQL, MySQL or SQL Server Express. Use when making those stores operational, applying a schema or an approved silver spec, operating daily loads, loading with grain: run / no bookkeeping, checking source readiness, reporting load timings, managing a backlog, monitoring a run or maintaining its operational runbook."
 ---
 
 # Data Operations
