@@ -7,19 +7,21 @@
 #   RUN=<label> infra/load-pipeline/aws-load.sh                      every lane at once, then the finish
 #   RUN=<label> infra/load-pipeline/aws-load.sh [--finish] <step>... only those steps, in order
 #   RUN=<label> infra/load-pipeline/aws-load.sh --prepare            everything up to the apply: no task, no load
+#   RUN=<label> infra/load-pipeline/aws-load.sh --plan <step>...     readiness, then those steps planned, read only: for a changed pipeline
 #
 # RUN is required: a store that was cleared takes a label never used before. One load at a time. The load reads captured
 # files only: the task holds no provider identity. The run's state file and logs are in s3://<bronze>/load/runs/<RUN>/.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 terraform_root="$here/../terraform/load-machine"
-prepare=false finish=false
-while [ "${1:-}" = "--prepare" ] || [ "${1:-}" = "--finish" ]; do
-  case "$1" in --prepare) prepare=true ;; --finish) finish=true ;; esac
+prepare=false finish=false plan=false
+while [ "${1:-}" = "--prepare" ] || [ "${1:-}" = "--finish" ] || [ "${1:-}" = "--plan" ]; do
+  case "$1" in --prepare) prepare=true ;; --finish) finish=true ;; --plan) plan=true ;; esac
   shift
 done
 for argument; do case "$argument" in -*) echo "unknown option $argument" >&2; exit 2 ;; esac; done
-[ "$#" -gt 0 ] || finish=true  # a load of every lane ends with the finish
+[ "$plan" = false ] || [ "$finish" = false ] || { echo "--finish writes the links tables: it has no plan" >&2; exit 2; }
+if [ "$#" -eq 0 ] && [ "$plan" = false ]; then finish=true; fi  # a load of every lane ends with the finish
 : "${RUN:?set RUN to the run label}"
 
 export AWS_DEFAULT_REGION=us-east-1 AWS_PAGER=""
@@ -47,6 +49,7 @@ if ! aws ecr describe-images --repository-name edgartools-prod-images --image-id
   aws ecr get-login-password | docker login --username AWS --password-stdin "$registry" >/dev/null
   docker tag "$source_image" "$image"
   docker push -q "$image" >/dev/null
+  docker logout "$registry" >/dev/null
 fi
 echo "image: commit ${commit:0:8} is in ECR"
 
@@ -138,13 +141,13 @@ echo "task ${task##*/}: running"
 
 if [ "$#" -gt 0 ]; then
   steps="$(printf '%s\n' "$@" | jq -R 'select(length > 0)' | jq -sc .)"
-  input="{\"steps\": ${steps}, \"plan\": false, \"force\": false, \"finish\": ${finish}}"
+  input="{\"steps\": ${steps}, \"plan\": ${plan}, \"force\": false, \"finish\": ${finish}}"
 else
   steps="every lane"
-  input="{\"plan\": false, \"force\": false, \"finish\": ${finish}}"
+  input="{\"plan\": ${plan}, \"force\": false, \"finish\": ${finish}}"
 fi
 execution="$(aws stepfunctions start-execution --state-machine-arn "$machine" --input "$input" --query executionArn --output text)"
-echo "started ${execution##*:} on commit ${commit:0:8}: ${lanes} lanes at once, steps ${steps}, finish ${finish}, run ${RUN}"
+echo "started ${execution##*:} on commit ${commit:0:8}: ${lanes} lanes at once, steps ${steps}, plan ${plan}, finish ${finish}, run ${RUN}"
 
 result=RUNNING unread=0
 while [ "$result" = RUNNING ]; do

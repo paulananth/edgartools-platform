@@ -25,7 +25,11 @@ driver's text is never kept); the run's state file is this store's, or is shown 
 steps; and the merge policy, every Dataset Contract and every worker profile are registered and granted (init steps 5 to 7). The gate is not the init runbook: after a reset, walk every runbook step,
 say in the report which ran and which did not, and never write a step off without reading why (a catalog step was once called
 unconfigured when its file existed). A fact that cannot be
-read is a failure. Fix what it names and run it again; there is no switch to skip it. A rehearsal of the first lane on a
+read is a failure. Fix what it names and run it again; there is no switch to skip it. `MIRRORED unreadable (the mirror
+operator could not list the mirror)` can be Snowflake refusing the warehouse: the account's monthly resource monitor stops
+every warehouse at its quota, and an account administrator raises it (`monthly_credit_quota` of the Snowflake access root)
+or the load waits for the monthly reset. List the mirror once before clearing a store: suspending it, resuming it and this
+check all need the warehouse. A rehearsal of the first lane on a
 disposable store is the next check to add.
 
 After truncating tables for a full reload, assign a new `RUN` label and use
@@ -39,7 +43,7 @@ arguments). Use that label again only when resuming this same load.
 - **On AWS (a whole load, and any large write):** `RUN=<label> infra/load-pipeline/aws-load.sh [--finish] [<step>...]` copies
   the image of `main`'s newest commit to ECR, the captures the load jobs file reads to `s3://<bronze>/load/`, and the logins
   to Secrets Manager; applies `infra/terraform/load-machine` (one Step Functions state machine, the same definition,
-  and one 16 vCPU, 120 GB ARM Fargate task); runs one execution and stops the task when it ends. `--prepare` stops before
+  and one 16 vCPU, 120 GB ARM Fargate task); runs one execution and stops the task when it ends. `--plan <step>` runs readiness and plans those steps, read only, to prove a changed pipeline; `--prepare` stops before
   the task. The task holds no provider identity, so a load reads captured files only. Its state file, logs and run documents
   are in `s3://<bronze>/load/runs/<RUN>/` (copied every minute and at a stop), and a task started again with the same
   `RUN` takes them back and carries on. A task lost without a stop lacks the last minute or so of run documents: a run

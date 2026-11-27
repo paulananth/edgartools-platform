@@ -17,7 +17,9 @@ Why: the finish's links write fails from a home uplink (about 0.25 to 0.4 MB/s t
 
 - [x] Captures the load jobs file reads (17 folders) are in the bronze bucket under `load/`: 111,567 files, 6,978,944,437 bytes, none missing or of another size than on this Mac (2026-11-27 13:19 ET)
 - [x] Terraform root `infra/terraform/load-machine` and `infra/load-pipeline/aws-load.sh`: `terraform validate`; the generated state machine equals the file with 11 lanes; the record keeper run in the AWS CLI image with a stand-in (a stop during a long copy starts the final copy at once; the time bound ends it) (2026-11-27 13:19 ET)
-- [ ] Apply and `--prepare`: image of `main`'s commit in ECR, logins in Secrets Manager, no task started
+- [x] Apply and `--prepare`: image of commit 734f464c in ECR, 6 logins in Secrets Manager (names read back), state machine with 11 lanes, task of 16 vCPU, 120 GB, 200 GiB, no task started (2026-11-27 13:35 ET)
+- [x] Trial on AWS, read only (`--plan ncen-fund`, run `aws-smoke-20261127`): the task fetched the captures in about 5 minutes, the worker polled, readiness ran and passed 11 of 12 checks, the execution failed on the twelfth and the task stopped (2026-11-27 13:35 ET)
+- [ ] Snowflake compute for the mirror: `MIRRORED` fails because resource monitor `EDGARTOOLS_PROD_MONITOR` (monthly, 10 credits in Terraform) has exceeded its quota and every warehouse is refused, from AWS and from the Mac alike. The operator's to raise or wait out
 - [ ] Clear the hosted stores: mirror suspended, backups of control and RDM, five stores truncated, RDM restored, mirror resumed and read back
 - [ ] Readiness passes in the AWS task
 - [ ] The complete load succeeds on AWS, the finish included
