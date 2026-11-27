@@ -18,9 +18,9 @@ mirror database (`mirror.database` in `rules/snowflake.yaml`). Approved consumer
 tables directly; dbt is not required for replication or direct consumption.
 When requirements call for Gold joins, calculations, aggregates or reporting
 models, dbt reads approved mirror sources and writes to a separately approved
-writable destination outside the managed mirror database. Gold database and
-schema names remain undecided; neither an example nor an existing operational
-object approves a target. Follow [Gold requirements](../data-modeling/GOLD.md)
+writable destination outside the managed mirror database: `gold` in
+`rules/snowflake.yaml`. A new destination needs its own approval; neither an
+example nor an existing operational object approves one. Follow [Gold requirements](../data-modeling/GOLD.md)
 before building it. Treat source consolidation, managed mirror qualification,
 consumer access and Gold model qualification as distinct gates. The hosted
 Postgres ingress rule needs an approved writable control location independent

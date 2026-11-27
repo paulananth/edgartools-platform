@@ -38,13 +38,18 @@ No dev environment exists on AWS or on Snowflake; a command that targets dev has
 | **Mirror** | Snowflake mirror database (named in `rules/snowflake.yaml`) | One managed Postgres mirror database with Snowflake-managed Iceberg tables for approved final MDM, RDM and Silver outputs. Consumers read it; the mirror owns writes. |
 | **Gold** | Snowflake writable destination (database and schema named in `rules/snowflake.yaml`) | Use dbt when consumption requirements need transformations of approved mirror inputs. Direct mirror reads do not need dbt. Gold writes outside the managed mirror database. |
 
-The mirror supports direct read-only consumption, with dbt Gold on top when
-required by consumption requirements. This is not a claim that
-the production mirror or Gold models are live. The source stores currently
-reside in separate PostgreSQL databases, so one managed mirror cannot combine
-them until source consolidation is separately qualified. Follow
+Gold is published through the mirror: one managed mirror of the data database
+(schemas `MDM`, `RDM`, `SILVER`) carries the tables `sources/managed-mirror.yaml`
+lists, and Gold is dbt views over it (`edgar_warehouse/gold/views.py` writes the
+project from `destination/gold/gold.yaml`). The mirror exists only while it
+replicates: a store reset removes it, and it is made again after the next load
+and its finish ([HOSTED-MIRRORING](../data-platform/HOSTED-MIRRORING.md#after-the-first-load-mirror-only-what-gold-reads)).
+Until then a Gold view fails when queried, since its tables are absent. `verified` in `sources/managed-mirror.yaml`
+says whether the current mirror passed its read-back. A dropped target's name
+cannot be reused, so a mirror made again takes a new `mirror.database` in
+`rules/snowflake.yaml`. Follow
 [`SINGLE-DATABASE-ICEBERG.md`](../data-platform/SINGLE-DATABASE-ICEBERG.md)
-for the source boundary, selection, hosted proof and Gold acceptance gates.
+for the selection, hosted proof and Gold acceptance gates.
 
 ## Retiring a Snowflake database
 

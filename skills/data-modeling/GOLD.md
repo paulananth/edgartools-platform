@@ -14,10 +14,10 @@ that silver already holds, plus dimensions from the masters and code sets.
 It is not a new data class, and it is not an exposure source.
 [Final exposable tables](../data-platform/FINAL-TABLES.md) lists final master,
 reference and silver tables. For required Gold transformations, dbt reads that
-approved mirror and writes Gold. The database and schema names are undecided;
-record and obtain approval of the exact writable destination before a build.
-An existing database, example name or control-schema location is not target
-approval. Execution follows
+approved mirror and writes Gold views to the destination `gold` names in
+`rules/snowflake.yaml`, from `destination/gold/gold.yaml`. A new destination
+needs the operator's approval of its exact database and schema; an existing
+database, example name or control-schema location is not that approval. Execution follows
 [aws-snowflake-operations](../aws-snowflake-operations/SKILL.md). A question
 contract on one built fact is
 [semantic-views](../semantic-views/SKILL.md).
