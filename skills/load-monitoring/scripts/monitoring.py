@@ -4,6 +4,8 @@
     uv run --no-sync python monitoring.py up        start all three, push the data source and the dashboard, read it back
     uv run --no-sync python monitoring.py status    what runs, whether Prometheus scrapes the exporter, whether the dashboard is there
     uv run --no-sync python monitoring.py stop      stop the exporter and the containers; the dashboard's data stays
+    uv run --no-sync python monitoring.py target [<host:port>]   the exporter Prometheus reads: a load task's on AWS, or
+                                                    with no address this Mac's (infra/load-pipeline/aws-load.sh sets both)
 
 The admin login is generated once into a private file (mode 0600) and never printed. The dashboard is pushed from
 `dashboard.py` every `up`, so it never drifts; the viewer needs no login (anonymous viewers cannot edit).
@@ -36,6 +38,8 @@ PRIVATE = Path.home() / ".config/edgartools/monitoring/grafana.env"
 STATE = Path.home() / ".local/share/edgartools/monitoring"
 PID = STATE / "exporter.pid"
 KEY = "MONITORING_ADMIN_PASSWORD"
+LOCAL_TARGET = "host.docker.internal:9108"  # the exporter on this Mac, as Prometheus's container reaches it
+TARGETS = "/etc/prometheus/targets/load.json"  # on the project's named volume: never a path of a checkout
 
 
 def docker(*args: str, env: dict | None = None, check: bool = True) -> str:
@@ -147,6 +151,23 @@ def services() -> list[dict]:
     return sorted(rows, key=lambda r: r["Service"])
 
 
+def current_target() -> str:
+    """The exporter Prometheus reads, or "" when none is named yet."""
+    text = compose("exec", "-T", "prometheus", "cat", TARGETS, check=False).strip()
+    try:
+        return json.loads(text)[0]["targets"][0]
+    except (ValueError, LookupError, TypeError):
+        return ""
+
+
+def set_target(address: str) -> str:
+    """Name the one exporter Prometheus reads; it reads the file again within 30 s. One exporter at a time, so no count
+    is summed twice."""
+    body = json.dumps([{"targets": [address], "labels": {"where": "local" if address == LOCAL_TARGET else "aws"}}])
+    compose("exec", "-T", "-u", "root", "prometheus", "sh", "-c", f'printf %s "$1" > {TARGETS}', "sh", body)
+    return f"Prometheus reads the exporter at {address}"
+
+
 def exporter_answer() -> str:
     try:
         with urllib.request.urlopen(EXPORTER_URL, timeout=5) as answer:
@@ -170,10 +191,14 @@ def status() -> int:
             bad.append(f"{row['Service']} is {row['State']} {row.get('Health', '')}".strip())
     if not services():
         bad.append("no container of the project exists")
-    exporter = exporter_answer()
-    print(f"{'exporter':<12} {exporter}")
-    if exporter != "up":
-        bad.append(f"the exporter is {exporter}")
+    target = current_target()
+    if target in ("", LOCAL_TARGET):
+        exporter = exporter_answer()
+        print(f"{'exporter':<12} {exporter}")
+        if exporter != "up":
+            bad.append(f"the exporter is {exporter}")
+    else:
+        print(f"{'exporter':<12} a load task's on AWS: {target}")
     scrape = scrape_health()
     print(f"{'prometheus':<12} scrape target {scrape}")
     if scrape != "up":
@@ -191,6 +216,8 @@ def up(run: str | None = None) -> int:
     preflight()
     start_exporter(run)
     compose("up", "-d", "--wait", "--wait-timeout", "300")
+    if not current_target():
+        set_target(LOCAL_TARGET)
     provision()
     time.sleep(20)  # Prometheus scrapes every 15 s: the first reading must land before it is read back
     return status()
@@ -206,9 +233,15 @@ def stop() -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=["up", "status", "stop"])
+    parser.add_argument("command", choices=["up", "status", "stop", "target"])
+    parser.add_argument("address", nargs="?", help="target: the exporter's host:port; none for this Mac's")
     parser.add_argument("--run", help="load run whose status the exporter reads when started here")
     args = parser.parse_args()
+    if args.command == "target":
+        print(set_target(args.address or LOCAL_TARGET))
+        return 0
+    if args.address:
+        parser.error("only target takes an address")
     if args.run:
         os.environ["RUN"] = args.run
     return up(args.run) if args.command == "up" else {"status": status, "stop": stop}[args.command]

@@ -196,3 +196,40 @@ def test_a_tile_click_filters_the_lanes_to_the_states_it_counts():
     every = next(o["value"] for o in variable["options"] if o["text"] == "All")
     assert {n for n, *_ in design.STATES if re.fullmatch(every, n)} == {n for n, *_ in design.STATES}
     assert variable["current"]["value"] == every
+
+
+
+def run_in_prometheus(monkeypatch, tmp_path):
+    """`compose exec ... prometheus <command>` run here, the target file being a file under tmp_path."""
+    import subprocess
+    from tests.support.patching import checked
+    monkeypatch.setattr(monitoring, "TARGETS", str(tmp_path / "load.json"))
+
+    def compose(*args, check=True):
+        command = list(args[args.index("prometheus") + 1:])
+        return subprocess.run(command, capture_output=True, text=True, check=check).stdout
+    checked(monkeypatch, monitoring, "compose", compose)
+    return tmp_path / "load.json"
+
+
+def test_prometheus_reads_the_one_exporter_named_in_its_target_file(monkeypatch, tmp_path):
+    import json
+    targets = run_in_prometheus(monkeypatch, tmp_path)
+    assert monitoring.current_target() == ""
+    monitoring.set_target("192.0.2.10:9108")
+    assert json.loads(targets.read_text()) == [{"targets": ["192.0.2.10:9108"], "labels": {"where": "aws"}}]
+    assert monitoring.current_target() == "192.0.2.10:9108"
+    monitoring.set_target(monitoring.LOCAL_TARGET)
+    assert json.loads(targets.read_text()) == [{"targets": ["host.docker.internal:9108"], "labels": {"where": "local"}}]
+
+
+def test_status_reads_an_aws_target_without_asking_for_the_macs_exporter(monkeypatch, tmp_path, capsys):
+    from tests.support.patching import checked
+    run_in_prometheus(monkeypatch, tmp_path)
+    monitoring.set_target("192.0.2.10:9108")
+    checked(monkeypatch, monitoring, "services", lambda: [{"Service": "prometheus", "State": "running", "Health": "healthy"}])
+    checked(monkeypatch, monitoring, "exporter_answer", lambda: pytest.fail("the Mac's exporter was asked"))
+    checked(monkeypatch, monitoring, "scrape_health", lambda: "up")
+    checked(monkeypatch, monitoring, "api", lambda method, path, body=None: (200, {}))
+    assert monitoring.status() == 0
+    assert "a load task's on AWS: 192.0.2.10:9108" in capsys.readouterr().out

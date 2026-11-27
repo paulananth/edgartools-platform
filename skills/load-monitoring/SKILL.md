@@ -27,12 +27,21 @@ and needs no login; the admin login is generated into a private file and never p
 | Bring it up | `up --run <label>` | Containers healthy, exporter up, Prometheus scraping it, dashboard present. Exit 0 only when all are |
 | Is it working? | `status` | The same readback; every `PROBLEM:` line says what is wrong |
 | Take it down | `stop` | Stops the exporter and the containers; Grafana's and Prometheus's data stay |
+| Read another exporter | `target [<host:port>]` | Prometheus reads that exporter within 30 s; with no address, this Mac's |
 
 ## Where the exporter runs
 
 The load pipeline's Compose project (`infra/load-pipeline`) runs the exporter from the loader image beside the worker and
 inherits its `RUN`; it needs no checkout and sees a load running in a container. `monitoring.py up` starts a host exporter
 only when nothing answers on the port; pass `--run <label>` for a standalone load.
+
+Prometheus reads one exporter at a time, named in a file on its own named volume, so no count is summed twice. A load on
+AWS (`infra/load-pipeline/aws-load.sh`) runs the same exporter in its Fargate task, sharing the task's processes (each
+step's CPU and memory show), on a port open to this Mac's public address only: the script names the task's exporter
+while the load runs and this Mac's again when it ends. Bring the monitor up before the load so it is there to read it.
+The port serves counts and step names over plain HTTP to the one address the Mac shows the internet (every machine
+behind the same router shares it); a changed address stops the scrape until the next load. A launch script killed
+outright leaves Prometheus on the task's address: `monitoring.py target` names this Mac's again.
 
 `load.sh` recreates the worker, and the exporter with it, at every start: for a minute `monitoring.py status` says the
 exporter is not answering, then `load_monitor_up 1`. A host exporter served from a checkout goes blind when that

@@ -2,7 +2,8 @@
 # Run a load on AWS: the loader image CI built for the newest main commit, on one large Fargate task, driven by
 # AWS Step Functions. It copies the image to ECR, the captures to the bronze bucket and the logins to Secrets Manager,
 # applies infra/terraform/load-machine, starts the task and one execution, and stops the task when it ends. The task
-# also stops itself after the root's max_hours, should this script or its machine be gone.
+# also stops itself after the root's max_hours, should this script or its machine be gone. While it runs, the Mac's load
+# monitor (skills/load-monitoring, Grafana) reads the task's exporter, whose port is open to this Mac's address only.
 #
 #   RUN=<label> infra/load-pipeline/aws-load.sh                      every lane at once, then the finish
 #   RUN=<label> infra/load-pipeline/aws-load.sh [--finish] <step>... only those steps, in order
@@ -72,10 +73,17 @@ echo "captures: in s3://$bucket/load"
 [ -f "$terraform_root/backend.hcl" ] || cp "$terraform_root/backend.hcl.example" "$terraform_root/backend.hcl"
 tf() { terraform -chdir="$terraform_root" "$@"; }
 tf init -input=false -backend-config=backend.hcl >/dev/null
-tf apply -input=false -auto-approve -var "image=$image" -var "run=$RUN" -var "lanes=$lanes" >/dev/null
+ipv4='^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'
+mac="$(curl -fsS --max-time 20 https://checkip.amazonaws.com 2>/dev/null | tr -d '[:space:]' || true)"  # the address AWS sees this Mac at
+opening=()
+if [[ "$mac" =~ $ipv4 ]]; then opening=(-var "metrics_cidr=$mac/32")
+else echo "monitor: this Mac's public address could not be read, so the task's exporter is open to no one" >&2; fi
+tf apply -input=false -auto-approve -var "image=$image" -var "run=$RUN" -var "lanes=$lanes" ${opening[@]+"${opening[@]}"} >/dev/null
 machine="$(tf output -raw state_machine_arn)"
 task_definition="$(tf output -raw task_definition_arn)"
 secret="$(tf output -raw secret_arn)"
+metrics_group="$(tf output -raw metrics_security_group_id)"
+exporter_port="$(tf output -raw exporter_port)"
 echo "terraform: applied"
 
 # The logins, each file in base64 under its key. The two settings that name a path on this machine name the task's.
@@ -113,12 +121,14 @@ running="$(aws stepfunctions list-executions --state-machine-arn "$machine" --st
 network="$(aws ec2 describe-subnets --filters 'Name=tag:Name,Values=edgartools-prod-public-*' --query 'join(`,`, Subnets[].SubnetId)' --output text)"
 group="$(aws ec2 describe-security-groups --filters Name=group-name,Values=edgartools-prod-ecs-public --query 'SecurityGroups[0].GroupId' --output text)"
 task="$(aws ecs run-task --cluster "$cluster" --task-definition "$task_definition" --launch-type FARGATE --count 1 \
-  --network-configuration "awsvpcConfiguration={subnets=[$network],securityGroups=[$group],assignPublicIp=ENABLED}" \
+  --network-configuration "awsvpcConfiguration={subnets=[$network],securityGroups=[$group,$metrics_group],assignPublicIp=ENABLED}" \
   --query 'tasks[0].taskArn' --output text)"
 [ "$task" != None ] || { echo "the load task did not start" >&2; exit 1; }
 echo "task ${task##*/}: starting"
 execution='' result=''
+monitor() { python3 "$here/../../skills/load-monitoring/scripts/monitoring.py" target "$@" >/dev/null 2>&1; }
 stop() {  # whatever ends this script: no execution is left waiting, and the task is gone, its record copied, before it returns
+  monitor || echo "monitor: could not point Grafana back at this Mac's exporter: monitoring.py target" >&2
   [ -z "$execution" ] || [ "$result" != RUNNING ] ||
     aws stepfunctions stop-execution --execution-arn "$execution" --cause "the launch script ended" >/dev/null || true
   aws ecs stop-task --cluster "$cluster" --task "$task" --reason "the load ended" >/dev/null &&
@@ -138,6 +148,16 @@ done
   aws ecs describe-tasks --cluster "$cluster" --tasks "$task" --query 'tasks[0].[stoppedReason, containers[].[name, exitCode, reason]]' >&2
   exit 1; }
 echo "task ${task##*/}: running"
+# The monitor is never a reason to stop the load: a lookup that fails leaves Grafana reading this Mac's exporter.
+eni="$(aws ecs describe-tasks --cluster "$cluster" --tasks "$task" --query \
+  'tasks[0].attachments[?type==`ElasticNetworkInterface`] | [0].details[?name==`networkInterfaceId`].value | [0]' --output text || true)"
+address="$(aws ec2 describe-network-interfaces --network-interface-ids "$eni" \
+  --query 'NetworkInterfaces[0].Association.PublicIp' --output text 2>/dev/null || true)"
+if [ "${#opening[@]}" -gt 0 ] && [[ "$address" =~ $ipv4 ]] && monitor "$address:$exporter_port"; then
+  echo "monitor: Grafana on this Mac reads the task's exporter (http://127.0.0.1:3001)"
+else
+  echo "monitor: not running on this Mac (skills/load-monitoring/scripts/monitoring.py up), so nothing reads the task's exporter"
+fi
 
 if [ "$#" -gt 0 ]; then
   steps="$(printf '%s\n' "$@" | jq -R 'select(length > 0)' | jq -sc .)"
