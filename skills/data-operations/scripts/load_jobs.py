@@ -1731,11 +1731,14 @@ def catalog_outcome(answer: str, error: str = "") -> str:
 
 
 def step_run_id(step_name: str) -> str | None:
-    """The Bookkeeping run to publish for a step: its last completed run, from its log or, when its last attempt found
-    everything already loaded and ran none, from its newest earlier attempt's."""
+    """The Bookkeeping run to publish for a step: its last completed run, from its log or, when its last process found
+    everything already loaded and ran none, from the newest earlier one's: a moved process (`.attempt-<n>.move-<m>`) or an
+    earlier attempt (`.attempt-<n>`, the last process of that attempt, after its moves)."""
     log = LOGS / f"chain-{RUN}-{step_name}.log"
-    numbered = [(int(found.group(1)), p) for p in log.parent.glob(log.name + ".attempt-*") if (found := re.search(r"\.attempt-(\d+)$", p.name))]
-    attempts = [p for _, p in sorted(numbered, key=lambda pair: pair[0], reverse=True)]  # `.attempt-1.errors` is no attempt's log
+    numbered = [((int(found.group(1)), int(found.group(2)) if found.group(2) else float("inf")), p)
+                for p in log.parent.glob(log.name + ".attempt-*")
+                if (found := re.search(r"\.attempt-(\d+)(?:\.move-(\d+))?$", p.name))]
+    attempts = [p for _, p in sorted(numbered, key=lambda pair: pair[0], reverse=True)]  # `.attempt-1.errors` is no process's log
     for path in [log, *attempts]:
         if path.exists() and (run := last_run_id(path.read_text())):
             return run
@@ -1869,6 +1872,30 @@ def done_line(text: str) -> str:
     return lines[-1][:200] if lines else ""
 
 
+BUNDLE_LINE = re.compile(r"^Bundle (\d+)/\d+: (?:all (\d+) documents already loaded|(\d+) of (\d+) documents to load)$")
+
+
+def attempt_done_line(moved: list[str], text: str) -> str:
+    """The `Done:` line of an attempt whose process was moved (restarted with other workers) before the last one finished.
+    Each bundle counts as its first report in the attempt says, the state the attempt found it in: a later process finds
+    the bundles an earlier one loaded "already loaded", which were this attempt's work. Without bundle lines, the last
+    process's own line."""
+    first, parts = {}, 1
+    for process in [*moved, text]:
+        part = 1
+        for line in process.splitlines():
+            if found := re.match(r"^Input (\d+)/(\d+): ", line):
+                part, parts = int(found[1]), max(parts, int(found[2]))
+            elif found := BUNDLE_LINE.match(line):
+                old, new, of = found[2], found[3], found[4]
+                first.setdefault((part, int(found[1])), (0, int(old)) if old else (int(new), int(of) - int(new)))
+    if not moved or not first:
+        return done_line(text)
+    loaded, before = sum(new for new, _ in first.values()), sum(old for _, old in first.values())
+    deliveries = f", in {parts} deliveries" if parts > 1 else ""
+    return f"Done: {loaded} documents loaded, {before} already loaded before{deliveries}, over {len(moved) + 1} processes (moved)"
+
+
 ENDED_BY_SIGNAL = (-signal.SIGTERM, 128 + signal.SIGTERM)  # as a child of this process, or through a shell or launcher
 
 
@@ -1881,6 +1908,7 @@ def attempt_loop(step: dict, env: dict, state: Path, others_run: bool = True) ->
     errors, offset, previous = STORES / "load-errors.log", (0, 0), ""
     peaked = [one for one in load_jobs() if "peak_gb" in one]  # the steps whose unreached peak this one's admission leaves out
     attempt, want, attempt_peak = 1, step["workers"], 0.0  # the peak of every load of this attempt, moves included
+    moved = []  # the output of this attempt's processes that a move ended, kept as `<log>.attempt-<n>.move-<m>`
     while attempt <= step["attempts"]:
         workers = admit(want, step.get("worker_gb", WORKER_GB), gate_path(state), say=lambda text: note(f"{name} {text}", state),
                         one_document=step.get("one_document", False), peak_gb=step.get("peak_gb", 0.0),
@@ -1894,9 +1922,11 @@ def attempt_loop(step: dict, env: dict, state: Path, others_run: bool = True) ->
         asked = take_move(state, name)
         sampled = f"; sampled peak {attempt_peak:.2f} GB" if attempt_peak else ""
         if code == 0 and "Load stopped" not in text:
-            note(f"{name} done: {done_line(text)}{sampled}", state)
+            note(f"{name} done: {attempt_done_line(moved, text)}{sampled}", state)
             return True
         if asked and code in ENDED_BY_SIGNAL:  # moved, not failed: the same attempt goes on with other workers
+            moved.append(text)
+            log.rename(log.with_name(log.name + f".attempt-{attempt}.move-{len(moved)}"))
             want = asked
             continue
         why = [line for line in text.splitlines() if re.search(r"stopped|did not finish|Error", line)]
@@ -1913,7 +1943,7 @@ def attempt_loop(step: dict, env: dict, state: Path, others_run: bool = True) ->
             return False
         previous = current
         attempt += 1
-        attempt_peak = 0.0
+        attempt_peak, moved = 0.0, []
     note(out_of_attempts(name, step["attempts"]), state)
     return False
 

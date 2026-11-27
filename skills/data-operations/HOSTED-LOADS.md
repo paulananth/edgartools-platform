@@ -116,7 +116,9 @@ CODE read it in place of git.
   over, waits ten minutes after the step's last start, comes just after a bundle completes, and is repeated only when the last one
   raised the measured rate. Nothing is raised while a step is being admitted. A move writes `<state>.move-<step>` with the count and
   ends the step's load (driver first, then the workers it started); the step's loop starts the load again in the same attempt,
-  through the same admission. The state file says `controller moves <step> from N to M workers`. A shed, like a raise, comes just
+  through the same admission. The state file says `controller moves <step> from N to M workers`. The ended load's log is
+  kept as `chain-<RUN>-<step>.log.attempt-<n>.move-<m>`, and the step's `done:` line counts the whole attempt: each bundle as
+  its first report in the attempt says, ending `over K processes (moved)`. A shed, like a raise, comes just
   after a bundle completes, so a move abandons next to nothing; a pressed machine whose running steps are all mid-bundle sheds
   nothing until one of them completes a bundle. A step of one bundle, one declared `one_document`, or one shed earlier
   in its attempt is never moved: a move abandons its run in flight, and a step shed, raised and shed again loses run after run.

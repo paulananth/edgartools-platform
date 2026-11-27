@@ -1109,6 +1109,18 @@ def test_a_step_that_loaded_nothing_new_in_its_last_attempt_publishes_the_run_of
     assert chain.step_run_id("a1") == "22222222-2222-4222-8222-222222222222"
 
 
+def test_a_step_whose_last_process_loaded_nothing_publishes_the_run_its_moved_process_completed(tmp_path, monkeypatch):
+    monkeypatch.setattr(chain, "LOGS", tmp_path)
+    monkeypatch.setattr(chain, "RUN", "fresh-v1")
+    (tmp_path / "chain-fresh-v1-a1.log").write_text("Bundle 1/1: all 5 documents already loaded\nDone: 0 documents loaded, 5 already loaded before\n")
+    (tmp_path / "chain-fresh-v1-a1.log.attempt-1").write_text(STEP_LOG.replace("22222222", "33333333"))
+    (tmp_path / "chain-fresh-v1-a1.log.attempt-2.move-1").write_text(STEP_LOG.replace("22222222", "44444444"))
+    (tmp_path / "chain-fresh-v1-a1.log.attempt-2.move-2").write_text(STEP_LOG)
+    assert chain.step_run_id("a1") == "22222222-2222-4222-8222-222222222222"  # the newest moved process of the newest attempt
+    (tmp_path / "chain-fresh-v1-a1.log.attempt-2").write_text(STEP_LOG.replace("22222222", "55555555"))
+    assert chain.step_run_id("a1") == "22222222-2222-4222-8222-222222222222".replace("22222222", "55555555")  # an attempt's own log ran after its moves
+
+
 def test_a_bad_line_in_the_env_file_never_hides_the_catalog_pair(tmp_path):
     env = tmp_path / ".env"
     env.write_text("STUB_NOTE=it's\nOPENMETADATA_URL=http://127.0.0.1:8587/api\nOPENMETADATA_TOKEN='t-invented'\n")
@@ -2284,6 +2296,56 @@ def test_a_running_step_asked_to_move_ends_its_load_and_its_workers_and_goes_on_
     assert (tmp_path / "counts").read_text().split() == ["8", "4"]
     assert not _alive(driver) and not _alive(worker)
     assert not chain.move_path(state, "a1").exists()
+
+
+# The first load reports its first bundle and works on; the one after the move finds it loaded and loads the second.
+LOADS_A_BUNDLE_THEN_IS_MOVED = """
+count = sys.argv[sys.argv.index('--workers') + 1]
+if count == '8':
+    print('Bundle 1/2: 512 of 512 documents to load', flush=True)
+    worker = subprocess.Popen(['sleep', '300'])
+    open(folder + '/pids', 'w').write(f'{os.getpid()} {worker.pid}')
+    time.sleep(300)
+print('Bundle 1/2: all 512 documents already loaded')
+print('Bundle 2/2: 92 of 92 documents to load')
+print('Done: 92 documents loaded, 512 already loaded before')
+"""
+
+
+def test_a_moved_steps_done_line_counts_what_every_process_of_the_attempt_loaded(monkeypatch, tmp_path):
+    """A moved step's done line counts every process of the attempt, not only the last one."""
+    step, state = _engine(monkeypatch, tmp_path, LOADS_A_BUNDLE_THEN_IS_MOVED), tmp_path / "state.log"
+    os.mkfifo(tmp_path / "pids")
+    ended = []
+    lane = threading.Thread(target=lambda: ended.append(chain.attempt_loop(step, dict(os.environ), state, others_run=False)), daemon=True)
+    lane.start()
+    driver, worker = map(int, (tmp_path / "pids").read_text().split())
+    listing = (f"{driver} 1 0:01 100 edgar-warehouse load --source a1 --target mastering --workers 8\n"
+               f"{worker} {driver} 0:01 100 sleep 300\n")
+    checked(monkeypatch, chain, "process_listing", lambda: listing)
+    assert chain.ask_move(step, 4, state)
+    lane.join()
+    assert ended == [True]
+    assert "a1 done: Done: 604 documents loaded, 0 already loaded before, over 2 processes (moved)" in state.read_text()
+    moved_log = chain.LOGS / f"chain-{chain.RUN}-a1.log.attempt-1.move-1"
+    assert "Bundle 1/2: 512 of 512 documents to load" in moved_log.read_text()
+
+
+@pytest.mark.parametrize("moved, last, done", [
+    ([], "Bundle 1/1: 3 of 5 documents to load\nDone: 3 documents loaded, 2 already loaded before",
+     "Done: 3 documents loaded, 2 already loaded before"),
+    (["Bundle 1/2: 3 of 5 documents to load\n"],
+     "Bundle 1/2: all 5 documents already loaded\nBundle 2/2: 4 of 4 documents to load\nDone: 4 documents loaded, 5 already loaded before",
+     "Done: 7 documents loaded, 2 already loaded before, over 2 processes (moved)"),
+    (["Input 1/2: d1\nBundle 1/1: 5 of 5 documents to load\n"],
+     "Input 1/2: d1\nBundle 1/1: all 5 documents already loaded\nDone: 0 documents loaded, 5 already loaded before\n"
+     "Input 2/2: d2\nBundle 1/1: 6 of 6 documents to load\nDone: 6 documents loaded, 0 already loaded before",
+     "Done: 11 documents loaded, 0 already loaded before, in 2 deliveries, over 2 processes (moved)"),
+    (["it was stopped before it named a bundle\n"], "Done: 9 documents loaded, 0 already loaded before",
+     "Done: 9 documents loaded, 0 already loaded before"),
+])
+def test_each_bundle_counts_as_its_first_report_in_the_attempt_says(moved, last, done):
+    assert chain.attempt_done_line(moved, last) == done
 
 
 def test_a_load_that_fails_by_itself_is_a_failed_attempt_though_a_move_was_asked_meanwhile(monkeypatch, tmp_path):
