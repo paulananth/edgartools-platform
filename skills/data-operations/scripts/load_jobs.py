@@ -1889,7 +1889,7 @@ def attempt_loop(step: dict, env: dict, state: Path, others_run: bool = True) ->
         offset = error_log.position(errors)
         take_move(state, name)  # a request left for a load that had ended is not this one's
         with sampled_peak(step["source"], step["target"]) as peak:
-            code, text = run_deliveries({**step, "workers": workers}, env, log)
+            code, text = run_deliveries({**step, "workers": workers}, {**env, "PGAPPNAME": application_name(name)}, log)
         attempt_peak = max(attempt_peak, peak[0])
         asked = take_move(state, name)
         sampled = f"; sampled peak {attempt_peak:.2f} GB" if attempt_peak else ""
@@ -2046,8 +2046,6 @@ def main() -> int:
             print(notice)
         print("\n".join(status(steps, counted, reader_url)))
         return 0
-    if args.only:
-        os.environ["PGAPPNAME"] = application_name(args.only)  # every session of this step's loads carries its name
     env = {**os.environ, **load_env(STORES / "worker.env")}
     if not (args.plan or args.catalog_status):
         # Every other path starts a load, resumes one or writes the finish: the infrastructure must have passed its checks.
