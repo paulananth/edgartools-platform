@@ -23,8 +23,8 @@ def snowflake_clean():
                   {"name": "A2", "type": "PERSON", "has_mfa": "true", "default_role": "WORK", "has_password": "true"},
                   {"name": "SVC", "type": "SERVICE", "has_password": "false", "has_rsa_public_key": "true", "default_role": "SVC"}],
         "admin_holders": ["A1", "A2"], "network_policies": 1, "account_network_policy": "P", "monitors": 1,
-        "warehouses": [{"name": "W", "resource_monitor": "M"}], "statement_timeout": 3600, "password_policies": 1,
-        "authentication_policies": 1, "policy_drift": [], "risky_grants": [], "queries": [{"role_name": "WORK", "n": 100}, {"role_name": "ACCOUNTADMIN", "n": 1}],
+        "warehouses": [{"name": "W", "resource_monitor": "M"}], "statement_timeout": 3600, "credential_policies": 0,
+        "extra_schemas": [], "risky_grants": [], "queries": [{"role_name": "WORK", "n": 100}, {"role_name": "ACCOUNTADMIN", "n": 1}],
         "logins": [{"user_name": "A1", "first_factor": "PASSWORD", "second_factor": "TOTP", "n": 5}],
     }
 
@@ -81,8 +81,9 @@ def test_every_control_names_a_known_objective_and_carries_severity_and_framewor
     ("snowflake", "NET", lambda e: e.update(account_network_policy="")),
     ("snowflake", "CST", lambda e: e["warehouses"][0].update(resource_monitor="null")),
     ("snowflake", "TMO", lambda e: e.update(statement_timeout=172800)),
-    ("snowflake", "POL", lambda e: e.update(password_policies=0)),
-    ("snowflake", "POL", lambda e: e.update(policy_drift=["password: min_length 8, expected 14"])),
+    ("snowflake", "POL", lambda e: e.update(credential_policies=1)),
+    ("snowflake", "POL", lambda e: e["users"].append({"name": "EDGARTOOLS_INVENTED", "type": "PERSON", "has_password": "true"})),
+    ("snowflake", "SCH", lambda e: e.update(extra_schemas=["INVENTED_GOLD.PUBLIC"])),
     ("postgres", "IND", lambda e: e.update(memberships=["pg_monitor", "pg_write_all_data"])),
     ("postgres", "LPR", lambda e: e["superusers"].append("loader")),
     ("postgres", "LOG", lambda e: e["settings"].update({"pgaudit.log": "none"})),
@@ -111,7 +112,7 @@ def test_each_weakness_fails_its_own_objective(platform, objective, change):
 
 def test_a_control_the_auditor_cannot_see_is_not_tested_never_passed():
     assert graded("snowflake", lambda e: e.update(admin_holders=["HIDDEN"]))["ADM"] == "NOT_TESTED"
-    assert graded("snowflake", lambda e: e.update(authentication_policies=None))["POL"] == "NOT_TESTED"
+    assert graded("snowflake", lambda e: e.update(extra_schemas=None))["SCH"] == "NOT_TESTED"
     assert graded("aws", lambda e: e.update(public_block=None))["NET"] == "NOT_TESTED"
     assert graded("postgres", lambda e: e["public_objects"].update(control=None))["SCH"] == "NOT_TESTED"
 
@@ -251,25 +252,27 @@ def test_the_connection_limit_control_leaves_out_the_platforms_own_logins_and_co
     assert found == [("governance", 10), ("edgar_loader", -1)]
 
 
-EXPECTED_POLICIES = {"location": {"database": "INVENTED_GOLD", "schema": "POLICIES"},
-                     "password": {"name": "P1", "min_length": 14, "history": 5},
-                     "authentication": {"name": "A1", "methods": ["KEYPAIR"]}}
-FOUND_POLICIES = {"password": [{"database_name": "INVENTED_GOLD", "schema_name": "POLICIES", "name": "P1",
-                                "properties": {"password_min_length": "14", "password_history": "5"}}],
-                  "authentication": [{"database_name": "INVENTED_GOLD", "schema_name": "POLICIES", "name": "A1",
-                                      "properties": {"authentication_methods": "[KEYPAIR]"}}]}
+def test_only_the_schema_a_platform_database_keeps_and_information_schema_are_not_extra():
+    kept = {"INVENTED_GOLD": "GOLD", "INVENTED_OPS": "CONTROL"}
+    found = [{"catalog_name": d, "schema_name": s} for d, s in [("INVENTED_GOLD", "GOLD"), ("INVENTED_GOLD", "INFORMATION_SCHEMA"),
+             ("INVENTED_GOLD", "POLICIES"), ("INVENTED_OPS", "CONTROL"), ("INVENTED_OPS", "PUBLIC")]]
+    assert snowflake.extra_schemas(kept, found) == ["INVENTED_GOLD.POLICIES", "INVENTED_OPS.PUBLIC"]
+    assert snowflake.extra_schemas(kept, None) is None
 
 
-def test_policies_equal_to_the_policy_file_have_no_drift():
-    assert snowflake.policy_drift(EXPECTED_POLICIES, FOUND_POLICIES) == []
+def test_a_platform_database_the_auditor_cannot_read_leaves_its_schemas_unread(monkeypatch):
+    calls = []
+    monkeypatch.setattr(snowflake, "snow", lambda connection, sql, soft=False: calls.append(sql) or (None if "INVENTED_OPS" in sql else [{"CATALOG_NAME": "INVENTED_GOLD", "SCHEMA_NAME": "GOLD"}]))
+    assert snowflake.schemas("c", {"INVENTED_GOLD": "GOLD", "INVENTED_OPS": "CONTROL"}) is None
+    assert all("information_schema.schemata" in sql for sql in calls)
 
 
-def test_a_changed_value_a_missing_policy_and_a_policy_in_another_database_are_each_drift():
-    wrong_value = {**FOUND_POLICIES, "password": [{**FOUND_POLICIES["password"][0], "properties": {"password_min_length": "8", "password_history": "5"}}]}
-    assert any("min_length" in d for d in snowflake.policy_drift(EXPECTED_POLICIES, wrong_value))
-    assert any("authentication" in d and "missing" in d for d in snowflake.policy_drift(EXPECTED_POLICIES, {**FOUND_POLICIES, "authentication": []}))
-    elsewhere = {**FOUND_POLICIES, "password": [{**FOUND_POLICIES["password"][0], "database_name": "UNAPPROVED"}]}
-    assert any("UNAPPROVED" in d for d in snowflake.policy_drift(EXPECTED_POLICIES, elsewhere))
+def test_the_platform_databases_are_the_blocks_of_the_names_file_that_name_a_schema():
+    import yaml
+    from edgar_warehouse.rules import files
+
+    names = yaml.safe_load((files.ROOT / "snowflake.yaml").read_text(encoding="utf-8"))
+    assert snowflake.places() == {names[p]["database"].upper(): names[p]["schema"].upper() for p in ("gold", "operations")}
 
 
 def test_the_snowflake_audit_needs_no_variable_and_reads_through_the_auditor_connection(monkeypatch):
@@ -282,23 +285,14 @@ def test_the_snowflake_audit_needs_no_variable_and_reads_through_the_auditor_con
     with pytest.raises(SystemExit, match="administrator role"):
         snowflake.collect({}, as_admin=False)
     assert seen[0] == "edgartools-audit"
-    ev = snowflake_clean()
-    ev["password_policies"], ev["authentication_policies"] = None, None
-    assert [r for r in snowflake.controls(ev) if r["id"] == "POL.snowflake"][0]["result"] == "NOT_TESTED"
 
 
-def test_policies_are_read_through_the_administrators_procedure_not_a_privilege_on_them(monkeypatch):
-    calls = []
-
-    def fake(connection, sql, soft=False):
-        calls.append(sql)
-        return [{"AUDIT_CREDENTIAL_POLICIES": json.dumps(FOUND_POLICIES)}]
-
-    monkeypatch.setattr(snowflake, "snow", fake)
-    assert snowflake.found_policies("c", "INVENTED_GOLD") == FOUND_POLICIES
-    assert calls == ["call INVENTED_GOLD.control.audit_credential_policies()"]
-    monkeypatch.setattr(snowflake, "snow", lambda connection, sql, soft=False: None)
-    assert snowflake.found_policies("c", "INVENTED_GOLD") is None
+def test_credential_policies_count_password_policies_and_attached_authentication_policies(monkeypatch):
+    answers = {"password_policies": [{"N": 1}], "policy_references": [{"N": 2}]}
+    monkeypatch.setattr(snowflake, "snow", lambda connection, sql, soft=False: next(v for k, v in answers.items() if k in sql))
+    assert snowflake.credential_policies("c") == 3
+    answers.update(password_policies=[{"N": 0}], policy_references=[{"N": 0}])
+    assert snowflake.credential_policies("c") == 0
 
 
 def test_a_machine_without_snowcli_skips_snowflake_instead_of_failing(monkeypatch):

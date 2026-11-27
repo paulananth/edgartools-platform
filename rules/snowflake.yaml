@@ -5,6 +5,14 @@
 owner: EDGARTOOLS              # the role that owns every database the platform creates (a managed mirror's target excepted: the Snowflake application owns it while the mirror replicates)
 mirror:                          # the managed mirror of the exposed tables (schemas MDM, RDM, SILVER)
   database: EDGARTOOLS_MIRROR
-gold:                            # where dbt writes the Gold views
+gold:                            # where dbt writes the Gold views; this schema is the database's only one
   database: EDGARTOOLS_GOLD
   schema: GOLD
+operations:                      # the hosted Postgres ingress network rule, which Snowflake keeps only in a schema; this schema is the database's only one
+  database: EDGARTOOLS_OPERATIONS
+  schema: CONTROL
+  approval:
+    date: "2026-11-26"
+    words:
+    - gold must not have control and ploicies schemas only one schema
+    - An approved operations db

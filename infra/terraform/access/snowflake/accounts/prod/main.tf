@@ -1,47 +1,13 @@
 # The access controls the audit (skills/access-audit) tests, as code: read-only roles and their key-pair service users,
-# the cost and timeout guards, and the credential policies. Changes go through plan, a recorded approval, apply, re-audit.
+# and the cost and timeout guards. Changes go through plan, a recorded approval, apply, re-audit.
 
 
-# --- Credential policies: values and home in rules/snowflake_policy.yaml ----------------------------------------------
-# A policy is a schema-level object, so it needs a schema; it lives in one of the Gold database's (rules/snowflake.yaml), and
-# no database is created for it. The access audit (control POL) reads the live policies back against the same file.
+# --- Names ---------------------------------------------------------------------------------------------------------------
+# Service logins sign in by key pair only because they are TYPE = SERVICE users, which Snowflake never lets use a password; no
+# credential policy object is kept, since Snowflake keeps one only inside a database (operator, 2026-11-26).
 locals {
-  policy        = yamldecode(file("${path.module}/../../../../../../rules/snowflake_policy.yaml"))
   names         = yamldecode(file("${path.module}/../../../../../../rules/snowflake.yaml"))
-  gold_database = local.names[local.policy.location.database_of].database
-}
-
-resource "snowflake_schema" "policies" {
-  database = local.gold_database
-  name     = local.policy.location.schema
-}
-
-resource "snowflake_password_policy" "standard" {
-  database             = local.gold_database
-  schema               = snowflake_schema.policies.name
-  name                 = local.policy.password.name
-  min_length           = local.policy.password.min_length
-  min_upper_case_chars = local.policy.password.min_upper_case_chars
-  min_lower_case_chars = local.policy.password.min_lower_case_chars
-  min_numeric_chars    = local.policy.password.min_numeric_chars
-  min_special_chars    = local.policy.password.min_special_chars
-  max_age_days         = local.policy.password.max_age_days
-  max_retries          = local.policy.password.max_retries
-  lockout_time_mins    = local.policy.password.lockout_time_mins
-  history              = local.policy.password.history
-  comment              = "Values in rules/snowflake_policy.yaml"
-}
-
-resource "snowflake_account_password_policy_attachment" "standard" {
-  password_policy = snowflake_password_policy.standard.fully_qualified_name
-}
-
-resource "snowflake_authentication_policy" "service_keypair_only" {
-  database               = local.gold_database
-  schema                 = snowflake_schema.policies.name
-  name                   = local.policy.authentication.name
-  authentication_methods = local.policy.authentication.methods
-  comment                = "Values in rules/snowflake_policy.yaml"
+  gold_database = local.names.gold.database
 }
 
 # --- Account guards -------------------------------------------------------------------------------------------------
@@ -93,10 +59,6 @@ resource "snowflake_grant_account_role" "log_reader" {
   user_name = snowflake_service_user.log_reader.name
 }
 
-resource "snowflake_user_authentication_policy_attachment" "log_reader" {
-  user_name                  = snowflake_service_user.log_reader.name
-  authentication_policy_name = snowflake_authentication_policy.service_keypair_only.fully_qualified_name
-}
 
 # --- The read-only auditor ------------------------------------------------------------------------------------------
 resource "snowflake_account_role" "auditor" {
@@ -153,6 +115,32 @@ resource "snowflake_grant_privileges_to_account_role" "auditor_gold_future_schem
   }
 }
 
+# The operations database: the auditor reads its schemas, to check it holds only the one rules/snowflake.yaml names.
+resource "snowflake_grant_privileges_to_account_role" "auditor_operations_database" {
+  account_role_name = snowflake_account_role.auditor.name
+  privileges        = ["USAGE"]
+  on_account_object {
+    object_type = "DATABASE"
+    object_name = local.names.operations.database
+  }
+}
+
+resource "snowflake_grant_privileges_to_account_role" "auditor_operations_schemas" {
+  account_role_name = snowflake_account_role.auditor.name
+  privileges        = ["USAGE"]
+  on_schema {
+    all_schemas_in_database = local.names.operations.database
+  }
+}
+
+resource "snowflake_grant_privileges_to_account_role" "auditor_operations_future_schemas" {
+  account_role_name = snowflake_account_role.auditor.name
+  privileges        = ["USAGE"]
+  on_schema {
+    future_schemas_in_database = local.names.operations.database
+  }
+}
+
 resource "snowflake_grant_privileges_to_account_role" "auditor_gold_tables" {
   account_role_name = snowflake_account_role.auditor.name
   privileges        = ["REFERENCES"]
@@ -189,10 +177,6 @@ resource "snowflake_grant_account_role" "auditor" {
   user_name = snowflake_service_user.auditor.name
 }
 
-resource "snowflake_user_authentication_policy_attachment" "auditor" {
-  user_name                  = snowflake_service_user.auditor.name
-  authentication_policy_name = snowflake_authentication_policy.service_keypair_only.fully_qualified_name
-}
 
 # --- The mirror operator ---------------------------------------------------------------------------------------------
 # Creates, reads back and changes the managed Postgres mirrors (SNOWFLAKE.POSTGRES.*_MIRROR) and nothing else, so no mirror
@@ -236,10 +220,6 @@ resource "snowflake_grant_account_role" "mirror_operator" {
   user_name = snowflake_service_user.mirror_operator.name
 }
 
-resource "snowflake_user_authentication_policy_attachment" "mirror_operator" {
-  user_name                  = snowflake_service_user.mirror_operator.name
-  authentication_policy_name = snowflake_authentication_policy.service_keypair_only.fully_qualified_name
-}
 
 # CREATE_MIRROR refuses a role that does not own the Postgres instance ("does not own the requested postgres instance"), so
 # the mirror operator owns it. The grants on it are copied, never revoked, and the administrator holds the operator role, so
@@ -255,45 +235,9 @@ resource "snowflake_execute" "mirror_operator_owns_instance" {
   depends_on = [snowflake_grant_account_role.mirror_operator_to_admin]
 }
 
-# --- Policy reader for the audit -------------------------------------------------------------------------------------------
-# A role can DESCRIBE a policy only with a privilege on it, and the one that allows that (APPLY) also lets it attach the policy.
-# So the audit reads through this owner's-rights procedure, which returns the policies' properties and changes nothing; the
-# auditor holds USAGE on the procedure only. Same JSON shape for any platform's reader: {"password": [...], "authentication": [...]}.
-resource "snowflake_procedure_javascript" "audit_credential_policies" {
-  database            = local.gold_database
-  schema              = "CONTROL"
-  name                = "AUDIT_CREDENTIAL_POLICIES"
-  execute_as          = "OWNER"
-  return_type         = "VARCHAR"
-  procedure_definition = <<-JS
-    const out = {password: [], authentication: []};
-    for (const kind of ["password", "authentication"]) {
-      const listed = snowflake.execute({sqlText: "show " + kind + " policies in account"});
-      const rows = [];
-      while (listed.next()) rows.push({db: listed.getColumnValue("database_name"), sc: listed.getColumnValue("schema_name"), name: listed.getColumnValue("name")});
-      for (const r of rows) {
-        const d = snowflake.execute({sqlText: "describe " + kind + " policy \"" + r.db + "\".\"" + r.sc + "\".\"" + r.name + "\""});
-        const properties = {};
-        while (d.next()) properties[String(d.getColumnValue("property")).toLowerCase()] = String(d.getColumnValue("value"));
-        out[kind].push({database_name: r.db, schema_name: r.sc, name: r.name, properties: properties});
-      }
-    }
-    return JSON.stringify(out);
-  JS
-}
-
-resource "snowflake_grant_privileges_to_account_role" "auditor_policy_reader" {
-  account_role_name = snowflake_account_role.auditor.name
-  privileges        = ["USAGE"]
-  on_schema_object {
-    object_type = "PROCEDURE"
-    object_name = "${local.gold_database}.CONTROL.AUDIT_CREDENTIAL_POLICIES()"
-  }
-}
-
 # --- The database owner ---------------------------------------------------------------------------------------------------
-# The role named `owner` in rules/snowflake.yaml owns the platform's databases (held by the administrator role, whose grants this root never plans), so the Gold database
-# has a role of its own as owner rather than a person's account. Objects that already exist are imported once (terraform import:
+# The role named `owner` in rules/snowflake.yaml owns the platform's databases (held by the administrator role, whose grants this root never plans), so the Gold and operations databases
+# have a role of their own as owner rather than a person's account. Objects that already exist are imported once (terraform import:
 # the role and the ownership), so a plan shows no change.
 resource "snowflake_account_role" "owner" {
   name    = local.names.owner
@@ -306,5 +250,14 @@ resource "snowflake_grant_ownership" "gold_database" {
   on {
     object_type = "DATABASE"
     object_name = local.gold_database
+  }
+}
+
+resource "snowflake_grant_ownership" "operations_database" {
+  account_role_name   = snowflake_account_role.owner.name
+  outbound_privileges = "COPY"
+  on {
+    object_type = "DATABASE"
+    object_name = local.names.operations.database
   }
 }

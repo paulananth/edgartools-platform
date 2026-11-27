@@ -53,47 +53,39 @@ def lower(rows):
     return [{k.lower(): (str(v).lower() if isinstance(v, bool) else v) for k, v in row.items()} for row in rows]
 
 
-def expected_policies() -> dict:
-    """The policy file's values with the database it names resolved from snowflake.yaml."""
+def places() -> dict[str, str]:
+    """Each platform database that keeps exactly one schema, with that schema (the blocks of snowflake.yaml that name one)."""
     import yaml
     from edgar_warehouse.rules import files
 
-    policy = yaml.safe_load((files.ROOT / "snowflake_policy.yaml").read_text(encoding="utf-8"))
     names = yaml.safe_load((files.ROOT / "snowflake.yaml").read_text(encoding="utf-8"))
-    where = policy["location"]
-    return {**policy, "location": {"database": names[where["database_of"]]["database"], "schema": where["schema"]}}
+    return {b["database"].upper(): b["schema"].upper() for b in names.values() if isinstance(b, dict) and "schema" in b}
 
 
-def found_policies(connection: str, database: str):
-    """The live password and authentication policies with their properties, read through the administrator's read-only procedure
-    (the auditor holds no privilege on a policy: the only one that reads it also lets a role attach it); None when unreadable."""
-    rows = snow(connection, f"call {database}.control.audit_credential_policies()", soft=True)
-    return json.loads(next(iter(rows[0].values()))) if rows else None
+def credential_policies(connection: str) -> int:
+    password = snow(connection, f"select count(*) as n from {USAGE}.password_policies where deleted is null")
+    attached = snow(connection, f"select count(distinct policy_db || '.' || policy_schema || '.' || policy_name) as n from {USAGE}.policy_references "
+                                "where policy_kind = 'AUTHENTICATION_POLICY'")
+    return int(password[0]["N"]) + int(attached[0]["N"])
 
 
-def policy_drift(expected: dict, found: dict | None) -> list[str]:
-    """Every way the live policies differ from snowflake_policy.yaml: a policy missing, in another database or schema, or with another value."""
+def schemas(connection: str, kept: dict[str, str]) -> list[dict] | None:
+    """Every schema of each platform database, read in its own information schema; None when one cannot be read."""
+    found = []
+    for database in kept:
+        rows = snow(connection, f"select '{database}' as catalog_name, schema_name from {database}.information_schema.schemata", soft=True)
+        if rows is None:
+            return None
+        found += lower(rows)
+    return found
+
+
+def extra_schemas(kept: dict[str, str], found: list[dict] | None) -> list[str] | None:
+    """Every schema of a platform database other than the one it keeps (INFORMATION_SCHEMA is Snowflake's own view)."""
     if found is None:
-        return ["the policies could not be read"]
-    place = (expected["location"]["database"].upper(), expected["location"]["schema"].upper())
-    drift = []
-    for kind in ("password", "authentication"):
-        want = expected[kind]
-        held = [p for p in found[kind] if p["name"].upper() == want["name"].upper()]
-        drift += [f"{kind} policy {p['name']} is in {p['database_name']}.{p['schema_name']}, not {place[0]}.{place[1]}"
-                  for p in found[kind] if (p["database_name"].upper(), p["schema_name"].upper()) != place]
-        if not held:
-            drift.append(f"{kind} policy {want['name']} is missing")
-            continue
-        properties = held[0]["properties"]
-        if kind == "password":
-            drift += [f"password {key}: {properties.get('password_' + key)}, expected {value}"
-                      for key, value in want.items() if key != "name" and str(properties.get("password_" + key)) != str(value)]
-        else:
-            methods = {m.strip().upper() for m in properties.get("authentication_methods", "").strip("[]").split(",") if m.strip()}
-            if methods != {m.upper() for m in want["methods"]}:
-                drift.append(f"authentication methods: {sorted(methods)}, expected {sorted(m.upper() for m in want['methods'])}")
-    return drift
+        return None
+    return sorted(f"{r['catalog_name']}.{r['schema_name']}" for r in found if r["catalog_name"].upper() in kept
+                  and r["schema_name"].upper() not in (kept[r["catalog_name"].upper()], "INFORMATION_SCHEMA"))
 
 
 def collect(env, as_admin: bool = False) -> dict:
@@ -103,8 +95,7 @@ def collect(env, as_admin: bool = False) -> dict:
     role = snow(connection, "select current_role() as role")[0]["ROLE"].upper()
     if role in ADMIN and not as_admin:
         sys.exit("the Snowflake connection runs as an administrator role: use the read-only auditor role, or pass --as-admin to record the gap")
-    expected = expected_policies()
-    policies = found_policies(connection, expected["location"]["database"])
+    kept = places()
     risky = ", ".join(f"'{p}'" for p in RISKY)
     return {
         "audit_role": role,
@@ -115,9 +106,10 @@ def collect(env, as_admin: bool = False) -> dict:
         "monitors": len(snow(connection, "show resource monitors")),
         "warehouses": lower(snow(connection, "show warehouses")),
         "statement_timeout": int(next(r["value"] for r in lower(snow(connection, "show parameters like 'STATEMENT_TIMEOUT_IN_SECONDS' in account")))),
-        "policy_drift": policy_drift(expected, policies),
-        "password_policies": len(policies["password"]) if policies else None,  # read from the live reader: the usage views lag by hours
-        "authentication_policies": len(policies["authentication"]) if policies else None,
+        # A role sees only the policies it holds a privilege on, so SHOW would list none: the usage views list every one (they lag by
+        # hours). An authentication policy has no view of its own and is found by its attachments.
+        "credential_policies": credential_policies(connection),
+        "extra_schemas": extra_schemas(kept, schemas(connection, kept)),
         "risky_grants": lower(snow(connection, f"select grantee_name, privilege from {USAGE}.grants_to_roles where deleted_on is null and granted_on in "
                                    f"('ACCOUNT', 'ROLE', 'WAREHOUSE', 'DATABASE') and privilege in ({risky}) and grantee_name not in "
                                    "('ACCOUNTADMIN', 'SECURITYADMIN', 'SYSADMIN', 'USERADMIN', 'ORGADMIN')")),
@@ -141,6 +133,7 @@ def controls(ev: dict) -> list[dict]:
     as_admin = sum(int(r["n"]) for r in ev["queries"] if (r["role_name"] or "").upper() == "ACCOUNTADMIN")
     admin_password = sum(int(r["n"]) for r in ev["logins"] if r["user_name"] in ev["admin_holders"] and r["first_factor"] == "PASSWORD" and not r["second_factor"])
     services = [u for u in ev["users"] if u.get("type") == "SERVICE"]
+    interactive = sorted(u["name"] for u in ev["users"] if u["name"].startswith("EDGARTOOLS") and u.get("type") != "SERVICE")
     ungoverned = [w["name"] for w in ev["warehouses"] if (w.get("resource_monitor") or "null") == "null"]
     defaulting = sum((a.get("default_role") or "").upper() == "ACCOUNTADMIN" for a in admins)
     return [
@@ -157,8 +150,10 @@ def controls(ev: dict) -> list[dict]:
           "Set an account network policy; add one per service user"),
         c("CST", not ungoverned, {"warehouses_without_monitor": len(ungoverned), "monitors": ev["monitors"]}, "Create a resource monitor with a credit quota"),
         c("TMO", ev["statement_timeout"] <= MAX_TIMEOUT, {"statement_timeout_s": ev["statement_timeout"]}, "Set a timeout on the account or on each service user"),
-        c("POL", (ev["password_policies"] or 0) > 0 and (ev["authentication_policies"] or 0) > 0 and not ev.get("policy_drift"),
-          {"password_policies": ev["password_policies"], "authentication_policies": ev["authentication_policies"], "drift_from_snowflake_policy_yaml": ev.get("policy_drift")},
-          "Apply the access Terraform root from rules/snowflake_policy.yaml (policies live in the Gold database's POLICIES schema, no other database)",
-          tested=ev["authentication_policies"] is not None),
+        c("POL", ev["credential_policies"] == 0 and not interactive, {"credential_policies": ev["credential_policies"], "platform_logins_not_service": interactive},
+          "Make every platform login a TYPE = SERVICE user (no password possible) and drop any credential policy object: Snowflake keeps one only in a database",
+          title="Credential rules are native: every platform login is a service user, and no credential policy object exists in any database"),
+        c("SCH", not ev["extra_schemas"], {"extra_schemas": ev["extra_schemas"]},
+          "Drop each schema a platform database holds beyond the one rules/snowflake.yaml names (skills/aws-snowflake-operations/scripts/one_schema_sql.py)",
+          title="Each platform database holds only the one schema rules/snowflake.yaml names", tested=ev["extra_schemas"] is not None),
     ]

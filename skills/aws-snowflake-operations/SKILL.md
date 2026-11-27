@@ -187,7 +187,7 @@ Check the account first: `snow sql --connection <name> -q "SHOW DATABASES"` and 
 A rebuilt account holds neither the `EDGARTOOLS_<ENV>` database nor an instance, and the account named in older
 notes is not the live one. The order:
 
-1. Use [`scripts/mdm_create_network_policy.sql`](scripts/mdm_create_network_policy.sql) with an explicitly approved writable control database/schema for the network rule and policy. This is operational connectivity setup, independent of Gold; it does not create a Gold schema or approve a model destination. Preserve existing policy references until an approved relocation is verified.
+1. Use [`scripts/mdm_create_network_policy.sql`](scripts/mdm_create_network_policy.sql) with the `operations` database and schema of `rules/snowflake.yaml` for the network rule and policy. This is operational connectivity setup, independent of Gold; it does not create a Gold schema or approve a model destination. Preserve existing policy references until an approved relocation is verified.
 2. Use `pg_connect.py --create` from the Snowflake Postgres manage skill for a new instance, with the created network policy. Review compute family and storage before execution.
 3. `bootstrap-prod-mdm.sh`, which rotates both credentials and runs `mdm init` last. It rotates on every run
    with no way to skip it, and a rotation needs the operator's word; without it, build the connection file from the
@@ -269,7 +269,7 @@ The auditor never fixes; this procedure never grades.
    (`.scratch/access-audit/approvals.jsonl`), then applies the saved plan.
 4. Hand back to the access audit: re-run `access_audit.py` on the platform; the finding is closed only by the re-run's PASS.
 
-**No database is created to hold a control.** A password or authentication policy is a schema-level object (Snowflake documents no account-level form), so it lives in a schema of a database the platform already has (the Gold database's `POLICIES`); its values and home are `rules/snowflake_policy.yaml`, Terraform reads that file, and the audit's POL control fails any difference. A new database needs the operator's approval first; use the platform's native feature before adding an object.
+**Each platform database holds one schema, and no credential policy object is kept** (operator, 2026-11-26: "gold must not have control and ploicies schemas only one schema", "credential policies must not be in a db it has to live outside"). Snowflake keeps a password or authentication policy only inside a schema, so none is made: every platform login is a `TYPE = SERVICE` user, which Snowflake never lets sign in with a password, and a person's password follows Snowflake's built-in rules. The hosted Postgres ingress network rule, which Snowflake also keeps only in a schema, lives in the operations database (`operations` in `rules/snowflake.yaml`, approved for that rule alone). [one_schema_sql.py](scripts/one_schema_sql.py) prints the SQL that moves an account to this layout, run by an administrator; the audit's POL and SCH controls check it. A new database needs the operator's approval first; use the platform's native feature before adding an object.
 
 Objects made before the root existed are imported once, so a plan shows no change for them. A permission error from the
 access-admin identity is reported as the missing privilege to grant it; it is never worked around with an administrator.
