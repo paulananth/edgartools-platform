@@ -1974,18 +1974,16 @@ def test_a_forced_load_is_a_new_publication_with_a_revision_above_the_one_the_fi
     assert args.count("--revision") == 1 and args[args.index("--revision") + 1] == "20261124121919000"
 
 
-@pytest.mark.parametrize("capacity, widest, carried, lanes, limit", [("local", 2, 8, 4, "memory"), ("aws-large", 2, 8, 4, "vcpu"),
-                                                                     ("aws-medium", 4, 4, 1, "vcpu"), ("aws-small", 1, 2, 1, "memory")])
-def test_a_compute_carries_the_workers_a_step_is_sized_by_over_the_widest_first_step_lanes_at_once(monkeypatch, capacity, widest, carried, lanes, limit):
+@pytest.mark.parametrize("capacity, widest, carried, limit", [("local", 2, 8, "memory"), ("aws-large", 2, 8, "vcpu"),
+                                                              ("aws-medium", 4, 4, "vcpu"), ("aws-small", 1, 2, "memory")])
+def test_a_compute_carries_the_workers_its_memory_and_vcpus_allow_and_names_which_sets_the_limit(monkeypatch, capacity, widest, carried, limit):
     monkeypatch.setattr(chain.os, "cpu_count", lambda: 8)
     monkeypatch.setattr(chain, "physical_gb", lambda: 8.0)  # `local` carries half of it: 4 GB, so 8 workers of half a gigabyte
     monkeypatch.setattr(chain, "in_container", lambda: False)
     steps = [{"name": "a1", "lane": "A", "workers": 2}, {"name": "a2", "lane": "A", "workers": 8},
              {"name": "b1", "lane": "B", "workers": widest}, {"name": "c1", "lane": "C", "workers": 1}]
-    # the workers a compute carries are its memory in worker-sized shares, at most four to a vCPU (the range a step's workers follow);
-    # a later step of a lane (a2) never counts: the widest first step is 2 (or 4 for aws-medium's b1), so lanes = carried // widest
-    assert chain.lane_budget(steps, capacity) == {"lanes": lanes, "workers": carried, "limit": limit}
-    assert chain.lanes_at_once(steps, capacity) == lanes
+    # the workers a compute carries are its memory in worker-sized shares, at most four to a vCPU (the range a step's workers follow)
+    assert chain.worker_budget(steps, capacity) == {"workers": carried, "limit": limit}
 
 
 def test_every_lane_of_the_real_load_jobs_is_started_and_load_sh_sets_that_number_in_the_definition(capsys, monkeypatch):
@@ -2006,16 +2004,16 @@ def test_each_job_of_a_forced_load_publishes_its_own_revision_so_a_sources_quart
     assert all(one["position"] == place for place, one in enumerate(one for step in chain.load_jobs() for one in chain.loads(step)))
 
 
-def test_inside_the_loader_container_local_is_the_whole_memory_the_runtime_gives_and_the_measured_worker_size_sets_the_lanes(monkeypatch):
-    """The first memory-aware budget halved the container's memory (`local` is half a machine) and gave 1 lane where 2 had run:
-    inside a container the memory seen is the runtime's whole allotment. A measured worker of 0.4 GB, 3.9 GB: 9 workers, 2 lanes of 4."""
+def test_inside_the_loader_container_local_is_the_whole_memory_the_runtime_gives_and_the_measured_worker_size_sets_the_workers(monkeypatch):
+    """Inside a container the memory seen is the runtime's whole allotment (`local` elsewhere is half a machine).
+    A measured worker of 0.4 GB in 3.9 GB: 9 workers."""
     monkeypatch.setattr(chain.os, "cpu_count", lambda: 8)
     monkeypatch.setattr(chain, "physical_gb", lambda: 3.9)
     steps = [{"name": "a1", "lane": "A", "workers": 4, "worker_gb": 0.4}, {"name": "b1", "lane": "B", "workers": 2, "worker_gb": 0.4}]
     monkeypatch.setattr(chain, "in_container", lambda: True)
-    assert chain.lane_budget(steps, "local") == {"lanes": 2, "workers": 9, "limit": "memory"}
-    monkeypatch.setattr(chain, "in_container", lambda: False)  # on the Mac itself half of it is the load's: 1.95 GB, 4 workers, 1 lane
-    assert chain.lane_budget(steps, "local")["lanes"] == 1
+    assert chain.worker_budget(steps, "local") == {"workers": 9, "limit": "memory"}
+    monkeypatch.setattr(chain, "in_container", lambda: False)  # on the Mac itself half of it is the load's: 1.95 GB, 4 workers
+    assert chain.worker_budget(steps, "local")["workers"] == 4
     assert all(step["worker_gb"] == 0.4 for step in chain.load_jobs())  # the file's default is the measured size
 
 
@@ -2641,14 +2639,52 @@ def test_the_controller_raises_nothing_into_a_full_store_and_sheds_from_one_held
     assert chain.store_level("ok", None) == "ok"
 
 
-def test_the_lane_budget_names_the_store_when_the_database_carries_fewer_workers_than_the_compute(monkeypatch):
+def test_the_worker_budget_names_the_store_when_the_database_carries_fewer_workers_than_the_compute(monkeypatch):
     checked(monkeypatch, chain, "store_workers", lambda path=None: 4)
     steps = [{"lane": "A", "workers": 2}, {"lane": "B", "workers": 2}, {"lane": "C", "workers": 2}]
-    assert chain.carried(steps, "local")[:2] == (4, "store")
-    assert chain.lanes_at_once(steps, "local") == 2
+    assert chain.worker_budget(steps, "local") == {"workers": 4, "limit": "store"}
 
 
 def test_with_no_other_load_running_a_step_starts_at_its_floor_though_the_store_is_full(tmp_path):
     got = chain.admit(8, 0.4, tmp_path / "gate", free=lambda: 100.0, running=lambda: False, pressed=lambda: False,
                       sleep=lambda s: pytest.fail("it waited"), settle=0, store=lambda: 0)
     assert got == 4
+
+
+def test_the_store_line_gives_the_workers_in_use_the_rows_a_minute_and_the_lock_waiters_every_ten_minutes(monkeypatch):
+    monkeypatch.setenv("LOAD_STORE", "hosted")
+    checked(monkeypatch, chain, "store_workers", lambda path=None, name=None: 8)
+    readings = iter([{"mdm": 1_000, "silver": 5_000}, {"mdm": 61_000, "silver": 5_000}])
+    memory = chain.Memory()
+    read = lambda url: next(readings)
+    assert chain.store_note(memory, "postgresql://x/y", 8, 0, now=0.0, read=read) is None  # the first reading opens a window
+    assert chain.store_note(memory, "postgresql://x/y", 8, 0, now=300.0, read=read) is None  # not ten minutes yet: nothing read
+    assert chain.store_note(memory, "postgresql://x/y", 8, 1, now=600.0, read=read) == (
+        "store hosted: 8 of 8 workers in use; rows written a minute: mdm 6,000; 1 waiting on locks")
+
+
+def test_a_store_that_could_not_be_read_writes_no_line_and_keeps_its_window_open_from_the_last_reading(monkeypatch):
+    monkeypatch.setenv("LOAD_STORE", "hosted")
+    checked(monkeypatch, chain, "store_workers", lambda path=None, name=None: 8)
+    readings = iter([{"mdm": 1_000}, {}, {"mdm": 121_000}])
+    memory = chain.Memory()
+    read = lambda url: next(readings)
+    assert chain.store_note(memory, "postgresql://x/y", 8, 0, now=0.0, read=read) is None
+    assert chain.store_note(memory, "postgresql://x/y", 8, 0, now=600.0, read=read) is None  # unreadable: never "none" written
+    assert chain.store_note(memory, "postgresql://x/y", 8, 0, now=1200.0, read=read) == (
+        "store hosted: 8 of 8 workers in use; rows written a minute: mdm 6,000; 0 waiting on locks")
+
+
+def test_a_lock_count_that_could_not_be_read_is_said_unknown_never_zero(monkeypatch):
+    monkeypatch.setenv("LOAD_STORE", "hosted")
+    checked(monkeypatch, chain, "store_workers", lambda path=None, name=None: 8)
+    readings = iter([{"mdm": 0}, {"mdm": 60_000}])
+    memory = chain.Memory()
+    read = lambda url: next(readings)
+    chain.store_note(memory, "postgresql://x/y", 8, None, now=0.0, read=read)
+    assert chain.store_note(memory, "postgresql://x/y", 8, None, now=600.0, read=read).endswith("; lock waiters unknown")
+
+
+def test_a_load_that_names_no_store_writes_no_store_line(monkeypatch):
+    monkeypatch.delenv("LOAD_STORE", raising=False)
+    assert chain.store_note(chain.Memory(), "postgresql://x/y", 4, 0, now=0.0, read=lambda url: pytest.fail("read")) is None

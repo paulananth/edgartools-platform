@@ -126,4 +126,4 @@ python scripts/db_monitor.py budget --rate <cost per hour of the instance> --lim
 
 ## Handshake
 
-Reads the instance, changes nothing. Receives a stalled or locked step from [load-monitoring](../load-monitoring/SKILL.md) and hands its findings (blockers, long transactions, costly statements) to [production-support](../production-support/SKILL.md) and [data-operations](../data-operations/SKILL.md), which act. The table of who owns what and hands off to whom is [OWNERSHIP.md](../data-platform/OWNERSHIP.md).
+Reads the instance, changes nothing. Receives a stalled or locked step, or a store at its worker limit, from [load-monitoring](../load-monitoring/SKILL.md) and hands its findings (blockers, long transactions, costly statements, the instance's CPU and memory at the limit) to [production-support](../production-support/SKILL.md) and [data-operations](../data-operations/SKILL.md), which act: data-operations changes the worker limit from them (its HOSTED-LOADS, "Balancing a load"). The table of who owns what and hands off to whom is [OWNERSHIP.md](../data-platform/OWNERSHIP.md).
