@@ -14,6 +14,18 @@ STATES = (
 )
 CODE = {name: code for name, code, _, _ in STATES}
 
+# The lane board's filters: a name and the states it keeps. A tile counts with its filter's pattern and a click on it selects
+# that filter, so a tile and the lanes it shows always mean the same states.
+FILTERS = (
+    ("All", ".*"),
+    ("Running", "progressing|stalled|locked"),
+    ("Done", "done"),
+    ("Stalled or locked", "stalled|locked"),
+    ("Failed", "failed"),
+    ("Waiting", "waiting"),
+)
+FILTER = dict(FILTERS)
+
 # A reading turns a colour at these values (the verdict's own limits, so the dashboard and `--status` agree).
 LOG_AGE_MINUTES = (10, 20)      # a log older than ten minutes is the first sign of a stall
 LOCK_WAITERS = (1, 3)           # one waiting session is normal; three is the scheduler's own limit
