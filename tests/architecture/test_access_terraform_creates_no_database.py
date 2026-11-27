@@ -1,5 +1,5 @@
-"""The Snowflake access root creates no database: its policies live in a schema of the Gold database, from rules/snowflake_policy.yaml
-(operator, 2026-11-21: "you cannot be creating a database ... remove creating unapproved db")."""
+"""The Snowflake access root creates no database (operator, 2026-11-21: "you cannot be creating a database ... remove creating unapproved
+db") and keeps no credential policy object (operator, 2026-11-26: "credential policies must not be in a db it has to live outside")."""
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -11,9 +11,11 @@ def test_the_access_root_declares_no_database():
     assert found == [], f"a database is created only with the operator's approval: {found}"
 
 
-def test_the_policies_are_read_from_the_policy_file_not_written_in_terraform():
-    text = (ACCESS / "accounts" / "prod" / "main.tf").read_text()
-    assert "rules/snowflake_policy.yaml" in text and "min_length           = 14" not in text
+def test_the_access_root_keeps_no_credential_policy_and_no_schema():
+    text = "".join(p.read_text() for p in ACCESS.rglob("*.tf"))
+    kept = [kind for kind in ("snowflake_password_policy", "snowflake_authentication_policy", "snowflake_schema", "policy_attachment")
+            if kind in text]
+    assert kept == []
 
 
 def test_the_owner_role_and_the_gold_database_ownership_are_declared_from_the_names_file():

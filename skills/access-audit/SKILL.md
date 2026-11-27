@@ -99,10 +99,10 @@ own access records is no request to a data provider.
 | AUT | No password-only privileged login; service identities use keys or roles | No shared or phishable secret |
 | LPR | No unexpected ownership, grant-management or wildcard-admin power | The escalation path |
 | NET | A network or public-exposure boundary applies | Boundary protection |
-| SCH | Nothing lives in a database's `public` schema; every object is in its store's own schema (PostgreSQL only; read in each platform database) | A schema nobody owns is open to every login, and what is exposed from it is not governed |
+| SCH | Nothing lives in a database's `public` schema; every object is in its store's own schema (PostgreSQL: read in each platform database; Snowflake: each database `rules/snowflake.yaml` names holds only its one schema) | A schema nobody owns is open to every login, and what is exposed from it is not governed |
 | CST | Cost and capacity guards (monitors, budgets, connection limits) | A runaway cannot spend or exhaust without a stop |
 | TMO | Execution is bounded (statement or session timeouts) | A runaway statement cannot run for days |
-| POL | Credential policies exist, and equal `rules/snowflake_policy.yaml` (Snowflake: values, and the schema they live in; a policy in any other database is drift) | Standards enforced, not hoped for |
+| POL | Credential policies exist and are enforced (Snowflake: natively, with no policy object, since Snowflake keeps one only inside a database: every platform login is a `TYPE = SERVICE` user, and the usage views list no password policy and no attached authentication policy) | Standards enforced, not hoped for |
 | LOG | Access and changes logged; transport and storage encrypted | Who did what, when |
 | CHG | Every access principal has a ticket and is defined in code; protected branch with a review | Change enablement: approver, reason, back-out |
 | SCR | No plain-text secret; secret files private; secret scanning on | Credential hygiene |
@@ -123,12 +123,9 @@ refuse an administrator identity), `principals(evidence)` (the roles and users t
 test; list it in `PLATFORMS` in `access_audit.py`, then add its clean case and one weakness per objective to
 `tests/unit/test_access_audit.py`. Databricks, OpenMetadata and any further cloud follow this contract.
 
-**Credential-policy values.** Where a platform keeps a policy a role cannot read without a privilege that could also change it
-(Snowflake's `APPLY`), the platform's administrator owns a read-only reader that returns the policies as
-`{"password": [...], "authentication": [...]}` (each `{database_name, schema_name, name, properties}`), and the auditor holds
-use of that reader only. Snowflake's is the procedure `AUDIT_CREDENTIAL_POLICIES` in the Gold database's `CONTROL` schema
-(`infra/terraform/access/snowflake`). A new platform returns the same shape from its own reader; `policy_drift` compares it
-with the policy file, whatever the vendor. The code and its tests
+**Credential policies on Snowflake.** A role sees only the policies it holds a privilege on, so `SHOW` lists none to the auditor;
+the audit counts them in the usage views instead (`PASSWORD_POLICIES`, and an authentication policy by its attachments in
+`POLICY_REFERENCES`, since it has no view of its own). Both lag by hours. The code and its tests
 follow `CLAUDE.md`'s "Code review" and test-writing rules.
 
 ## Decisions, artifacts and handoffs

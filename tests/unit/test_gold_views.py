@@ -190,7 +190,7 @@ def test_the_exposure_scripts_take_the_mirror_name_from_the_same_file():
 
 
 def test_the_one_names_file_also_names_the_owner_role():
-    assert NAMES["owner"] and set(NAMES) == {"owner", "mirror", "gold"}
+    assert NAMES["owner"] and set(NAMES) == {"owner", "mirror", "gold", "operations"}
 
 
 def test_each_exposed_silver_table_gets_a_fact_made_from_its_spec_and_an_explicit_object_wins():
