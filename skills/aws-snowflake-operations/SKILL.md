@@ -44,7 +44,7 @@ lists, and Gold is dbt views over it (`edgar_warehouse/gold/views.py` writes the
 project from `destination/gold/gold.yaml`). The mirror exists only while it
 replicates: a store reset removes it, and it is made again after the next load
 and its finish ([HOSTED-MIRRORING](../data-platform/HOSTED-MIRRORING.md#after-the-first-load-mirror-only-what-gold-reads)).
-Until then Gold's views read nothing. `verified` in `sources/managed-mirror.yaml`
+Until then a Gold view fails when queried, since its tables are absent. `verified` in `sources/managed-mirror.yaml`
 says whether the current mirror passed its read-back. A dropped target's name
 cannot be reused, so a mirror made again takes a new `mirror.database` in
 `rules/snowflake.yaml`. Follow
