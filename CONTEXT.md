@@ -604,6 +604,10 @@ _Avoid_: Routine pipeline writes, silent repair without evidence
 The single path that writes MDM master tables: one atomic bounded batch holding decisions, projection, MDM Commit Evidence, Consumer Checkpoint, and publication intents, or nothing. Applications hold no direct master-table write.
 _Avoid_: Direct table write, partial batch, nested commit
 
+**MDM Commit Evidence**:
+The durable entity-change and relationship-version facts one Bookkeeping run committed to MDM, used to count that run's committed outputs by type; a later change or export does not replace the run that originated them.
+_Avoid_: Full processing funnel, current-row last modifier, a log window
+
 **Steward**:
 The person or deterministic rule recorded as the actor of an Enrichment Stewardship Decision; an attribute of the decision, not a database role.
 _Avoid_: Separate database role, decision without a named actor
@@ -857,6 +861,10 @@ _Avoid_: Using explore as the agent source of truth, silent mode switching, expl
 **Decision Graph Bundle**:
 The Agent Decision Surface unit of read: a multi-entity payload rooted at one subject (usually an issuer) that includes related entities and relationship edges the agent may use, bound to one Relationship Generation Snapshot / data watermark.
 _Avoid_: Single-table company row, ad-hoc multi-query join by the agent, unbounded "whole graph" dump, Streamlit ego-network screenshot
+
+**Current-at-Watermark Relationship**:
+A relationship version whose proven date interval contains the as-of date under `[valid_from_date, valid_to_date)` semantics; a relationship with an unknown interval is kept but is not current for a strict as-of read.
+_Avoid_: Unknown-date-as-current, timestamp-inclusive end date
 
 **Bundle Subject**:
 The primary entity the Decision Graph Bundle is built for (typically a company identified by CIK); related persons, advisers, funds, securities, and edges are included only as they attach to that subject under declared relationship types and applicability rules.
