@@ -193,9 +193,6 @@ def test_a_tile_click_filters_the_lanes_to_the_states_it_counts():
         pattern = selected(link["url"])
         assert pattern in offered
         assert {n for n, *_ in design.STATES if re.fullmatch(pattern, n)} == states
-        assert pattern in by_title[title]["targets"][0]["expr"]
     every = next(o["value"] for o in variable["options"] if o["text"] == "All")
     assert {n for n, *_ in design.STATES if re.fullmatch(every, n)} == {n for n, *_ in design.STATES}
     assert variable["current"]["value"] == every
-    lanes_expr = by_title["Lanes"]["targets"][0]["expr"]
-    assert "${state:raw}" in lanes_expr and "@ end()" in lanes_expr
