@@ -122,6 +122,15 @@ CODE read it in place of git.
   after a bundle completes, so a move abandons next to nothing; a pressed machine whose running steps are all mid-bundle sheds
   nothing until one of them completes a bundle. A step of one bundle, one declared `one_document`, or one shed earlier
   in its attempt is never moved: a move abandons its run in flight, and a step shed, raised and shed again loses run after run.
+- **The store bounds the load, not only its compute.** Every step's worker holds a session on the one database, and one sort or
+  hash of a session may take `work_mem`: the load jobs file's `stores:` entry the load names (`LOAD_STORE`; both pipelines
+  name `hosted`, the instance's cores, memory and `work_mem`) carries four workers to a core and half its memory in `work_mem`
+  shares, across every running step. A step waits until the store carries its floor and starts with no more than it has left
+  (`waits for the store`); the controller and the local scheduler raise nothing into a full store and shed from one held past
+  it; the lane budget names `store` when it is the limit. Every lane still starts and queues at admission. A large compute
+  with an idle CPU is no sign of room: the database is where the load runs out. A resize of the instance is a changed line. The
+  refusal `the database server ran short of a resource (53200: memory ...)` is the store full; read the instance's server log
+  and metrics (`database-monitoring`: `logs`, `telemetry`) for what took the memory.
 - **One task per poller.** The worker's `ps` sees only its container, so QUIET's process count no longer covers the Mac; the
   loader's database sessions still do. Never start `load_jobs.py` on the Mac beside it.
 - **Mounts:** the logins and the captures are read-only; the stores folder, `LOGS` and the run documents' folder

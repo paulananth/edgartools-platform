@@ -20,6 +20,7 @@ services:
       PROVING: ${PROVING:?}
       LOGS: ${LOGS:?}
       RUN: ${RUN:?}
+      LOAD_STORE: hosted  # the hosted stores: their instance bounds the load (load jobs file `stores:`)
       ACTIVITY_ARN: ${ACTIVITY_ARN:?load.sh creates the activity}
       AWS_ENDPOINT_URL_SFN: http://localhost:8083
       AWS_DEFAULT_REGION: us-east-1
@@ -49,6 +50,7 @@ services:
       LOGS: ${LOGS:?}
       RUN: ${RUN:?}
       CAPACITY: ${CAPACITY:-local}  # the compute whose lane budget it shows, the one load.sh applied
+      LOAD_STORE: hosted
     volumes:  # only the reader login (in STORES) and the run's logs: not the logins folder, which holds other private files
       - ${STORES}:${STORES}:ro
       - ${LOGS}:${LOGS}:ro

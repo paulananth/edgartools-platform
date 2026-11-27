@@ -23,13 +23,25 @@ def refusal(exc: Exception) -> str:
         ("column", getattr(diag, "column_name", None)), ("table", getattr(diag, "table_name", None))) if value]
     return f" ({', '.join(parts)})" if parts else f" ({type(orig or exc).__name__})"
 
+# What a refusal's SQLSTATE class says (its first two characters): only a value (22) or a constraint (23) is the delivery's own.
+REFUSAL_CLASSES = {
+    "08": "the connection to the database was lost; deliver again",
+    "22": "a value is not its column's type",
+    "23": "a storage constraint refused the delivery",
+    "53": "the database server ran short of a resource (53200: memory, 53100: disk, 53300: connections); deliver again once it has room",
+    "57": "the database stopped the statement (a timeout, a cancel or a shutdown)",
+}
+
+
 def delivery_refusal(table: str, exc: Exception) -> str:
-    """Why a delivery failed in the database: another delivery's rows at once (retry), or a value or constraint."""
+    """Why a delivery failed in the database, by its SQLSTATE class; a refusal of another class says only its code."""
     orig = getattr(exc, "orig", None)
-    if getattr(orig, "pgcode", None) in ("40P01", "40001"):
+    if isinstance(orig, Blocked):
+        return f"silver.{table}: a value is not its column's type or a storage constraint refused the delivery: {orig}"
+    code = str(getattr(orig, "pgcode", None) or getattr(orig, "sqlstate", None) or "")
+    if code in ("40P01", "40001"):  # a deadlock or a serialization failure
         return f"silver.{table}: another delivery changed the same rows at once; deliver again"
-    detail = f": {orig}" if isinstance(orig, Blocked) else refusal(exc)
-    return f"silver.{table}: a value is not its column's type or a storage constraint refused the delivery{detail}"
+    return f"silver.{table}: {REFUSAL_CLASSES.get(code[:2], 'the database refused the delivery')}{refusal(exc)}"
 
 
 def lock(conn, spec):

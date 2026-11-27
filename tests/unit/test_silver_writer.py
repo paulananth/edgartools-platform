@@ -384,3 +384,21 @@ def test_a_deadlock_or_serialization_failure_tells_the_delivery_to_run_again():
     for pgcode in ("40P01", "40001"):
         assert delivery_refusal("visit", Failed(pgcode)) == "silver.visit: another delivery changed the same rows at once; deliver again"
     assert "SQLSTATE 23505" in delivery_refusal("visit", Failed("23505"))
+
+
+@pytest.mark.parametrize("pgcode, said", [
+    ("53200", "silver.visit: the database server ran short of a resource (53200: memory"),
+    ("22P02", "silver.visit: a value is not its column's type (SQLSTATE 22P02)"),
+    ("23505", "silver.visit: a storage constraint refused the delivery (SQLSTATE 23505)"),
+    ("08006", "silver.visit: the connection to the database was lost"),
+    ("42501", "silver.visit: the database refused the delivery (SQLSTATE 42501)"),
+    ("40002", "silver.visit: the database refused the delivery (SQLSTATE 40002)"),
+])
+def test_a_refusal_says_what_its_sqlstate_class_means_and_only_a_value_or_constraint_blames_the_delivery(pgcode, said):
+    from edgar_warehouse.silver_writer.relational import delivery_refusal
+
+    class Failed(Exception):
+        def __init__(self, pgcode):
+            self.orig = type("Orig", (), {"pgcode": pgcode, "diag": None})()
+
+    assert delivery_refusal("visit", Failed(pgcode)).startswith(said)
