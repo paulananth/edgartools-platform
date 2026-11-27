@@ -6,10 +6,10 @@ import json
 import os
 from pathlib import Path
 
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 
-from edgar_warehouse.control_contract import DRIVERS, keep_alive
+from edgar_warehouse.control_contract import DRIVERS
 
 from .config import Blocked, canonical
 
@@ -34,7 +34,6 @@ def get_engine(url: str | None = None):
     # A connection older than the bound is replaced at checkout, which finds one the server dropped while it sat
     # idle; a ping on every checkout is three round trips (BEGIN, SELECT 1, ROLLBACK), each a delay on a hosted store.
     engine = create_engine(target, pool_recycle=30, hide_parameters=True)
-    event.listen(engine, "connect", keep_alive)
     return engine
 
 
