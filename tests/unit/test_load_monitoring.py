@@ -173,3 +173,29 @@ def test_the_exporter_shows_the_lane_budget_beside_the_lanes_and_workers_running
     assert 'load_lane_budget{limit="memory"} 2' in text and "load_worker_budget 8" in text
     assert "load_lanes_running 1" in text and "load_workers_running 2" in text
     assert "load_lane_budget" not in exporter.render(SNAPSHOT)  # a reading with no budget shows none, never a guess
+
+
+def selected(link_url: str) -> str:
+    from urllib.parse import parse_qs, urlparse
+    return parse_qs(urlparse(link_url).query)["var-state"][0]
+
+
+def test_a_tile_click_filters_the_lanes_to_the_states_it_counts():
+    import re
+    board = dashboard.build()
+    by_title = {p["title"]: p for p in board["panels"]}
+    (variable,) = [v for v in board["templating"]["list"] if v["name"] == "state"]
+    offered = {o["value"] for o in variable["options"]}
+    expected = {"Done": {"done"}, "Running": {"progressing", "stalled", "locked"},
+                "Stalled or locked": {"stalled", "locked"}, "Failed": {"failed"}}
+    for title, states in expected.items():
+        (link,) = by_title[title]["fieldConfig"]["defaults"]["links"]
+        pattern = selected(link["url"])
+        assert pattern in offered
+        assert {n for n, *_ in design.STATES if re.fullmatch(pattern, n)} == states
+        assert pattern in by_title[title]["targets"][0]["expr"]
+    every = next(o["value"] for o in variable["options"] if o["text"] == "All")
+    assert {n for n, *_ in design.STATES if re.fullmatch(every, n)} == {n for n, *_ in design.STATES}
+    assert variable["current"]["value"] == every
+    lanes_expr = by_title["Lanes"]["targets"][0]["expr"]
+    assert "${state:raw}" in lanes_expr and "@ end()" in lanes_expr

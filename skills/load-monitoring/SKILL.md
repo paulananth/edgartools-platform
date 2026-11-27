@@ -61,6 +61,7 @@ decorated, and a number is never rounded to look calm.
 | Interaction | What carries it in Grafana |
 |---|---|
 | A step starts, works, stalls or ends | The lane board: one bar a step, coloured by state, grouped by lane |
+| "Show me only the running (done, stalled, failed) steps" | A click on the Done, Running, Stalled-or-locked or Failed tile keeps only those steps on the lane board, by their state at the end of the time range; the Steps list at the top picks any filter, All shows every step. A tile counts with the same states it filters (`FILTERS` in `scripts/design.py`) |
 | "Why is it not running?" | The Waiting-for table: each waiting step and the step it waits for; empty means a free slot |
 | A restart | An annotation on the timelines at the moment an attempt count rises, and an amber Attempt cell |
 | A stall | Log age turns amber at ten minutes and red at twenty; the bar and the Stalled-or-locked tile turn red from one |

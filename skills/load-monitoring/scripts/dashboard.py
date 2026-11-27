@@ -1,5 +1,7 @@
 """The load monitor dashboard, built from the design tokens: every colour and threshold comes from `design`, every panel
 says in its description which interaction it carries and what a reading means. Pushed by `monitoring.py`; never edited by hand."""
+from urllib.parse import quote
+
 import design
 
 UID = "load-monitor"
@@ -16,27 +18,40 @@ def target(expr: str, ref: str = "A", legend: str = "", fmt: str = "time_series"
 
 
 def stat(title: str, description: str, expr: str, x: int, thresholds: dict, unit: str = "none", decimals: int = 0,
-         graph: str = "area") -> dict:
+         graph: str = "area", links: list | None = None) -> dict:
     return {"type": "stat", "title": title, "description": description, "datasource": SOURCE,
             "gridPos": {"h": 4, "w": 3, "x": x, "y": 0}, "targets": [target(expr)],
             "fieldConfig": {"defaults": {"thresholds": thresholds, "color": {"mode": "thresholds"}, "unit": unit,
-                                         "decimals": decimals, "mappings": []}, "overrides": []},
+                                         "decimals": decimals, "mappings": [], "links": links or []}, "overrides": []},
             "options": {"colorMode": "background", "graphMode": graph, "textMode": "value", "justifyMode": "center",
                         "reduceOptions": {"calcs": ["lastNotNull"], "values": False}}}
+
+
+def counted(name: str) -> str:
+    """The number of steps in a filter's states."""
+    return f'sum(load_steps{{state=~"{design.FILTER[name]}"}}) or vector(0)'
+
+
+def shows(name: str) -> list[dict]:
+    """A click on the tile filters the lanes to the tile's states; the other settings and the time range stay."""
+    pattern = quote(design.FILTER[name], safe="")
+    return [{"title": f"Show {name.lower()} on the lanes", "oneClick": True,
+             "url": f"/d/{UID}/load-monitor?var-state={pattern}&${{__url_time_range}}"}]
 
 
 def header() -> list[dict]:
     d = design
     zero_green = lambda colour: steps((None, d.GREEN), (1, colour))
+    click = " Click it to show only those steps on the lanes; pick All in the Steps list at the top to see every step again."
     return [
-        stat("Done", "Steps finished. The number ticks up when a step ends; its block stays green on the lanes below.",
-             'load_steps{state="done"}', 0, steps((None, d.NEUTRAL), (1, d.GREEN))),
-        stat("Running", "Steps with a process now: progressing, stalled or locked.",
-             'sum(load_steps{state=~"progressing|stalled|locked"})', 3, steps((None, d.NEUTRAL), (1, d.ORANGE))),
-        stat("Failed", "Steps the scheduler gave up on. Any is red: a retry cannot change a repeated failure.",
-             'load_steps{state="failed"}', 6, zero_green(d.RED), graph="none"),
-        stat("Stalled or locked", "Running steps with no sign of work, or waiting on database locks. Red from one.",
-             'sum(load_steps{state=~"stalled|locked"})', 9, zero_green(d.RED), graph="none"),
+        stat("Done", "Steps finished. The number ticks up when a step ends; its block stays green on the lanes below." + click,
+             counted("Done"), 0, steps((None, d.NEUTRAL), (1, d.GREEN)), links=shows("Done")),
+        stat("Running", "Steps with a process now: progressing, stalled or locked." + click,
+             counted("Running"), 3, steps((None, d.NEUTRAL), (1, d.ORANGE)), links=shows("Running")),
+        stat("Failed", "Steps the scheduler gave up on. Any is red: a retry cannot change a repeated failure." + click,
+             counted("Failed"), 6, zero_green(d.RED), graph="none", links=shows("Failed")),
+        stat("Stalled or locked", "Running steps with no sign of work, or waiting on database locks. Red from one." + click,
+             counted("Stalled or locked"), 9, zero_green(d.RED), graph="none", links=shows("Stalled or locked")),
         stat("Lock waiters", "Sessions waiting on database locks: one is normal (amber), three is the scheduler's limit (red).",
              "load_lock_waiters", 12, steps((None, d.GREEN), (d.LOCK_WAITERS[0], d.AMBER), (d.LOCK_WAITERS[1], d.RED)), graph="none"),
         stat("Memory free", "Share of memory free. Short under a quarter (amber), pressed under a tenth (red): the controller holds lanes back.",
@@ -54,11 +69,13 @@ def header() -> list[dict]:
 def lanes() -> dict:
     mappings = {str(code): {"text": name, "color": colour, "index": code} for name, code, colour, _ in design.STATES}
     return {"type": "state-timeline", "title": "Lanes", "datasource": SOURCE,
-            "description": "One row a step, grouped by lane. A step is grey while it is not running, orange while it "
+            "description": "One row a step, grouped by lane; the Steps list at the top (or a click on a tile) keeps only the steps "
+                           "whose state at the end of the time range is the one chosen. A step is grey while it is not running, orange while it "
                            "works, green when it is done, grey again once the whole load is complete, red when it failed, stalled or locked. A change of colour is the event; hover a bar for the step and its state. "
                            + " ".join(f"{name}: {meaning}." for name, _, _, meaning in design.STATES),
             "gridPos": {"h": 16, "w": 24, "x": 0, "y": 4},
-            "targets": [target("load_step_state", legend="{{lane}} · {{step}}")],
+            "targets": [target('load_step_state and on (lane, step) (load_step_info{state=~"${state:raw}"} @ end())',
+                               legend="{{lane}} · {{step}}")],
             "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": mappings}], "color": {"mode": "fixed"},
                                          "custom": {"fillOpacity": 85, "lineWidth": 0}}, "overrides": []},
             "options": {"mergeValues": True, "showValue": "never", "alignValue": "center", "rowHeight": 0.85,
@@ -137,10 +154,18 @@ def annotations() -> list[dict]:
                  "every step has finished; the lanes are grey until the next load")]
 
 
+def filter_variable() -> dict:
+    """The Steps list: each filter of the design tokens, All first and chosen when the board opens."""
+    options = [{"text": name, "value": pattern, "selected": name == "All"} for name, pattern in design.FILTERS]
+    return {"name": "state", "label": "Steps", "type": "custom", "hide": 0, "multi": False, "includeAll": False,
+            "query": ",".join(f"{name} : {pattern}" for name, pattern in design.FILTERS),
+            "options": options, "current": {"text": "All", "value": design.FILTER["All"]}}
+
+
 def build() -> dict:
     return {"uid": UID, "title": "Load monitor", "tags": ["load", "monitoring"], "timezone": "America/New_York",
             "refresh": "10s", "time": {"from": "now-6h", "to": "now"}, "schemaVersion": 39, "editable": False,
-            "graphTooltip": 1, "annotations": {"list": annotations()},
+            "graphTooltip": 1, "annotations": {"list": annotations()}, "templating": {"list": [filter_variable()]},
             "panels": [*header(), lanes(), running_table(), waiting_table(), whys_table(), rate()],
             "description": "Is the load healthy, and why is a step not running? Colour carries the answer: read the lanes, "
                            "then the stat strip. Built from skills/load-monitoring."}
