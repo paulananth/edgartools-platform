@@ -1436,6 +1436,35 @@ def test_a_snapshot_names_the_state_of_every_step_and_what_a_waiting_step_waits_
     assert "c1 (lane C, attempt 2" in "\n".join(chain.status_lines(snap))  # the text is the snapshot written out
 
 
+def test_a_load_whose_processes_run_elsewhere_shows_each_started_step_running_from_its_copied_logs(tmp_path, monkeypatch):
+    steps = [{"name": n, "lane": n[0].upper(), "source": f"s-{n}", "target": "mastering", "minutes": 60, "attempts": 3, "workers": 2}
+             for n in ("a1", "b1", "c1", "d1", "e1")]
+    state = tmp_path / "state.log"
+    state.write_text("11-23 07:00:00 ET a1 attempt 1 start\n11-23 07:10:00 ET a1 done: 5 min\n"
+                     "11-23 07:11:00 ET b1 attempt 1 start\n11-23 07:12:00 ET b1 attempt 1 stopped rc=1: boom\n"
+                     "11-23 07:12:00 ET b1 attempt 2 start\n"
+                     "11-23 07:13:00 ET c1 attempt 1 start\n11-23 07:14:00 ET c1 stopped: the same failure came back\n"
+                     "11-23 07:15:00 ET e1 attempt 1 start\n11-23 07:16:00 ET e1 attempt 1 stopped rc=1: between attempts\n")
+    (tmp_path / "chain-x-b1.log").write_text("Bundle 1/3: 5 of 5 documents to load\n")
+    os.utime(tmp_path / "chain-x-b1.log", (0, 0))  # silent for long: the verdict cannot lean on a CPU it did not measure
+    monkeypatch.setenv("LOAD_ELSEWHERE", "1")
+    monkeypatch.setattr(chain, "RUN", "x")
+    monkeypatch.setattr(chain, "LOGS", tmp_path)
+    checked(monkeypatch, chain, "external_loads", lambda: pytest.fail("this machine's processes were read"))
+    checked(monkeypatch, chain, "process_use", lambda source, target: ({}, 0.0))
+    checked(monkeypatch, chain, "process_listing", lambda: "")
+    checked(monkeypatch, chain, "machine_reading", lambda: {"load": 1.0, "cores": 8, "memory_free": 0.2})
+    monkeypatch.setattr(chain.time, "sleep", lambda s: None)
+    snap = chain.status_snapshot(steps, state, None, sample=1)
+    assert {s["name"]: s["state"] for s in snap["steps"]} == {"a1": "done", "b1": "stalled", "c1": "failed", "d1": "waiting",
+                                                              "e1": "waiting"}
+    (row,) = snap["running"]
+    assert (row["name"], row["attempt"], row["cpu"], row["memory_mb"]) == ("b1", 2, None, None)
+    assert "run on another machine, not measured here" in row["why"][0]
+    assert "CPU" not in row["verdict"]
+    assert "processes on another machine" in "\n".join(chain.status_lines(snap))
+
+
 def test_a_step_the_scheduler_gave_up_on_is_failed_until_it_starts_again(tmp_path):
     state = tmp_path / "state.log"
     state.write_text("11-23 07:00:00 ET a1 attempt 1 start\n11-23 07:01:00 ET a1 attempt 1 stopped rc=1: boom\n"

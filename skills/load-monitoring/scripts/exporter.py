@@ -58,8 +58,9 @@ def render(snapshot: dict, age: float = 0.0) -> str:
         who = {"lane": row["lane"], "step": row["name"]}
         lines += [sample("load_step_attempt", row["attempt"], **who), sample("load_step_workers", row["workers"], **who),
                   sample("load_step_elapsed_minutes", row["elapsed"], **who), sample("load_step_bound_minutes", row["bound"], **who),
-                  sample("load_step_log_age_minutes", row["log_age"], **who), sample("load_step_cpu_percent", row["cpu"], **who),
-                  sample("load_step_memory_mb", row["memory_mb"], **who),
+                  sample("load_step_log_age_minutes", row["log_age"], **who),
+                  *([] if row["cpu"] is None else  # its processes run on another machine: not measured, never a zero
+                    [sample("load_step_cpu_percent", row["cpu"], **who), sample("load_step_memory_mb", row["memory_mb"], **who)]),
                   sample("load_step_rows_per_minute", row["rows_per_min"], store=row["store"], **who),
                   sample("load_step_cause", 1, **who, cause=row["why"][-1])]  # the last of the five whys, a sentence of counts and names
         if row.get("kind") != "progressing":  # a step that is stalled or locked shows all the load jobs; one that works has none

@@ -233,3 +233,10 @@ def test_status_reads_an_aws_target_without_asking_for_the_macs_exporter(monkeyp
     checked(monkeypatch, monitoring, "api", lambda method, path, body=None: (200, {}))
     assert monitoring.status() == 0
     assert "a load task's on AWS: 192.0.2.10:9108" in capsys.readouterr().out
+
+
+def test_a_step_whose_processes_run_elsewhere_publishes_no_cpu_or_memory_rather_than_a_zero():
+    row = {**SNAPSHOT["running"][0], "cpu": None, "memory_mb": None}
+    text = exporter.render({**SNAPSHOT, "running": [row]})
+    assert "load_step_attempt{" in text
+    assert "load_step_cpu_percent" not in text and "load_step_memory_mb" not in text

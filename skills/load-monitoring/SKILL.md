@@ -43,6 +43,9 @@ The port serves counts and step names over plain HTTP to the one address the Mac
 behind the same router shares it); a changed address stops the scrape until the next load. A launch script killed
 outright leaves Prometheus on the task's address: `monitoring.py target` names this Mac's again.
 
+An exporter that reads a load's logs copied from another machine (none of its processes here) runs with
+`LOAD_ELSEWHERE=1`: a step started and not ended is running, and its CPU and memory are not published (never a zero).
+
 `load.sh` recreates the worker, and the exporter with it, at every start: for a minute `monitoring.py status` says the
 exporter is not answering, then `load_monitor_up 1`. A host exporter served from a checkout goes blind when that
 checkout is deleted (`load_monitor_up 0`): stop it, never repair it, and let the pipeline's exporter take the port.

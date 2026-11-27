@@ -54,6 +54,8 @@ ROOTS = {"captures": Path(os.environ.get("CAPTURES") or HOME / ".local/share/edg
          "proving": Path(os.environ.get("PROVING") or HOME / ".local/share/edgartools/mdm/proving")}
 LOGS = Path(os.environ.get("LOGS") or HOME / ".local/share/edgartools/load-logs")
 RUN = os.environ.get("RUN", "fresh-v1")
+ELSEWHERE = "LOAD_ELSEWHERE"  # "1": the load's processes run on another machine (its logs copied here), so a step started
+# and not ended is running though none of its processes is seen, and its CPU and memory are not measured
 FORCE = "LOAD_FORCE"  # set by `--force` to the load's time (UTC) for this process and the steps it starts: a load is forced as a whole
 def engine_command(environ: dict) -> list[str]:
     """The command that runs `edgar-warehouse`: the executable `EDGAR_WAREHOUSE` names (a checkout whose environment is
@@ -961,14 +963,14 @@ def step_sessions(reader_url: str) -> dict[str, dict]:
         return {}
 
 
-def verdict_kind(log_age: float, cpu: float, lock_waiters: int, evidence: dict | None = None) -> str:
+def verdict_kind(log_age: float, cpu: float | None, lock_waiters: int, evidence: dict | None = None) -> str:
     """A step's state by its own evidence, never by a neighbour's: `locked` (a session of its own waits on a lock while the store has three
     or more waiting), `progressing` (its processes work, its log moved, or one of its own database sessions is active or changed
     state lately) or `stalled` (none of them). A step whose work is on the database side uses no CPU and writes no log, so its own
     sessions are the evidence."""
     if lock_waiters >= 3 and evidence and evidence["lock_waiting"]:  # three waiting is the scheduler's own threshold: one is normal
         return "locked"
-    if cpu >= 5 or log_age < IDLE_MINUTES or (evidence and (evidence["active"] > 0 or evidence["changed_min"] < IDLE_MINUTES)):
+    if (cpu or 0) >= 5 or log_age < IDLE_MINUTES or (evidence and (evidence["active"] > 0 or evidence["changed_min"] < IDLE_MINUTES)):
         return "progressing"
     return "stalled"
 
@@ -979,10 +981,12 @@ WAIT_CAUSES = (("IO:", "the store reads the table from disk (cache misses): the 
                ("Client:", "client-bound: the step's own round trips or compute, while the database is idle"))
 
 
-def five_whys(name: str, kind: str, elapsed: float, bound: int, log_age: float, cpu: float, evidence: dict | None) -> list[str]:
-    """Why this step reads as it does, five links, each from a reading: never a guess. A link that cannot be read says what would read it."""
+def five_whys(name: str, kind: str, elapsed: float, bound: int, log_age: float, cpu: float | None, evidence: dict | None) -> list[str]:
+    """Why this step reads as it does, five links, each from a reading: never a guess. A link that cannot be read says what
+    would read it. `cpu` is None when the step's processes run on another machine."""
     late = f", past its bound of {bound} min" if elapsed > bound else ""
-    why = [f"{name} is {kind}{late}: its log is {log_age:.0f} min old and its processes use {cpu:.0f}% CPU"]
+    use = "run on another machine, not measured here" if cpu is None else f"use {cpu:.0f}% CPU"
+    why = [f"{name} is {kind}{late}: its log is {log_age:.0f} min old and its processes {use}"]
     if evidence is None:
         return why + ["it has no database session: none carries the tag chain-" + name,
                       "so it is asking the database for nothing, and its processes are idle",
@@ -1001,7 +1005,7 @@ def five_whys(name: str, kind: str, elapsed: float, bound: int, log_age: float, 
     return why
 
 
-def verdict(elapsed: float, bound: int, log_age: float, cpu: float, lock_waiters: int, evidence: dict | None = None) -> str:
+def verdict(elapsed: float, bound: int, log_age: float, cpu: float | None, lock_waiters: int, evidence: dict | None = None) -> str:
     """The words of `verdict_kind`; being past the step's bound is said first."""
     late = f"past its bound of {bound} min; " if elapsed > bound else ""
     kind = verdict_kind(log_age, cpu, lock_waiters, evidence)
@@ -1009,7 +1013,8 @@ def verdict(elapsed: float, bound: int, log_age: float, cpu: float, lock_waiters
         return f"{late}waiting on database locks ({lock_waiters} sessions on the store)"
     if kind == "progressing":
         return f"{late}progressing"
-    return f"{late}no sign of work: no CPU, no session of its own working, log silent for {log_age:.0f} min"
+    cpu_said = "" if cpu is None else "no CPU, "  # None: its processes run on another machine, not measured here
+    return f"{late}no sign of work: {cpu_said}no session of its own working, log silent for {log_age:.0f} min"
 
 
 def store_databases() -> tuple[str, ...]:
@@ -1210,8 +1215,11 @@ def status_snapshot(steps: list[dict], state: Path, reader_url: str | None, samp
     started = {}
     for found in re.finditer(r"^(\d\d-\d\d \d\d:\d\d:\d\d) ET (\S+) attempt (\d+) start", text, re.M):
         started[found.group(2)] = (datetime.strptime(found.group(1), "%m-%d %H:%M:%S").replace(year=clock().year), int(found.group(3)))
-    busy = external_loads()
-    running = [s for s in steps if (s["source"], s["target"]) in busy and s["name"] not in done and s["name"] in started]
+    elsewhere = os.environ.get(ELSEWHERE) == "1"
+    busy = set() if elsewhere else external_loads()
+    latest = {found.group(1): found.group(2) for found in re.finditer(r"^\S+ \S+ ET (\S+) (attempt \d+ start|attempt \d+ stopped|done:|stopped:)", text, re.M)}
+    running = [s for s in steps if s["name"] not in done and s["name"] in started
+               and (latest.get(s["name"], "").endswith("start") if elsewhere else (s["source"], s["target"]) in busy)]
     before = database_writes(reader_url) if reader_url else {}
     cpu_before = {s["name"]: process_use(s["source"], s["target"])[0] for s in running}
     time.sleep(sample if before or running else 0)
@@ -1228,7 +1236,8 @@ def status_snapshot(steps: list[dict], state: Path, reader_url: str | None, samp
         age = (time.time() - log.stat().st_mtime) / 60 if log.exists() else elapsed
         progress = bundle_progress(log.read_text()) if log.exists() else None
         seconds, memory = process_use(step["source"], step["target"])
-        cpu = cpu_percent(0.0, window_cpu(cpu_before[step["name"]], seconds), sample)
+        cpu = None if elsewhere else cpu_percent(0.0, window_cpu(cpu_before[step["name"]], seconds), sample)
+        memory = None if elsewhere else memory
         store = store_of(step["target"])
         mine = rate.get(store, 0.0)
         sharing = [o["name"] for o in running if o is not step and store_of(o["target"]) == store]
@@ -1270,8 +1279,10 @@ def status_lines(snapshot: dict) -> list[str]:
             f" shared with {', '.join(row['shared_with'])}" if row["shared_with"] else "")
         shown = (f"bundles {progress[0]} of {progress[1]}" + (f", about {left:.0f} min left" if left else "")
                  if progress and progress[1] > 1 else "one document, so its log shows no progress; the database does")
+        use = ("processes on another machine" if row["cpu"] is None
+               else f"{row['processes']} processes, {row['cpu']:.0f}% CPU, {row['memory_mb']:,.0f} MB")
         lines.append(f"  {row['name']} (lane {row['lane']}, attempt {row['attempt']}, {row['workers']} workers): {row['elapsed']:.0f} min of {row['bound']}; "
-                     f"{shown}; {row['processes']} processes, {row['cpu']:.0f}% CPU, {row['memory_mb']:,.0f} MB; wrote {wrote}; log {row['log_age']:.0f} min old; "
+                     f"{shown}; {use}; wrote {wrote}; log {row['log_age']:.0f} min old; "
                      + row["verdict"] + (f"; {row['warning']}" if row["warning"] else ""))
         if row["kind"] != "progressing" or row["elapsed"] > row["bound"]:  # something is wrong: every why, symptom to cause
             lines += [f"      why {number}: {words}" for number, words in enumerate(row["why"], 1)]
