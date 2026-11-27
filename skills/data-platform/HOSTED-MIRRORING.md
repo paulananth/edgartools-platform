@@ -201,13 +201,12 @@ The create plan names the one source database, its tables per schema, its target
 the record with every table REPLICATING; then set `verified: true` in `sources/managed-mirror.yaml`. Read the snapshot cost from metering history
 (`SERVERLESS_TASK` lines lag by hours) against the 5-credit bound.
 
-For a hosted table reset, authenticate to Snowflake with the configured mirror
-operator key-pair service user and its explicit mirror operator role. Call
-`SNOWFLAKE.POSTGRES.SUSPEND_MIRROR` for the mirror named in the configuration,
-then verify `SUSPENDED` with `SNOWFLAKE.POSTGRES.LIST_MIRRORS` as the same
-identity. Suspension pauses Snowflake apply. A PostgreSQL WAL sender can remain
+For a hosted table reset, suspend the mirror as the mirror operator
+(`mirror_sql.py suspend | mirror_run.py`; `mirror_run.py` runs one statement with the operator's key pair and prints its
+rows as JSON), then verify `SUSPENDED` with `mirror_sql.py status | mirror_run.py`. After the reset,
+`mirror_sql.py resume | mirror_run.py`. Suspension pauses Snowflake apply. A PostgreSQL WAL sender can remain
 connected, so check source sessions and logical slot activity separately before
-running the table reset. Read `pg_stat_activity` by backend type and transaction
+running the table reset (`reset-hosted-tables.py --wait-minutes` waits for them and names what stays). Read `pg_stat_activity` by backend type and transaction
 state, and `pg_replication_slots` by slot type and active state for the source
 database. An active logical slot means the source connection still needs to
 drain even when Snowflake reports `SUSPENDED`. Use the managed lifecycle for

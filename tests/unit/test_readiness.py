@@ -290,8 +290,20 @@ def test_a_failed_listing_keeps_none_of_its_error_text(monkeypatch, tmp_path):
     def refused(*_, **__):
         raise snowflake.connector.errors.DatabaseError("account invented-account not found")
     checked(monkeypatch, snowflake.connector, "connect", refused)
-    assert readiness.mirror_listing("CALL x();") is None
+    with pytest.raises(readiness.SnowflakeRefused):
+        readiness.run_as_mirror_operator("CALL x();")
     assert "invented" not in readiness.mirror_fact()
+
+
+def test_a_refused_listing_names_snowflakes_error_number_and_nothing_of_its_text(monkeypatch, tmp_path):
+    import snowflake.connector
+    from tests.support.patching import checked
+    monkeypatch.setattr(readiness, "MIRROR_OPERATOR", operator_file(tmp_path))
+
+    def over_quota(*_, **__):
+        raise snowflake.connector.errors.ProgrammingError("invented-account: warehouse refused", errno=90073)
+    checked(monkeypatch, snowflake.connector, "connect", over_quota)
+    assert readiness.mirror_fact() == "unreadable (Snowflake error 090073)"
 
 
 def test_the_listing_is_read_as_the_mirror_operator_in_a_loader_image_that_has_no_snowflake_command(monkeypatch, tmp_path):

@@ -30,6 +30,12 @@ def test_create_lists_only_the_recorded_tables_under_their_layers_schema_and_nam
     assert "postgres_instance => 'inst'" in sql and "postgres_database => 'data'" in sql
 
 
+@pytest.mark.parametrize("action, call", [("suspend", "SUSPEND_MIRROR('m1')"), ("resume", "RESUME_MIRROR('m1')"),
+                                          ("status", "LIST_MIRRORS()")])
+def test_a_table_reset_suspends_and_resumes_the_recorded_mirror_by_name(action, call):
+    assert mirror_sql.lifecycle(MANAGED, action) == f"CALL SNOWFLAKE.POSTGRES.{call};\n"
+
+
 def test_retire_always_drops_the_target_with_the_mirror():
     assert mirror_sql.retire(MANAGED) == "CALL SNOWFLAKE.POSTGRES.DROP_MIRROR('m1', TRUE);\n"
 

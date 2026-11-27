@@ -4,7 +4,7 @@
     uv run python infra/scripts/reset-hosted-tables.py --store mdm --inventory
     uv run python infra/scripts/reset-hosted-tables.py --store mdm --manifest <file>
     uv run python infra/scripts/reset-hosted-tables.py --store mdm --manifest <file> \
-        --apply --words "<the operator's exact words>" --plan-sha256 <the reviewed plan digest>
+        --apply --words "<the operator's exact words>" --plan-sha256 <the reviewed plan digest> [--wait-minutes 15]
 
 The manifest selects ordinary tables in one store schema and says `drop` or `truncate` for each.
 The script never drops a database, schema, or table with CASCADE. A dropped table must be recreated
@@ -18,6 +18,7 @@ import json
 import os
 import re
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -51,6 +52,10 @@ PERSISTENT_TABLES = """
 
 class UniqueYamlLoader(yaml.SafeLoader):
     pass
+
+
+class BlockedError(RuntimeError):
+    """A session other than an idle managed worker is connected to the store; its message names them by kind."""
 
 
 class ReceiptError(RuntimeError):
@@ -214,13 +219,31 @@ def append_receipt(record: dict) -> None:
     path.chmod(0o600)
 
 
-def blocking_sessions(conn) -> int:
-    return int(conn.scalar(sa.text("""
-        SELECT count(*) FROM pg_stat_activity
+def blocking_sessions(conn) -> str:
+    """The sessions that block a reset, by kind and number ("walsender 1"), or "" when none does."""
+    return ", ".join(f"{kind} {count}" for kind, count in conn.execute(sa.text("""
+        SELECT coalesce(backend_type, 'unknown'), count(*) FROM pg_stat_activity
         WHERE datname = current_database() AND pid <> pg_backend_pid()
           AND NOT (backend_type IS NOT DISTINCT FROM 'pg base extension worker'
                    AND state IS NULL AND xact_start IS NULL)
+        GROUP BY 1 ORDER BY 1
     """)))
+
+
+def wait_for_quiet(engine, minutes: float, every: float = 30) -> None:
+    """Wait until no session blocks the reset, checking every `every` seconds for at most `minutes`. A suspended mirror's
+    walsender stays connected for a while after the suspend; this is the wait for it to leave."""
+    deadline = time.monotonic() + minutes * 60
+    while True:
+        with engine.connect() as conn:
+            blocking = blocking_sessions(conn)
+        if not blocking:
+            return
+        if time.monotonic() >= deadline:
+            waited = f" after {minutes:g} minutes" if minutes > 0 else ""
+            raise BlockedError(f"Refusing reset while connected to this store{waited}: {blocking}")
+        print(f"waiting for the store to be quiet: {blocking}", flush=True)
+        time.sleep(every)
 
 
 def show_plan(plan: dict) -> None:
@@ -239,14 +262,14 @@ def apply_plan(engine, store: str, tables: list[dict[str, str]], words: str, exp
     schema = STORE_SCHEMAS[store]
     try:
         with engine.begin() as conn:
-            if blocking_sessions(conn) != 0:
-                raise ValueError("Refusing reset while a blocking PostgreSQL session is connected to this store")
+            if blocking := blocking_sessions(conn):
+                raise BlockedError(f"Refusing reset while connected to this store: {blocking}")
             conn.exec_driver_sql("SET LOCAL lock_timeout = '2s'")
             for item in tables:
                 qualified = f"{quote(engine, schema)}.{quote(engine, item['table'])}"
                 conn.exec_driver_sql(f"LOCK TABLE {qualified} IN ACCESS EXCLUSIVE MODE NOWAIT")
-            if blocking_sessions(conn) != 0:
-                raise ValueError("Refusing reset while a blocking PostgreSQL session is connected to this store")
+            if blocking := blocking_sessions(conn):
+                raise BlockedError(f"Refusing reset while connected to this store: {blocking}")
             plan = read_plan(conn, engine, store, tables, require_all=require_all)
             if plan["plan_sha256"] != expected_digest:
                 raise ValueError("Plan changed since it was reviewed; generate and review a new plan")
@@ -296,6 +319,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--apply", action="store_true", help="apply the reviewed plan")
     parser.add_argument("--words", help="operator's exact approval words; required with --apply")
     parser.add_argument("--plan-sha256", help="digest printed by the reviewed plan; required with --apply")
+    parser.add_argument("--wait-minutes", type=float, default=0,
+                        help="with --apply: wait up to this long for blocking sessions (a suspended mirror's walsender) to leave")
     args = parser.parse_args(argv)
     if args.inventory == (args.manifest is not None):
         return fail("Choose exactly one of --inventory or --manifest")
@@ -319,6 +344,7 @@ def main(argv: list[str] | None = None) -> int:
                 show_plan(plan)
                 print("Plan only; nothing changed")
                 return 0
+            wait_for_quiet(engine, args.wait_minutes)
             plan = apply_plan(engine, args.store, tables, args.words.strip(), args.plan_sha256,
                               require_all=args.require_all_tables)
             show_plan(plan)
@@ -326,6 +352,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         finally:
             engine.dispose()
+    except BlockedError as exc:
+        return fail(str(exc))
     except ReceiptError as exc:
         return fail(str(exc) + "; inspect the pending approval receipt before retrying", 3)
     except (KeyError, OSError, ValueError, yaml.YAMLError):
