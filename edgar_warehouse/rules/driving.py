@@ -75,6 +75,14 @@ def manifest_root(env: dict[str, dict[str, str | None]]) -> Path:
     return Path(value)
 
 
+def stop_tree(pid: int) -> None:
+    """Stop a process and every process it started: its process group on Linux and macOS, its tree on Windows."""
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True, check=False)
+    else:
+        os.killpg(pid, signal.SIGKILL)
+
+
 def run_command(command: list[str], env: dict, timeout: float) -> subprocess.CompletedProcess:
     """The command with its output, in a process group of its own: past the timeout the whole group is stopped, the worker
     processes it started too, since a worker left running merges on beside the next attempt and both write the same file."""
@@ -82,7 +90,7 @@ def run_command(command: list[str], env: dict, timeout: float) -> subprocess.Com
     try:
         stdout, stderr = child.communicate(timeout=timeout)
     except BaseException:  # the deadline, or an interrupt of the caller: the command's own session no longer hears the terminal
-        os.killpg(child.pid, signal.SIGKILL)
+        stop_tree(child.pid)
         try:
             child.communicate(timeout=30)
         except subprocess.TimeoutExpired:  # a process that left the group holds the pipes: they are not waited for

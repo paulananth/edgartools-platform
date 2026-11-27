@@ -1,0 +1,49 @@
+# The skills install on Windows as an operator installs them: skills/install.ps1 from the PR's commit, then the command line
+# starts, every skill is in place, and a command past its deadline is stopped with the processes it started.
+name: Windows install
+
+on:
+  pull_request:
+    paths:
+      - skills/install.ps1
+      - .github/workflows/windows-install.yml
+      - packages/**
+      - edgar_warehouse/rules/driving.py
+      - edgar_warehouse/rules/error_log.py
+  workflow_dispatch:
+
+jobs:
+  install:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install with the script
+        shell: pwsh
+        run: ./skills/install.ps1 -Ref "${{ github.event.pull_request.head.sha || github.sha }}"
+
+      - name: The command line starts, the skills are in place, a deadline stops a tree
+        shell: pwsh
+        run: |
+          $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
+          edgar-warehouse --help | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "edgar-warehouse does not start" }
+          foreach ($base in "$env:USERPROFILE\.agents\skills", "$env:USERPROFILE\.claude\skills") {
+            if (-not (Test-Path "$base\data-platform\SKILL.md")) { throw "no skills in $base" }
+          }
+          $python = Join-Path (uv tool dir) "edgartools-data\Scripts\python.exe"
+          & $python -c @"
+          import os, pathlib, subprocess, sys, tempfile
+          from edgar_warehouse.rules.driving import run_command
+          pid_file = pathlib.Path(tempfile.mkdtemp()) / 'grandchild.pid'
+          start = f"import subprocess, sys, time; p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(300)']); open(r'{pid_file}', 'w').write(str(p.pid)); time.sleep(300)"
+          try:
+              run_command([sys.executable, '-c', start], dict(os.environ), 10)
+          except subprocess.TimeoutExpired:
+              pass
+          listed = subprocess.run(['tasklist', '/FI', f'PID eq {pid_file.read_text()}'], capture_output=True, text=True).stdout
+          assert 'python' not in listed.lower(), 'the process the command started is still running'
+          print('stopped at the deadline with the process it started')
+          "@
+          if ($LASTEXITCODE -ne 0) { throw "a command past its deadline was not stopped" }

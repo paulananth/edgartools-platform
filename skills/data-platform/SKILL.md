@@ -209,7 +209,7 @@ checks and points to the repository lifecycle script.
 
    Building the engine takes about two minutes. It worked when
    `edgar-warehouse --help` lists `rules`, `load`, `bookkeeping`, `mdm`,
-   `workers`, `plan` and `doctor`.
+   `workers`, `plan` and `doctor`. On Windows run `skills\install.ps1` (prerequisites, this, step 2).
 
    Each wheel ships a list of files, not a folder:
    `packages/<wheel>/pyproject.toml`'s `force-include`. When you add a
