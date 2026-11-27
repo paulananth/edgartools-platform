@@ -2597,3 +2597,58 @@ def test_a_catalog_command_cut_off_at_its_timeout_is_reaped(monkeypatch):
     assert chain.run_catalog_status([sys.executable, "-c", "import time; time.sleep(30)"], {**os.environ}, timeout=1) == \
         ("", "the command did not answer in time")
     assert started[0].returncode is not None  # waited on: no zombie left behind
+
+
+@pytest.mark.parametrize("named, carries", [
+    ("xl", 16),     # STANDARD_XL: four to a core
+    ("m", 4),       # STANDARD_M: four to its one core
+    ("wide", 10),   # memory-bound: half of 8 GB in 384 MB shares
+    ("", None),     # a load that names no store has no store bound
+])
+def test_the_store_carries_four_workers_a_core_and_half_its_memory_in_work_mem_shares(tmp_path, monkeypatch, named, carries):
+    (tmp_path / "jobs.yaml").write_text("stores:\n  xl: {vcpu: 4, memory_gb: 16, work_mem_gb: 0.375}\n"
+                                        "  m: {vcpu: 1, memory_gb: 4, work_mem_gb: 0.375}\n"
+                                        "  wide: {vcpu: 8, memory_gb: 8, work_mem_gb: 0.375}\n")
+    monkeypatch.setenv("LOAD_STORE", named)
+    assert chain.store_workers(tmp_path / "jobs.yaml") == carries
+
+
+def test_the_workers_in_use_are_every_running_loads_own_count_once_and_a_plan_holds_none():
+    listing = ("uv run --no-sync edgar-warehouse load --source a --target mastering --workers 8\n"
+               "/x/.venv/bin/python /x/.venv/bin/edgar-warehouse load --source a --target mastering --workers 8\n"
+               "edgar-warehouse load --source b --target silver --workers 2\n"
+               "edgar-warehouse load --source c --target mastering --workers 4 --plan\n"
+               "python something --workers 9\n")
+    assert chain.workers_in_use(listing) == 10
+
+
+def test_a_step_waits_while_the_store_is_full_and_starts_with_no_more_than_it_has_left(tmp_path):
+    """A client with memory to spare still waits for the store, and takes no more than the store has left."""
+    left, said = iter([1, 6]), []
+    got = chain.admit(8, 0.4, tmp_path / "gate", free=lambda: 100.0, running=lambda: True, pressed=lambda: False,
+                      sleep=lambda s: None, settle=0, say=said.append, store=lambda: next(left))
+    assert got == 6  # it waited for its floor (half of its 8), then took the 6 the store had left, not its 8
+    assert said == ["waits for the store: it takes 1 more workers, 4 needed"]
+
+
+def test_the_controller_raises_nothing_into_a_full_store_and_sheds_from_one_held_past_it():
+    assert chain.store_bounds({"a": (1, 16), "b": (1, 16)}, {"a": 4, "b": 2}, 3) == {"a": (1, 7), "b": (1, 5)}
+    assert chain.store_bounds({"a": (1, 16)}, {"a": 4}, -2) == {"a": (1, 4)}  # held past it: no raise
+    assert chain.store_bounds({"a": (1, 16)}, {"a": 4}, None) == {"a": (1, 16)}
+    assert chain.store_level("low", 0) == "ok"
+    assert chain.store_level("low", -2) == "high"
+    assert chain.store_level("low", 3) == "low"
+    assert chain.store_level("ok", None) == "ok"
+
+
+def test_the_lane_budget_names_the_store_when_the_database_carries_fewer_workers_than_the_compute(monkeypatch):
+    checked(monkeypatch, chain, "store_workers", lambda path=None: 4)
+    steps = [{"lane": "A", "workers": 2}, {"lane": "B", "workers": 2}, {"lane": "C", "workers": 2}]
+    assert chain.carried(steps, "local")[:2] == (4, "store")
+    assert chain.lanes_at_once(steps, "local") == 2
+
+
+def test_with_no_other_load_running_a_step_starts_at_its_floor_though_the_store_is_full(tmp_path):
+    got = chain.admit(8, 0.4, tmp_path / "gate", free=lambda: 100.0, running=lambda: False, pressed=lambda: False,
+                      sleep=lambda s: pytest.fail("it waited"), settle=0, store=lambda: 0)
+    assert got == 4

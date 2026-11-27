@@ -340,7 +340,7 @@ def cpu_level() -> str:
 
 def admit(want: int, worker_gb: float, lock: Path, free=free_gb, running=load_running, pressed=lambda: cpu_level() == "high",
           sleep=time.sleep, settle: int = GATE_SETTLE_SECONDS, poll: int = GATE_POLL_SECONDS, say=lambda text: None,
-          one_document: bool = False, peak_gb: float = 0.0, reserved=lambda: 0.0) -> int:
+          one_document: bool = False, peak_gb: float = 0.0, reserved=lambda: 0.0, store=lambda: None) -> int:
     """The workers a step starts with: its own `want` when the memory is there, fewer when it is not (at least half of them;
     all of them for a step of one document, which the controller never moves), and none until the memory of that floor is free and the CPU is not pressed (the controller would take back what a pressed
     machine admits), unless no other load runs, when waiting would never end. One step is
@@ -348,7 +348,9 @@ def admit(want: int, worker_gb: float, lock: Path, free=free_gb, running=load_ru
     that waits holds it only while it reads, so a step that fits is admitted meanwhile. A
     container whose memory cannot be read gives the step its own workers. One load runs in one container. The floor's memory is
     at least the step's measured `peak_gb`, and the free memory read leaves out what the running steps have yet to reach of
-    theirs (`reserved`, `unreached_peaks`): a step still growing to its peak is not free memory."""
+    theirs (`reserved`, `unreached_peaks`): a step still growing to its peak is not free memory. The store bounds it too
+    (`store`, the workers it can still take, `store_left`): a step waits until the store carries its floor, and starts with
+    no more than the store has left."""
     floor = want if one_document else max(1, want // 2)
     waited, waiting = False, None  # a waiter holds `<gate>.wait` shared, so the controller raises nothing meanwhile
     try:
@@ -361,9 +363,11 @@ def admit(want: int, worker_gb: float, lock: Path, free=free_gb, running=load_ru
                     held = reserved()
                     room -= held
                 need = max(floor * worker_gb, peak_gb)
+                left = store()
+                full = left is not None and left < floor
                 short = room is not None and room < need
-                busy = not short and pressed()
-                if not (short or busy) or not running():
+                busy = not short and not full and pressed()
+                if not (short or full or busy) or not running():
                     break  # admitted: the gate stays held through the settle window
                 if waiting is None:  # marked before the gate is let go, so the controller never sees a moment with neither held
                     waiting = wait_path(lock).open("a")
@@ -375,6 +379,7 @@ def admit(want: int, worker_gb: float, lock: Path, free=free_gb, running=load_ru
             if not waited:
                 say(f"waits for {need:.1f} GB of free memory ({room:.1f} GB now"
                     + (f", {held:.2f} GB more held for running steps' peaks)" if held else ")") if short else
+                    f"waits for the store: it takes {max(left, 0)} more workers, {floor} needed" if full else
                     "waits for the CPU (the machine is pressed)")
                 waited = True
             sleep(poll)
@@ -384,7 +389,57 @@ def admit(want: int, worker_gb: float, lock: Path, free=free_gb, running=load_ru
     timer = threading.Timer(settle, handle.close)  # closing the file releases the lock
     timer.daemon = True
     timer.start()
-    return want if room is None else max(floor, min(want, int(room / worker_gb + 1e-9)))
+    granted = want if room is None else max(floor, min(want, int(room / worker_gb + 1e-9)))
+    return granted if left is None else max(floor, min(granted, left))
+
+
+STORE = "LOAD_STORE"  # the name of the database the load writes to, a `stores:` entry of the load jobs file
+
+
+def store_workers(path: Path = ROOT / "rules/load-jobs.yaml", name: str | None = None) -> int | None:
+    """The workers the named store carries at once across every running step (`LOAD_STORE` unless named): four to a core, and
+    half its memory in work_mem shares. None when the load names no store."""
+    name = name if name is not None else os.environ.get(STORE)
+    if not name:
+        return None
+    stores = (yaml.safe_load(path.read_text()) or {}).get("stores") or {}
+    if name not in stores:
+        raise SystemExit(f"No store named {name}: {', '.join(sorted(stores)) or 'the load jobs file names none'}")
+    store = stores[name]
+    return max(1, min(int(store["vcpu"] * WORKERS_PER_VCPU), int(store["memory_gb"] / 2 / store["work_mem_gb"] + 1e-9)))
+
+
+def workers_in_use(listing: str) -> int:
+    """The workers of every load running here, from its driver's `--workers` (a `--plan` loads nothing), once a source and
+    target: a load started through a launcher (`uv run`) shows twice, the launcher and the driver."""
+    loads = {}
+    for line in listing.splitlines():
+        found, which = re.search(r"--workers (\d+)", line), re.search(r"--source (\S+) --target (\S+)", line)
+        if LOAD_COMMAND.search(line) and found and which and not re.search(r" --plan( |$)", line):
+            loads[which.groups()] = max(loads.get(which.groups(), 0), int(found.group(1)))
+    return sum(loads.values())
+
+
+def store_left(listing: str | None = None) -> int | None:
+    """The workers the store can still take (below zero when the running steps hold more); None with no store declared."""
+    carried_by_store = store_workers()
+    return None if carried_by_store is None else carried_by_store - workers_in_use(process_listing() if listing is None else listing)
+
+
+def store_bounds(bounds: dict[str, tuple[int, int]], workers: dict[str, int], left: int | None) -> dict[str, tuple[int, int]]:
+    """Each running step's range, its top no higher than its workers and what the store has left: a raise stays inside it."""
+    if left is None:
+        return bounds
+    return {name: (low, max(low, min(top, workers[name] + max(left, 0)))) for name, (low, top) in bounds.items()}
+
+
+def store_level(level: str, left: int | None) -> str:
+    """The controller's level within the store: no raise when the store is full, a shed when the steps hold more than it carries."""
+    if left is None:
+        return level
+    if left < 0:
+        return "high"
+    return "ok" if left == 0 and level == "low" else level
 
 
 def capacity_profiles(path: Path = ROOT / "rules/load-jobs.yaml") -> dict[str, dict]:
@@ -691,9 +746,12 @@ def control_cycle(steps: list[dict], state: Path, memory: Memory, reader_url: st
         level = room(level, reading["connections"], connections)
     if level == "low" and admitting(gate_path(state)):
         level = "ok"
+    left = store_left(listing)
+    level = store_level(level, left)
     workers = {name: count for name, (_, count) in running.items()}
     bounds = {name: headroom(count, bounds_for("local", s.get("worker_gb", WORKER_GB)), free, s.get("worker_gb", WORKER_GB))
               for name, (s, count) in running.items()}
+    bounds = store_bounds(bounds, workers, left)
     change = choose_move(level, workers, chain_length(steps, estimates(steps, measured(text))), bounds,
                          {name: step_log_text(name) for name in running}, {name: since[name] for name in running}, memory, now,
                          unmovable(steps, text))
@@ -774,6 +832,8 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
         level = worst(machine_pressure(relaxed=slow), database)
         if reading:
             level = room(level, reading["connections"], connections)
+        left = store_left()
+        level = store_level(level, left)
         estimate = estimates(steps, measured(state.read_text()) if state.exists() else {})
         length = chain_length(steps, estimate)
         cycle += 1
@@ -793,7 +853,8 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
             count = min(max(by_name[name].get("workers", low), low), top)
             note(f"scheduler starts {name} (priority {by_name[name].get('priority', 3)}) at {count} workers", state)
             spawn(name, count)
-        change = choose_move(level, workers, length, {n: range_of(n) for n in workers}, {n: step_log_text(n) for n in workers},
+        change = choose_move(level, workers, length, store_bounds({n: range_of(n) for n in workers}, workers, left),
+                             {n: step_log_text(n) for n in workers},
                              {n: moved.get(n, began[n]) for n in workers}, memory, clock(),
                              unmovable(steps, state.read_text() if state.exists() else ""))
         if change and not starts:
@@ -1320,8 +1381,8 @@ def forced_at() -> str:
 
 
 def carried(steps: list[dict], capacity: str = "local") -> tuple[int, str, int]:
-    """The workers a compute carries, what limits them (`memory` when worker-sized shares of memory carry fewer than the vCPUs
-    allow, else `vcpu`), and the widest first step of a lane. A worker's size is the load jobs file's measured `worker_gb`
+    """The workers a compute carries, what limits them (`store` when the database carries fewer, `memory` when worker-sized
+    shares of memory carry fewer than the vCPUs allow, else `vcpu`), and the widest first step of a lane. A worker's size is the load jobs file's measured `worker_gb`
     (the widest of the first steps), else half a gigabyte."""
     heads = {}
     for step in steps:
@@ -1330,6 +1391,9 @@ def carried(steps: list[dict], capacity: str = "local") -> tuple[int, str, int]:
     worker_gb = max((head.get("worker_gb", WORKER_GB) for head in heads.values()), default=WORKER_GB)
     vcpu, memory_gb = capacity_of(capacity)
     workers = bounds_for(capacity, worker_gb)[1]
+    by_store = store_workers()
+    if by_store is not None and by_store < workers:  # the database carries fewer than the compute: it is the limit
+        return by_store, "store", widest
     return workers, ("memory" if int(memory_gb / worker_gb + 1e-9) <= int(vcpu * WORKERS_PER_VCPU) else "vcpu"), widest
 
 
@@ -1922,6 +1986,7 @@ def attempt_loop(step: dict, env: dict, state: Path, others_run: bool = True) ->
     moved = []  # the output of this attempt's processes that a move ended, kept as `<log>.attempt-<n>.move-<m>`
     while attempt <= step["attempts"]:
         workers = admit(want, step.get("worker_gb", WORKER_GB), gate_path(state), say=lambda text: note(f"{name} {text}", state),
+                        store=store_left,
                         one_document=step.get("one_document", False), peak_gb=step.get("peak_gb", 0.0),
                         reserved=(lambda: unreached_peaks(peaked, process_listing(), besides=name)) if peaked else lambda: 0.0)
         note(f"{name} attempt {attempt} start" + (f" with {workers} of its {step['workers']} workers" if workers != step["workers"] else ""), state)

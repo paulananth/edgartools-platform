@@ -373,6 +373,7 @@ resource "aws_ecs_task_definition" "load" {
         PROVING            = "/data/mdm/proving"
         LOGS               = "/data/load-logs"
         RUN                = var.run
+        LOAD_STORE         = "hosted"
         ACTIVITY_ARN       = aws_sfn_activity.load.id
         AWS_DEFAULT_REGION = var.aws_region
       } : { name = name, value = value }]
@@ -388,11 +389,12 @@ resource "aws_ecs_task_definition" "load" {
       dependsOn    = [{ containerName = "fetch", condition = "SUCCESS" }]
       portMappings = [{ containerPort = local.exporter_port, protocol = "tcp" }]
       environment = [for name, value in {
-        HOME     = local.home
-        STORES   = "${local.home}/.config/edgartools/hosted"
-        LOGS     = "/data/load-logs"
-        RUN      = var.run
-        CAPACITY = "local"
+        HOME       = local.home
+        STORES     = "${local.home}/.config/edgartools/hosted"
+        LOGS       = "/data/load-logs"
+        RUN        = var.run
+        CAPACITY   = "local"
+        LOAD_STORE = "hosted"
       } : { name = name, value = value }]
       mountPoints      = [{ sourceVolume = "data", containerPath = "/data", readOnly = true }]
       logConfiguration = local.log["exporter"]
