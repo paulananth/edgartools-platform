@@ -30,6 +30,12 @@ def test_create_lists_only_the_recorded_tables_under_their_layers_schema_and_nam
     assert "postgres_instance => 'inst'" in sql and "postgres_database => 'data'" in sql
 
 
+@pytest.mark.parametrize("action, call", [("suspend", "SUSPEND_MIRROR('m1')"), ("resume", "RESUME_MIRROR('m1')"), ("restart", "RESTART_MIRROR('m1')"),
+                                          ("status", "LIST_MIRRORS()")])
+def test_a_table_reset_suspends_and_resumes_the_recorded_mirror_by_name(action, call):
+    assert mirror_sql.lifecycle(MANAGED, action) == f"CALL SNOWFLAKE.POSTGRES.{call};\n"
+
+
 def test_retire_always_drops_the_target_with_the_mirror():
     assert mirror_sql.retire(MANAGED) == "CALL SNOWFLAKE.POSTGRES.DROP_MIRROR('m1', TRUE);\n"
 
@@ -126,3 +132,9 @@ def test_readback_takes_the_rows_as_the_listing_gives_them():
     assert "ref.codes (SNAPSHOTTING)" in str(refused.value)
     raw[1]["state"] = "REPLICATING"
     assert "schemas PUB, REF" in mirror_sql.readback(MANAGED, EXPOSURE, raw)
+
+
+def test_readback_takes_the_listing_as_mirror_run_prints_it_with_snowflakes_upper_case_columns():
+    rows = [{"SOURCE_SCHEMA_NAME": t.split(".")[0], "SOURCE_TABLE_NAME": t.split(".")[1], "STATE": "REPLICATING"}
+            for t in mirror_sql.tables(MANAGED, EXPOSURE)]
+    assert mirror_sql.readback(MANAGED, EXPOSURE, rows).startswith("the mirror is exactly the record")

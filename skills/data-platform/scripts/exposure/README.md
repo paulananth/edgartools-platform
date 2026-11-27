@@ -37,7 +37,7 @@ An expired token answers HTTP 401 on every call but `/system/version`: renew the
 
 ## The mirror SQL (qualified)
 
-`mirror_sql.py create|alter|verify|readback|check|retire|release` prints the mirror skill's `CREATE_MIRROR` (Iceberg, Snowflake-managed storage), `ALTER_MIRROR`,
+`mirror_sql.py create|alter|verify|readback|check|retire|release|suspend|restart|resume|status` prints the mirror skill's `CREATE_MIRROR` (Iceberg, Snowflake-managed storage), `ALTER_MIRROR`,
 `LIST_MIRRORED_TABLES` and `DROP_MIRROR(<mirror>, TRUE)` text. Its tables are the ones `sources/managed-mirror.yaml` lists (`--managed`), each of which must
 be on the exposure list (`--exposure`); an exposed table the record does not list is not mirrored, and `check --reads` fails when Gold reads one the record lacks. `alter` takes the mirror's read-back table list
 (`--mirrored`) and adds and removes the difference; `readback --listing` takes the listing as `{table, state}` rows and fails until the mirror is exactly the record, all `REPLICATING`. The target database comes from `rules/snowflake.yaml`. It connects to nothing; run its output as the mirror
@@ -93,3 +93,6 @@ Publication is not considered successful until parity passes. A failed cycle pro
 - Manifest/business-definition drift: rules owner; regenerate and review the new digest.
 
 Rollback means stop scheduling the failing digest and restore the last parity-passing digest. Never delete Snowflake data or credentials as part of rollback.
+
+`mirror_run.py` runs one statement from standard input as the mirror operator and prints its rows as JSON; a refusal exits 1
+with Snowflake's error number only (`mirror_sql.py verify | mirror_run.py > listing.json`).

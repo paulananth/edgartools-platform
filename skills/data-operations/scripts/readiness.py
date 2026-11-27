@@ -325,10 +325,12 @@ def mirror_fact(listing=None) -> str:
     import mirror_sql
     try:
         managed, exposure = mirror_sql.load(mirror_sql.MANAGED), mirror_sql.load(mirror_sql.EXPOSURE)
-        rows = (listing or mirror_listing)(mirror_sql.verify(managed))
+        rows = (listing or run_as_mirror_operator)(mirror_sql.verify(managed))
         if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
             return "unreadable (the mirror operator could not list the mirror)"
         mirror_sql.readback(managed, exposure, [{k.lower(): v for k, v in row.items()} for row in rows])
+    except SnowflakeRefused as refused:
+        return f"unreadable (Snowflake error {refused})"
     except SystemExit as refused:
         return str(refused) or "the listing is empty"
     except Exception as exc:  # noqa: BLE001
@@ -336,21 +338,28 @@ def mirror_fact(listing=None) -> str:
     return "exact"
 
 
-def mirror_listing(sql: str) -> list[dict] | None:
-    """The listing through the Snowflake driver the loader image installs (the `mirror` extra), so the gate in the worker reads
-    what the gate on the Mac reads. A driver error can name the account: none of its text is kept."""
+class SnowflakeRefused(Exception):
+    """The statement was not run: Snowflake's error number only (a driver error's text can name the account), or why it was not tried."""
+
+
+def run_as_mirror_operator(sql: str) -> list[dict]:
+    """One statement run as the mirror operator, through the Snowflake driver the loader image installs (the `mirror` extra), so
+    the gate in the worker reads what the gate on the Mac reads. A refusal raises SnowflakeRefused with Snowflake's error number."""
     sys.path.insert(0, str(HERE))
     import load_jobs
     import snowflake.connector
-    env = load_jobs.load_env(MIRROR_OPERATOR)
+    try:
+        env = load_jobs.load_env(MIRROR_OPERATOR)
+    except (KeyError, OSError):
+        raise SnowflakeRefused("not tried: the mirror operator's login is missing") from None
     try:
         with snowflake.connector.connect(account=env["MIRROR_SNOWFLAKE_ACCOUNT"], user=env["MIRROR_SNOWFLAKE_USER"],
                                          authenticator="SNOWFLAKE_JWT", private_key_file=env["MIRROR_SNOWFLAKE_PRIVATE_KEY_PATH"],
                                          role=env["MIRROR_SNOWFLAKE_ROLE"], warehouse=env["MIRROR_SNOWFLAKE_WAREHOUSE"],
                                          login_timeout=60, query_timeout=120) as connection:
             return connection.cursor(snowflake.connector.DictCursor).execute(sql.strip().rstrip(";")).fetchall()
-    except snowflake.connector.Error:
-        return None
+    except snowflake.connector.Error as exc:
+        raise SnowflakeRefused(f"{exc.errno:06d}" if isinstance(exc.errno, int) and exc.errno >= 0 else "without a number") from None
 
 
 def gather(stores: Path, repo: Path = REPO) -> dict:

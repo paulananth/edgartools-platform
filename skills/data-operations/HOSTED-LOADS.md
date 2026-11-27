@@ -25,11 +25,13 @@ driver's text is never kept); the run's state file is this store's, or is shown 
 steps; and the merge policy, every Dataset Contract and every worker profile are registered and granted (init steps 5 to 7). The gate is not the init runbook: after a reset, walk every runbook step,
 say in the report which ran and which did not, and never write a step off without reading why (a catalog step was once called
 unconfigured when its file existed). A fact that cannot be
-read is a failure. Fix what it names and run it again; there is no switch to skip it. `MIRRORED unreadable (the mirror
-operator could not list the mirror)` can be Snowflake refusing the warehouse: the account's monthly resource monitor stops
-every warehouse at its quota, and an account administrator raises it (`monthly_credit_quota` of the Snowflake access root)
-or the load waits for the monthly reset. List the mirror once before clearing a store: suspending it, resuming it and this
-check all need the warehouse. A rehearsal of the first lane on a
+read is a failure. Fix what it names and run it again; there is no switch to skip it. `MIRRORED unreadable (Snowflake error
+090073)` is Snowflake refusing the warehouse: a resource monitor (the platform's is the access root's `snowflake_resource_monitor`)
+is over its quota. A monitor
+set on the account stops every warehouse even when the warehouse shows none (`SHOW WAREHOUSES` says `null`): an account
+administrator reads `SHOW RESOURCE MONITORS` (its `level` column) and raises that quota (`monthly_credit_quota` of the
+Snowflake access root), or the load waits for the monthly reset. List the mirror once before clearing a store
+(`mirror_sql.py status | mirror_run.py`): suspending it, resuming it and this check all need the warehouse. A rehearsal of the first lane on a
 disposable store is the next check to add.
 
 After truncating tables for a full reload, assign a new `RUN` label and use
@@ -274,6 +276,17 @@ a batch before changing its size: the writer made three a batch (70 ms each) and
   `init`/table-deployment command after a drop; truncation retains the schema. Keep the captured extracts for reload.
 
 ### Clear all MDM and Silver tables for a full reload
+
+The clear, in order (the mirror commands are the data-platform skill's `scripts/exposure/mirror_sql.py` and `mirror_run.py`):
+
+1. `mirror_sql.py status | mirror_run.py`: the mirror lists (the warehouse answers); the gate's QUIET check passes (no load runs, the
+   loader has no session).
+2. Back up the control database and RDM (below); plan each store's manifest and keep its digest.
+3. `mirror_sql.py suspend | mirror_run.py`, then `status` reads `SUSPENDED`.
+4. Apply each store's plan with `--with-suspended-mirror`: a suspended mirror keeps its walsender and a managed worker
+   connected, and the reset lets those two stay; any other session refuses it, named. Stop at the first store that fails.
+5. Restore RDM's published codes (`rdm_restore_published.py`), then restart the mirror (`mirror_sql.py restart | mirror_run.py`, a new snapshot
+   of the emptied tables) and read it back (HOSTED-MIRRORING, "Done is read back").
 
 Prepare a separate manifest for each store. List every resettable table from its
 inventory with `action: truncate`. Use `--require-all-tables` when planning
