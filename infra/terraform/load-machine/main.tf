@@ -124,22 +124,29 @@ locals {
     ],
   ))
 
-  # The run's record outlives the task: its logs every minute, its run documents every five, and both once more at the stop.
-  # This container also bounds the task: when it ends after `max_hours`, the task stops with it.
+  # The run's record outlives the task: its logs, its run documents and the loader's error log are copied every minute,
+  # each by its own loop so a long copy holds up no other, and the first two once more at the stop. This container also
+  # bounds the task: when it ends after `max_hours`, the task stops with it.
   keep = <<-EOT
-    logs() { aws s3 sync --only-show-errors /data/load-logs ${local.s3}/runs/${var.run}/logs; }
-    documents() { aws s3 sync --only-show-errors /data/manifests ${local.s3}/runs/${var.run}/manifests; }
-    trap 'logs; documents; exit 0' TERM
-    end=$(($(date +%s) + ${var.max_hours} * 3600))
-    n=0
-    while [ "$(date +%s)" -lt "$end" ]; do
-      logs || true
-      [ $((n % 5)) -ne 0 ] || documents || true
-      n=$((n + 1))
-      sleep 60 & wait $!
-    done
+    record=${local.s3}/runs/${var.run}
+    errors=${local.home}/.config/edgartools/hosted/load-errors.log
+    started=$(date +%s)
+    logs() {
+      aws s3 sync --only-show-errors /data/load-logs $record/logs
+      [ ! -f $errors ] || aws s3 cp --only-show-errors $errors $record/errors/load-errors-$started.log
+    }
+    documents() { aws s3 sync --only-show-errors /data/manifests $record/manifests; }
+    while true; do logs || true; sleep 60; done & copying_logs=$!
+    while true; do documents || true; sleep 60; done & copying_documents=$!
+    finish() {
+      kill $copying_logs $copying_documents 2>/dev/null
+      logs; documents
+      exit 0
+    }
+    trap finish TERM
+    sleep $((${var.max_hours} * 3600)) & wait $!
     echo "the load task reached its bound of ${var.max_hours} hours: stopping"
-    logs; documents
+    finish
   EOT
 
   log = { for name in ["fetch", "keep", "worker"] : name => {

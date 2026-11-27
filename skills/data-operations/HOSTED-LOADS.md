@@ -41,8 +41,9 @@ arguments). Use that label again only when resuming this same load.
   to Secrets Manager; applies `infra/terraform/load-machine` (one Step Functions state machine, the same definition,
   and one 16 vCPU, 120 GB ARM Fargate task); runs one execution and stops the task when it ends. `--prepare` stops before
   the task. The task holds no provider identity, so a load reads captured files only. Its state file, logs and run documents
-  are in `s3://<bronze>/load/runs/<RUN>/` (logs a minute behind, documents five), and a task started again with the same
-  `RUN` takes them back and carries on. The task costs about 1 USD an hour while it runs; it stops itself after the
+  are in `s3://<bronze>/load/runs/<RUN>/` (copied every minute and at a stop), and a task started again with the same
+  `RUN` takes them back and carries on. A task lost without a stop lacks the last minute or so of run documents: a run
+  that then refuses a missing document is not driven again. The task costs about 1 USD an hour while it runs; it stops itself after the
   root's `max_hours` (24). The script keeps its machine awake, starts the execution and stops the task. A home uplink to the hosted store is slow and drops long
   writes; AWS sits beside it.
 

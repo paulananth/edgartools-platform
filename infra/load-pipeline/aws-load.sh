@@ -114,17 +114,24 @@ task="$(aws ecs run-task --cluster "$cluster" --task-definition "$task_definitio
   --query 'tasks[0].taskArn' --output text)"
 [ "$task" != None ] || { echo "the load task did not start" >&2; exit 1; }
 echo "task ${task##*/}: starting"
-stop() { aws ecs stop-task --cluster "$cluster" --task "$task" --reason "the load ended" >/dev/null && echo "task ${task##*/}: stopped"; }
+execution='' result=''
+stop() {  # whatever ends this script: no execution is left waiting, and the task is gone, its record copied, before it returns
+  [ -z "$execution" ] || [ "$result" != RUNNING ] ||
+    aws stepfunctions stop-execution --execution-arn "$execution" --cause "the launch script ended" >/dev/null || true
+  aws ecs stop-task --cluster "$cluster" --task "$task" --reason "the load ended" >/dev/null &&
+    aws ecs wait tasks-stopped --cluster "$cluster" --tasks "$task" && echo "task ${task##*/}: stopped"
+}
 trap stop EXIT
 
 status() { aws ecs describe-tasks --cluster "$cluster" --tasks "$task" --query 'tasks[0].lastStatus' --output text; }
-state=PENDING
-for _ in $(seq 180); do  # half an hour for the image and the captures
-  state="$(status)"
-  [ "$state" = RUNNING ] || [ "$state" = STOPPED ] && break
+worker() { aws ecs describe-tasks --cluster "$cluster" --tasks "$task" --query 'tasks[0].containers[?name==`worker`].lastStatus | [0]' --output text; }
+polling=PENDING
+for _ in $(seq 180); do  # half an hour for the images and the captures: an execution starts only once the worker polls
+  polling="$(worker)"
+  [ "$polling" = RUNNING ] || [ "$(status)" = STOPPED ] && break
   sleep 10
 done
-[ "$state" = RUNNING ] || {
+[ "$polling" = RUNNING ] || {
   aws ecs describe-tasks --cluster "$cluster" --tasks "$task" --query 'tasks[0].[stoppedReason, containers[].[name, exitCode, reason]]' >&2
   exit 1; }
 echo "task ${task##*/}: running"

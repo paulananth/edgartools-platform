@@ -15,8 +15,8 @@ Why: the finish's links write fails from a home uplink (about 0.25 to 0.4 MB/s t
 
 ## Checklist
 
-- [ ] Captures the load jobs file reads (17 folders, about 6.75 GB) are in the bronze bucket under `load/`
-- [ ] Terraform root `infra/terraform/load-machine` and `infra/load-pipeline/aws-load.sh`
+- [x] Captures the load jobs file reads (17 folders) are in the bronze bucket under `load/`: 111,567 files, 6,978,944,437 bytes, none missing or of another size than on this Mac (2026-11-27 13:19 ET)
+- [x] Terraform root `infra/terraform/load-machine` and `infra/load-pipeline/aws-load.sh`: `terraform validate`; the generated state machine equals the file with 11 lanes; the record keeper run in the AWS CLI image with a stand-in (a stop during a long copy starts the final copy at once; the time bound ends it) (2026-11-27 13:19 ET)
 - [ ] Apply and `--prepare`: image of `main`'s commit in ECR, logins in Secrets Manager, no task started
 - [ ] Clear the hosted stores: mirror suspended, backups of control and RDM, five stores truncated, RDM restored, mirror resumed and read back
 - [ ] Readiness passes in the AWS task
