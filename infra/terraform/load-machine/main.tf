@@ -76,6 +76,17 @@ variable "max_hours" {
   default     = 24
 }
 
+variable "metrics_cidr" {
+  description = "The one address (a /32) that may read the task's load exporter: the operator's Mac, whose Prometheus scrapes it. Null opens nothing."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.metrics_cidr == null || (can(cidrhost(var.metrics_cidr, 0)) && endswith(coalesce(var.metrics_cidr, "-"), "/32"))
+    error_message = "metrics_cidr is one IPv4 address as a /32, or null."
+  }
+}
+
 variable "disk_gib" {
   description = "Task disk: the captures, the run documents and the logs of one load."
   type        = number
@@ -149,7 +160,9 @@ locals {
     finish
   EOT
 
-  log = { for name in ["fetch", "keep", "worker"] : name => {
+  exporter_port = 9108
+
+  log = { for name in ["fetch", "keep", "worker", "exporter"] : name => {
     logDriver = "awslogs"
     options = {
       awslogs-group         = aws_cloudwatch_log_group.load.name
@@ -165,6 +178,28 @@ check "canonical_prod_account" {
   assert {
     condition     = data.aws_caller_identity.current.account_id == var.expected_aws_account_id
     error_message = "The load runs in AWS account ${var.expected_aws_account_id}."
+  }
+}
+
+data "aws_vpc" "prod" {
+  tags = { Name = "edgartools-prod-vpc" }
+}
+
+# The load exporter's port, open to the operator's Mac only. The task's other traffic goes through the cluster's own group.
+resource "aws_security_group" "metrics" {
+  name        = "${local.name}-metrics"
+  description = "The load exporter, read by the operator's Prometheus"
+  vpc_id      = data.aws_vpc.prod.id
+
+  dynamic "ingress" {
+    for_each = var.metrics_cidr == null ? [] : [var.metrics_cidr]
+    content {
+      description = "Prometheus on the operator's Mac"
+      protocol    = "tcp"
+      from_port   = local.exporter_port
+      to_port     = local.exporter_port
+      cidr_blocks = [ingress.value]
+    }
   }
 }
 
@@ -294,6 +329,9 @@ resource "aws_ecs_task_definition" "load" {
     size_in_gib = var.disk_gib
   }
 
+  # The exporter reads the load's processes (each step's CPU and memory) as the local pipeline's exporter does.
+  pid_mode = "task"
+
   volume {
     name = "data"
   }
@@ -341,6 +379,24 @@ resource "aws_ecs_task_definition" "load" {
       mountPoints      = [{ sourceVolume = "data", containerPath = "/data" }]
       logConfiguration = local.log["worker"]
     },
+    {
+      # The load monitor's exporter, as the local pipeline runs it: the reader login and the run's logs, read only.
+      name         = "exporter"
+      image        = var.image
+      essential    = false
+      entryPoint   = ["python", "/app/skills/load-monitoring/scripts/exporter.py", "serve"]
+      dependsOn    = [{ containerName = "fetch", condition = "SUCCESS" }]
+      portMappings = [{ containerPort = local.exporter_port, protocol = "tcp" }]
+      environment = [for name, value in {
+        HOME     = local.home
+        STORES   = "${local.home}/.config/edgartools/hosted"
+        LOGS     = "/data/load-logs"
+        RUN      = var.run
+        CAPACITY = "local"
+      } : { name = name, value = value }]
+      mountPoints      = [{ sourceVolume = "data", containerPath = "/data", readOnly = true }]
+      logConfiguration = local.log["exporter"]
+    },
   ])
 }
 
@@ -350,6 +406,14 @@ output "state_machine_arn" {
 
 output "task_definition_arn" {
   value = aws_ecs_task_definition.load.arn
+}
+
+output "metrics_security_group_id" {
+  value = aws_security_group.metrics.id
+}
+
+output "exporter_port" {
+  value = local.exporter_port
 }
 
 output "secret_arn" {

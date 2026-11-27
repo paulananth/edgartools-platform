@@ -1,6 +1,7 @@
 # The load monitor: Prometheus scrapes the exporter on the host, Grafana shows it. Only Grafana's port reaches the host,
 # on 127.0.0.1. Nothing is mounted from a checkout (a bind of a repository path ties a container to that worktree);
-# Prometheus's scrape file is inline `configs` content. The dashboard and its data source are pushed by
+# Prometheus's scrape file is inline `configs` content. The exporter it reads is named in `targets/load.json`, on a named
+# volume: the Mac's exporter, or a load task's on AWS while infra/load-pipeline/aws-load.sh runs (`monitoring.py target`). The dashboard and its data source are pushed by
 # `skills/load-monitoring/scripts/monitoring.py`, not mounted.
 #
 #   uv run --no-sync python skills/load-monitoring/scripts/monitoring.py up
@@ -19,6 +20,7 @@ services:
         target: /etc/prometheus/prometheus.yml
     volumes:
       - prometheus-data:/prometheus
+      - prometheus-targets:/etc/prometheus/targets
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
       interval: 10s
@@ -58,9 +60,11 @@ configs:
         scrape_interval: 15s
       scrape_configs:
         - job_name: load-exporter
-          static_configs:
-            - targets: ["host.docker.internal:9108"]
+          file_sd_configs:
+            - files: [/etc/prometheus/targets/load.json]
+              refresh_interval: 30s
 
 volumes:
   prometheus-data:
+  prometheus-targets:
   grafana-data:

@@ -11,7 +11,7 @@ SQL procedures/tasks, access-control bindings, or runtime secret values.
 
 ```text
 bootstrap-state/
-load-machine/             # the hosted load: state machine, activity, task definition, their roles, empty secret
+load-machine/             # the hosted load: state machine, activity, task definition, their roles, empty secret, exporter port
 access/
   aws/accounts/{dev,prod}/        # IAM, SNS trust policies, ECS task roles
 accounts/
