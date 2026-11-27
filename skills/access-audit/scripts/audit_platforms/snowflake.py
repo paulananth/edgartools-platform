@@ -80,11 +80,14 @@ def schemas(connection: str, kept: dict[str, str]) -> list[dict] | None:
     return found
 
 
-def extra_schemas(kept: dict[str, str], found: list[dict] | None) -> list[str] | None:
-    """Every schema of a platform database other than the one it keeps (INFORMATION_SCHEMA is Snowflake's own view)."""
+def schema_drift(kept: dict[str, str], found: list[dict] | None) -> list[str] | None:
+    """Every schema of a platform database other than the one it keeps (INFORMATION_SCHEMA is Snowflake's own view), and each kept
+    schema that is absent."""
     if found is None:
         return None
-    return sorted(f"{r['catalog_name']}.{r['schema_name']}" for r in found if r["catalog_name"].upper() in kept
+    held = {(r["catalog_name"].upper(), r["schema_name"].upper()) for r in found}
+    missing = [f"{d}.{s} is missing" for d, s in kept.items() if (d, s) not in held]
+    return missing + sorted(f"{r['catalog_name']}.{r['schema_name']}" for r in found if r["catalog_name"].upper() in kept
                   and r["schema_name"].upper() not in (kept[r["catalog_name"].upper()], "INFORMATION_SCHEMA"))
 
 
@@ -109,7 +112,7 @@ def collect(env, as_admin: bool = False) -> dict:
         # A role sees only the policies it holds a privilege on, so SHOW would list none: the usage views list every one (they lag by
         # hours). An authentication policy has no view of its own and is found by its attachments.
         "credential_policies": credential_policies(connection),
-        "extra_schemas": extra_schemas(kept, schemas(connection, kept)),
+        "schema_drift": schema_drift(kept, schemas(connection, kept)),
         "risky_grants": lower(snow(connection, f"select grantee_name, privilege from {USAGE}.grants_to_roles where deleted_on is null and granted_on in "
                                    f"('ACCOUNT', 'ROLE', 'WAREHOUSE', 'DATABASE') and privilege in ({risky}) and grantee_name not in "
                                    "('ACCOUNTADMIN', 'SECURITYADMIN', 'SYSADMIN', 'USERADMIN', 'ORGADMIN')")),
@@ -153,7 +156,7 @@ def controls(ev: dict) -> list[dict]:
         c("POL", ev["credential_policies"] == 0 and not interactive, {"credential_policies": ev["credential_policies"], "platform_logins_not_service": interactive},
           "Make every platform login a TYPE = SERVICE user (no password possible) and drop any credential policy object: Snowflake keeps one only in a database",
           title="Credential rules are native: every platform login is a service user, and no credential policy object exists in any database"),
-        c("SCH", not ev["extra_schemas"], {"extra_schemas": ev["extra_schemas"]},
-          "Drop each schema a platform database holds beyond the one rules/snowflake.yaml names (skills/aws-snowflake-operations/scripts/one_schema_sql.py)",
-          title="Each platform database holds only the one schema rules/snowflake.yaml names", tested=ev["extra_schemas"] is not None),
+        c("SCH", not ev["schema_drift"], {"schema_drift": ev["schema_drift"]},
+          "Keep in each platform database only the one schema rules/snowflake.yaml names: drop the others (skills/aws-snowflake-operations/scripts/one_schema_sql.py)",
+          title="Each platform database holds only the one schema rules/snowflake.yaml names", tested=ev["schema_drift"] is not None),
     ]

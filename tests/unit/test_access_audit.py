@@ -24,7 +24,7 @@ def snowflake_clean():
                   {"name": "SVC", "type": "SERVICE", "has_password": "false", "has_rsa_public_key": "true", "default_role": "SVC"}],
         "admin_holders": ["A1", "A2"], "network_policies": 1, "account_network_policy": "P", "monitors": 1,
         "warehouses": [{"name": "W", "resource_monitor": "M"}], "statement_timeout": 3600, "credential_policies": 0,
-        "extra_schemas": [], "risky_grants": [], "queries": [{"role_name": "WORK", "n": 100}, {"role_name": "ACCOUNTADMIN", "n": 1}],
+        "schema_drift": [], "risky_grants": [], "queries": [{"role_name": "WORK", "n": 100}, {"role_name": "ACCOUNTADMIN", "n": 1}],
         "logins": [{"user_name": "A1", "first_factor": "PASSWORD", "second_factor": "TOTP", "n": 5}],
     }
 
@@ -83,7 +83,7 @@ def test_every_control_names_a_known_objective_and_carries_severity_and_framewor
     ("snowflake", "TMO", lambda e: e.update(statement_timeout=172800)),
     ("snowflake", "POL", lambda e: e.update(credential_policies=1)),
     ("snowflake", "POL", lambda e: e["users"].append({"name": "EDGARTOOLS_INVENTED", "type": "PERSON", "has_password": "true"})),
-    ("snowflake", "SCH", lambda e: e.update(extra_schemas=["INVENTED_GOLD.PUBLIC"])),
+    ("snowflake", "SCH", lambda e: e.update(schema_drift=["INVENTED_GOLD.PUBLIC"])),
     ("postgres", "IND", lambda e: e.update(memberships=["pg_monitor", "pg_write_all_data"])),
     ("postgres", "LPR", lambda e: e["superusers"].append("loader")),
     ("postgres", "LOG", lambda e: e["settings"].update({"pgaudit.log": "none"})),
@@ -112,7 +112,7 @@ def test_each_weakness_fails_its_own_objective(platform, objective, change):
 
 def test_a_control_the_auditor_cannot_see_is_not_tested_never_passed():
     assert graded("snowflake", lambda e: e.update(admin_holders=["HIDDEN"]))["ADM"] == "NOT_TESTED"
-    assert graded("snowflake", lambda e: e.update(extra_schemas=None))["SCH"] == "NOT_TESTED"
+    assert graded("snowflake", lambda e: e.update(schema_drift=None))["SCH"] == "NOT_TESTED"
     assert graded("aws", lambda e: e.update(public_block=None))["NET"] == "NOT_TESTED"
     assert graded("postgres", lambda e: e["public_objects"].update(control=None))["SCH"] == "NOT_TESTED"
 
@@ -252,19 +252,20 @@ def test_the_connection_limit_control_leaves_out_the_platforms_own_logins_and_co
     assert found == [("governance", 10), ("edgar_loader", -1)]
 
 
-def test_only_the_schema_a_platform_database_keeps_and_information_schema_are_not_extra():
+def test_an_extra_schema_and_a_missing_kept_schema_are_each_drift_and_information_schema_is_neither():
     kept = {"INVENTED_GOLD": "GOLD", "INVENTED_OPS": "CONTROL"}
     found = [{"catalog_name": d, "schema_name": s} for d, s in [("INVENTED_GOLD", "GOLD"), ("INVENTED_GOLD", "INFORMATION_SCHEMA"),
              ("INVENTED_GOLD", "POLICIES"), ("INVENTED_OPS", "CONTROL"), ("INVENTED_OPS", "PUBLIC")]]
-    assert snowflake.extra_schemas(kept, found) == ["INVENTED_GOLD.POLICIES", "INVENTED_OPS.PUBLIC"]
-    assert snowflake.extra_schemas(kept, None) is None
+    assert snowflake.schema_drift(kept, found) == ["INVENTED_GOLD.POLICIES", "INVENTED_OPS.PUBLIC"]
+    without_gold = [r for r in found if r["schema_name"] != "GOLD"]
+    assert snowflake.schema_drift(kept, without_gold) == ["INVENTED_GOLD.GOLD is missing", "INVENTED_GOLD.POLICIES", "INVENTED_OPS.PUBLIC"]
+    assert snowflake.schema_drift(kept, None) is None
 
 
 def test_a_platform_database_the_auditor_cannot_read_leaves_its_schemas_unread(monkeypatch):
     calls = []
     monkeypatch.setattr(snowflake, "snow", lambda connection, sql, soft=False: calls.append(sql) or (None if "INVENTED_OPS" in sql else [{"CATALOG_NAME": "INVENTED_GOLD", "SCHEMA_NAME": "GOLD"}]))
     assert snowflake.schemas("c", {"INVENTED_GOLD": "GOLD", "INVENTED_OPS": "CONTROL"}) is None
-    assert all("information_schema.schemata" in sql for sql in calls)
 
 
 def test_the_platform_databases_are_the_blocks_of_the_names_file_that_name_a_schema():

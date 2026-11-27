@@ -17,9 +17,9 @@ POLICIES = {"PASSWORD": ["INVENTED_GOLD.POLICIES.PW"], "AUTHENTICATION": ["INVEN
 
 
 def render(**changes):
-    args = {"names": NAMES, "network_policy": "INVENTED_POLICY", "rule": "INVENTED_GOLD.CONTROL.INGRESS", "policies": POLICIES,
+    args = {"names": NAMES, "network_policy": "INVENTED_POLICY", "rule": "INVENTED_GOLD.CONTROL.INGRESS", "allow": ["10.0.0.0/8"], "policies": POLICIES,
             "users": ["SVC_A", "SVC_B"], "drop": ["INVENTED_GOLD.CONTROL", "INVENTED_GOLD.POLICIES"], "auditor": "INVENTED_AUDITOR", **changes}
-    return one_schema_sql.statements(**{k: args[k] for k in ("names", "network_policy", "rule", "policies", "users", "drop", "auditor")}).splitlines()
+    return one_schema_sql.statements(**{k: args[k] for k in ("names", "network_policy", "rule", "allow", "policies", "users", "drop", "auditor")}).splitlines()
 
 
 def at(lines, text):
@@ -63,3 +63,24 @@ def test_moving_the_rule_out_of_a_schema_that_is_kept_is_refused():
 def test_a_name_that_is_not_a_plain_identifier_is_refused():
     with pytest.raises(SystemExit):
         render(users=["SVC_A; DROP DATABASE X"])
+
+
+def test_the_new_rule_allows_the_ranges_named_and_nothing_wider():
+    assert any(line.endswith("VALUE_LIST = ('10.0.0.0/8') COMMENT = 'Permissive ingress rule for MDM Snowflake Postgres: protection relies on credentials and sslmode=require';")
+               for line in render())
+    with pytest.raises(SystemExit):
+        render(allow=[])
+    with pytest.raises(SystemExit):
+        render(allow=["0.0.0.0/0'); DROP DATABASE X; --"])
+
+
+def test_a_rule_already_in_the_operations_database_is_never_dropped():
+    with pytest.raises(SystemExit):
+        render(rule="INVENTED_OPS.CONTROL.INGRESS")
+
+
+def test_the_policy_and_the_old_rule_are_printed_before_anything_changes():
+    lines = render()
+    first_change = at(lines, "CREATE DATABASE")
+    assert at(lines, "DESCRIBE NETWORK RULE INVENTED_GOLD.CONTROL.INGRESS") < first_change
+    assert at(lines, "DESCRIBE NETWORK POLICY INVENTED_POLICY") < first_change
