@@ -244,7 +244,9 @@ notes is not the live one. The order:
   creates views (never tables) in the Gold schema only. dbt reads its settings from the private file
   `~/.config/edgartools/gold-writer/gold-writer.env` (account, user, role, warehouse and the private key's path; the key stays in that
   folder, mode 0600). Prove a new writer by connecting with the key and checking that a view in its schema is created and dropped, and
-  that a table, a view in another schema and an account-usage read are refused.
+  that a table, a view in another schema and an account-usage read are refused. It reads the mirror through the target's
+  `<target>_ADMIN` database role, which `CREATE_MIRROR` gives its caller with grant option: the mirror operator grants it
+  (`GRANT DATABASE ROLE <target>.<target>_ADMIN TO ROLE <writer role>`) after each create, since a new target has a new role.
 - The mirror operator makes, reads back and changes the managed Postgres mirrors, and nothing else: a key-pair service user
   (`~/.config/edgartools/mirror-operator/mirror-operator.env`, key in that folder, mode 0600) whose role holds the
   `SNOWFLAKE.POSTGRES_MIRROR_ADMIN` application role and owns the Postgres instance, since `CREATE_MIRROR` refuses any role

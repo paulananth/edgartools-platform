@@ -4,7 +4,7 @@
 # never here: they come from the private environment.
 owner: EDGARTOOLS              # the role that owns every database the platform creates (a managed mirror's target excepted: the Snowflake application owns it while the mirror replicates)
 mirror:                          # the managed mirror of the exposed tables (schemas MDM, RDM, SILVER)
-  database: EDGARTOOLS_MIRROR
+  database: EDGARTOOLS_MIRROR_20261126
 gold:                            # where dbt writes the Gold views; this schema is the database's only one
   database: EDGARTOOLS_GOLD
   schema: GOLD
