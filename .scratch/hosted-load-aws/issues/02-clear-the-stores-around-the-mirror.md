@@ -22,4 +22,10 @@ Found while clearing the stores for ticket 01:
 - [x] HOSTED-LOADS and HOSTED-MIRRORING name the commands of the clear in order: skill lints pass (2026-11-27 15:09 ET)
 - [x] Tests: the affected unit tests pass: 89 passed (readiness, mirror SQL, table reset, five skill lints) (2026-11-27 15:09 ET)
 - [x] `/code-review` (Standards, Spec, GoF), each on `risky-reviewer`: no hard violation; applied a negative error number shown as none, a missing login reported as not tried, 090073 named as any resource monitor, the QUIET check named in step 1, the runner renamed `run_as_mirror_operator`; left: a lock held by a session is refused by the database (55P03) without naming it (2026-11-27 15:09 ET)
-- [x] Learning → skill: HOSTED-LOADS (090073 and an account-level monitor; the clear's five steps) and HOSTED-MIRRORING (suspend, status and resume commands; the wait for the walsender) (2026-11-27 15:09 ET)
+- [x] A suspended mirror's walsender did not leave: read every minute for 15 minutes after the suspend (15:04 to after 15:10 ET),
+  one walsender and one active slot throughout. Operator, 2026-11-27: "restart the mirror after the clear of all mdm, rdm,
+  silver". `--with-suspended-mirror` lets the mirror's own sessions (its walsender, a managed worker with no open transaction)
+  stay connected through the reset, and `mirror_sql.py restart` takes the new snapshot after it: unit tests pass; live, read
+  only, on mdm, silver and rdm the check names `pg base extension worker 1, walsender 1` without the switch and nothing with
+  it (2026-11-27 15:12 ET)
+- [x] Learning → skill: HOSTED-LOADS (090073 and an account-level monitor; the clear's five steps) and HOSTED-MIRRORING (suspend, status and restart commands; a suspended mirror's walsender stays, and the reset lets it) (2026-11-27 15:09 ET)

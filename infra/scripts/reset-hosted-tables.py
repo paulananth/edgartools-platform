@@ -4,7 +4,7 @@
     uv run python infra/scripts/reset-hosted-tables.py --store mdm --inventory
     uv run python infra/scripts/reset-hosted-tables.py --store mdm --manifest <file>
     uv run python infra/scripts/reset-hosted-tables.py --store mdm --manifest <file> \
-        --apply --words "<the operator's exact words>" --plan-sha256 <the reviewed plan digest> [--wait-minutes 15]
+        --apply --words "<the operator's exact words>" --plan-sha256 <the reviewed plan digest> [--wait-minutes 15] [--with-suspended-mirror]
 
 The manifest selects ordinary tables in one store schema and says `drop` or `truncate` for each.
 The script never drops a database, schema, or table with CASCADE. A dropped table must be recreated
@@ -219,24 +219,28 @@ def append_receipt(record: dict) -> None:
     path.chmod(0o600)
 
 
-def blocking_sessions(conn) -> str:
-    """The sessions that block a reset, by kind and number ("walsender 1"), or "" when none does."""
+def blocking_sessions(conn, mirror_suspended: bool = False) -> str:
+    """The sessions that block a reset, by kind and number ("walsender 1"), or "" when none does. A managed worker with no
+    session state and no open transaction never blocks. With the mirror suspended, its own sessions (its walsender, and a
+    managed worker with no open transaction) stay connected through the reset; the mirror is restarted after it, which
+    takes a new snapshot of the emptied tables. A client session blocks always."""
     return ", ".join(f"{kind} {count}" for kind, count in conn.execute(sa.text("""
         SELECT coalesce(backend_type, 'unknown'), count(*) FROM pg_stat_activity
         WHERE datname = current_database() AND pid <> pg_backend_pid()
           AND NOT (backend_type IS NOT DISTINCT FROM 'pg base extension worker'
-                   AND state IS NULL AND xact_start IS NULL)
+                   AND (state IS NULL OR :mirror_suspended) AND xact_start IS NULL)
+          AND NOT (:mirror_suspended AND backend_type IS NOT DISTINCT FROM 'walsender')
         GROUP BY 1 ORDER BY 1
-    """)))
+    """), {"mirror_suspended": mirror_suspended}))
 
 
-def wait_for_quiet(engine, minutes: float, every: float = 30) -> None:
+def wait_for_quiet(engine, minutes: float, every: float = 30, mirror_suspended: bool = False) -> None:
     """Wait until no session blocks the reset, checking every `every` seconds for at most `minutes`. A suspended mirror's
     walsender stays connected for a while after the suspend; this is the wait for it to leave."""
     deadline = time.monotonic() + minutes * 60
     while True:
         with engine.connect() as conn:
-            blocking = blocking_sessions(conn)
+            blocking = blocking_sessions(conn, mirror_suspended)
         if not blocking:
             return
         if time.monotonic() >= deadline:
@@ -257,18 +261,18 @@ def show_plan(plan: dict) -> None:
 
 
 def apply_plan(engine, store: str, tables: list[dict[str, str]], words: str, expected_digest: str, *,
-               require_all: bool = False) -> dict:
+               require_all: bool = False, mirror_suspended: bool = False) -> dict:
     plan = None
     schema = STORE_SCHEMAS[store]
     try:
         with engine.begin() as conn:
-            if blocking := blocking_sessions(conn):
+            if blocking := blocking_sessions(conn, mirror_suspended):
                 raise BlockedError(f"Refusing reset while connected to this store: {blocking}")
             conn.exec_driver_sql("SET LOCAL lock_timeout = '2s'")
             for item in tables:
                 qualified = f"{quote(engine, schema)}.{quote(engine, item['table'])}"
                 conn.exec_driver_sql(f"LOCK TABLE {qualified} IN ACCESS EXCLUSIVE MODE NOWAIT")
-            if blocking := blocking_sessions(conn):
+            if blocking := blocking_sessions(conn, mirror_suspended):
                 raise BlockedError(f"Refusing reset while connected to this store: {blocking}")
             plan = read_plan(conn, engine, store, tables, require_all=require_all)
             if plan["plan_sha256"] != expected_digest:
@@ -319,6 +323,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--apply", action="store_true", help="apply the reviewed plan")
     parser.add_argument("--words", help="operator's exact approval words; required with --apply")
     parser.add_argument("--plan-sha256", help="digest printed by the reviewed plan; required with --apply")
+    parser.add_argument("--with-suspended-mirror", action="store_true",
+                        help="with --apply: the mirror is suspended (mirror_sql.py status says SUSPENDED) and is restarted after the "
+                             "reset; its walsender and idle managed workers may stay connected")
     parser.add_argument("--wait-minutes", type=float, default=0,
                         help="with --apply: wait up to this long for blocking sessions (a suspended mirror's walsender) to leave")
     args = parser.parse_args(argv)
@@ -344,9 +351,9 @@ def main(argv: list[str] | None = None) -> int:
                 show_plan(plan)
                 print("Plan only; nothing changed")
                 return 0
-            wait_for_quiet(engine, args.wait_minutes)
+            wait_for_quiet(engine, args.wait_minutes, mirror_suspended=args.with_suspended_mirror)
             plan = apply_plan(engine, args.store, tables, args.words.strip(), args.plan_sha256,
-                              require_all=args.require_all_tables)
+                              require_all=args.require_all_tables, mirror_suspended=args.with_suspended_mirror)
             show_plan(plan)
             print(f"Applied {len(plan['tables'])} table actions; receipt recorded in the private stores folder")
             return 0

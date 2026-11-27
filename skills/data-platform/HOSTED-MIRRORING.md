@@ -204,9 +204,11 @@ the record with every table REPLICATING; then set `verified: true` in `sources/m
 For a hosted table reset, suspend the mirror as the mirror operator
 (`mirror_sql.py suspend | mirror_run.py`; `mirror_run.py` runs one statement with the operator's key pair and prints its
 rows as JSON), then verify `SUSPENDED` with `mirror_sql.py status | mirror_run.py`. After the reset,
-`mirror_sql.py resume | mirror_run.py`. Suspension pauses Snowflake apply. A PostgreSQL WAL sender can remain
+restart it (`mirror_sql.py restart | mirror_run.py`): it takes a new snapshot, so the mirror holds the emptied tables (resume would only replay). Suspension pauses Snowflake apply. A PostgreSQL WAL sender can remain
 connected, so check source sessions and logical slot activity separately before
-running the table reset (`reset-hosted-tables.py --wait-minutes` waits for them and names what stays). Read `pg_stat_activity` by backend type and transaction
+running the table reset. The walsender of a suspended mirror stays connected (read for 15 minutes after a suspend):
+`reset-hosted-tables.py --with-suspended-mirror` lets the mirror's own sessions stay, and the restart after the reset
+takes the new snapshot. Read `pg_stat_activity` by backend type and transaction
 state, and `pg_replication_slots` by slot type and active state for the source
 database. An active logical slot means the source connection still needs to
 drain even when Snowflake reports `SUSPENDED`. Use the managed lifecycle for

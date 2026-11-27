@@ -283,10 +283,10 @@ The clear, in order (the mirror commands are the data-platform skill's `scripts/
    loader has no session).
 2. Back up the control database and RDM (below); plan each store's manifest and keep its digest.
 3. `mirror_sql.py suspend | mirror_run.py`, then `status` reads `SUSPENDED`.
-4. Apply each store's plan with `--wait-minutes 15`: the mirror's walsender stays connected for a while after the suspend,
-   and the reset waits for it, then refuses naming what is still connected. Stop at the first store that fails.
-5. Restore RDM's published codes (`rdm_restore_published.py`), then `mirror_sql.py resume | mirror_run.py`, and read the
-   mirror back (HOSTED-MIRRORING, "Done is read back").
+4. Apply each store's plan with `--with-suspended-mirror`: a suspended mirror keeps its walsender and a managed worker
+   connected, and the reset lets those two stay; any other session refuses it, named. Stop at the first store that fails.
+5. Restore RDM's published codes (`rdm_restore_published.py`), then restart the mirror (`mirror_sql.py restart | mirror_run.py`, a new snapshot
+   of the emptied tables) and read it back (HOSTED-MIRRORING, "Done is read back").
 
 Prepare a separate manifest for each store. List every resettable table from its
 inventory with `action: truncate`. Use `--require-all-tables` when planning

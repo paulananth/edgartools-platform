@@ -20,7 +20,7 @@ class Engine:
 
 def sessions(monkeypatch, answers):
     answers = iter(answers)
-    checked(monkeypatch, reset, "blocking_sessions", lambda conn: next(answers))
+    checked(monkeypatch, reset, "blocking_sessions", lambda conn, mirror_suspended=False: next(answers))
 
 
 def test_the_reset_starts_once_a_suspended_mirrors_walsender_has_left(monkeypatch):
