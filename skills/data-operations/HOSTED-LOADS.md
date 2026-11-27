@@ -193,20 +193,17 @@ The goal is every document loaded in the least wall-clock time. Each rule below 
   statement's last byte arrives, and the client meanwhile sits in `ppoll` with little CPU. Read the writer's timeline before blaming a lock or the
   database: sample its sessions every half second (connection, transaction, statement start and last change) and compare the store's time per
   statement with the gap before the next one.
-  - Problem: a silver-only step (no mastering, one document) ran for hours, shown stalled or locked, its session idle in a transaction 96% of the time.
-  - Root cause: each insert runs on the store in under a second, then the next batch of 5,000 rows, sent as SQL text, takes 7 to 15 seconds to
-    upload from the loading machine (one connection about 13 Mbit/s, four together about 21). The step lands one document's deliveries one after
-    another over one connection, and a rerun uploads every row again only for the store to discard the ones already landed. A statement that cannot
-    arrive within the loader's ten-minute idle-in-transaction limit gets its transaction ended and the attempt restarts from the start.
-  - Fix: send fewer bytes and send them side by side (the rows of a rerun that are already landed not sent again; a denser format than SQL text;
-    a document's deliveries on several connections up to the line's rate), and run the loader beside the store, where the line is not the limit.
-  - Lesson: measure where the time goes from both ends (the store's statement times and the client's gaps) before adding workers or connections:
-    the connection limit is not the limit, the upload is.
-
-- **A step stopped at its deadline leaves no worker running.** A command's merge workers are processes of their own; a deadline that stopped only
-  the command left them merging beside the next attempt, and both wrote the same file (`UniqueViolation` on `mastering_file_pkey`, the same error on
-  every retry). Each platform command runs in its own process group and the deadline stops the group. After any stopped step, look for workers whose
-  parent is gone (`ps -eo pid,ppid,etime,args` in the worker container, parent 1) before starting the step again.
+  - Problem: a silver-only step (no mastering, one document) runs for hours, shown stalled or locked, its session idle in a transaction nearly always.
+  - Root cause: each insert is quick on the store, and the next batch, sent as SQL text, waits on the upload from the loading machine. The step lands
+    one document's deliveries one after another over one connection, and a rerun uploads every row again for the store to discard those already landed.
+  - Fix, the direction: send fewer bytes (no row a rerun already landed; a denser format than SQL text), send them side by side up to the line's
+    rate, and run the loader beside the store.
+  - Lesson: measure both ends (the store's statement times and the client's gaps, and the upload rate on one connection and on several) before adding
+    workers or connections: the connection limit is not the limit, the upload is.
+- **A step stopped at its deadline leaves no worker running.** A command's merge workers are processes of their own, and one left running merges
+  beside the next attempt: both write the same file, and every retry stops on `UniqueViolation` on `mastering_file_pkey`. Each platform command runs
+  in its own process group, and a deadline or an interrupt stops the group. After any stopped step, look for workers whose parent is gone
+  (`ps -eo pid,ppid,etime,args` in the worker container, parent 1) before starting the step again.
 
 ## The finish takes at most five minutes
 `--finish` builds the links tables and `master_binding` from the stored records; `master_binding` is two statements inside the data database

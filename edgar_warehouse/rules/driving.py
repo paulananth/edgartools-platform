@@ -81,9 +81,12 @@ def run_command(command: list[str], env: dict, timeout: float) -> subprocess.Com
     child = subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
     try:
         stdout, stderr = child.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
+    except BaseException:  # the deadline, or an interrupt of the caller: the command's own session no longer hears the terminal
         os.killpg(child.pid, signal.SIGKILL)
-        child.communicate()
+        try:
+            child.communicate(timeout=30)
+        except subprocess.TimeoutExpired:  # a process that left the group holds the pipes: they are not waited for
+            child.kill()
         raise
     return subprocess.CompletedProcess(command, child.returncode, stdout, stderr)
 

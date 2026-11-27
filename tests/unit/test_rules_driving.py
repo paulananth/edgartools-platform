@@ -229,7 +229,7 @@ def test_a_command_past_its_deadline_is_stopped_with_every_process_it_started(tm
     started = ("import subprocess, sys, time; "
                f"w = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)']); open({str(pid_file)!r}, 'w').write(str(w.pid)); "
                "time.sleep(60)")
-    run = driving.Commands({"worker": {}}, "file:///reports", deadline=driving.time.monotonic() + 3, log=tmp_path / "errors.log")
+    run = driving.Commands({"worker": {}}, "file:///reports", deadline=driving.time.monotonic() + 10, log=tmp_path / "errors.log")
     run.command = [sys.executable, "-c", started]
     with pytest.raises(driving.RunStopped, match="did not finish before the deadline"):
         run("worker", "rules", "run")
