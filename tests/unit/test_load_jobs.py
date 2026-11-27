@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 import threading
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -2618,6 +2619,50 @@ def test_the_workers_in_use_are_every_running_loads_own_count_once_and_a_plan_ho
                "edgar-warehouse load --source c --target mastering --workers 4 --plan\n"
                "python something --workers 9\n")
     assert chain.workers_in_use(listing) == 10
+
+
+def test_a_running_load_is_charged_the_sessions_it_was_measured_to_open_once_read_twice_else_its_declared_workers():
+    listing = ("edgar-warehouse load --source gleif --target mastering --workers 8\n"
+               "edgar-warehouse load --source sec.ownership --target silver --workers 2\n")
+    assert chain.workers_in_use(listing) == 10
+    assert chain.workers_in_use(listing, {("gleif", "mastering"): 2}) == 4  # 8 declared, 2 sessions opened at most
+    assert chain.workers_in_use(listing, {("gleif", "mastering"): 2, ("other", "silver"): 5}) == 4  # a load not running holds none
+
+
+def test_the_controller_keeps_each_running_steps_peak_sessions_in_its_start_and_a_new_start_is_measured_again(tmp_path):
+    state = tmp_path / "chain-r.log"
+    steps = [{"name": "gleif", "source": "gleif", "target": "mastering"}, {"name": "o", "source": "sec.ownership", "target": "silver"}]
+    first = {"gleif": datetime(2026, 11, 27, 18, 9, 49), "o": datetime(2026, 11, 27, 18, 6, 18)}
+    chain.record_sessions(state, first, {"gleif": 2, "o": 1})
+    assert chain.session_charges(state, steps, first) == {}  # one reading: admission keeps the declared workers
+    assert chain.session_charges(state, steps, first, readings=1) == {("gleif", "mastering"): 2, ("sec.ownership", "silver"): 1}
+    chain.record_sessions(state, first, {"gleif": 1})
+    assert chain.session_charges(state, steps, first) == {("gleif", "mastering"): 2, ("sec.ownership", "silver"): 1}  # each its peak
+    moved = {**first, "gleif": datetime(2026, 11, 27, 18, 30)}
+    assert chain.session_charges(state, steps, moved, readings=1) == {("sec.ownership", "silver"): 1}  # the old start's peak: no measure
+    chain.record_sessions(state, moved, {"gleif": 0})
+    assert chain.session_charges(state, steps, moved, readings=1) == {("gleif", "mastering"): 0, ("sec.ownership", "silver"): 1}
+    assert chain.session_charges(tmp_path / "none.log", steps, first) == {}  # nothing recorded: nothing measured
+
+
+def test_a_sessions_reading_that_fails_keeps_the_peaks_and_counts_no_reading(tmp_path, monkeypatch):
+    state = tmp_path / "chain-r.log"
+    steps = [{"name": "gleif", "source": "gleif", "target": "mastering"}]
+    since = {"gleif": datetime(2026, 11, 27, 18, 9, 49)}
+    readings = iter([{"gleif": {"active": 1, "idle_in_transaction": 1}}, None])
+    checked(monkeypatch, chain, "step_sessions", lambda reader_url: next(readings))
+    chain.measure_store(state, "postgresql://x/y", since)
+    chain.measure_store(state, "postgresql://x/y", since)  # unreadable
+    assert chain.session_charges(state, steps, since, readings=1) == {("gleif", "mastering"): 2}
+    assert chain.session_charges(state, steps, since) == {}  # still one reading
+
+
+def test_a_one_document_step_starts_with_all_its_workers_once_the_store_has_one_free(tmp_path):
+    """`gleif` (one document, 8 workers) waited 21 minutes for all 8 of the store's workers while smaller steps took each one
+    as it freed; it starts with one free and the controller sheds the movable steps if the store goes over."""
+    got = chain.admit(8, 0.4, tmp_path / "gate", free=lambda: 100.0, running=lambda: True, pressed=lambda: False,
+                      sleep=lambda s: pytest.fail("it waited"), settle=0, one_document=True, store=lambda: 1)
+    assert got == 8
 
 
 def test_a_step_waits_while_the_store_is_full_and_starts_with_no_more_than_it_has_left(tmp_path):

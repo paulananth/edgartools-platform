@@ -350,8 +350,10 @@ def admit(want: int, worker_gb: float, lock: Path, free=free_gb, running=load_ru
     at least the step's measured `peak_gb`, and the free memory read leaves out what the running steps have yet to reach of
     theirs (`reserved`, `unreached_peaks`): a step still growing to its peak is not free memory. The store bounds it too
     (`store`, the workers it can still take, `store_left`): a step waits until the store carries its floor, and starts with
-    no more than the store has left."""
+    no more than the store has left. A step of one document waits for one free store worker only, not all of its own: it
+    starts with all of them, and the controller sheds the movable steps if the store goes over."""
     floor = want if one_document else max(1, want // 2)
+    store_floor = 1 if one_document else floor
     waited, waiting = False, None  # a waiter holds `<gate>.wait` shared, so the controller raises nothing meanwhile
     try:
         while True:  # the lock is held for a reading and an admission only: a step that waits lets the others be admitted
@@ -364,7 +366,7 @@ def admit(want: int, worker_gb: float, lock: Path, free=free_gb, running=load_ru
                     room -= held
                 need = max(floor * worker_gb, peak_gb)
                 left = store()
-                full = left is not None and left < floor
+                full = left is not None and left < store_floor
                 short = room is not None and room < need
                 busy = not short and not full and pressed()
                 if not (short or full or busy) or not running():
@@ -379,7 +381,7 @@ def admit(want: int, worker_gb: float, lock: Path, free=free_gb, running=load_ru
             if not waited:
                 say(f"waits for {need:.1f} GB of free memory ({room:.1f} GB now"
                     + (f", {held:.2f} GB more held for running steps' peaks)" if held else ")") if short else
-                    f"waits for the store: it takes {max(left, 0)} more workers, {floor} needed" if full else
+                    f"waits for the store: it takes {max(left, 0)} more workers, {store_floor} needed" if full else
                     "waits for the CPU (the machine is pressed)")
                 waited = True
             sleep(poll)
@@ -409,21 +411,71 @@ def store_workers(path: Path = ROOT / "rules/load-jobs.yaml", name: str | None =
     return max(1, min(int(store["vcpu"] * WORKERS_PER_VCPU), int(store["memory_gb"] / 2 / store["work_mem_gb"] + 1e-9)))
 
 
-def workers_in_use(listing: str) -> int:
-    """The workers of every load running here, from its driver's `--workers` (a `--plan` loads nothing), once a source and
-    target: a load started through a launcher (`uv run`) shows twice, the launcher and the driver."""
+def workers_in_use(listing: str, charges: dict[tuple[str, str], int] | None = None) -> int:
+    """The store workers every load running here holds: the sessions it was measured to open (`charges`, by source and target,
+    `session_charges`), else its driver's `--workers` (a `--plan` loads nothing), once a source and target: a load started
+    through a launcher (`uv run`) shows twice, the launcher and the driver."""
     loads = {}
     for line in listing.splitlines():
         found, which = re.search(r"--workers (\d+)", line), re.search(r"--source (\S+) --target (\S+)", line)
         if LOAD_COMMAND.search(line) and found and which and not re.search(r" --plan( |$)", line):
             loads[which.groups()] = max(loads.get(which.groups(), 0), int(found.group(1)))
-    return sum(loads.values())
+    charges = charges or {}
+    return sum(charges.get(load, declared) for load, declared in loads.items())
 
 
-def store_left(listing: str | None = None) -> int | None:
+def store_left(listing: str | None = None, charges: dict[tuple[str, str], int] | None = None) -> int | None:
     """The workers the store can still take (below zero when the running steps hold more); None with no store declared."""
     carried_by_store = store_workers()
-    return None if carried_by_store is None else carried_by_store - workers_in_use(process_listing() if listing is None else listing)
+    if carried_by_store is None:
+        return None
+    return carried_by_store - workers_in_use(process_listing() if listing is None else listing, charges)
+
+
+def sessions_path(state: Path) -> Path:
+    return state.with_name(state.name + ".sessions")
+
+
+def record_sessions(state: Path, since: dict[str, datetime], seen: dict[str, int]) -> None:
+    """Keep each running step's most sessions at work (active or in a transaction) in its current start (`since`: its last
+    attempt or move), one reading a cycle, beside the state file. Its one writer is the controller, or the local scheduler
+    (`auto`) where that runs the load instead."""
+    path = sessions_path(state)
+    try:
+        kept = json.loads(path.read_text())
+    except (OSError, ValueError):
+        kept = {}
+    fresh = {}
+    for name, started in since.items():
+        mark, before = started.isoformat(), kept.get(name) or {}
+        same = before.get("since") == mark
+        fresh[name] = {"since": mark, "peak": max(before.get("peak", 0) if same else 0, seen.get(name, 0)),
+                       "readings": (before.get("readings", 0) if same else 0) + 1}
+    spare = path.with_name(path.name + ".new")
+    spare.write_text(json.dumps(fresh))
+    spare.replace(path)
+
+
+def measure_store(state: Path, reader_url: str | None, since: dict[str, datetime]) -> None:
+    """Read the running steps' sessions at work and keep each one's peak; a reading that fails keeps nothing, so the peaks kept
+    stand and count no further reading."""
+    seen = step_sessions(reader_url) if reader_url and since else None
+    if seen is not None:
+        record_sessions(state, since, {name: one["active"] + one["idle_in_transaction"] for name, one in seen.items()})
+
+
+def session_charges(state: Path, steps: list[dict], since: dict[str, datetime], readings: int = 2) -> dict[tuple[str, str], int]:
+    """The store workers each running step is measured to hold, by its source and target: its peak sessions in its current start
+    (`since`; a peak of an earlier start is no measure of this one), once read `readings` times. Admitting and raising ask two
+    readings (a step just started has opened few yet); shedding asks one, so it acts on the sessions the store holds, never on
+    the declared workers of a step not yet read. A step not measured is charged its declared workers."""
+    try:
+        kept = json.loads(sessions_path(state).read_text())
+    except (OSError, ValueError):
+        return {}
+    by_name = {step["name"]: (step["source"], step["target"]) for step in steps}
+    return {by_name[name]: one["peak"] for name, one in kept.items()
+            if name in by_name and name in since and one.get("since") == since[name].isoformat() and one.get("readings", 0) >= readings}
 
 
 def store_bounds(bounds: dict[str, tuple[int, int]], workers: dict[str, int], left: int | None) -> dict[str, tuple[int, int]]:
@@ -771,9 +823,12 @@ def control_cycle(steps: list[dict], state: Path, memory: Memory, reader_url: st
         level = room(level, reading["connections"], connections)
     if level == "low" and admitting(gate_path(state)):
         level = "ok"
-    left = store_left(listing)
-    level = store_level(level, left)
-    if said := store_note(memory, reader_url, workers_in_use(listing), (reading or {}).get("lock_waiters"), time.monotonic()):
+    starts = {name: since[name] for name in running}
+    measure_store(state, reader_url, starts)
+    held = session_charges(state, steps, starts, readings=1)
+    left = store_left(listing, session_charges(state, steps, starts))
+    level = store_level(level, store_left(listing, held))
+    if said := store_note(memory, reader_url, workers_in_use(listing, held), (reading or {}).get("lock_waiters"), time.monotonic()):
         note(said, state)
     workers = {name: count for name, (_, count) in running.items()}
     bounds = {name: headroom(count, bounds_for("local", s.get("worker_gb", WORKER_GB)), free, s.get("worker_gb", WORKER_GB))
@@ -859,16 +914,18 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
         level = worst(machine_pressure(relaxed=slow), database)
         if reading:
             level = room(level, reading["connections"], connections)
-        left = store_left()
-        level = store_level(level, left)
+        text = state.read_text() if state.exists() else ""
+        starts_now = {n: s for n, s in last_starts(text, clock().year).items() if n in workers}
+        measure_store(state, reader_url, starts_now)
+        left = store_left(charges=session_charges(state, steps, starts_now))
+        level = store_level(level, store_left(charges=session_charges(state, steps, starts_now, readings=1)))
         estimate = estimates(steps, measured(state.read_text()) if state.exists() else {})
         length = chain_length(steps, estimate)
         cycle += 1
         if cycle % 10 == 1:
             running_now = {n for n in by_name if n not in done and (n in children or (by_name[n]["source"], by_name[n]["target"]) in external_loads())}
             minutes_in = minutes_running(state.read_text() if state.exists() else "", running_now, clock())
-            left = remaining(steps, done, minutes_in, estimate)
-            ends = clock() + timedelta(minutes=left)
+            ends = clock() + timedelta(minutes=remaining(steps, done, minutes_in, estimate))
             note(f"projected end {ends:%H:%M} ET (an estimate from the {len(measured(state.read_text()) if state.exists() else {})} "
                  f"steps done){f' against the deadline {deadline:%H:%M} ET' if deadline else ''}; "
                  f"{reading['connections'] if reading else '?'} of {connections} target connections in use", state)
@@ -1037,8 +1094,9 @@ def summarize_sessions(rows) -> dict[str, dict]:
                    "wait": one["waits"].most_common(1)[0][0] if one["waits"] else "-"} for step, one in found.items()}
 
 
-def step_sessions(reader_url: str) -> dict[str, dict]:
-    """The sessions of every load job, read as the diagnostic login (state, wait and statement shape, never a value)."""
+def step_sessions(reader_url: str) -> dict[str, dict] | None:
+    """The sessions of every load job, read as the diagnostic login (state, wait and statement shape, never a value); None when
+    they cannot be read."""
     import psycopg2
 
     try:
@@ -1048,7 +1106,7 @@ def step_sessions(reader_url: str) -> dict[str, dict]:
                            FROM pg_stat_activity WHERE application_name LIKE 'chain-%%' AND state IS NOT NULL AND pid <> pg_backend_pid()""")
             return summarize_sessions(cur.fetchall())
     except Exception:  # noqa: BLE001  a driver error can quote the address: no reading
-        return {}
+        return None
 
 
 def verdict_kind(log_age: float, cpu: float | None, lock_waiters: int, evidence: dict | None = None) -> str:
@@ -1315,7 +1373,7 @@ def status_snapshot(steps: list[dict], state: Path, reader_url: str | None, samp
     waiters = (database_load(reader_url) or {}).get("lock_waiters", 0)
     listing = process_listing()
     sessions = database_sessions(reader_url) if reader_url else {}
-    tagged = step_sessions(reader_url) if reader_url else {}
+    tagged = (step_sessions(reader_url) or {}) if reader_url else {}
     rows = []
     for step in running:
         began, attempt = started[step["name"]]
@@ -1999,12 +2057,13 @@ def attempt_loop(step: dict, env: dict, state: Path, others_run: bool = True) ->
     from edgar_warehouse.rules import error_log
 
     errors, offset, previous = STORES / "load-errors.log", (0, 0), ""
-    peaked = [one for one in load_jobs() if "peak_gb" in one]  # the steps whose unreached peak this one's admission leaves out
+    jobs = load_jobs()
+    peaked = [one for one in jobs if "peak_gb" in one]  # the steps whose unreached peak this one's admission leaves out
     attempt, want, attempt_peak = 1, step["workers"], 0.0  # the peak of every load of this attempt, moves included
     moved = []  # the output of this attempt's processes that a move ended, kept as `<log>.attempt-<n>.move-<m>`
     while attempt <= step["attempts"]:
         workers = admit(want, step.get("worker_gb", WORKER_GB), gate_path(state), say=lambda text: note(f"{name} {text}", state),
-                        store=store_left,
+                        store=lambda: store_left(charges=session_charges(state, jobs, last_starts(state.read_text(), clock().year))),
                         one_document=step.get("one_document", False), peak_gb=step.get("peak_gb", 0.0),
                         reserved=(lambda: unreached_peaks(peaked, process_listing(), besides=name)) if peaked else lambda: 0.0)
         note(f"{name} attempt {attempt} start" + (f" with {workers} of its {step['workers']} workers" if workers != step["workers"] else ""), state)

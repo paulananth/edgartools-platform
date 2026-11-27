@@ -154,6 +154,15 @@ flat is the right limit; CPU to spare is a limit to raise; an out-of-memory line
 or an instance to resize (the operator's approval; [HOSTED-MIRRORING](../data-platform/HOSTED-MIRRORING.md), "Readiness before
 changes"). A resize is followed by a changed `stores:` line in the same change.
 
+**The store counts what a step uses, not what it declares.** Each controller cycle reads every step's sessions at work (active
+or in a transaction, `application_name` `chain-<step>`) and keeps its peak in its current start beside the state file
+(`<state>.sessions`); a peak counts only for the start it was read in. Admitting a step and raising one charge a running step
+that peak once read twice; shedding charges it once read once, so it acts on the sessions the store holds. Until then, or when
+the database cannot be read, a step is charged its declared `--workers`. A step's `workers` is so a cap and a first guess, never the measure: a step reading one file on one core
+holds no store workers. A step of one document (never moved) waits for one free store worker, not all of its own, and starts
+with all of them; when its sessions take the store over the limit, the controller sheds the movable steps, never it. The store's half of memory
+kept spare (`stores:`) covers the cycle between a step opening sessions and the next reading.
+
 ## The shortest time to load everything
 The goal is every document loaded in the least wall-clock time. Each rule below removed a wait or a restart.
 - **The longest chain of steps sets the time, so every lane starts at once.** The lane count is the workers the compute carries over the
