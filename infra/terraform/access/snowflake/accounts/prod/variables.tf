@@ -16,10 +16,6 @@ variable "warehouse" {
   type    = string
   default = "COMPUTE_WH"
 }
-variable "monthly_credit_quota" {
-  type    = number
-  default = 10
-}
 variable "account_statement_timeout_seconds" {
   type    = number
   default = 7200

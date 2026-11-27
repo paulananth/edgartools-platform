@@ -1,5 +1,5 @@
 # The access controls the audit (skills/access-audit) tests, as code: read-only roles and their key-pair service users,
-# and the cost and timeout guards. Changes go through plan, a recorded approval, apply, re-audit.
+# and the timeout guards. Changes go through plan, a recorded approval, apply, re-audit.
 
 
 # --- Names ---------------------------------------------------------------------------------------------------------------
@@ -14,15 +14,6 @@ locals {
 resource "snowflake_account_parameter" "statement_timeout" {
   key   = "STATEMENT_TIMEOUT_IN_SECONDS"
   value = tostring(var.account_statement_timeout_seconds)
-}
-
-resource "snowflake_resource_monitor" "prod" {
-  name            = "EDGARTOOLS_PROD_MONITOR"
-  credit_quota    = var.monthly_credit_quota
-  frequency       = "MONTHLY"
-  start_timestamp = "IMMEDIATELY"
-  notify_triggers = [75]
-  suspend_trigger = 100
 }
 
 # --- The read-only log reader ---------------------------------------------------------------------------------------

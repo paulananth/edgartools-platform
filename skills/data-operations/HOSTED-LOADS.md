@@ -26,11 +26,9 @@ steps; and the merge policy, every Dataset Contract and every worker profile are
 say in the report which ran and which did not, and never write a step off without reading why (a catalog step was once called
 unconfigured when its file existed). A fact that cannot be
 read is a failure. Fix what it names and run it again; there is no switch to skip it. `MIRRORED unreadable (the mirror
-operator could not list the mirror)` can be Snowflake refusing the warehouse: the account's monthly resource monitor stops
-every warehouse at its quota, and an account administrator raises it (`monthly_credit_quota` of the Snowflake access root)
-or the load waits for the monthly reset. List the mirror once before clearing a store: suspending it, resuming it and this
-check all need the warehouse. A rehearsal of the first lane on a
-disposable store is the next check to add.
+operator could not list the mirror)` can be Snowflake refusing the mirror operator's warehouse. List the mirror once
+before clearing a store: suspending it, resuming it and this check all need the warehouse. A rehearsal of the first lane
+on a disposable store is the next check to add.
 
 After truncating tables for a full reload, assign a new `RUN` label and use
 it for readiness and every invocation of the hosted load pipeline. Confirm

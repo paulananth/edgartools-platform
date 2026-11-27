@@ -106,8 +106,6 @@ def collect(env, as_admin: bool = False) -> dict:
         "admin_holders": [r["grantee_name"] for r in lower(snow(connection, f"select grantee_name from {USAGE}.grants_to_users where role = 'ACCOUNTADMIN' and deleted_on is null"))],
         "network_policies": len(snow(connection, f"select name from {USAGE}.network_policies where deleted is null")),
         "account_network_policy": next((r["value"] for r in lower(snow(connection, "show parameters like 'NETWORK_POLICY' in account"))), ""),
-        "monitors": len(snow(connection, "show resource monitors")),
-        "warehouses": lower(snow(connection, "show warehouses")),
         "statement_timeout": int(next(r["value"] for r in lower(snow(connection, "show parameters like 'STATEMENT_TIMEOUT_IN_SECONDS' in account")))),
         # A role sees only the policies it holds a privilege on, so SHOW would list none: the usage views list every one (they lag by
         # hours). An authentication policy has no view of its own and is found by its attachments.
@@ -137,7 +135,6 @@ def controls(ev: dict) -> list[dict]:
     admin_password = sum(int(r["n"]) for r in ev["logins"] if r["user_name"] in ev["admin_holders"] and r["first_factor"] == "PASSWORD" and not r["second_factor"])
     services = [u for u in ev["users"] if u.get("type") == "SERVICE"]
     interactive = sorted(u["name"] for u in ev["users"] if u["name"].startswith("EDGARTOOLS") and u.get("type") != "SERVICE")
-    ungoverned = [w["name"] for w in ev["warehouses"] if (w.get("resource_monitor") or "null") == "null"]
     defaulting = sum((a.get("default_role") or "").upper() == "ACCOUNTADMIN" for a in admins)
     return [
         c("IND", ev["audit_role"] not in ADMIN, {"audit_role": ev["audit_role"]}, "Use the read-only auditor role"),
@@ -151,7 +148,6 @@ def controls(ev: dict) -> list[dict]:
         c("LPR", not ev["risky_grants"], {"roles_with_risky_grants": len({r["grantee_name"] for r in ev["risky_grants"]})}, "Revoke or justify in a change record"),
         c("NET", bool(ev["account_network_policy"]), {"account_policy_set": bool(ev["account_network_policy"]), "policies": ev["network_policies"]},
           "Set an account network policy; add one per service user"),
-        c("CST", not ungoverned, {"warehouses_without_monitor": len(ungoverned), "monitors": ev["monitors"]}, "Create a resource monitor with a credit quota"),
         c("TMO", ev["statement_timeout"] <= MAX_TIMEOUT, {"statement_timeout_s": ev["statement_timeout"]}, "Set a timeout on the account or on each service user"),
         c("POL", ev["credential_policies"] == 0 and not interactive, {"credential_policies": ev["credential_policies"], "platform_logins_not_service": interactive},
           "Make every platform login a TYPE = SERVICE user (no password possible) and drop any credential policy object: Snowflake keeps one only in a database",

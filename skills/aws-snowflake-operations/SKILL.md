@@ -236,7 +236,7 @@ notes is not the live one. The order:
   `MONITOR USAGE ON ACCOUNT`.
 - `ACCOUNT_USAGE` lags by minutes to hours (a new user or grant is missing at first), and a view the role may not read fails:
   treat both as "not tested", never as "empty, so clean".
-- These identities, the resource monitor, the statement timeout and the key-pair-only authentication policy are code
+- These identities, the statement timeout and the key-pair-only authentication policy are code
   (`infra/terraform/access/snowflake`), applied by a dedicated access-admin service identity ([Fixing an access
   finding](#fixing-an-access-finding)), not by hand. The [access-audit](../access-audit/SKILL.md) skill grades them.
 - The server log quotes the data a failed statement held: read it only through the monitoring script, which drops those lines.

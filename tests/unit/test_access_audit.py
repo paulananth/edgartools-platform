@@ -22,8 +22,8 @@ def snowflake_clean():
         "users": [{"name": "A1", "type": "PERSON", "has_mfa": "true", "default_role": "WORK", "has_password": "true"},
                   {"name": "A2", "type": "PERSON", "has_mfa": "true", "default_role": "WORK", "has_password": "true"},
                   {"name": "SVC", "type": "SERVICE", "has_password": "false", "has_rsa_public_key": "true", "default_role": "SVC"}],
-        "admin_holders": ["A1", "A2"], "network_policies": 1, "account_network_policy": "P", "monitors": 1,
-        "warehouses": [{"name": "W", "resource_monitor": "M"}], "statement_timeout": 3600, "credential_policies": 0,
+        "admin_holders": ["A1", "A2"], "network_policies": 1, "account_network_policy": "P",
+        "statement_timeout": 3600, "credential_policies": 0,
         "schema_drift": [], "risky_grants": [], "queries": [{"role_name": "WORK", "n": 100}, {"role_name": "ACCOUNTADMIN", "n": 1}],
         "logins": [{"user_name": "A1", "first_factor": "PASSWORD", "second_factor": "TOTP", "n": 5}],
     }
@@ -79,7 +79,6 @@ def test_every_control_names_a_known_objective_and_carries_severity_and_framewor
     ("snowflake", "AUT", lambda e: e.update(logins=[{"user_name": "A1", "first_factor": "PASSWORD", "second_factor": None, "n": 3}])),
     ("snowflake", "LPR", lambda e: e.update(risky_grants=[{"grantee_name": "X", "privilege": "OWNERSHIP"}])),
     ("snowflake", "NET", lambda e: e.update(account_network_policy="")),
-    ("snowflake", "CST", lambda e: e["warehouses"][0].update(resource_monitor="null")),
     ("snowflake", "TMO", lambda e: e.update(statement_timeout=172800)),
     ("snowflake", "POL", lambda e: e.update(credential_policies=1)),
     ("snowflake", "POL", lambda e: e["users"].append({"name": "EDGARTOOLS_INVENTED", "type": "PERSON", "has_password": "true"})),

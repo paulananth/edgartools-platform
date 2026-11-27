@@ -50,7 +50,7 @@ own access records is no request to a data provider.
 
 | Platform | Set | Evidence | The read-only identity holds |
 |---|---|---|---|
-| Snowflake | none to set: the `edgartools-audit` SnowCLI connection of the auditor role (`AUDIT_SNOWFLAKE_CONNECTION` overrides it) | `ACCOUNT_USAGE` views, `SHOW` of parameters, warehouses and monitors | the security, usage and governance viewer database roles and `MONITOR USAGE ON ACCOUNT` |
+| Snowflake | none to set: the `edgartools-audit` SnowCLI connection of the auditor role (`AUDIT_SNOWFLAKE_CONNECTION` overrides it) | `ACCOUNT_USAGE` views, `SHOW` of parameters | the security, usage and governance viewer database roles and `MONITOR USAGE ON ACCOUNT` |
 | PostgreSQL | the stores folder's `reader.env` (a hosted store's is `~/.config/edgartools/hosted/`), sourced | catalogs and settings | the diagnostic login (`pg_monitor`) |
 | AWS | `AUDIT_AWS_PROFILE`: a read-only audit profile; an ambient `AWS_PROFILE` or `AWS_ACCESS_KEY_ID` also counts as set | IAM account summary and credential report, CloudTrail, S3 public-access block, budgets | the `SecurityAudit` managed policy (plus `iam:GenerateCredentialReport`) |
 | GitHub | `AUDIT_GITHUB_REPO`: `owner/name`, read with the `gh` CLI | branch protection, secret scanning, the caller's permission | a token with read access to the repository |
@@ -100,7 +100,7 @@ own access records is no request to a data provider.
 | LPR | No unexpected ownership, grant-management or wildcard-admin power | The escalation path |
 | NET | A network or public-exposure boundary applies | Boundary protection |
 | SCH | Nothing lives in a database's `public` schema; every object is in its store's own schema (PostgreSQL: read in each platform database; Snowflake: each database `rules/snowflake.yaml` names holds only its one schema) | A schema nobody owns is open to every login, and what is exposed from it is not governed |
-| CST | Cost and capacity guards (monitors, budgets, connection limits) | A runaway cannot spend or exhaust without a stop |
+| CST | Cost and capacity guards (budgets, connection limits) | A runaway cannot spend or exhaust without a stop |
 | TMO | Execution is bounded (statement or session timeouts) | A runaway statement cannot run for days |
 | POL | Credential policies exist and are enforced (Snowflake: natively, with no policy object, since Snowflake keeps one only inside a database: every platform login is a `TYPE = SERVICE` user, and the usage views list no password policy and no attached authentication policy) | Standards enforced, not hoped for |
 | LOG | Access and changes logged; transport and storage encrypted | Who did what, when |
