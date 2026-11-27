@@ -2,8 +2,12 @@
 
 The data platform for SEC EDGAR and other provider data: a Rust source engine
 reads captured files, MDM (PostgreSQL) masters them, codes go to RDM and silver
-lands every detail. The platform ends at silver; gold and dashboards come later
-(operator, 2026-11-12). MDM's hosted target is Snowflake Postgres or Databricks Lakebase.
+lands every detail. Gold is published in Snowflake: one managed mirror copies the
+data database's final MDM, RDM and silver tables into Snowflake, and Gold is dbt
+views over that mirror (operator, 2026-11-26: "the gold is published using mirror").
+MDM's hosted target is Snowflake Postgres or Databricks Lakebase. The mirror,
+its order after a load and its approval are in
+[HOSTED-MIRRORING](skills/data-platform/HOSTED-MIRRORING.md).
 
 ## What belongs in this file (operator, 2026-10-28)
 

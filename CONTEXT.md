@@ -332,11 +332,15 @@ _Avoid_: A raw table dump, an answer without its version or source
 
 **Deployer Role**:
 The account role that creates and owns Terraform-managed Snowflake infrastructure (warehouses, schemas, the dashboard Streamlit app) — deployment of infrastructure, not ownership of pipeline data objects.
-_Avoid_: Owning EDGARTOOLS_GOLD dynamic tables or the manifest-pipeline procedures, running dbt against gold
+_Avoid_: Owning the Gold views or the mirror, running dbt against Gold
 
-**Loader Role**:
-The account role that owns and refreshes the pipeline's data objects — the EDGARTOOLS_GOLD dynamic tables and the manifest-pipeline procedures (LOAD_EXPORTS_FOR_RUN, REFRESH_AFTER_LOAD, PROCESS_RUN_MANIFEST_STREAM) — deliberately distinct from the Deployer Role so that pipeline-object ownership cannot drift to whichever role happens to run `dbt run` or a manual fix that day; `dbt run --target prod` and the manifest task must always execute as this role.
-_Avoid_: Reusing the Deployer Role or ACCOUNTADMIN for gold-table/procedure ownership, letting ownership vary by whichever role last touched an object
+**Managed Mirror**:
+The one Snowflake copy of the data database's final tables (MDM, RDM and silver, as the schemas `MDM`, `RDM` and `SILVER`), kept current by Snowflake at its refresh interval. It carries only the tables the mirror record lists, and Snowflake owns its writes. A store reset removes it; it is made again after the next load.
+_Avoid_: A copy written by the platform's own code, a mirror per store, mirroring working tables (the merge stage, reviews, lookups)
+
+**Gold**:
+The views in Snowflake that consumers read, written by dbt over the Managed Mirror by the Gold writer, the one identity that creates them. A Gold view reads only mirrored tables.
+_Avoid_: Gold tables copied from the mirror without a measured need, Gold reading the stores directly
 
 **Reader Role**:
 The read-only consumption-layer role for dashboards and reports (the Streamlit-in-Snowflake dashboard runs as this role by Terraform pin; the standalone dashboard is bring-your-own-connection and not required to use it) — SELECT only, never owns or mutates pipeline objects.
@@ -345,8 +349,8 @@ _Avoid_: Granting write/ownership privileges, treating "dashboard" and "report" 
 ### Data plane (ingest and engagement)
 
 **Canonical Silver**:
-Snowflake `EDGARTOOLS_SILVER`, the dbt collapse of the landing zone — the live typed Runtime System of Engagement. The former warehouse bucket is absent from production, and the retired `silver.duckdb` keys have no readers or writers.
-_Avoid_: identity-refresh run snapshots, historical gold `run_id=` copies
+The `silver` schema of the data database, where each source's every detail lands typed and keyed, written by the silver writer. Snowflake reads it through the Managed Mirror.
+_Avoid_: identity-refresh run snapshots, a second silver copy in Snowflake written by the platform
 
 **VersionId Reclaim**:
 Permanent removal of billed bytes on a versioned bucket by deleting specific `Key` + `VersionId` pairs. Key-only delete and `aws s3 rm` leave payloads billed behind delete markers.
