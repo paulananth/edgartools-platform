@@ -267,3 +267,14 @@ def test_the_mirror_is_exact_only_when_its_listing_is_the_record_every_table_rep
     assert readiness.mirror_fact(lambda sql: rows[1:]).startswith("missing:")
     assert "not replicating" in readiness.mirror_fact(lambda sql: [{**rows[0], "STATE": "SNAPSHOTTING"}, *rows[1:]])
     assert readiness.mirror_fact(lambda sql: None).startswith("unreadable")
+    assert readiness.mirror_fact(lambda sql: {"error": "invented"}).startswith("unreadable")
+
+
+def test_a_failed_listing_keeps_none_of_its_error_text(monkeypatch, tmp_path):
+    secret_file = tmp_path / "mirror-operator.env"
+    secret_file.write_text("\n".join(f"export MIRROR_SNOWFLAKE_{k}=invented" for k in ("ACCOUNT", "USER", "PRIVATE_KEY_PATH", "ROLE", "WAREHOUSE")))
+    monkeypatch.setattr(readiness, "MIRROR_OPERATOR", secret_file)
+    failed_run = type("Done", (), {"returncode": 1, "stdout": "account invented-account not found", "stderr": "invented-account"})
+    monkeypatch.setattr(readiness.subprocess, "run", lambda *a, **k: failed_run)
+    assert readiness.mirror_listing("CALL x();") is None
+    assert "invented" not in readiness.mirror_fact()

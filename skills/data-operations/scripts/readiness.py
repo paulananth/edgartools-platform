@@ -325,19 +325,19 @@ def mirror_fact(listing=None) -> str:
     import mirror_sql
     try:
         managed, exposure = mirror_sql.load(mirror_sql.MANAGED), mirror_sql.load(mirror_sql.EXPOSURE)
-        rows = listing(mirror_sql.verify(managed)) if listing else mirror_listing(mirror_sql.verify(managed))
-    except Exception as exc:  # noqa: BLE001
-        return f"unreadable ({type(exc).__name__})"
-    if rows is None:
-        return "unreadable (the mirror operator could not list the mirror)"
-    try:
+        rows = (listing or mirror_listing)(mirror_sql.verify(managed))
+        if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+            return "unreadable (the mirror operator could not list the mirror)"
         mirror_sql.readback(managed, exposure, [{k.lower(): v for k, v in row.items()} for row in rows])
     except SystemExit as refused:
         return str(refused) or "the listing is empty"
+    except Exception as exc:  # noqa: BLE001
+        return f"unreadable ({type(exc).__name__})"
     return "exact"
 
 
 def mirror_listing(sql: str) -> list[dict] | None:
+    sys.path.insert(0, str(HERE))
     import load_jobs
     env = load_jobs.load_env(MIRROR_OPERATOR)
     done = subprocess.run(["snow", "sql", "-x", "--account", env["MIRROR_SNOWFLAKE_ACCOUNT"], "--user", env["MIRROR_SNOWFLAKE_USER"],

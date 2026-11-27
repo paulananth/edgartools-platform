@@ -335,7 +335,7 @@ The account role that creates and owns Terraform-managed Snowflake infrastructur
 _Avoid_: Owning the Gold views or the mirror, running dbt against Gold
 
 **Managed Mirror**:
-The one Snowflake copy of the data database's final tables (MDM, RDM and silver, as the schemas `MDM`, `RDM` and `SILVER`), kept current by Snowflake at its refresh interval. It carries only the tables the mirror record lists, and Snowflake owns its writes. A store reset removes it; it is made again after the next load.
+The one Snowflake copy of the data database's final tables (MDM, RDM and silver, as the schemas `MDM`, `RDM` and `SILVER`), kept current by Snowflake at its refresh interval. It carries only the tables the mirror record lists, and Snowflake owns its writes. Init makes it once the tables exist, before any load; a store reset removes it, and the next init makes it again.
 _Avoid_: A copy written by the platform's own code, a mirror per store, mirroring working tables (the merge stage, reviews, lookups)
 
 **Gold**:

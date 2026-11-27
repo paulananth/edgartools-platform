@@ -1,4 +1,4 @@
-# 23: Gold is published through the mirror, and the mirror is made again after the load
+# 23: Gold is published through the mirror, and init makes the mirror
 
 Status: open
 Type: task
@@ -26,6 +26,7 @@ mirror and the target database absent, and `managed-mirror.yaml` reads `verified
 - [x] Pre-flight on today's tables, read-only: all 24 hold a primary key, no unbounded numeric column; 9 `jsonb` columns (`quality` and three of `rdm.published_code`) mirror as strings, the documented JSON mapping; `mirror_sql.py plan`: one mirror of `data`, 24 tables (MDM 2, RDM 1, SILVER 21), 1 publication of 2 (2026-11-26 21:35 ET)
 - [x] `CREATE_MIRROR` as the mirror operator at 21:31 ET: "Mirror created: edgartools_mirror", target `EDGARTOOLS_PG_MIRROR`, 60 minutes, Iceberg; `LIST_MIRRORS` reads it STARTING with no error. The 11-19 plan approval (once the load has finished) is superseded by the operator's ruling that the mirror is made at init (2026-11-26 21:35 ET)
 - [x] The Gold writer reads the mirror: `GRANT DATABASE ROLE EDGARTOOLS_PG_MIRROR.EDGARTOOLS_PG_MIRROR_ADMIN TO ROLE EDGARTOOLS_GOLD_WRITER` as the mirror operator; `SHOW GRANTS OF DATABASE ROLE` lists the writer (2026-11-26 21:35 ET)
+- [x] Review (risky reviewer, three axes): GoF none; Standards none hard; Spec: `CONTEXT.md`'s Managed Mirror now says init makes it; the gate reads a listing that is not a list of rows as unreadable; a failed listing keeps none of its error text (`test_a_failed_listing_keeps_none_of_its_error_text`); init step 6 registers `rules/silver/silver-*.yaml`, so `master_binding` and the relationship tables exist before step 8b (`deploy-silver.sh`); 50 readiness tests pass (2026-11-26 21:38 ET)
 - [ ] Read back: `LIST_MIRRORED_TABLES` until all 24 tables read REPLICATING, `mirror_sql.py readback` passes, then `verified: true`
 - [x] The mirror is an init step: `init.md` step 8b (after the silver tables of step 6, before the gate), the mirroring guide's "At init" section, the Snowflake skill's "Data layers"; the readiness gate's `MIRRORED` check refuses a load until the mirror is exactly its record, every table REPLICATING (`test_a_load_waits_for_the_mirror_that_init_makes`, `test_the_mirror_is_exact_only_when_its_listing_is_the_record_every_table_replicating`; 97 pass); live it reads "missing: ..." while the listing fills (2026-11-26 21:35 ET)
 - [ ] The `ops_reader` password was printed in this session's tool output (a pre-flight script built its address by hand and let the driver's error through; fixed to report only the error's class): rotate it, on the operator's word, and update `reader.env`
