@@ -1553,6 +1553,28 @@ def test_a_loads_database_sessions_carry_the_step_name_as_their_application_name
     assert chain.application_name("gleif") == "chain-gleif"
 
 
+def test_every_step_of_a_lane_tags_its_own_loads_sessions_with_its_name(tmp_path, monkeypatch):
+    """A lane runs its steps in one process: each step's loads carry that step's name, so the stall verdict sees its sessions."""
+    seen = {}
+    monkeypatch.delenv("PGAPPNAME", raising=False)
+    monkeypatch.setattr(chain, "LOGS", tmp_path)
+    monkeypatch.setattr(chain, "STORES", tmp_path)
+    monkeypatch.setattr(chain, "wait_for", lambda *a, **k: set())
+    monkeypatch.setattr(chain, "admit", lambda want, gb, lock, **k: want)
+
+    def load(step, env, log):
+        seen[step["name"]] = env.get("PGAPPNAME")
+        return 0, "Done: 1 documents loaded"
+
+    monkeypatch.setattr(chain, "run_deliveries", load)
+    shared = {"OTHER": "kept"}
+    for name in ("first", "second"):
+        assert chain.attempt_loop({**_step(name, "Q"), "workers": 1, "attempts": 1, "source": "s", "target": "t"}, shared,
+                                  tmp_path / "state.log")
+    assert seen == {"first": "chain-first", "second": "chain-second"}
+    assert shared == {"OTHER": "kept"}
+
+
 def test_a_plan_of_one_step_or_lane_plans_only_it(monkeypatch, tmp_path):
     """A plan of every step took over five minutes to answer for one."""
     (tmp_path / "worker.env").write_text("")
