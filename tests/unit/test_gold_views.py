@@ -336,3 +336,37 @@ def test_the_gold_configuration_is_a_destination_not_a_rule():
     root = files.ROOT.parent
     assert views.CONFIG == root / "destination" / "gold" / "gold.yaml" and views.CONFIG.is_file()
     assert not (files.ROOT / "gold").exists()
+
+
+def test_a_silver_column_named_like_its_dimension_key_is_carried_under_the_source_key_name():
+    """The silver row's own key of a master can share the dimension key's name: the fact keeps both, the source's value
+    under the configured source-key name (operator, 2026-11-27: "Source key renamed (Recommended)")."""
+    config = views.load()
+    rule = config["silver_facts"]
+    item = next(i for i in config["objects"] if i["name"] == "fact_company_fact")
+    link = next(l for l in item["links"] if rule["dimension_key"].format(role=l["role"]) in item["key"] + item["carry"])
+    column, dimension_key = link["column"], rule["dimension_key"].format(role=link["role"])
+    columns = list(dict.fromkeys([*item["key"], *[c for c in item["times"].values() if c], *item["carry"]]))
+    conn = sqlite3.connect(":memory:")
+    conn.executescript("""
+        create table mastering_master (entity_id text, canonical_id text, kind text, status text, body text);
+        create table mastering_identifier (namespace text, value text, entity_id text);
+        create table master_binding (source_code text, source_key text, kind text, master_id text);
+    """)
+    conn.execute(f"create table company_fact ({', '.join(chr(34) + c + chr(34) + ' text' for c in columns)})")
+    conn.execute(f"insert into company_fact ({', '.join(chr(34) + c + chr(34) for c in columns)}) values ({', '.join('?' for _ in columns)})",
+                 [("0000000001" if c == column else f"invented-{c}") for c in columns])
+    conn.execute("insert into master_binding values (?, '0000000001', 'company', 'c1')", [link["source_code"]])
+    conn.execute("insert into mastering_master values ('c1', 'c1', 'company', 'active', '{}')")
+    statements = views.render(dialect="sqlite", qualify=False)
+    for name in ("master", item["name"]):
+        conn.execute(statements[name])
+    found = conn.execute(f"select * from {item['name']}")
+    names = [d[0] for d in found.description]
+    row = dict(zip(names, found.fetchone()))
+    assert len(names) == len(set(names))
+    assert row[dimension_key] == "c1" and row[rule["source_key"].format(role=link["role"])] == "0000000001"
+
+
+def test_every_snowflake_column_is_quoted_so_a_reserved_word_is_a_column():
+    assert views.DIALECTS["snowflake"]["column"]("row") == '"ROW"'
