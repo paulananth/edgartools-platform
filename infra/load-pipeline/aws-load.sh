@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Run a load on AWS: the loader image CI built for the newest main commit, on one large Fargate task, driven by
 # AWS Step Functions. It copies the image to ECR, the captures to the bronze bucket and the logins to Secrets Manager,
-# applies infra/terraform/accounts/prod-load, starts the task and one execution, and stops the task when it ends.
+# applies infra/terraform/load-machine, starts the task and one execution, and stops the task when it ends. The task
+# also stops itself after the root's max_hours, should this script or its machine be gone.
 #
 #   RUN=<label> infra/load-pipeline/aws-load.sh                      every lane at once, then the finish
 #   RUN=<label> infra/load-pipeline/aws-load.sh [--finish] <step>... only those steps, in order
@@ -11,12 +12,13 @@
 # files only: the task holds no provider identity. The run's state file and logs are in s3://<bronze>/load/runs/<RUN>/.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
-terraform_root="$here/../terraform/accounts/prod-load"
+terraform_root="$here/../terraform/load-machine"
 prepare=false finish=false
 while [ "${1:-}" = "--prepare" ] || [ "${1:-}" = "--finish" ]; do
   case "$1" in --prepare) prepare=true ;; --finish) finish=true ;; esac
   shift
 done
+for argument; do case "$argument" in -*) echo "unknown option $argument" >&2; exit 2 ;; esac; done
 [ "$#" -gt 0 ] || finish=true  # a load of every lane ends with the finish
 : "${RUN:?set RUN to the run label}"
 
@@ -33,6 +35,8 @@ data="${DATA_HOME:-$HOME/.local/share/edgartools/mdm}"
 [ "$(aws ecs list-tasks --cluster "$cluster" --family "$name" --query 'length(taskArns)' --output text)" = 0 ] || {
   echo "a load task is still running: one load at a time" >&2; exit 2; }
 
+caffeinate -dimsu -w $$ 2>/dev/null &
+
 # The image: main's newest commit, copied from ghcr.io to ECR once.
 commit="$(git ls-remote https://github.com/paulananth/edgartools-platform.git refs/heads/main | cut -f1)"
 source_image="ghcr.io/paulananth/edgartools-platform:loader-sha-${commit}"
@@ -46,18 +50,20 @@ if ! aws ecr describe-images --repository-name edgartools-prod-images --image-id
 fi
 echo "image: commit ${commit:0:8} is in ECR"
 
-in_image() { docker run --rm --network none --entrypoint python "$image_run" /app/skills/data-operations/scripts/load_jobs.py "$@"; }
-image_run="$source_image"
-lanes="$(in_image --lane-count)"
+in_image() { docker run --rm --network none --entrypoint python "$source_image" "$@"; }
+jobs=/app/skills/data-operations/scripts/load_jobs.py
+lanes="$(in_image "$jobs" --lane-count)"
+names="$(in_image "$jobs" --list | awk '{print $3}')"
+for step; do  # a name the image does not know is refused before anything is copied or billed
+  printf '%s\n' "$names" | grep -qx -- "$step" || { echo "no step named $step in the loader image" >&2; exit 2; }
+done
 
-# The captures the load jobs file reads, and no other folder. A folder already copied costs one listing.
-in_image --list | awk '{for (i = 6; i <= NF; i++) print $i}' | sort -u > "${TMPDIR:-/tmp}/aws-load-captures.$$"
-while read -r folder; do
-  root=captures
-  [ -d "$data/captures/$folder" ] || root=proving
+# The captures the load jobs file reads, each under the root its source names, and no other folder. A folder already copied costs one listing.
+folders="$(in_image -c 'import sys; sys.path.insert(0, "/app/skills/data-operations/scripts"); import load_jobs as L
+print("\n".join(sorted({d.get("capture_root", "captures") + " " + d["capture"] for s in L.load_jobs() for d in s.get("deliveries", ())})))')"
+while read -r root folder; do
   aws s3 sync --only-show-errors --exclude '.DS_Store' --exclude '*/.DS_Store' "$data/$root/$folder" "s3://$bucket/load/$root/$folder"
-done < "${TMPDIR:-/tmp}/aws-load-captures.$$"
-rm -f "${TMPDIR:-/tmp}/aws-load-captures.$$"
+done <<< "$folders"
 echo "captures: in s3://$bucket/load"
 
 [ -f "$terraform_root/backend.hcl" ] || cp "$terraform_root/backend.hcl.example" "$terraform_root/backend.hcl"
@@ -133,10 +139,15 @@ fi
 execution="$(aws stepfunctions start-execution --state-machine-arn "$machine" --input "$input" --query executionArn --output text)"
 echo "started ${execution##*:} on commit ${commit:0:8}: ${lanes} lanes at once, steps ${steps}, finish ${finish}, run ${RUN}"
 
-result=RUNNING
+result=RUNNING unread=0
 while [ "$result" = RUNNING ]; do
   sleep 60
-  result="$(aws stepfunctions describe-execution --execution-arn "$execution" --query status --output text)" || result=RUNNING
+  if result="$(aws stepfunctions describe-execution --execution-arn "$execution" --query status --output text)"; then
+    unread=0
+  else
+    result=RUNNING unread=$((unread + 1))
+    [ "$unread" -lt 30 ] || { echo "the execution could not be read for half an hour: stopping the task" >&2; exit 1; }
+  fi
   if [ "$result" = RUNNING ] && [ "$(status || echo UNKNOWN)" = STOPPED ]; then
     aws stepfunctions stop-execution --execution-arn "$execution" --cause "the load task stopped" >/dev/null
     result=TASK_STOPPED

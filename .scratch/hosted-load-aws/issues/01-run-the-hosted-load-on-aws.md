@@ -16,12 +16,12 @@ Why: the finish's links write fails from a home uplink (about 0.25 to 0.4 MB/s t
 ## Checklist
 
 - [ ] Captures the load jobs file reads (17 folders, about 6.75 GB) are in the bronze bucket under `load/`
-- [ ] Terraform root `infra/terraform/accounts/prod-load` and `infra/load-pipeline/aws-load.sh`
+- [ ] Terraform root `infra/terraform/load-machine` and `infra/load-pipeline/aws-load.sh`
 - [ ] Apply and `--prepare`: image of `main`'s commit in ECR, logins in Secrets Manager, no task started
 - [ ] Clear the hosted stores: mirror suspended, backups of control and RDM, five stores truncated, RDM restored, mirror resumed and read back
 - [ ] Readiness passes in the AWS task
 - [ ] The complete load succeeds on AWS, the finish included
 - [ ] Gold accepted: `dbt build` passes every link test
 - [ ] `/code-review` (Standards, Spec, GoF), PR green and merged
-- [ ] The `/gof-refactor-reviewer` consult before production code: not run before writing; the change is new files only. The GoF review axis covers the diff
+- [ ] ~~The `/gof-refactor-reviewer` consult before production code~~ deferred to this ticket's GoF review axis: it was not run before writing
 - [ ] Learning → skill

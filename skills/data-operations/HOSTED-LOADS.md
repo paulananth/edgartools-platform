@@ -38,12 +38,12 @@ arguments). Use that label again only when resuming this same load.
 ## Where a load runs
 - **On AWS (a whole load, and any large write):** `RUN=<label> infra/load-pipeline/aws-load.sh [--finish] [<step>...]` copies
   the image of `main`'s newest commit to ECR, the captures the load jobs file reads to `s3://<bronze>/load/`, and the logins
-  to Secrets Manager; applies `infra/terraform/accounts/prod-load` (one Step Functions state machine, the same definition,
+  to Secrets Manager; applies `infra/terraform/load-machine` (one Step Functions state machine, the same definition,
   and one 16 vCPU, 120 GB ARM Fargate task); runs one execution and stops the task when it ends. `--prepare` stops before
   the task. The task holds no provider identity, so a load reads captured files only. Its state file, logs and run documents
   are in `s3://<bronze>/load/runs/<RUN>/` (logs a minute behind, documents five), and a task started again with the same
-  `RUN` takes them back and carries on. The task costs about 1 USD an hour while it runs. Keep the machine running the
-  script awake: it starts the execution and stops the task. A home uplink to the hosted store is slow and drops long
+  `RUN` takes them back and carries on. The task costs about 1 USD an hour while it runs; it stops itself after the
+  root's `max_hours` (24). The script keeps its machine awake, starts the execution and stops the task. A home uplink to the hosted store is slow and drops long
   writes; AWS sits beside it.
 
 A load runs in the loader image, never in a checkout: a checkout's code can differ from its tested commit (an engine not

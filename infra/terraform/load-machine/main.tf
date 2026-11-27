@@ -70,6 +70,12 @@ variable "memory" {
   default     = 122880
 }
 
+variable "max_hours" {
+  description = "The task stops itself after this many hours, whatever started it: it is billed while it runs."
+  type        = number
+  default     = 24
+}
+
 variable "disk_gib" {
   description = "Task disk: the captures, the run documents and the logs of one load."
   type        = number
@@ -94,6 +100,11 @@ locals {
 
   home = "/data/home"
 
+  # The load's one state machine definition, with every lane running at once.
+  machine = jsondecode(templatefile("${path.module}/../../load-pipeline/state-machine.asl.json",
+  { activity = aws_sfn_activity.load.id }))
+  run_lanes = merge(local.machine.States["Run lanes"], { MaxConcurrency = var.lanes })
+
   fetch = join("\n", concat(
     [
       "set -eu",
@@ -103,6 +114,8 @@ locals {
     ],
     [for key, file in local.logins : "printf '%s' \"$${${key}}\" | base64 -d > $config/${file}"],
     [
+      # A capture is tens of thousands of small files: their number, not their size, sets the time.
+      "aws configure set default.s3.max_concurrent_requests 100",
       "aws s3 sync --only-show-errors ${local.s3}/captures /data/mdm/captures",
       "aws s3 sync --only-show-errors ${local.s3}/proving /data/mdm/proving",
       # A task started again for the same run carries on from its state file and its run documents.
@@ -112,17 +125,21 @@ locals {
   ))
 
   # The run's record outlives the task: its logs every minute, its run documents every five, and both once more at the stop.
+  # This container also bounds the task: when it ends after `max_hours`, the task stops with it.
   keep = <<-EOT
     logs() { aws s3 sync --only-show-errors /data/load-logs ${local.s3}/runs/${var.run}/logs; }
     documents() { aws s3 sync --only-show-errors /data/manifests ${local.s3}/runs/${var.run}/manifests; }
     trap 'logs; documents; exit 0' TERM
+    end=$(($(date +%s) + ${var.max_hours} * 3600))
     n=0
-    while true; do
+    while [ "$(date +%s)" -lt "$end" ]; do
       logs || true
       [ $((n % 5)) -ne 0 ] || documents || true
       n=$((n + 1))
       sleep 60 & wait $!
     done
+    echo "the load task reached its bound of ${var.max_hours} hours: stopping"
+    logs; documents
   EOT
 
   log = { for name in ["fetch", "keep", "worker"] : name => {
@@ -178,12 +195,9 @@ resource "aws_iam_role" "machine" {
 }
 
 resource "aws_sfn_state_machine" "load" {
-  name     = local.name
-  role_arn = aws_iam_role.machine.arn
-  definition = replace(
-    templatefile("${path.module}/../../../load-pipeline/state-machine.asl.json", { activity = aws_sfn_activity.load.id }),
-    "\"MaxConcurrency\": 1,", "\"MaxConcurrency\": ${var.lanes},"
-  )
+  name       = local.name
+  role_arn   = aws_iam_role.machine.arn
+  definition = jsonencode(merge(local.machine, { States = merge(local.machine.States, { "Run lanes" = local.run_lanes }) }))
 }
 
 resource "aws_iam_role" "execution" {
@@ -245,7 +259,7 @@ data "aws_iam_policy_document" "task" {
   # The captures are read only: a task writes its own run's record and nothing else.
   statement {
     actions   = ["s3:PutObject"]
-    resources = ["arn:aws:s3:::${local.bucket}/load/runs/*"]
+    resources = ["arn:aws:s3:::${local.bucket}/load/runs/${var.run}/*"]
   }
 }
 
@@ -291,7 +305,7 @@ resource "aws_ecs_task_definition" "load" {
     {
       name             = "keep"
       image            = local.aws_image
-      essential        = false
+      essential        = true
       entryPoint       = ["/bin/sh", "-c"]
       command          = [local.keep]
       dependsOn        = [{ containerName = "fetch", condition = "SUCCESS" }]

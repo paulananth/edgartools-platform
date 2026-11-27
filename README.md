@@ -660,12 +660,13 @@ declared unit to be verified and the run finalized.
 | **Current source definitions** | The [source inventory](#sources-in-the-repository) includes submissions, GLEIF, ADV, ownership, 13F and N-PORT registrant/Security/Fund Structure definitions. Qualification differs by feed; a definition is not activation evidence. |
 | **Live capture** | `provider.capture` has offline HTTPS JSON qualification. Company still selects `artifact.copy`; live acquisition and continuation integration are separate work. See [configured capture](docs/configured-capture.md). |
 | **Silver landing** | Explicit local PostgreSQL registration, landing and MDM-ID refresh commands exist. Automated landing through a declared pipeline still requires a verified worker. |
-| **AWS execution** | Passive infrastructure, access control and image publishing assets exist. The retired ECS/Step Functions workload is not the configured workers' launch configuration. |
+| **AWS execution** | A hosted load runs on AWS Step Functions with one Fargate task ([hosted loads](skills/data-operations/HOSTED-LOADS.md#where-a-load-runs)); it is not scheduled. |
 
 Terraform separates passive infrastructure from access control. Administrators
 provision infrastructure; application rollout uses the deployer principal;
 runtime uses service-assumed roles. Passive roots do not create runnable
-workloads, schedules, image rollouts or runtime secret values. Publish images
+workloads, schedules, image rollouts or runtime secret values; the one workload
+root is the [load machine](infra/terraform/README.md#the-load-machine). Publish images
 with [publish-warehouse-image.sh](infra/scripts/publish-warehouse-image.sh).
 
 ## Repository guide
