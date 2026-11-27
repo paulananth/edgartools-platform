@@ -126,7 +126,8 @@ task="$(aws ecs run-task --cluster "$cluster" --task-definition "$task_definitio
 [ "$task" != None ] || { echo "the load task did not start" >&2; exit 1; }
 echo "task ${task##*/}: starting"
 execution='' result=''
-monitor() { python3 "$here/../../skills/load-monitoring/scripts/monitoring.py" target "$@" >/dev/null 2>&1; }
+# The load monitor runs in the repository's environment (`uv run`), as its skill does: the system python3 can be too old for it.
+monitor() { (cd "$here/../.." && uv run --no-sync python skills/load-monitoring/scripts/monitoring.py target "$@") >/dev/null 2>&1; }
 stop() {  # whatever ends this script: no execution is left waiting, and the task is gone, its record copied, before it returns
   monitor || echo "monitor: could not point Grafana back at this Mac's exporter: monitoring.py target" >&2
   [ -z "$execution" ] || [ "$result" != RUNNING ] ||
