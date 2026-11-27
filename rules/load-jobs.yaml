@@ -28,13 +28,13 @@ capacity:
   aws-medium: {vcpu: 1, memory_gb: 4}
   aws-large: {vcpu: 2, memory_gb: 8}
 # The databases a load writes to, by name (`LOAD_STORE=<name>`; a load that names none has no store bound): each one's cores,
-# memory and work_mem. `hosted` is the hosted instance (STANDARD_XL: 4 cores, 16 GB, Snowflake's sizes page; work_mem 384 MB,
+# memory and work_mem. `hosted` is the hosted instance (STANDARD_L: 2 cores, 8 GB, Snowflake's sizes page; work_mem 384 MB,
 # read from the instance). A step's worker holds a session there, and one sort or hash of a session may take work_mem: so a
 # store carries four workers to a core and half its memory in work_mem shares (the rest is its shared buffers, the mirror's
 # change export and the system), across every running step. Admission and the controller's raises stay inside it, and the
 # lane budget names it when it is the limit. A resize is a changed line here.
 stores:
-  hosted: {vcpu: 4, memory_gb: 16, work_mem_gb: 0.375}
+  hosted: {vcpu: 2, memory_gb: 8, work_mem_gb: 0.375}
 # What a step takes unless it says otherwise. `priority` (1 first, then 2, then 3) is the order among steps that can start now:
 # 1 the critical path, the steps with 100 minutes or more of chain behind them (their own time plus the longest run of steps
 # waiting on them, by the first full load's measured times), 2 the steps with 30 to under 100 minutes, 3 every other step. A step
