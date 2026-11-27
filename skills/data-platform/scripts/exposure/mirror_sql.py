@@ -110,6 +110,7 @@ def verify(managed: dict) -> str:
 def readback(managed: dict, exposure: dict, listing: list[dict]) -> str:
     """Whether the mirror is the record: nothing missing or unexpected, every table REPLICATING, and each target schema the
     source schema in upper case (`mdm` gives `MDM`). Raises with every difference; never reads Snowflake itself."""
+    listing = [{k.lower(): v for k, v in row.items()} for row in listing]  # Snowflake names its columns in upper case
     listing = [{"table": row.get("table") or f"{row['source_schema_name']}.{row['source_table_name']}".lower(), "state": row["state"]}
                for row in listing]  # the rows as LIST_MIRRORED_TABLES gives them, or {table, state}
     wanted, held = set(tables(managed, exposure)), {row["table"] for row in listing}

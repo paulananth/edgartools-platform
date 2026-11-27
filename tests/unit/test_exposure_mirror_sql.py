@@ -132,3 +132,9 @@ def test_readback_takes_the_rows_as_the_listing_gives_them():
     assert "ref.codes (SNAPSHOTTING)" in str(refused.value)
     raw[1]["state"] = "REPLICATING"
     assert "schemas PUB, REF" in mirror_sql.readback(MANAGED, EXPOSURE, raw)
+
+
+def test_readback_takes_the_listing_as_mirror_run_prints_it_with_snowflakes_upper_case_columns():
+    rows = [{"SOURCE_SCHEMA_NAME": t.split(".")[0], "SOURCE_TABLE_NAME": t.split(".")[1], "STATE": "REPLICATING"}
+            for t in mirror_sql.tables(MANAGED, EXPOSURE)]
+    assert mirror_sql.readback(MANAGED, EXPOSURE, rows).startswith("the mirror is exactly the record")

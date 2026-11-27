@@ -28,4 +28,8 @@ Found while clearing the stores for ticket 01:
   stay connected through the reset, and `mirror_sql.py restart` takes the new snapshot after it: unit tests pass; live, read
   only, on mdm, silver and rdm the check names `pg base extension worker 1, walsender 1` without the switch and nothing with
   it (2026-11-27 15:12 ET)
+- [x] `readback` takes the listing as `mirror_run.py` prints it: Snowflake's upper-case columns gave `KeyError:
+  'source_schema_name'` on the live listing after the restart; `test_readback_takes_the_listing_as_mirror_run_prints_it_with_snowflakes_upper_case_columns`
+  fails the same way before the fix; live, readback printed "the mirror is exactly the record: 24 tables, all REPLICATING,
+  schemas MDM, RDM, SILVER" (2026-11-27 15:18 ET)
 - [x] Learning → skill: HOSTED-LOADS (090073 and an account-level monitor; the clear's five steps) and HOSTED-MIRRORING (suspend, status and restart commands; a suspended mirror's walsender stays, and the reset lets it) (2026-11-27 15:09 ET)
