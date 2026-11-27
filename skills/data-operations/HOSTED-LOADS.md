@@ -203,6 +203,11 @@ The goal is every document loaded in the least wall-clock time. Each rule below 
   - Lesson: measure where the time goes from both ends (the store's statement times and the client's gaps) before adding workers or connections:
     the connection limit is not the limit, the upload is.
 
+- **A step stopped at its deadline leaves no worker running.** A command's merge workers are processes of their own; a deadline that stopped only
+  the command left them merging beside the next attempt, and both wrote the same file (`UniqueViolation` on `mastering_file_pkey`, the same error on
+  every retry). Each platform command runs in its own process group and the deadline stops the group. After any stopped step, look for workers whose
+  parent is gone (`ps -eo pid,ppid,etime,args` in the worker container, parent 1) before starting the step again.
+
 ## The finish takes at most five minutes
 `--finish` builds the links tables and `master_binding` from the stored records; `master_binding` is two statements inside the data database
 (an upsert that writes only a changed row, and a delete), so no binding row reaches the client; no silver row is written with a master id. A finish that takes minutes more than five is the measure of the slowest phase still left (time each phase,

@@ -134,7 +134,7 @@ def test_a_manifest_root_that_is_not_local_is_refused(value):
 
 def test_a_failed_command_keeps_its_message_off_the_screen(tmp_path, monkeypatch):
     message = "connection to server at 127.0.0.1 port 5433 failed for user worker"
-    monkeypatch.setattr(driving.subprocess, "run", lambda *_, **__:
+    monkeypatch.setattr(driving, "run_command", lambda *_, **__:
                         type("Done", (), {"returncode": 1, "stdout": "", "stderr": message})())
 
     with pytest.raises(driving.RunStopped) as caught:
@@ -153,7 +153,7 @@ def test_a_key_the_file_unsets_is_removed_from_the_duty_process(tmp_path, monkey
 
     assert found["worker"] == {"OTHER_DATABASE_URL": None, "DATA_URL": "postgresql://w@h/data"}
     seen = {}
-    monkeypatch.setattr(driving.subprocess, "run", lambda command, env, **_: seen.update(env) or
+    monkeypatch.setattr(driving, "run_command", lambda command, env, *_: seen.update(env) or
                         type("Done", (), {"returncode": 0, "stdout": "{}", "stderr": ""})())
     commands(found, tmp_path)("worker", "bookkeeping", "status", "1")
     assert "OTHER_DATABASE_URL" not in seen
@@ -188,7 +188,7 @@ def test_a_status_read_starts_no_process_and_gives_what_the_command_prints(tmp_p
     reads = commands(found, tmp_path)
     book = Book()
     monkeypatch.setattr(reads, "book", lambda: book)
-    checked(monkeypatch, driving.subprocess, "run", lambda *_, **__: pytest.fail("a status read started a process"))
+    checked(monkeypatch, driving, "run_command", lambda *_, **__: pytest.fail("a status read started a process"))
     page = reads.status("run-1", "merge")
     assert book.asked == [("run-1", 1000, "merge")]
     assert page == {"run": {"run_id": "run-1", "started": "2026-01-02 00:00:00+00:00"}, "counts": {"verified": 1}, "items": []}
@@ -217,3 +217,29 @@ def test_a_failed_status_read_keeps_its_message_off_the_screen(tmp_path, monkeyp
 def test_a_status_read_needs_the_worker_logins_database(tmp_path):
     with pytest.raises(driving.RunStopped, match="worker.env"):
         commands({"worker": {}}, tmp_path).status("run-1")
+
+
+def test_a_command_past_its_deadline_is_stopped_with_every_process_it_started(tmp_path):
+    """A command's worker pool lives in processes of its own: the deadline stops them with it, or they merge on beside the next attempt."""
+    import os
+    import sys
+    import time
+
+    pid_file = tmp_path / "worker.pid"
+    started = ("import subprocess, sys, time; "
+               f"w = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)']); open({str(pid_file)!r}, 'w').write(str(w.pid)); "
+               "time.sleep(60)")
+    run = driving.Commands({"worker": {}}, "file:///reports", deadline=driving.time.monotonic() + 3, log=tmp_path / "errors.log")
+    run.command = [sys.executable, "-c", started]
+    with pytest.raises(driving.RunStopped, match="did not finish before the deadline"):
+        run("worker", "rules", "run")
+    worker = int(pid_file.read_text())
+    for _ in range(50):
+        try:
+            os.kill(worker, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.1)
+    else:
+        os.kill(worker, 9)
+        pytest.fail("the command's worker process outlived its deadline")
