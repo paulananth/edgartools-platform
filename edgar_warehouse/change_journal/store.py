@@ -5,11 +5,11 @@ from __future__ import annotations
 import os
 from uuid import UUID
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
 
-from edgar_warehouse.control_contract import DRIVERS, canonical, keep_alive, reference
+from edgar_warehouse.control_contract import DRIVERS, canonical, reference
 
 
 # Keys `journal.found` takes in one call: migration 002's bound, held equal by
@@ -41,7 +41,6 @@ def get_engine(url: str | None = None):
     # A connection older than the bound is replaced at checkout, which finds one the server dropped while it sat
     # idle; a ping on every checkout is three round trips (BEGIN, SELECT 1, ROLLBACK), each a delay on a hosted store.
     engine = create_engine(target, pool_recycle=30, hide_parameters=True)
-    event.listen(engine, "connect", keep_alive)
     return engine
 
 
