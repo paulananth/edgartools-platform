@@ -189,6 +189,20 @@ The goal is every document loaded in the least wall-clock time. Each rule below 
   count; no line in any step log means no part merged alone, and the kind lock was shared throughout. Lock waits are read the same
   way as every wait: sample `pg_stat_activity` and `pg_locks` (wait event and lock type) as the diagnostic login, and say each wait's share.
 
+- **A silver step that looks stalled or locked may be uploading.** PostgreSQL shows a session `idle in transaction` (`ClientRead`) until a
+  statement's last byte arrives, and the client meanwhile sits in `ppoll` with little CPU. Read the writer's timeline before blaming a lock or the
+  database: sample its sessions every half second (connection, transaction, statement start and last change) and compare the store's time per
+  statement with the gap before the next one.
+  - Problem: a silver-only step (no mastering, one document) ran for hours, shown stalled or locked, its session idle in a transaction 96% of the time.
+  - Root cause: each insert runs on the store in under a second, then the next batch of 5,000 rows, sent as SQL text, takes 7 to 15 seconds to
+    upload from the loading machine (one connection about 13 Mbit/s, four together about 21). The step lands one document's deliveries one after
+    another over one connection, and a rerun uploads every row again only for the store to discard the ones already landed. A statement that cannot
+    arrive within the loader's ten-minute idle-in-transaction limit gets its transaction ended and the attempt restarts from the start.
+  - Fix: send fewer bytes and send them side by side (the rows of a rerun that are already landed not sent again; a denser format than SQL text;
+    a document's deliveries on several connections up to the line's rate), and run the loader beside the store, where the line is not the limit.
+  - Lesson: measure where the time goes from both ends (the store's statement times and the client's gaps) before adding workers or connections:
+    the connection limit is not the limit, the upload is.
+
 ## The finish takes at most five minutes
 `--finish` builds the links tables and `master_binding` from the stored records; `master_binding` is two statements inside the data database
 (an upsert that writes only a changed row, and a delete), so no binding row reaches the client; no silver row is written with a master id. A finish that takes minutes more than five is the measure of the slowest phase still left (time each phase,
