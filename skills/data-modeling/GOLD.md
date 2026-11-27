@@ -32,12 +32,12 @@ The Gold modeling method below applies when transformations are needed.
 ## dbt implementation requirements
 
 - **The system of record is the configuration, never dbt.** Gold is `destination/gold/gold.yaml`, the silver specs and the exposure
-  list; `python -m edgar_warehouse.gold.views write infra/dbt/gold` writes the dbt models, sources and tests from them, and dbt only
+  list; the generator writes the dbt models, sources and tests from them into `infra/dbt/gold`, and dbt only
   runs that output. A name, a key, a join or a rule changes in the configuration and the project is written again; the written
   project is never edited by hand nor committed. No custom code is written for one table: a case the configuration cannot express
   becomes one general rule of the generator, read from the configuration.
 - A link's dimension key is named by `silver_facts.dimension_key`; a silver column of that name (the source's own key of the
-  master, such as a company's CIK) is carried as `silver_facts.source_key`, so every fact holds both. Every silver column a view or a
+  master) is carried as `silver_facts.source_key`, so every fact holds both. Every silver column a view or a
   Gold test reads is written quoted in the mirror's case, so a reserved word (`row`) is a column.
 - Apply this method to any business domain. Resolve the entity and fact list
   from approved modeling configuration; no fixed entity names or three-entity
