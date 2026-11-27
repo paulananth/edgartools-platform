@@ -9,7 +9,8 @@ Who owns what, what each takes in and gives out, and how skills hand off (the SI
 
 Install every skill for Claude, Codex and Grok from this checkout with
 `bash skills/link.sh`, or name the skills to link. An installed command line
-copies them instead: `edgar-warehouse skill install`.
+copies them instead: `edgar-warehouse skill install`. On Windows, `skills\install.ps1` installs the
+prerequisites, the command line and the skills in one run.
 
 ## Lifecycle role map
 

@@ -1,0 +1,34 @@
+# The skills install on Windows as an operator installs them: skills/install.ps1 from the PR's commit, then the command line
+# starts and every skill is in place.
+name: Windows install
+
+on:
+  pull_request:
+    paths:
+      - skills/install.ps1
+      - .github/workflows/windows-install.yml
+      - packages/**
+      - edgar_warehouse/rules/driving.py
+      - edgar_warehouse/rules/error_log.py
+  workflow_dispatch:
+
+jobs:
+  install:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install with the script
+        shell: pwsh
+        run: ./skills/install.ps1 -Ref "${{ github.event.pull_request.head.sha || github.sha }}"
+
+      - name: The command line starts and the skills are in place
+        shell: pwsh
+        run: |
+          $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
+          edgar-warehouse --help | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "edgar-warehouse does not start" }
+          foreach ($base in "$env:USERPROFILE\.agents\skills", "$env:USERPROFILE\.claude\skills") {
+            if (-not (Test-Path "$base\data-platform\SKILL.md")) { throw "no skills in $base" }
+          }

@@ -16,7 +16,6 @@ that the system reuses cannot be mistaken for the old file.
 """
 from __future__ import annotations
 
-import fcntl
 import gzip
 import os
 import shutil
@@ -69,10 +68,20 @@ def _full(path: Path, added: int, limit: int) -> bool:
     return size > 0 and size + added > limit
 
 
+def _hold(fd: int) -> None:
+    """Wait for the rotation lock: `flock` on Linux and macOS, `msvcrt.locking` on Windows (which retries for ten seconds)."""
+    if os.name == "nt":
+        import msvcrt
+        msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+    else:
+        import fcntl
+        fcntl.flock(fd, fcntl.LOCK_EX)
+
+
 def _rotate(path: Path, added: int, limit: int, keep: int, max_age_days: float) -> None:
     lock = os.open(path.with_name(path.name + ".lock"), os.O_WRONLY | os.O_CREAT, 0o600)
     try:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+        _hold(lock)
         if not _full(path, added, limit):  # another process rotated while this one waited
             return
         for number in range(keep, 1, -1):
