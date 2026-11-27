@@ -90,3 +90,10 @@ infra/.bronze-historic-delete-evidence/
 .omp/ratchet/
 eval/
 infra/terraform/**/access.plan
+
+# The Gold dbt project is written from destination/gold/gold.yaml (the system of record) and never committed
+infra/dbt/gold/models/
+infra/dbt/gold/tests/
+infra/dbt/gold/target/
+infra/dbt/gold/logs/
+infra/dbt/gold/.user.yml

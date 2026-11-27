@@ -20,6 +20,7 @@ DIALECTS = {
         "part": lambda part, expr: f"EXTRACT({part} FROM {expr})",
         "next_day": lambda expr: f"DATEADD(day, 1, {expr})",
         "date": lambda text: f"DATE '{text}'",
+        "column": lambda name: f'"{name.upper()}"',   # the mirror's columns are upper case; quoted, a reserved word is a column
     },
     "sqlite": {
         "create": "CREATE VIEW",
@@ -27,6 +28,7 @@ DIALECTS = {
         "part": lambda part, expr: f"CAST(strftime('{'%Y' if part == 'YEAR' else '%m'}', {expr}) AS INTEGER)",
         "next_day": lambda expr: f"date({expr}, '+1 day')",
         "date": lambda text: f"'{text}'",
+        "column": lambda name: f'"{name}"',
     },
 }
 
@@ -81,7 +83,8 @@ def silver_facts(config: dict) -> list[dict]:
         times = {"business": time.get("as_of"), "event": time.get("event_time"), "recorded": time.get("as_at")}
         used = set(spec["key"]) | {v for v in times.values() if v}
         facts.append({"name": f"fact_{entry['table']}", "kind": "fact", "source": source, "key": list(spec["key"]),
-                      "links": links, "times": times, "carry": [c["name"] for c in spec["columns"] if c["name"] not in used],
+                      "links": links, "times": times,
+                      "carry": [c["name"] for c in spec["columns"] if c["name"] not in used],
                       "requirement": rule["requirement"], "spec": entry["requirement"], "grain": spec["grain"]})
     return facts
 
@@ -100,6 +103,21 @@ class Context:
             return "{{ source('" + layer + "', '" + table + "') }}"
         mirror = self.config["mirror"]
         return f"{mirror['database']}.{mirror['schemas'][layer]}.{table}" if self.qualify else table
+
+    def column(self, name: str, row: str = "s", renamed: dict | None = None) -> str:
+        """A row's column, quoted, under the name the fact gives it."""
+        written = f"{row}.{self.dialect['column'](name)}"
+        return f"{written} AS {renamed[name]}" if renamed and name in renamed else written
+
+    def dimension_key(self, link: dict) -> str:
+        return self.config["silver_facts"]["dimension_key"].format(role=link["role"])
+
+    def source_names(self, item: dict) -> dict[str, str]:
+        """A fact's silver columns that carry a dimension key's name, each under its source-key name: the fact keeps both."""
+        links = [*item.get("links", []), *([item["parent"]["single_link"]] if item.get("parent") else [])]
+        role_of_key = {self.dimension_key(link): link["role"] for link in links}
+        columns = [*item["key"], *item.get("measures", []), *item.get("carry", [])]
+        return {c: self.config["silver_facts"]["source_key"].format(role=role_of_key[c]) for c in columns if c in role_of_key}
 
     def view(self, name: str) -> str:
         if self.dbt:
@@ -171,7 +189,7 @@ def holders(link: dict, ctx: Context, masters: str) -> str:
 def master_join(link: dict, ctx: Context, row: str, alias: str) -> tuple[str, str]:
     """How a silver row finds its master: (the join, the column holding the master id). A source-code link joins
     `master_binding` on the row's own source key; an identifier link joins the one master of the kind that holds the value."""
-    key = f"CAST({row}.{link['column']} AS VARCHAR)"
+    key = f"CAST({ctx.column(link['column'], row)} AS VARCHAR)"
     if link.get("identifier"):
         return f"LEFT JOIN ({holders(link, ctx, '= 1')}) {alias} ON {alias}.value = {key}", f"{alias}.master_id"
     return (f"LEFT JOIN {ctx.mirror('silver.master_binding')} {alias} ON {alias}.source_code = {literal(link['source_code'])} "
@@ -181,30 +199,31 @@ def master_join(link: dict, ctx: Context, row: str, alias: str) -> tuple[str, st
 def render_fact(item: dict, ctx: Context) -> str:
     """One row per silver row. Each link finds its master by a join on the row's source key, then resolves through
     the master view, so a merged-away id finds its survivor."""
-    select, joins = [f"s.{c}" for c in item["key"]], []
+    renamed = ctx.source_names(item)
+    select, joins = [ctx.column(c, renamed=renamed) for c in item["key"]], []
     for n, link in enumerate(item.get("links", [])):
         alias = f"m{n}"
         found, master_id = master_join(link, ctx, "s", f"b{n}")
         joins += [found, f"LEFT JOIN {ctx.view('master')} {alias} ON {alias}.entity_id = {master_id}"]
-        select.append(f"{link_key(link, ctx, alias)} AS {link['role']}_key")
+        select.append(f"{link_key(link, ctx, alias)} AS {ctx.dimension_key(link)}")
     parent = item.get("parent")
     if parent:
         by = parent["by"]
         link = parent["single_link"]
-        on = " AND ".join(f"p.{c} = s.{c}" for c in by)
+        on = " AND ".join(f"{ctx.column(c, 'p')} = {ctx.column(c)}" for c in by)
         found, master_id = master_join(link, ctx, "q", "pb")
         joins.append(
-            f"LEFT JOIN (SELECT {', '.join('q.' + c for c in by)}, MIN(q.{parent['times']['business']}) AS business_date, "
-            f"MAX(q.{parent['times']['recorded']}) AS recorded_date, COUNT(DISTINCT {master_id}) AS managers, "
+            f"LEFT JOIN (SELECT {', '.join(ctx.column(c, 'q') for c in by)}, MIN({ctx.column(parent['times']['business'], 'q')}) AS business_date, "
+            f"MAX({ctx.column(parent['times']['recorded'], 'q')}) AS recorded_date, COUNT(DISTINCT {master_id}) AS managers, "
             f"MIN({master_id}) AS single_id FROM {ctx.mirror(parent['source'])} q {found} "
-            f"GROUP BY {', '.join('q.' + c for c in by)}) p ON {on}")
+            f"GROUP BY {', '.join(ctx.column(c, 'q') for c in by)}) p ON {on}")
         joins.append(f"LEFT JOIN {ctx.view('master')} pm ON pm.entity_id = p.single_id")
         select += ["p.business_date", "p.recorded_date",
                    f"CASE WHEN p.managers = 1 THEN COALESCE(pm.canonical_id, {literal(ctx.unknown)}) "
-                   f"WHEN p.managers > 1 THEN {literal(ctx.not_applicable)} ELSE {literal(ctx.unknown)} END AS {link['role']}_key"]
+                   f"WHEN p.managers > 1 THEN {literal(ctx.not_applicable)} ELSE {literal(ctx.unknown)} END AS {ctx.dimension_key(link)}"]
     elif item.get("times"):
-        select += [f"s.{column} AS {role}_date" for role, column in item["times"].items() if column]
-    select += [f"s.{c}" for c in item.get("measures", []) + item.get("carry", [])]
+        select += [f"{ctx.column(column)} AS {role}_date" for role, column in item["times"].items() if column]
+    select += [ctx.column(c, renamed=renamed) for c in item.get("measures", []) + item.get("carry", [])]
     return f"SELECT {', '.join(select)}\nFROM {ctx.mirror(item['source'])} s\n" + "\n".join(joins)
 
 
@@ -248,11 +267,11 @@ def quality_tests(config: dict | None = None, dialect: str = "snowflake", qualif
             share = "1.0" if link.get("inclusion") is None else str(link["inclusion"])  # the declared share, never through a float
             tests[f"{table}_{column}_resolves"] = (
                 f"SELECT t.n, t.found FROM (SELECT COUNT(*) AS n, COUNT({master_id}) AS found FROM {ctx.mirror(source)} s "
-                f"{found} WHERE s.{column} IS NOT NULL) t WHERE t.found < {share} * t.n")
+                f"{found} WHERE {ctx.column(column)} IS NOT NULL) t WHERE t.found < {share} * t.n")
             if link.get("identifier"):
                 tests[f"{table}_{column}_one_master"] = (
                     f"SELECT h.value FROM ({holders(link, ctx, '> 1')}) h "
-                    f"WHERE h.value IN (SELECT CAST(s.{column} AS VARCHAR) FROM {ctx.mirror(source)} s)")
+                    f"WHERE h.value IN (SELECT CAST({ctx.column(column)} AS VARCHAR) FROM {ctx.mirror(source)} s)")
     return tests
 
 

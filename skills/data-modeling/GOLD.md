@@ -31,6 +31,14 @@ The Gold modeling method below applies when transformations are needed.
 
 ## dbt implementation requirements
 
+- **The system of record is the configuration, never dbt.** Gold is `destination/gold/gold.yaml`, the silver specs and the exposure
+  list; the generator writes the dbt models, sources and tests from them into `infra/dbt/gold`, and dbt only
+  runs that output. A name, a key, a join or a rule changes in the configuration and the project is written again; the written
+  project is never edited by hand nor committed. No custom code is written for one table: a case the configuration cannot express
+  becomes one general rule of the generator, read from the configuration.
+- A link's dimension key is named by `silver_facts.dimension_key`; a silver column of that name (the source's own key of the
+  master) is carried as `silver_facts.source_key`, so every fact holds both. Every silver column a view or a
+  Gold test reads is written quoted in the mirror's case, so a reserved word (`row`) is a column.
 - Apply this method to any business domain. Resolve the entity and fact list
   from approved modeling configuration; no fixed entity names or three-entity
   limit controls the build. Each entry declares its approved input assignments,
@@ -51,11 +59,8 @@ The Gold modeling method below applies when transformations are needed.
   one Gold fact grain and its dimensions; apply
   [semantic-views](../semantic-views/SKILL.md) for that later stage. A dimension
   view alone does not certify questions or authorize another consumer source.
-- Use a shared model-generation path or reusable dbt templates/macros driven by
-  those entries. Adding a domain or entity changes configuration and its grain,
-  key and join tests, not a copied domain-specific implementation. Verify the
-  installed project's actual capabilities before using this path; this skill
-  defines requirements and does not claim a generator or models already exist.
+- The one generator (`edgar_warehouse/gold/views.py`) is driven by those entries. Adding a domain or entity changes configuration
+  and its grain, key and join tests, not a copied domain-specific implementation.
 - Link each model to the consumption requirement and its approved input-table
   assignments. Mirroring and direct reads do not depend on dbt readiness.
 - Record the approved output database and schema, materialization, execution
