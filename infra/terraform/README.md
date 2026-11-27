@@ -1,6 +1,6 @@
 # Terraform Layout
 
-This directory contains passive cloud-infrastructure Terraform roots for AWS.
+This directory contains passive cloud-infrastructure Terraform roots for AWS, and one workload root, `load-machine/`.
 
 AWS account roots are infra-only. They may create networks, storage,
 registries, databases, logs, and empty secret containers. They
@@ -11,6 +11,7 @@ SQL procedures/tasks, access-control bindings, or runtime secret values.
 
 ```text
 bootstrap-state/
+load-machine/             # the hosted load: state machine, activity, task definition, their roles, empty secret
 access/
   aws/accounts/{dev,prod}/        # IAM, SNS trust policies, ECS task roles
 accounts/
@@ -22,6 +23,14 @@ modules/
   storage_buckets_destroyable/
   warehouse_runtime/     # ECR, ECS cluster/logs, SNS topic, empty secrets only
 ```
+
+## The load machine
+
+`load-machine/` holds the one workload: the load's Step Functions state machine and activity, the Fargate task that
+runs the loader image, the roles those two assume and the empty secret its logins go in. It uses the passive roots'
+network, cluster, registry and bronze bucket by name and changes none of them.
+`infra/load-pipeline/aws-load.sh` applies it with an AWS admin profile, writes the secret's value and starts a load
+([hosted loads](../../skills/data-operations/HOSTED-LOADS.md#where-a-load-runs)). Applying it runs nothing.
 
 ## AWS Principal Model
 
