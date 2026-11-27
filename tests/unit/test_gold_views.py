@@ -340,7 +340,7 @@ def test_the_gold_configuration_is_a_destination_not_a_rule():
 
 def test_a_silver_column_named_like_its_dimension_key_is_carried_under_the_source_key_name():
     """The silver row's own key of a master can share the dimension key's name: the fact keeps both, the source's value
-    under the configured source-key name (operator, 2026-11-27: "Source key renamed (Recommended)")."""
+    under the configured source-key name."""
     config = views.load()
     rule = config["silver_facts"]
     item = next(i for i in config["objects"] if i["name"] == "fact_company_fact")
@@ -368,5 +368,15 @@ def test_a_silver_column_named_like_its_dimension_key_is_carried_under_the_sourc
     assert row[dimension_key] == "c1" and row[rule["source_key"].format(role=link["role"])] == "0000000001"
 
 
-def test_every_snowflake_column_is_quoted_so_a_reserved_word_is_a_column():
+def test_the_snowflake_column_name_is_quoted_in_the_mirrors_case():
     assert views.DIALECTS["snowflake"]["column"]("row") == '"ROW"'
+
+
+def test_a_configured_fact_carries_a_column_of_its_dimension_keys_name_under_the_source_key_name_too():
+    config = views.load()
+    ctx = views.Context(config, "sqlite", qualify=False)
+    rule = config["silver_facts"]
+    link = {"role": "manager", "column": "cik", "source_code": "invented.v1", "kind": "company"}
+    item = {"key": ["accession_number"], "links": [], "carry": [rule["dimension_key"].format(role="manager"), "form"],
+            "parent": {"single_link": link}}
+    assert ctx.source_names(item) == {rule["dimension_key"].format(role="manager"): rule["source_key"].format(role="manager")}

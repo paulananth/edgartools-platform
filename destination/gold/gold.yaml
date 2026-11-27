@@ -35,7 +35,7 @@ silver_facts:
   exposure: authorised_data_sharing.yaml
   requirement: silver_spec
   dimension_key: "{role}_key"           # each link's dimension key, the master's canonical id
-  source_key: "{role}_source_key"       # a silver column of the dimension key's name, the source's own key, is carried as this (operator, 2026-11-27: "Source key renamed (Recommended)")
+  source_key: "{role}_source_key"       # a silver column of the dimension key's name, the source's own key, is carried as this
 
 # RDM publishes one view per code set (data-modeling GOLD.md, "RDM publishes one view per code set"): each folder of
 # `published` is a code set, and its view holds the latest published version's codes from `source`.

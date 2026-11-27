@@ -37,8 +37,8 @@ The Gold modeling method below applies when transformations are needed.
   project is never edited by hand nor committed. No custom code is written for one table: a case the configuration cannot express
   becomes one general rule of the generator, read from the configuration.
 - A link's dimension key is named by `silver_facts.dimension_key`; a silver column of that name (the source's own key of the
-  master, such as a company's CIK) is carried as `silver_facts.source_key`, so the fact holds both. Every column is written quoted
-  in the mirror's case, so a reserved word (`row`) is a column.
+  master, such as a company's CIK) is carried as `silver_facts.source_key`, so every fact holds both. Every silver column a view or a
+  Gold test reads is written quoted in the mirror's case, so a reserved word (`row`) is a column.
 - Apply this method to any business domain. Resolve the entity and fact list
   from approved modeling configuration; no fixed entity names or three-entity
   limit controls the build. Each entry declares its approved input assignments,

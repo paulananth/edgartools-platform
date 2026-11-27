@@ -82,10 +82,8 @@ def silver_facts(config: dict) -> list[dict]:
         time = spec.get("time") or {}
         times = {"business": time.get("as_of"), "event": time.get("event_time"), "recorded": time.get("as_at")}
         used = set(spec["key"]) | {v for v in times.values() if v}
-        keys = {rule["dimension_key"].format(role=link["role"]): link["role"] for link in links}
-        renamed = {c["name"]: rule["source_key"].format(role=keys[c["name"]]) for c in spec["columns"] if c["name"] in keys}
         facts.append({"name": f"fact_{entry['table']}", "kind": "fact", "source": source, "key": list(spec["key"]),
-                      "links": links, "times": times, "renamed": renamed,
+                      "links": links, "times": times,
                       "carry": [c["name"] for c in spec["columns"] if c["name"] not in used],
                       "requirement": rule["requirement"], "spec": entry["requirement"], "grain": spec["grain"]})
     return facts
@@ -113,6 +111,13 @@ class Context:
 
     def dimension_key(self, link: dict) -> str:
         return self.config["silver_facts"]["dimension_key"].format(role=link["role"])
+
+    def source_names(self, item: dict) -> dict[str, str]:
+        """A fact's silver columns that carry a dimension key's name, each under its source-key name: the fact keeps both."""
+        links = [*item.get("links", []), *([item["parent"]["single_link"]] if item.get("parent") else [])]
+        role_of_key = {self.dimension_key(link): link["role"] for link in links}
+        columns = [*item["key"], *item.get("measures", []), *item.get("carry", [])]
+        return {c: self.config["silver_facts"]["source_key"].format(role=role_of_key[c]) for c in columns if c in role_of_key}
 
     def view(self, name: str) -> str:
         if self.dbt:
@@ -194,7 +199,7 @@ def master_join(link: dict, ctx: Context, row: str, alias: str) -> tuple[str, st
 def render_fact(item: dict, ctx: Context) -> str:
     """One row per silver row. Each link finds its master by a join on the row's source key, then resolves through
     the master view, so a merged-away id finds its survivor."""
-    renamed = item.get("renamed") or {}
+    renamed = ctx.source_names(item)
     select, joins = [ctx.column(c, renamed=renamed) for c in item["key"]], []
     for n, link in enumerate(item.get("links", [])):
         alias = f"m{n}"
@@ -205,13 +210,13 @@ def render_fact(item: dict, ctx: Context) -> str:
     if parent:
         by = parent["by"]
         link = parent["single_link"]
-        on = " AND ".join(f"p.{c} = s.{c}" for c in by)
+        on = " AND ".join(f"{ctx.column(c, 'p')} = {ctx.column(c)}" for c in by)
         found, master_id = master_join(link, ctx, "q", "pb")
         joins.append(
-            f"LEFT JOIN (SELECT {', '.join('q.' + c for c in by)}, MIN(q.{parent['times']['business']}) AS business_date, "
-            f"MAX(q.{parent['times']['recorded']}) AS recorded_date, COUNT(DISTINCT {master_id}) AS managers, "
+            f"LEFT JOIN (SELECT {', '.join(ctx.column(c, 'q') for c in by)}, MIN({ctx.column(parent['times']['business'], 'q')}) AS business_date, "
+            f"MAX({ctx.column(parent['times']['recorded'], 'q')}) AS recorded_date, COUNT(DISTINCT {master_id}) AS managers, "
             f"MIN({master_id}) AS single_id FROM {ctx.mirror(parent['source'])} q {found} "
-            f"GROUP BY {', '.join('q.' + c for c in by)}) p ON {on}")
+            f"GROUP BY {', '.join(ctx.column(c, 'q') for c in by)}) p ON {on}")
         joins.append(f"LEFT JOIN {ctx.view('master')} pm ON pm.entity_id = p.single_id")
         select += ["p.business_date", "p.recorded_date",
                    f"CASE WHEN p.managers = 1 THEN COALESCE(pm.canonical_id, {literal(ctx.unknown)}) "
@@ -262,11 +267,11 @@ def quality_tests(config: dict | None = None, dialect: str = "snowflake", qualif
             share = "1.0" if link.get("inclusion") is None else str(link["inclusion"])  # the declared share, never through a float
             tests[f"{table}_{column}_resolves"] = (
                 f"SELECT t.n, t.found FROM (SELECT COUNT(*) AS n, COUNT({master_id}) AS found FROM {ctx.mirror(source)} s "
-                f"{found} WHERE s.{column} IS NOT NULL) t WHERE t.found < {share} * t.n")
+                f"{found} WHERE {ctx.column(column)} IS NOT NULL) t WHERE t.found < {share} * t.n")
             if link.get("identifier"):
                 tests[f"{table}_{column}_one_master"] = (
                     f"SELECT h.value FROM ({holders(link, ctx, '> 1')}) h "
-                    f"WHERE h.value IN (SELECT CAST(s.{column} AS VARCHAR) FROM {ctx.mirror(source)} s)")
+                    f"WHERE h.value IN (SELECT CAST({ctx.column(column)} AS VARCHAR) FROM {ctx.mirror(source)} s)")
     return tests
 
 
