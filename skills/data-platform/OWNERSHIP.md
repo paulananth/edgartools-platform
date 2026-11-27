@@ -57,8 +57,9 @@ sides (A hands off to B only if B lists A under "Receives from").
 | When | Who looks | At what |
 |---|---|---|
 | Before a load | data-operations (gate), access-audit | The twelve readiness facts, one login per duty |
-| Every 30 minutes during a load | load-monitoring, then data-operations | Lanes running against the lane budget, memory and CPU, failed or stalled steps, the container runtime answering |
+| Every 30 minutes during a load | load-monitoring, then data-operations | Workers running against the worker limit and the store's rows a minute, memory and CPU, failed or stalled steps, the container runtime answering |
 | At a stall | load-monitoring, then database-monitoring | The runtime first, then lock waiters and costly statements |
+| With every worker in use and steps waiting | load-monitoring, database-monitoring, then data-operations | Rows a minute and the database's CPU and memory at the limit; data-operations keeps, raises or lowers the `stores:` line (HOSTED-LOADS, "Balancing a load") |
 | At a failure | production-support | Bookkeeping and Change Journal evidence, then the logs |
 | After a load | data-operations | The elapsed time against the window, what loaded, what a skill must learn |
 | On a rules change | data-onboarding or refining-rules, then openmetadata | The catalog's text, on its own, never inside a load |

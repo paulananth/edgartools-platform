@@ -433,6 +433,30 @@ def store_bounds(bounds: dict[str, tuple[int, int]], workers: dict[str, int], le
     return {name: (low, max(low, min(top, workers[name] + max(left, 0)))) for name, (low, top) in bounds.items()}
 
 
+STORE_NOTE_SECONDS = 600  # a store line in the state file every ten minutes: rows commit late, so a short window reads none
+
+
+def store_note(memory: "Memory", reader_url: str | None, in_use: int, waiters: int | None, now: float,
+               read=lambda url: database_writes(url)) -> str | None:
+    """The store's line, every STORE_NOTE_SECONDS: the workers in use against the limit, the rows written a minute over the
+    window and the sessions waiting on locks (None when the database could not be read), so the limit is judged on what it
+    yields. None between two lines, for the first reading (it has no window yet), for a store that could not be read (the
+    window stays open from the last reading) and with no store declared."""
+    limit = store_workers()
+    if limit is None or not reader_url or (memory.writes and now - memory.writes[0] < STORE_NOTE_SECONDS):
+        return None
+    totals, before = read(reader_url), memory.writes
+    if not totals:
+        return None
+    memory.writes = (now, totals)
+    if not before:
+        return None
+    rate = writes_per_minute(before[1], totals, now - before[0])
+    rows = ", ".join(f"{name} {per_minute:,.0f}" for name, per_minute in sorted(rate.items()) if per_minute) or "none"
+    locks = "lock waiters unknown" if waiters is None else f"{waiters} waiting on locks"
+    return f"store {os.environ.get(STORE)}: {in_use} of {limit} workers in use; rows written a minute: {rows}; {locks}"
+
+
 def store_level(level: str, left: int | None) -> str:
     """The controller's level within the store: no raise when the store is full, a shed when the steps hold more than it carries."""
     if left is None:
@@ -590,6 +614,7 @@ class Memory:
     finished: dict[str, tuple[int, datetime]] = field(default_factory=dict)  # a step's bundles done, and when that count last changed
     rates: dict[str, dict[int, float]] = field(default_factory=dict)  # a step's measured bundles a minute at each worker count
     pressed: int = 0  # consecutive cycles at `high`
+    writes: tuple[float, dict[str, int]] | None = None  # the stores' cumulative rows written, and when (monotonic) they were read
 
 
 MOVE_LINE = re.compile(r" ET (?:controller|scheduler) moves (\S+) from (\d+) to (\d+) workers")
@@ -748,6 +773,8 @@ def control_cycle(steps: list[dict], state: Path, memory: Memory, reader_url: st
         level = "ok"
     left = store_left(listing)
     level = store_level(level, left)
+    if said := store_note(memory, reader_url, workers_in_use(listing), (reading or {}).get("lock_waiters"), time.monotonic()):
+        note(said, state)
     workers = {name: count for name, (_, count) in running.items()}
     bounds = {name: headroom(count, bounds_for("local", s.get("worker_gb", WORKER_GB)), free, s.get("worker_gb", WORKER_GB))
               for name, (s, count) in running.items()}
@@ -1380,36 +1407,27 @@ def forced_at() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def carried(steps: list[dict], capacity: str = "local") -> tuple[int, str, int]:
-    """The workers a compute carries, what limits them (`store` when the database carries fewer, `memory` when worker-sized
-    shares of memory carry fewer than the vCPUs allow, else `vcpu`), and the widest first step of a lane. A worker's size is the load jobs file's measured `worker_gb`
-    (the widest of the first steps), else half a gigabyte."""
+def carried(steps: list[dict], capacity: str = "local") -> tuple[int, str]:
+    """The workers a compute carries and what limits them (`store` when the database carries fewer, `memory` when worker-sized
+    shares of memory carry fewer than the vCPUs allow, else `vcpu`). A worker's size is the load jobs file's measured `worker_gb`
+    (the widest of the lanes' first steps), else half a gigabyte."""
     heads = {}
     for step in steps:
         heads.setdefault(step["lane"], step)
-    widest = max((head["workers"] for head in heads.values()), default=1)
     worker_gb = max((head.get("worker_gb", WORKER_GB) for head in heads.values()), default=WORKER_GB)
     vcpu, memory_gb = capacity_of(capacity)
     workers = bounds_for(capacity, worker_gb)[1]
     by_store = store_workers()
     if by_store is not None and by_store < workers:  # the database carries fewer than the compute: it is the limit
-        return by_store, "store", widest
-    return workers, ("memory" if int(memory_gb / worker_gb + 1e-9) <= int(vcpu * WORKERS_PER_VCPU) else "vcpu"), widest
+        return by_store, "store"
+    return workers, ("memory" if int(memory_gb / worker_gb + 1e-9) <= int(vcpu * WORKERS_PER_VCPU) else "vcpu")
 
 
-def lanes_at_once(steps: list[dict], capacity: str = "local") -> int:
-    """How many lanes a compute carries at once: the workers it carries (its memory in worker-sized shares, at most four to a
-    vCPU, the same sizing a step's workers follow) over the workers of the widest first step of a lane. The one budget, in no
-    platform's terms: whatever starts the lanes (a state machine, the local scheduler) starts no more than this and queues the
-    rest, and the load monitor reads this same number."""
-    workers, _, widest = carried(steps, capacity)
-    return max(1, workers // widest)
-
-
-def lane_budget(steps: list[dict], capacity: str = "local") -> dict:
-    """The lane budget with what sets it, for the monitor: lanes at once, the workers the compute carries and its limit."""
-    workers, limit, _ = carried(steps, capacity)
-    return {"lanes": lanes_at_once(steps, capacity), "workers": max(1, workers), "limit": limit}
+def worker_budget(steps: list[dict], capacity: str = "local") -> dict:
+    """The worker limit with what sets it, for the monitor: the workers every lane together may hold, and its limit (the store,
+    the compute's memory or its vCPUs)."""
+    workers, limit = carried(steps, capacity)
+    return {"workers": max(1, workers), "limit": limit}
 
 
 def arguments(step: dict) -> list[str]:
@@ -2083,8 +2101,6 @@ def main() -> int:
         parser.add_argument(f"--{flag}", action="store_true")
     parser.add_argument("--from", dest="start")
     parser.add_argument("--only")
-    parser.add_argument("--lanes-at-once", action="store_true",
-                        help="print how many lanes the --capacity carries at once (its vCPUs over the widest first step's workers)")
     parser.add_argument("--lane-count", action="store_true", help="print how many lanes the load jobs file has")
     parser.add_argument("--force", action="store_true",
                         help="force publish: every load of this run ignores the Change Journal and processes every document of its source again")
@@ -2132,8 +2148,6 @@ def main() -> int:
     if args.lookups and (args.only or args.lane or not args.finish and (args.list or args.plan)):
         print("--lookups goes with --finish (or all the load jobs), never a partial run that does not reach the finish", file=sys.stderr)
         return 2
-    if args.lanes_at_once:
-        print(lanes_at_once(steps, args.capacity))
         return 0
     if args.lane_count:
         print(len({step["lane"] for step in steps}))

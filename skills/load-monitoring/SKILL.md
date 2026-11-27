@@ -53,10 +53,13 @@ checkout is deleted (`load_monitor_up 0`): stop it, never repair it, and let the
 A container runtime that stops answering blinds the exporter and freezes the load behind it: test the runtime first (a bounded
 `docker version`), and restart it before looking at anything else (HOSTED-LOADS, "The shortest time to load everything").
 
-The monitor shows the lane budget beside the lanes and workers running (`load_lane_budget`, `load_worker_budget`, `load_lanes_running`,
-`load_workers_running`): the budget is data-operations' `lane_budget`, the lanes the compute carries when every step runs its declared workers (every lane starts, and each step is admitted by the memory free then), and its `limit` label names what sets it
-(memory or vcpu). Lanes running below the budget while lanes wait is a defect to explain; lanes at the budget with CPU idle means the limit
-is memory, not a setting.
+The monitor shows the worker limit beside the workers running (`load_worker_budget`, `load_workers_running`): the limit is
+data-operations' `worker_budget` workers, every lane together, and its `limit` label names what sets it (store, memory or vcpu).
+Workers running below the limit while steps wait is a defect to explain. Whether the limit is right is read from what it yields,
+never from the compute's idle CPU: the store's rows written a minute (`load_store_rows_per_minute`, and the state file's
+`store <name>:` line every ten minutes) against the workers in use, beside the database's own CPU (`database-monitoring`
+`telemetry`). A store at its limit with its CPU saturated is right; one at its limit with CPU to spare is a limit to raise, by
+its `stores:` line.
 
 A watcher reads the log of the run label it watches, never "the newest log": the newest one replays an old run's events as if they
 were new. After the runtime restarts, an execution it held no longer exists (`ExecutionDoesNotExist`): that is the restart, not a
@@ -115,4 +118,4 @@ dependency lines need a custom panel plugin, which is a separate decision.
 
 ## Handshake
 
-Reads and shows; changes nothing. Tells [data-operations](../data-operations/SKILL.md) what stalls (the runtime first, then lanes against the budget), sends a lock or slow statement to [database-monitoring](../database-monitoring/SKILL.md) and an unexplained failure to [production-support](../production-support/SKILL.md). Its numbers come from data-operations' `lane_budget`; the two change together. The table of who owns what and hands off to whom is [OWNERSHIP.md](../data-platform/OWNERSHIP.md).
+Reads and shows; changes nothing. Tells [data-operations](../data-operations/SKILL.md) what stalls (the runtime first, then workers against the limit), sends a lock, a slow statement or a store at its limit to [database-monitoring](../database-monitoring/SKILL.md) and an unexplained failure to [production-support](../production-support/SKILL.md). Its numbers come from data-operations' `worker_budget`; the two change together, in the loop of HOSTED-LOADS, "Balancing a load". The table of who owns what and hands off to whom is [OWNERSHIP.md](../data-platform/OWNERSHIP.md).

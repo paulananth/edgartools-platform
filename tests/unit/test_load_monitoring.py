@@ -167,12 +167,11 @@ def test_exporter_passes_the_selected_run_to_load_status(monkeypatch):
     assert seen == ["after-clear"]
 
 
-def test_the_exporter_shows_the_lane_budget_beside_the_lanes_and_workers_running():
-    """The monitor and data-operations share one budget: the number load.sh applied, what limits it, and what runs against it."""
-    text = exporter.render({**SNAPSHOT, "budget": {"lanes": 2, "workers": 8, "limit": "memory"}})
-    assert 'load_lane_budget{limit="memory"} 2' in text and "load_worker_budget 8" in text
-    assert "load_lanes_running 1" in text and "load_workers_running 2" in text
-    assert "load_lane_budget" not in exporter.render(SNAPSHOT)  # a reading with no budget shows none, never a guess
+def test_the_exporter_shows_the_worker_limit_and_what_sets_it_beside_the_workers_running():
+    """The monitor and data-operations share one limit: the workers the load may hold, what sets it, and what runs against it."""
+    text = exporter.render({**SNAPSHOT, "budget": {"workers": 8, "limit": "memory"}})
+    assert 'load_worker_budget{limit="memory"} 8' in text and "load_workers_running 2" in text
+    assert "load_worker_budget" not in exporter.render(SNAPSHOT)  # a reading with no budget shows none, never a guess
 
 
 def selected(link_url: str) -> str:

@@ -104,8 +104,7 @@ CODE read it in place of git.
   (a load's `done` and `stopped` lines end with the `sampled peak` its processes were seen to hold, read every 10 s; resident
   memory counts a shared page once a process, so it can be more than they take together: declare it from there) waits for at least that much, and while it runs the memory it has yet to reach of its peak is not free to the steps admitted
   after it. A container with no limit to read gives every step its
-  declared workers. The step's log names the workers it got. `lane_budget` (`--lanes-at-once`) stays the monitor's reference: the lanes
-  the compute carries when every step runs its declared workers. If lanes wait while CPU idles, memory is the limit: more lanes need
+  declared workers. The step's log names the workers it got. If lanes wait while CPU idles, memory is the limit: more lanes need
   more of it (a larger container-runtime ceiling or compute). The gate exists because lanes started at once, each with its declared
   workers, overload the CPU and the heaviest merges are killed for memory (status -9).
 - **The lane controller moves the running steps' workers.** A thread of the activity worker (`control` in `load_jobs.py`) looks every 30
@@ -136,6 +135,24 @@ CODE read it in place of git.
 - **Mounts:** the logins and the captures are read-only; the stores folder, `LOGS` and the run documents' folder
   (`BOOKKEEPING_MANIFEST_ROOT` in `worker.env`, read by `load.sh`) are written (the readiness record, the run's state, each run's
   frozen rules and input manifests; a folder the worker does not mount reads as a missing file, and a run driven again stops). Host networking lets the worker reach the stores and the catalog as the Mac does.
+
+## Balancing a load: one worker limit, three skills
+
+The load is balanced by one number, the worker limit: the workers every lane together may hold, set by the store
+(`stores:` in the load jobs file) or by the compute, whichever carries fewer (`worker_budget`, its `limit` naming which).
+Three skills keep it right, each with one duty, in this loop:
+
+| Step | Skill | What it does |
+|---|---|---|
+| Set and hold the limit | data-operations | The `stores:` line; admission (`waits for the store`), the controller's raises and sheds inside it |
+| Show it working | [load-monitoring](../load-monitoring/SKILL.md) | Grafana's "Workers running" against "Worker limit", the store's rows a minute; the state file's `store <name>:` line every ten minutes |
+| Read what the task cannot | [database-monitoring](../database-monitoring/SKILL.md) | The database's CPU, memory and server log (`telemetry`, `memory`, `logs`): the one place an out-of-memory or a saturated core shows |
+| Change the limit | data-operations | From those readings only, a changed `stores:` line on its own branch: never from the compute's idle CPU |
+
+The verdicts, each from readings at the limit (every worker in use, steps waiting): database CPU saturated and rows a minute
+flat is the right limit; CPU to spare is a limit to raise; an out-of-memory line or lock waiters climbing is a limit to lower,
+or an instance to resize (the operator's approval; [HOSTED-MIRRORING](../data-platform/HOSTED-MIRRORING.md), "Readiness before
+changes"). A resize is followed by a changed `stores:` line in the same change.
 
 ## The shortest time to load everything
 The goal is every document loaded in the least wall-clock time. Each rule below removed a wait or a restart.

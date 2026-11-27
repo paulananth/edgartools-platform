@@ -57,12 +57,13 @@ def header() -> list[dict]:
         stat("Memory free", "Share of memory free. Short under a quarter (amber), pressed under a tenth (red): the controller holds lanes back.",
              "load_machine_memory_free_ratio", 15,
              steps((None, d.RED), (d.MEMORY_FREE[0], d.AMBER), (d.MEMORY_FREE[1], d.GREEN)), unit="percentunit"),
-        stat("Lanes running", "Lanes with a step running now. It should sit at the lane budget beside it while lanes wait: a lower number "
-             "with lanes waiting means the budget is not being used.",
-             "count(count by (lane) (load_step_workers)) or vector(0)", 18, steps((None, d.NEUTRAL), (1, d.GREEN))),
-        stat("Lane budget", "The lanes the compute carries when every step runs its declared workers (the workers it carries over the widest first step of a lane); a step is admitted by the memory free then, so more can run "
-             "(data-operations `lane_budget`). Its legend names the limit: memory or vcpu. More lanes need more of that limit.",
-             "load_lane_budget", 21, steps((None, d.NEUTRAL)), graph="none"),
+        stat("Workers running", "The workers of the running steps, every lane together. It should sit at the worker limit beside it while "
+             "steps wait: a lower number with steps waiting means the limit is not being used.",
+             "load_workers_running or vector(0)", 18, steps((None, d.NEUTRAL), (1, d.GREEN))),
+        stat("Worker limit", "The workers the load may hold at once (data-operations `worker_budget`). Its legend names what sets it: "
+             "store (the database's cores and memory), memory or vcpu (the compute). More workers need more of that limit; the "
+             "store's rows a minute below say whether the ones running pay.",
+             "load_worker_budget", 21, steps((None, d.NEUTRAL)), graph="none"),
     ]
 
 
