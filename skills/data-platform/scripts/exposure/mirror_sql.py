@@ -27,6 +27,13 @@ import yaml
 
 RULES = Path(__file__).resolve().parents[4] / "rules"
 SOURCES = RULES.parent / "sources"  # the managed mirror record is part of the source mapping
+MANAGED = SOURCES / "managed-mirror.yaml"
+EXPOSURE = SOURCES.parent / "destination" / "authorised_data_sharing.yaml"
+NAMES = RULES / "snowflake.yaml"
+
+
+def load(path: Path) -> dict:
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
 def tables(managed: dict, exposure: dict) -> list[str]:
@@ -144,9 +151,9 @@ def release(managed: dict, names: dict) -> str:
 def main(argv: list[str] | None = None) -> str:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("action", choices=["plan", "create", "alter", "verify", "check", "retire", "release", "exists", "readback"])
-    parser.add_argument("--managed", type=Path, default=SOURCES / "managed-mirror.yaml", help="the managed mirror record")
-    parser.add_argument("--exposure", type=Path, default=SOURCES.parent / "destination" / "authorised_data_sharing.yaml", help="the exposure list that bounds the record")
-    parser.add_argument("--names", type=Path, default=RULES / "snowflake.yaml", help="the file naming the mirror database")
+    parser.add_argument("--managed", type=Path, default=MANAGED, help="the managed mirror record")
+    parser.add_argument("--exposure", type=Path, default=EXPOSURE, help="the exposure list that bounds the record")
+    parser.add_argument("--names", type=Path, default=NAMES, help="the file naming the mirror database")
     parser.add_argument("--publication-limit", type=int, help="snowflake_cdc.max_publications, read from the instance (plan)")
     parser.add_argument("--publications-held", type=int, help="the publications the instance already holds (plan)")
     parser.add_argument("--instance", help="the Postgres instance (create)")
@@ -154,7 +161,6 @@ def main(argv: list[str] | None = None) -> str:
     parser.add_argument("--listing", type=Path, help="a JSON list of {table, state} read from the listing (readback)")
     parser.add_argument("--mirrored", type=Path, help="a JSON list of the tables the mirror holds, read back (alter)")
     args = parser.parse_args(argv)
-    load = lambda path: yaml.safe_load(path.read_text(encoding="utf-8"))
     managed = load(args.managed)
     if args.action == "plan":
         if args.publication_limit is None or args.publications_held is None:

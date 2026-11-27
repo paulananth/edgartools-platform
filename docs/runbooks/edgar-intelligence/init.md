@@ -10,8 +10,8 @@ order, by skills and their own commands only. Use
 files, roles and credential handling. The commands below are the whole procedure; each prints names and checksums, never
 a connection value.
 
-**Run every step, 1 to 9, in order, and say which ran.** The readiness gate (step 9) reads the result of steps 2b to 8 (steps 5 to 7 by its
-`REGISTERED` check) but does not run them: a store reset and given its schemas, with the registration, rules and worker grants skipped, passed an
+**Run every step, 1 to 9, in order, and say which ran.** The readiness gate (step 9) reads the result of steps 2b to 8b (steps 5 to 7 by its
+`REGISTERED` check, step 8b by `MIRRORED`) but does not run them: a store reset and given its schemas, with the registration, rules and worker grants skipped, passed an
 earlier gate, and every load step then stopped within seconds at "permission denied for schema mdm".
 
 The stores folder is `~/.config/edgartools/hosted/`, one folder for the store: `owner.env` (the owner login, `DATA_URL`, `CONTROL_URL` and `CONFIG_URL`),
@@ -124,7 +124,14 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    The statuses it already holds for the steps are the previous load's history; the new load's statuses supersede them (see
    [data-operations](../../../skills/data-operations/SKILL.md#publish-a-steps-status-to-the-catalog)).
 
-9. **Ready.** `python <data-operations skill>/scripts/readiness.py` reads the infrastructure and writes `readiness.json` only when every check passes (committed code containing main, `doctor`, guards, reference data, captures, quiet instance, room, audit, each duty file's login, the run's state file). Done when it prints `READY` (eleven checks, the last `REGISTERED`: the merge policy, the Dataset Contracts and every worker profile). The gate is not this runbook: say which steps ran and which did not before a load starts. A load does not start without it, and any reset of the databases or new commit closes it again.
+8b. **Mirror** (data-platform's [hosted mirroring guide](../../../skills/data-platform/HOSTED-MIRRORING.md#at-init-mirror-only-what-gold-reads)). Step 6 made every
+   table the mirror copies, empty, so the mirror is made here, before any load: the load's writes then reach Snowflake by the mirror's change capture,
+   and Gold reads them without a step after the load. As the mirror operator: `exposure_manifest.py generate`, then `check`; the pre-flight;
+   `mirror_sql.py exists` (absent; a dropped target's name is not reused, so a reset takes a new `mirror.database` in `rules/snowflake.yaml`), `plan`,
+   `create`; grant the Gold writer the target's `<target>_ADMIN` database role. Done when `mirror_sql.py readback` passes, every table REPLICATING
+   (about 10 minutes for 20 million rows), then `verified: true` in `sources/managed-mirror.yaml`.
+
+9. **Ready.** `python <data-operations skill>/scripts/readiness.py` reads the infrastructure and writes `readiness.json` only when every check passes (committed code containing main, `doctor`, guards, reference data, captures, quiet instance, room, audit, each duty file's login, the run's state file). Done when it prints `READY` (twelve checks; `REGISTERED`: the merge policy, the Dataset Contracts and every worker profile; `MIRRORED`: the mirror is exactly its record, every table replicating). The gate is not this runbook: say which steps ran and which did not before a load starts. A load does not start without it, and any reset of the databases or new commit closes it again.
 
 A missing grant or login that a command names is a gap to fix through the central connection section, not to work around.
 
@@ -293,17 +300,11 @@ critical path (`load_jobs.py --status --run <RUN>` shows its progress and `chain
 
 ## Mirror the final tables
 
-After the load (and `--finish`), one Snowflake mirror of the data database carries the final tables: the tables named in `sources/managed-mirror.yaml`, each of
-which `destination/authorised_data_sharing.yaml` lets leave the stores. Its schemas are `MDM`, `RDM` and `SILVER` (the source schema's name in upper case), and
-its target database is `mirror.database` in `rules/snowflake.yaml`. The procedure, its read-only checks and its approval (one create plan) are
-[the data-platform skill's hosted mirroring guide](../../../skills/data-platform/HOSTED-MIRRORING.md#after-the-first-load-mirror-only-the-exposed-subset).
-Done when `mirror_sql.py readback --listing <the listing as JSON>` passes: the mirror lists exactly its recorded tables, each replicating, in schemas `MDM`, `RDM` and `SILVER`, with none missing or unexpected.
+One Snowflake mirror of the data database carries the final tables: the tables named in `sources/managed-mirror.yaml`, each of which
+`destination/authorised_data_sharing.yaml` lets leave the stores, in the schemas `MDM`, `RDM` and `SILVER`, with the target database `mirror.database` of
+`rules/snowflake.yaml`. It is made at init (step 8b), on the empty tables, and keeps them current while the loads and `--finish` write. The
+procedure, its read-only checks and its approval are [the data-platform skill's hosted mirroring guide](../../../skills/data-platform/HOSTED-MIRRORING.md#at-init-mirror-only-what-gold-reads).
 `--finish` writes `finish took <n> min` to the run's state file (the bound is five minutes without lookups): record that figure on the ticket.
-
-The mirror is made, in this order, after `--finish`: (1) `exposure_manifest.py generate`, then `check` (read-only); (2) the guide's read-only pre-flight on the data
-database (instance `STANDARD_*` or `HIGHMEM_*`, a key and a supported type on every column) and `mirror_sql.py exists`, which must show the target absent before a
-create; (3) `mirror_sql.py plan`, approved by the operator before any `CREATE_MIRROR` (billable), then `mirror_sql.py create`. The target is Iceberg on
-Snowflake-managed storage with serverless apply. A target name cannot be reused, so a mirror that is dropped and made again takes a new name.
 
 The Snowflake database names are in `rules/snowflake.yaml`, nowhere else. A target database cannot be renamed, and while its mirror replicates the Snowflake application owns it (the owner role can own it only after `DROP_MIRROR(<mirror>, FALSE)`, [HOSTED-MIRRORING](../../../skills/data-platform/HOSTED-MIRRORING.md)), so a new
 name means a new mirror: create it beside the old one, wait until every table reads `REPLICATING` with equal counts, change the name in

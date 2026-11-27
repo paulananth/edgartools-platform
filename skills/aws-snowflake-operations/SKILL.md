@@ -42,9 +42,9 @@ Gold is published through the mirror: one managed mirror of the data database
 (schemas `MDM`, `RDM`, `SILVER`) carries the tables `sources/managed-mirror.yaml`
 lists, and Gold is dbt views over it (`edgar_warehouse/gold/views.py` writes the
 project from `destination/gold/gold.yaml`). The mirror exists only while it
-replicates: a store reset removes it, and it is made again after the next load
-and its finish ([HOSTED-MIRRORING](../data-platform/HOSTED-MIRRORING.md#after-the-first-load-mirror-only-what-gold-reads)).
-Until then a Gold view fails when queried, since its tables are absent. `verified` in `sources/managed-mirror.yaml`
+replicates: a store reset removes it, and init makes it again once the tables exist, before any load
+([HOSTED-MIRRORING](../data-platform/HOSTED-MIRRORING.md#at-init-mirror-only-what-gold-reads)); the readiness gate's `MIRRORED` check
+refuses a load without it. Without it a Gold view fails when queried, since its tables are absent. `verified` in `sources/managed-mirror.yaml`
 says whether the current mirror passed its read-back. A dropped target's name
 cannot be reused, so a mirror made again takes a new `mirror.database` in
 `rules/snowflake.yaml`. Follow

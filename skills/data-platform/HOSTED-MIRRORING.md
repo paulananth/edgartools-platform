@@ -175,13 +175,14 @@ days. Require explicit approval for table removal, restart (full re-snapshot
 and loss of change-feed history), or mirror drop. Grant consumers read access
 only when requested; the mirror owns target writes.
 
-## After the first load: mirror only what Gold reads
+## At init: mirror only what Gold reads
 
-The mirror is created after the stores' first load, and again after a reset, for the tables `sources/managed-mirror.yaml` lists and no others
+The mirror is created at init, and again after a reset, for the tables `sources/managed-mirror.yaml` lists and no others
 (Gold reads only those; each must be on `destination/authorised_data_sharing.yaml`, which [Final exposable tables](FINAL-TABLES.md) owns). A read table must
-exist before a mirror can take it, so the order is the load, then:
+exist before a mirror can take it, and init's silver step makes every one, empty; the mirror's change capture then carries each load's writes, so no
+step waits for a load. The readiness gate's `MIRRORED` check keeps a load from starting before the mirror is exactly its record. The order, after init's silver step:
 
-1. Resolve the exposure list against the loaded stores, read-only, with the exposure tooling ([its README](scripts/exposure/README.md):
+1. Resolve the exposure list against the initialized stores, read-only, with the exposure tooling ([its README](scripts/exposure/README.md):
    `generate`, then `check`). It refuses a listed table or column the stores lack.
 2. Write the Gold project from its configuration ([data-modeling GOLD.md](../data-modeling/GOLD.md)), then check that it reads only the record
    (`mirror_sql.py check --reads <dbt folder>/models/sources.yml`) and write the create text from the record (`mirror_sql.py create --instance <instance>`).
