@@ -189,6 +189,22 @@ The goal is every document loaded in the least wall-clock time. Each rule below 
   count; no line in any step log means no part merged alone, and the kind lock was shared throughout. Lock waits are read the same
   way as every wait: sample `pg_stat_activity` and `pg_locks` (wait event and lock type) as the diagnostic login, and say each wait's share.
 
+- **A silver step that looks stalled or locked may be uploading.** PostgreSQL shows a session `idle in transaction` (`ClientRead`) until a
+  statement's last byte arrives, and the client meanwhile sits in `ppoll` with little CPU. Read the writer's timeline before blaming a lock or the
+  database: sample its sessions every half second (connection, transaction, statement start and last change) and compare the store's time per
+  statement with the gap before the next one.
+  - Problem: a silver-only step (no mastering, one document) runs for hours, shown stalled or locked, its session idle in a transaction nearly always.
+  - Root cause: each insert is quick on the store, and the next batch, sent as SQL text, waits on the upload from the loading machine. The step lands
+    one document's deliveries one after another over one connection, and a rerun uploads every row again for the store to discard those already landed.
+  - Fix, the direction: send fewer bytes (no row a rerun already landed; a denser format than SQL text), send them side by side up to the line's
+    rate, and run the loader beside the store.
+  - Lesson: measure both ends (the store's statement times and the client's gaps, and the upload rate on one connection and on several) before adding
+    workers or connections: the connection limit is not the limit, the upload is.
+- **A step stopped at its deadline leaves no worker running.** A command's merge workers are processes of their own, and one left running merges
+  beside the next attempt: both write the same file, and every retry stops on `UniqueViolation` on `mastering_file_pkey`. Each platform command runs
+  in its own process group, and a deadline or an interrupt stops the group. After any stopped step, look for workers whose parent is gone
+  (`ps -eo pid,ppid,etime,args` in the worker container, parent 1) before starting the step again.
+
 ## The finish takes at most five minutes
 `--finish` builds the links tables and `master_binding` from the stored records; `master_binding` is two statements inside the data database
 (an upsert that writes only a changed row, and a delete), so no binding row reaches the client; no silver row is written with a master id. A finish that takes minutes more than five is the measure of the slowest phase still left (time each phase,

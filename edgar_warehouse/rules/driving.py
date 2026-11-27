@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import signal
 import subprocess
 import sys
 import time
@@ -74,6 +75,22 @@ def manifest_root(env: dict[str, dict[str, str | None]]) -> Path:
     return Path(value)
 
 
+def run_command(command: list[str], env: dict, timeout: float) -> subprocess.CompletedProcess:
+    """The command with its output, in a process group of its own: past the timeout the whole group is stopped, the worker
+    processes it started too, since a worker left running merges on beside the next attempt and both write the same file."""
+    child = subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
+    try:
+        stdout, stderr = child.communicate(timeout=timeout)
+    except BaseException:  # the deadline, or an interrupt of the caller: the command's own session no longer hears the terminal
+        os.killpg(child.pid, signal.SIGKILL)
+        try:
+            child.communicate(timeout=30)
+        except subprocess.TimeoutExpired:  # a process that left the group holds the pipes: they are not waited for
+            child.kill()
+        raise
+    return subprocess.CompletedProcess(command, child.returncode, stdout, stderr)
+
+
 class Commands:
     """The platform's own commands, each run as its duty's login in its own process."""
 
@@ -83,15 +100,14 @@ class Commands:
             raise RunStopped("At least one worker")
         self.env, self.reports, self.deadline, self.log, self.workers = env, reports, deadline, log, workers
         self._book = None
+        # The platform's command in its own process, on this interpreter: the same code.
+        self.command = [sys.executable, "-c", "from edgar_warehouse.cli import main; raise SystemExit(main())"]
 
     def __call__(self, duty: str, *args: str) -> str:
         environment = {**os.environ, **self.env[duty]}
         environment = {key: value for key, value in environment.items() if value is not None}
-        # The platform's command in its own process, on this interpreter: the same code.
-        command = [sys.executable, "-c", "from edgar_warehouse.cli import main; raise SystemExit(main())"]
         try:
-            done = subprocess.run([*command, *args], env=environment, capture_output=True, text=True,
-                                  timeout=max(1.0, self.deadline - time.monotonic()))
+            done = run_command([*self.command, *args], environment, max(1.0, self.deadline - time.monotonic()))
         except subprocess.TimeoutExpired:
             raise RunStopped(f"{' '.join(args[:3])} did not finish before the deadline") from None
         if done.returncode not in (0, 3):
