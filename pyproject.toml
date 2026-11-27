@@ -42,6 +42,10 @@ mdm-runtime = [
     "psycopg2-binary>=2.9.9",
     "boto3>=1.34.0",
 ]
+# The loader's readiness gate reads the managed mirror's listing as the mirror operator (a key pair) through this driver.
+mirror = [
+    "snowflake-connector-python>=5.2",
+]
 # The configured source engine: Rust behind Python (mastering to-do 15). A
 # separate extra, so a plain `uv sync` builds no Rust. MDM extras also require
 # it: archive consumers use configured reading. Dependency images install a
