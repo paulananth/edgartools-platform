@@ -163,21 +163,5 @@ is already underway is the wrong order.
 
 ## Runtime Settings
 
-Warehouse commands require:
-
-```bash
-export EDGAR_IDENTITY="EdgarTools Platform thepaulananth@gmail.com"
-export WAREHOUSE_ENVIRONMENT="dev"
-export WAREHOUSE_RUNTIME_MODE="bronze_capture"
-export WAREHOUSE_BRONZE_ROOT="s3://edgartools-dev-bronze/warehouse/bronze"
-export SERVING_EXPORT_ROOT="s3://edgartools-dev-snowflake-export/warehouse/artifacts/snowflake_exports/"
-export AWS_DEFAULT_REGION=us-east-1
-```
-
-Notes:
-
-- `EDGAR_IDENTITY` must include an email address or the runtime rejects the command.
-- `WAREHOUSE_RUNTIME_MODE` is `bronze_capture` or `infrastructure_validation`.
-- Gold-affecting commands require `SERVING_EXPORT_ROOT`; `SNOWFLAKE_EXPORT_ROOT` is accepted as a compatibility fallback.
-- For AWS work, prefer S3 roots. Do not introduce other storage roots into new AWS guidance.
+- A SEC capture reads its User-Agent from `EDGAR_IDENTITY`, which must include an email address; it is in the private identity file, never in the repo.
 - Local MDM, RDM, Rules, Bookkeeping and Change Journal connections come from the shared server's private `worker.env`. See [Initialize shared local PostgreSQL](docs/local-agent-testing.md). Hosted MDM uses its secret. Never print either value.
