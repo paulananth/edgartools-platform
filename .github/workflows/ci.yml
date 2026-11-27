@@ -28,7 +28,7 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
-        run: uv sync --frozen --extra mdm
+        run: uv sync --frozen --extra mdm --extra mirror
 
       - name: Run unit, architecture and MDM tests
         run: uv run --no-sync pytest tests/unit/ tests/architecture/ tests/mdm/ -q --tb=short --durations=30

@@ -14,7 +14,10 @@ the hosted load itself still runs from the CI-built loader image below.
 refuses to start, resume or finish a load without it (the read-only `--plan`, `--list`, `--status` and `--catalog-status` still
 run). A pass belongs to one store generation (a reset of the databases closes the gate), one commit (any new commit closes it)
 and one day. Each check reads only what it asks (a capture is its folder's receipts file), never a plan of
-the work. The checks: the code is committed and contains `main`;
+the work. The gate that counts is the one the loader image runs as a load's first state: a pass on the Mac proves only the Mac. So
+a check reads through a Python driver the image installs (Snowflake through `snowflake-connector-python`, the `mirror` extra),
+never a command-line tool, the image carries every file a check reads (`destination/` holds the mirror's exposure list), and
+the image's CI smoke step imports each driver. The checks: the code is committed and contains `main`;
 `doctor` is ready; the loader holds its connection limit, memory ceiling
 and timeouts; RDM holds its codes and silver a table per spec; every step has a capture; no load runs and the loader has no
 session; disk and load average have room; the access audit of the database has no failing control; every duty file's login connects to the databases of its duty (names only, a

@@ -13,6 +13,7 @@ WORKDIR /app
 COPY edgar_warehouse /app/edgar_warehouse
 COPY rules /app/rules
 COPY sources /app/sources
+COPY destination /app/destination
 COPY skills /app/skills
 
 # The commit the image was built from, which readiness and the gate read in place of git.

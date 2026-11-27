@@ -337,14 +337,20 @@ def mirror_fact(listing=None) -> str:
 
 
 def mirror_listing(sql: str) -> list[dict] | None:
+    """The listing through the Snowflake driver the loader image installs (the `mirror` extra), so the gate in the worker reads
+    what the gate on the Mac reads. A driver error can name the account: none of its text is kept."""
     sys.path.insert(0, str(HERE))
     import load_jobs
+    import snowflake.connector
     env = load_jobs.load_env(MIRROR_OPERATOR)
-    done = subprocess.run(["snow", "sql", "-x", "--account", env["MIRROR_SNOWFLAKE_ACCOUNT"], "--user", env["MIRROR_SNOWFLAKE_USER"],
-                           "--authenticator", "SNOWFLAKE_JWT", "--private-key-file", env["MIRROR_SNOWFLAKE_PRIVATE_KEY_PATH"],
-                           "--role", env["MIRROR_SNOWFLAKE_ROLE"], "--warehouse", env["MIRROR_SNOWFLAKE_WAREHOUSE"], "--format", "JSON", "-q", sql],
-                          capture_output=True, text=True, check=False, timeout=120)
-    return json.loads(done.stdout) if done.returncode == 0 else None  # its error text can name the account: not kept
+    try:
+        with snowflake.connector.connect(account=env["MIRROR_SNOWFLAKE_ACCOUNT"], user=env["MIRROR_SNOWFLAKE_USER"],
+                                         authenticator="SNOWFLAKE_JWT", private_key_file=env["MIRROR_SNOWFLAKE_PRIVATE_KEY_PATH"],
+                                         role=env["MIRROR_SNOWFLAKE_ROLE"], warehouse=env["MIRROR_SNOWFLAKE_WAREHOUSE"],
+                                         login_timeout=60, query_timeout=120) as connection:
+            return connection.cursor(snowflake.connector.DictCursor).execute(sql.strip().rstrip(";")).fetchall()
+    except snowflake.connector.Error:
+        return None
 
 
 def gather(stores: Path, repo: Path = REPO) -> dict:

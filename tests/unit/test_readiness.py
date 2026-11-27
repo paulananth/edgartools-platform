@@ -270,11 +270,51 @@ def test_the_mirror_is_exact_only_when_its_listing_is_the_record_every_table_rep
     assert readiness.mirror_fact(lambda sql: {"error": "invented"}).startswith("unreadable")
 
 
-def test_a_failed_listing_keeps_none_of_its_error_text(monkeypatch, tmp_path):
+def readiness_mirror_tables():
+    sys.path.insert(0, str(Path(readiness.REPO) / "skills" / "data-platform" / "scripts" / "exposure"))
+    import mirror_sql
+    return mirror_sql.tables(mirror_sql.load(mirror_sql.MANAGED), mirror_sql.load(mirror_sql.EXPOSURE))
+
+
+def operator_file(tmp_path):
     secret_file = tmp_path / "mirror-operator.env"
-    secret_file.write_text("\n".join(f"export MIRROR_SNOWFLAKE_{k}=invented" for k in ("ACCOUNT", "USER", "PRIVATE_KEY_PATH", "ROLE", "WAREHOUSE")))
-    monkeypatch.setattr(readiness, "MIRROR_OPERATOR", secret_file)
-    failed_run = type("Done", (), {"returncode": 1, "stdout": "account invented-account not found", "stderr": "invented-account"})
-    monkeypatch.setattr(readiness.subprocess, "run", lambda *a, **k: failed_run)
+    secret_file.write_text("\n".join(f"export MIRROR_SNOWFLAKE_{k}=invented-{k.lower()}" for k in ("ACCOUNT", "USER", "PRIVATE_KEY_PATH", "ROLE", "WAREHOUSE")))
+    return secret_file
+
+
+def test_a_failed_listing_keeps_none_of_its_error_text(monkeypatch, tmp_path):
+    import snowflake.connector
+    from tests.support.patching import checked
+    monkeypatch.setattr(readiness, "MIRROR_OPERATOR", operator_file(tmp_path))
+
+    def refused(*_, **__):
+        raise snowflake.connector.errors.DatabaseError("account invented-account not found")
+    checked(monkeypatch, snowflake.connector, "connect", refused)
     assert readiness.mirror_listing("CALL x();") is None
     assert "invented" not in readiness.mirror_fact()
+
+
+def test_the_listing_is_read_as_the_mirror_operator_in_a_loader_image_that_has_no_snowflake_command(monkeypatch, tmp_path):
+    import snowflake.connector
+    from tests.support.patching import checked
+    monkeypatch.setattr(readiness, "MIRROR_OPERATOR", operator_file(tmp_path))
+    monkeypatch.setenv("PATH", str(tmp_path))
+    record = sorted(readiness_mirror_tables())
+    rows = [{"SOURCE_SCHEMA_NAME": t.split(".")[0], "SOURCE_TABLE_NAME": t.split(".")[1], "STATE": "REPLICATING"} for t in record]
+    logins, statements = [], []
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def cursor(self, kind):
+            assert kind is snowflake.connector.DictCursor
+            return type("Cursor", (), {"execute": lambda cursor, sql: statements.append(sql) or cursor, "fetchall": lambda cursor: rows})()
+    checked(monkeypatch, snowflake.connector, "connect", lambda **login: logins.append(login) or Connection())
+    assert readiness.mirror_fact() == "exact"
+    assert [{k: v for k, v in login.items() if k in ("user", "authenticator", "private_key_file", "role")} for login in logins] == [
+        {"user": "invented-user", "authenticator": "SNOWFLAKE_JWT", "private_key_file": "invented-private_key_path", "role": "invented-role"}]
+    assert statements and not statements[0].endswith(";")
