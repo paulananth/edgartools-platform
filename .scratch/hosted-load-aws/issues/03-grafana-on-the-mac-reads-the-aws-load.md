@@ -17,6 +17,8 @@ its port open to the Mac's public address only, the launch script names the task
 - [x] Tests and `terraform validate`: load monitoring 21 passed, `terraform validate` Success (2026-11-27 15:35 ET)
 - [x] Live: Prometheus follows the target file both ways: after `target 192.0.2.10:9108` its active target was that address (down, nothing there), after `target` the Mac's (up) (2026-11-27 15:35 ET)
 - [x] The apply refused the security group: AWS allows no apostrophe in a group or rule description (`"ingress.0.description" doesn't comply with restrictions`); both descriptions now pass its pattern, checked against it (2026-11-27 17:14 ET)
-- [ ] Live on AWS: Grafana shows the next AWS load's lanes, steps, CPU and memory
+- [x] `aws-load.sh` runs the monitor through `uv run`: the Mac's `python3` (3.9) refused `monitoring.py` (`TypeError: unsupported operand type(s) for |`), so the launch said "monitor: not running" though it ran; the same call through `uv run` named a test address and was put back, live (2026-11-27 17:44 ET)
+- [x] Live on AWS: the task's exporter answers the Mac through its port (`load_monitor_up 1`, 14 steps done at the first reading), and Prometheus reads it (2026-11-27 17:44 ET)
+- [ ] Live on AWS: Grafana shows the load's running lanes, CPU and memory
 - [x] `/code-review` (Standards, Spec, GoF), each on `risky-reviewer`: fixed a test of the compose file's text (deleted) and a fake that matched command text (the target file is now written for real); the monitor no longer stops a load; the port read from Terraform's output; the skill states the port's exposure and how to point Grafana back. Left: `CAPACITY = "local"` in the task, as the worker measures it (2026-11-27 15:35 ET)
 - [x] Learning → skill: load-monitoring, "Where the exporter runs" (one exporter at a time, named on a named volume; the AWS task's exporter and its exposure); HOSTED-LOADS, the AWS bullet (2026-11-27 15:35 ET)
