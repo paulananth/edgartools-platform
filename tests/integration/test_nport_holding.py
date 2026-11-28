@@ -127,10 +127,24 @@ def bound(database, source_code: str, key: str) -> str | None:
         store.close()
 
 
+def held(database, link: dict, value: str) -> str | None:
+    """The one canonical master of the link's kinds holding `value` as its identifier."""
+    with database.application.connect() as conn:
+        found = conn.execute(text(
+            "SELECT DISTINCT m.canonical_id FROM mdm.mastering_identifier i JOIN mdm.mastering_master m "
+            "ON m.entity_id = i.entity_id AND m.kind = ANY(:kinds) WHERE i.namespace = :namespace AND i.value = :value"),
+            {"kinds": link["kinds"], "namespace": link["identifier"], "value": value}).scalars().all()
+    return found[0] if len(found) == 1 else None
+
+
 def master_of(database, row: dict, to_part: str) -> str | None:
-    """The master a landed row finds through its link: the binding row of its source code and its own key."""
+    """The master a landed row finds through its link: by the identifier its master holds, or by the binding row of
+    its source code and its own key."""
     link = next(l for l in files.load(FOLDER / "silver-holding.yaml")["links"] if l["to_part"] == to_part)
-    return bound(database, link["source_code"], None if row[link["source_key"]] is None else str(row[link["source_key"]]))
+    key = None if row[link["source_key"]] is None else str(row[link["source_key"]])
+    if link.get("identifier"):
+        return None if key is None else held(database, link, key)
+    return bound(database, link["source_code"], key)
 
 
 def test_each_row_finds_its_holder_and_security_through_the_binding(database, tmp_path):
