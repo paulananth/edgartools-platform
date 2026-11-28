@@ -41,6 +41,7 @@ bypass-selection = true
 "../../edgar_warehouse/cli.py" = "edgar_warehouse/cli.py"
 "../../edgar_warehouse/hosted_store_clear_preview.py" = "edgar_warehouse/hosted_store_clear_preview.py"
 "../../edgar_warehouse/hosted_store_clear_progress.py" = "edgar_warehouse/hosted_store_clear_progress.py"
+"../../edgar_warehouse/source_onboarding_preview.py" = "edgar_warehouse/source_onboarding_preview.py"
 "../../edgar_warehouse/bundle.py" = "edgar_warehouse/bundle.py"
 "../../edgar_warehouse/context.py" = "edgar_warehouse/context.py"
 "../../edgar_warehouse/database_connections.py" = "edgar_warehouse/database_connections.py"
