@@ -12,9 +12,12 @@ Every step says what differs for each target.
 - **Silver target.** A transaction or published reference part lands in a
   silver table made from its approved silver table spec (the part's `silver`
   in `findings.yaml`). The spec's links point to master parts only; fill each
-  link's `kind` and `source_code` (the master's Dataset Contract) from the
-  onboarded master, since the writer looks each row's MDM id up by them and
-  refuses a link without them.
+  link's `kinds` (every kind its master may be) and how it finds that master:
+  `identifier` (a namespace the master holds, such as `cik`; found on any
+  master of its kinds, whichever feed mastered it) or `source_code` (the
+  Dataset Contract whose record key the column holds). The spec checker
+  refuses a link without them. An identifier several masters may hold (one
+  per trading venue) names the row's exchange column as its `venue`.
   - **One link, one Dataset Contract.** The writer finds a row's MDM id by
     the source key among the records that one Dataset Contract staged. When
     a key may have been staged by either of two contracts (one column holding
@@ -79,7 +82,8 @@ Every step says what differs for each target.
   On PostgreSQL the schema owner runs
   `edgar-warehouse silver init --runtime-role <runtime login>` once, and
   `edgar-warehouse silver register sources/<source>/silver-<table>.yaml --runtime-role <runtime login>`
-  for the table (or `register <findings.yaml> --part <part>`). A changed
+  for the table (or `register <findings.yaml> --part <part>`). A spec changed
+  only in its links or words is recorded over the held one; any other changed
   spec is refused for a registered table: register it as a new table.
   `edgar-warehouse load` creates no table: it checks each table it writes
   (`silver created <spec>`, with the runtime login) and stops when one is missing

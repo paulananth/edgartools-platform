@@ -154,7 +154,8 @@ Add a missing master attribute to MDM before excluding it from the fact.
 The unit of a transaction measure stays with that measure, even if the master has its own unit.
 
 **A retired column leaves a store by a new table, never by a drop**. The silver writer adds
-columns and never drops them, and a changed spec is refused for a registered table. So a spec that loses a
+columns and never drops them, and a spec whose table changes (a column, the key, the partition, a check or the load mode)
+is refused for a registered table. So a spec that loses a
 copy is registered under a new table name (`silver register`), the loads go to it, and the old table is dropped
 by its owner after the people reading the shared server are told. A store that holds no Silver needs nothing.
 `tests/unit/test_silver_keeps_no_master_field.py` refuses a column whose name is a field the same source's

@@ -81,8 +81,10 @@ def created(engine, spec: dict) -> dict:
 
 def register(engine, spec: dict, *, runtime_role: str) -> dict:
     """Create the table a spec describes, with a comment on it and every column,
-    and record the spec. The same spec again changes nothing; a changed spec for
-    a registered table is refused: register it as a new table."""
+    and record the spec. The same spec again changes nothing; a spec of the same
+    shape (`specs.shape`: only its links or words differ) is recorded over the held
+    one with its comments; any other changed spec for a registered table is
+    refused: register it as a new table."""
     if engine.dialect.name == "mysql":
         from .mysql import register as selected_register
         return selected_register(engine, spec, runtime_role=runtime_role)
@@ -92,13 +94,18 @@ def register(engine, spec: dict, *, runtime_role: str) -> dict:
     with engine.begin() as conn:
         _separate(conn, runtime_role)
         conn.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": LOCK})
-        held = conn.execute(text("SELECT sha256 FROM silver.table_spec WHERE table_name=:t"), {"t": name}).scalar()
-        if held == digest:
-            return {"table": name, "sha256": digest, "created": False}
-        if held:
-            raise Blocked(f"silver.{name} holds another spec ({held[:12]}); a changed spec is registered as a new table")
+        held = conn.execute(text("SELECT sha256, spec FROM silver.table_spec WHERE table_name=:t"), {"t": name}).first()
         q = specs.quote
         table = f"silver.{q(name)}"
+        if held and held.sha256 == digest:
+            return {"table": name, "sha256": digest, "created": False}
+        if held and specs.shape(held.spec) == specs.shape(spec):
+            _comments(conn, table, spec, digest)
+            conn.execute(text("UPDATE silver.table_spec SET spec = CAST(:s AS jsonb), sha256 = :h WHERE table_name = :t"),
+                         {"t": name, "s": canonical(spec), "h": digest})
+            return {"table": name, "sha256": digest, "created": False}
+        if held:
+            raise Blocked(f"silver.{name} holds another spec ({held.sha256[:12]}); a changed spec is registered as a new table")
         if conn.scalar(text("SELECT to_regclass(:t) IS NOT NULL"), {"t": table}):
             raise Blocked(f"silver.{name} exists without a registered spec; refusing to adopt it")
         lines = [f"{q(c['name'])} {specs.postgres_type(c['type'])}{'' if c['nullable'] else ' NOT NULL'}"
@@ -110,26 +117,32 @@ def register(engine, spec: dict, *, runtime_role: str) -> dict:
         if spec["partition"]:
             # Rows are read by partition; the warehouse sink partitions physically, here an index serves.
             _ddl(conn, f"CREATE INDEX ON {table} ({', '.join(q(p) for p in spec['partition'])})")
-        _comment(conn, f"TABLE {table}", f"One row per {spec['grain'].removeprefix('one row per ')}. "
-                 f"{spec.get('definition') or spec['why']} Load mode: {spec['load_mode']}. Spec sha256 {digest}.")
-        for c in spec["columns"]:
-            words = c.get("definition") or f"From {c.get('source') or 'the source'}; not yet defined by a steward."
-            if c.get("sensitivity") not in (None, "none"):
-                words += f" Sensitivity: {c['sensitivity']}."
-            _comment(conn, f"COLUMN {table}.{q(c['name'])}", words)
-        for c in specs.quality_columns(spec):
-            flags = [k for k in spec["checks"] if k["on_fail"] == "flag"]
-            _comment(conn, f"COLUMN {table}.{q(c)}", "The data quality checks this row failed, by id (each "
-                     "flagged, the row still landed); empty when it passed every one. Checks: " + ("; ".join(
-                         f"{k['id']}: {k['why']}" for k in flags) or "none flag") + ".")
-        for c in specs.added_time(spec):
-            _comment(conn, f"COLUMN {table}.{q(c)}", "When the row's delivered values were last written (the as-at "
-                     "time); filling an MDM id later does not change it.")
+        _comments(conn, table, spec, digest)
         runtime = q(runtime_role)
         _ddl(conn, f"GRANT SELECT, INSERT, UPDATE, DELETE ON {table} TO {runtime}")
         conn.execute(text("INSERT INTO silver.table_spec(table_name, spec, sha256) VALUES (:t, CAST(:s AS jsonb), :h)"),
                      {"t": name, "s": canonical(spec), "h": digest})
     return {"table": name, "sha256": digest, "created": True}
+
+
+def _comments(conn, table: str, spec: dict, digest: str) -> None:
+    """The table's and every column's comment, from the spec's words."""
+    q = specs.quote
+    _comment(conn, f"TABLE {table}", f"One row per {spec['grain'].removeprefix('one row per ')}. "
+             f"{spec.get('definition') or spec['why']} Load mode: {spec['load_mode']}. Spec sha256 {digest}.")
+    for c in spec["columns"]:
+        words = c.get("definition") or f"From {c.get('source') or 'the source'}; not yet defined by a steward."
+        if c.get("sensitivity") not in (None, "none"):
+            words += f" Sensitivity: {c['sensitivity']}."
+        _comment(conn, f"COLUMN {table}.{q(c['name'])}", words)
+    for c in specs.quality_columns(spec):
+        flags = [k for k in spec["checks"] if k["on_fail"] == "flag"]
+        _comment(conn, f"COLUMN {table}.{q(c)}", "The data quality checks this row failed, by id (each "
+                 "flagged, the row still landed); empty when it passed every one. Checks: " + ("; ".join(
+                     f"{k['id']}: {k['why']}" for k in flags) or "none flag") + ".")
+    for c in specs.added_time(spec):
+        _comment(conn, f"COLUMN {table}.{q(c)}", "When the row's delivered values were last written (the as-at "
+                 "time); filling an MDM id later does not change it.")
 
 
 def _separate(conn, runtime_role: str) -> None:

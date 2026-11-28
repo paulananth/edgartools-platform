@@ -31,7 +31,7 @@ def a_spec(**more):
              "source": "visit.tags", "sensitivity": "none"},
         ],
         "key": ["visit_id"],
-        "links": [{"columns": ["member_id"], "kind": "person", "source_code": "fixture.members",
+        "links": [{"columns": ["member_id"], "kinds": ["person"], "source_code": "fixture.members",
                    "to_part": "member", "source_key": "member_id",
                    "inclusion": 1.0}],
         "time": {"as_of": None, "as_at": "loaded_at", "event_time": "visited_on"},
@@ -60,9 +60,9 @@ def test_a_spec_is_checked_and_the_writer_adds_loaded_at_and_no_master_id():
 
 
 @pytest.mark.parametrize("change, refused", [
-    ({"links": [{"columns": ["member_id"], "kind": None, "source_code": None, "to_part": "member",
+    ({"links": [{"columns": ["member_id"], "kinds": None, "source_code": None, "to_part": "member",
                  "source_key": "member_id", "inclusion": 1.0}]},
-     "name the master's kind and either"),
+     "name the master's kinds and either"),
     ({"table": "t" * 64}, "1 to 63 bytes"),
     ({"key": ["member_id"]}, "never empty"),
     ({"key": ["nope"]}, "The key names"),
@@ -72,9 +72,17 @@ def test_a_spec_is_checked_and_the_writer_adds_loaded_at_and_no_master_id():
     ({"may_be_empty": True}, "only on a snapshot"),
     ({"load_mode": "snapshot", "may_be_empty": "yes"}, "may_be_empty is true"),
     ({"grain": None}, "grain is plain words"),
-    ({"links": [{"columns": ["member_id"], "kind": "person", "source_code": "x", "source_key": "member_id", "inclusion": 1.5}]}, "inclusion is a share"),
-    ({"links": [{"columns": ["member_id", "amount"], "kind": "person", "source_code": "x",
+    ({"links": [{"columns": ["member_id"], "kinds": ["person"], "source_code": "x", "source_key": "member_id", "inclusion": 1.5}]}, "inclusion is a share"),
+    ({"links": [{"columns": ["member_id", "amount"], "kinds": ["person"], "source_code": "x",
                  "source_key": "member_id"}]}, "one column of the spec"),
+    ({"links": [{"columns": ["member_id"], "kinds": "person", "source_code": "x", "source_key": "member_id"}]},
+     "name the master's kinds"),
+    ({"links": [{"columns": ["member_id"], "kinds": ["person", "person"], "source_code": "x", "source_key": "member_id"}]},
+     "name the master's kinds"),
+    ({"links": [{"columns": ["member_id"], "kinds": ["security"], "source_code": "x", "source_key": "member_id",
+                 "venue": "amount"}]}, "venue names the column"),
+    ({"links": [{"columns": ["member_id"], "kinds": ["security"], "identifier": "ticker", "source_key": "member_id",
+                 "venue": "no_such_column"}]}, "venue names the column"),
 ])
 def test_a_spec_that_could_not_land_is_refused_before_any_table(change, refused):
     with pytest.raises(Blocked, match=refused):
@@ -145,7 +153,7 @@ def test_a_row_lands_as_delivered_and_a_master_is_found_by_a_join_never_a_writte
 @pytest.mark.parametrize("finds", [{}, {"source_code": "fixture.members", "identifier": "ticker"},
                                    {"identifier": ""}])
 def test_a_link_names_either_a_dataset_contract_or_an_identifier(finds):
-    link = {"columns": ["member_id"], "kind": "person", "source_key": "member_id", **finds}
+    link = {"columns": ["member_id"], "kinds": ["person"], "source_key": "member_id", **finds}
     with pytest.raises(Blocked, match="source_code\\) or the identifier"):
         specs.check(a_spec(links=[link]))
 

@@ -82,16 +82,17 @@ key:
 links:
 - columns:
   - cik
-  kind: company
-  source_code: sec.company.v1
+  kinds: [company, fund_structure]
+  identifier: cik
   to_part: registrant
   source_key: cik
 - columns:
   - ticker
-  kind: security
+  kinds: [security]
   identifier: ticker
   to_part: listed_security
   source_key: ticker
+  venue: exchange
 time:
   as_of: null
   as_at: captured_at

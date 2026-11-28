@@ -38,10 +38,12 @@ Two different ids, never confused:
 
 Silver and Gold read the master by a join, never by a copy written onto the row: the finish builds `master_binding` (source code, source key, kind, master id)
 by statements inside the data database, writing only what changed (never a row through the client: `links.bind`), the mirror carries it as a table (a mirror copies tables, not views), and a
-silver row joins it on its own source key. An identifier link joins the one master of its kind that holds the value. No id is stored
+silver row joins it on its own source key. An identifier link joins the one canonical master of its kinds that holds the value, whichever
+feed mastered it. No id is stored
 on a silver row, so a merge never leaves a stale id behind and no load step fills one in. Every silver table reaches its master one way:
 `links`, `master_columns` (its columns hold master ids) or `master_through` (the table whose key it carries); the spec checker refuses
-a table with none. Gold's generated dbt tests fail a link that resolves under its declared `inclusion` and an identifier two masters hold.
+a table with none. Gold's generated dbt tests fail a link that resolves under its declared `inclusion` and an identifier two masters hold,
+leaving out a key the Set Aside table holds.
 
 Our model is both industry styles in one place: the golden record (the operational style's result) and the Cross-reference (the analytical
 style's linked view). It is read-only toward the sources: masters flow forward to silver and Gold, never back to a source application.

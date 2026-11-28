@@ -94,7 +94,12 @@ def infer() -> dict:
         for spec in sorted((files.sources_root() / item["source"]).glob("silver-*.yaml")):
             body = yaml.safe_load(spec.read_text()) or {}
             if body.get("table") in item["silver"]:
-                silver_links |= {owner[link["source_code"]] for link in body.get("links") or [] if link.get("source_code") in owner}
+                for link in body.get("links") or []:
+                    if link.get("source_code") in owner:
+                        silver_links.add(owner[link["source_code"]])
+                    elif link.get("identifier"):   # found on any master of its kinds: each source minting one by that identifier
+                        silver_links |= {targets[k]["source"] for kind in link["kinds"] for k in minters[kind]
+                                         if link["identifier"] in spaces[(k, kind, "mint")]}
         prefer = set()
         for kind in waits[key]:
             named = holders.get((key, kind), set())

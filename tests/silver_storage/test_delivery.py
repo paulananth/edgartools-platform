@@ -106,9 +106,35 @@ def test_context_rights_and_changed_registration(silver):
         with runtime.begin() as conn: conn.execute(text("DELETE FROM " + target))
 
 
+def test_a_spec_changed_only_in_links_or_wording_keeps_its_table_and_a_changed_shape_is_refused(silver):
+    """Operator, 2026-11-28: "Compare table shape (Recommended)": links and words build no table, so a spec changed only
+    there rewrites the recorded spec and its landed rows stay; a column, key, check or load mode change is refused."""
+    owner, runtime, role = silver
+    first = a_spec(table="relinked_" + uuid4().hex[:10])
+    register(owner, first, runtime_role=role)
+    sink = DatabaseSink(runtime)
+    land(sink, first["table"], rows())
+    link = {"columns": ["member_id"], "kinds": ["person", "company"], "identifier": "invented-id", "source_key": "member_id"}
+    relinked = {**first, "links": [link], "why": "Invented wording, changed",
+                "columns": [{**c, "definition": "Invented, reworded."} for c in first["columns"]]}
+    assert register(owner, relinked, runtime_role=role)["created"] is False
+    assert TableContext(runtime).table(first["table"])["links"][0]["identifier"] == "invented-id"
+    assert land(sink, first["table"], rows())["inserted"] == 0   # the same table, its rows kept, under the new spec
+    assert len(stored(runtime, first)) == 2
+    check = {"id": "allowed", "check": "in_set", "column": "member_id", "values": ["invented-a"], "on_fail": "flag",
+             "why": "Invented quality policy"}
+    for shape in ({"load_mode": "upsert"}, {"partition": []}, {"key": ["visit_id", "visited_on"],   # a key column is never empty, so the key change also makes visited_on required
+                   "columns": [{**c, "nullable": False} if c["name"] == "visited_on" else c for c in first["columns"]]},
+                  {"checks": [check]},
+                  {"columns": [{**c, "type": "VARCHAR"} if c["name"] == "amount" else c for c in first["columns"]]},
+                  {"columns": [{**c, "nullable": False} if c["name"] == "amount" else c for c in first["columns"]]}):
+        with pytest.raises(Blocked, match="registered as a new table"):
+            register(owner, {**relinked, **shape}, runtime_role=role)
+
+
 def test_quality_and_configured_master_links(silver):
     owner, runtime, role = silver
-    link = {"columns": ["member_id"], "kind": "invented-kind", "source_code": "invented-source",
+    link = {"columns": ["member_id"], "kinds": ["invented-kind"], "source_code": "invented-source",
             "source_key": "member_id"}
     config = a_spec(table="linked_" + uuid4().hex[:10], links=[link], checks=[{
         "id": "allowed", "check": "in_set", "column": "member_id", "values": ["invented-a"],

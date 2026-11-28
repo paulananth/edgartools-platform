@@ -4,7 +4,7 @@ import hashlib
 import re
 from pathlib import Path
 
-from sqlalchemy import Index, UniqueConstraint, inspect, insert, select, text
+from sqlalchemy import Index, UniqueConstraint, inspect, insert, select, text, update
 
 from edgar_warehouse.control_contract import Blocked, digest
 from . import spec as specs
@@ -100,8 +100,8 @@ def register(engine, spec, *, runtime_role):
         if not held_migration or not held_migration.complete or held_migration.checksum != hashlib.sha256(PAYLOAD.read_bytes()).hexdigest():
             raise Blocked("Silver migration incomplete or differs from this build")
         catalog = registry("mysql")
-        held = conn.scalar(select(catalog.c.sha256).where(catalog.c.table_name == name))
-        if held and held != checksum:
+        held = conn.execute(select(catalog.c.sha256, catalog.c.spec).where(catalog.c.table_name == name)).first()
+        if held and held.sha256 != checksum and specs.shape(held.spec) != specs.shape(spec):
             raise Blocked(f"silver.{name} holds another spec; a changed spec is registered as a new table")
         table = data_table(spec, "mysql")
         q = conn.dialect.identifier_preparer.quote_identifier
@@ -114,7 +114,8 @@ def register(engine, spec, *, runtime_role):
             types = {c["name"]: specs.postgres_type(c["type"]) for c in spec["columns"]}
             lengths = {name: width for name in spec["partition"] if types[name] in {"text", "bytea", "jsonb"}}
             partition = Index("silver_partition", *(table.c[name] for name in spec["partition"]), mysql_length=lengths)
-        table.comment = "silver-spec:" + checksum
+        shaped = digest(specs.shape(spec))  # a spec changed only in its links or words keeps its tables
+        table.comment = "silver-shape:" + shaped
         for column in table.c:
             source = next((c for c in spec["columns"] if c["name"] == column.name), None)
             column.comment = ((source.get("definition") or source.get("source") or "Configured source field")
@@ -122,7 +123,7 @@ def register(engine, spec, *, runtime_role):
         if conn.scalar(text("SELECT @@lower_case_table_names")) and name != name.lower():
             raise Blocked("MySQL configuration cannot preserve the configured table name's case")
         stage = data_table(spec, "mysql", temporary=staging_name(spec))
-        stage.comment = "silver-stage:" + checksum
+        stage.comment = "silver-stage:" + shaped
         for physical in (table, stage):
             names = inspect(conn).get_table_names()
             if physical.name not in names:
@@ -153,6 +154,9 @@ def register(engine, spec, *, runtime_role):
             # Table DDL commits implicitly. The registration becomes visible only
             # after physical storage exists; retries restore grants after a crash.
             conn.execute(insert(catalog).values(table_name=name, spec=spec, sha256=checksum))
+        elif held.sha256 != checksum:
+            # The same shape: the spec is recorded over the held one; the column comments stay those written at creation.
+            conn.execute(update(catalog).where(catalog.c.table_name == name).values(spec=spec, sha256=checksum))
         for physical in (table, stage):
             target = q(engine.url.database) + "." + q(physical.name)
             conn.execute(text("GRANT SELECT,INSERT,UPDATE,DELETE ON " + target + " TO " + account))

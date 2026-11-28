@@ -210,5 +210,7 @@ def bound_row(spec, row):
 
 
 def staging_name(spec):
+    """The stage table of a spec's shape: a spec changed only in its links or words keeps its stage."""
     from edgar_warehouse.control_contract import digest
-    return "silver_stage_" + digest(spec)[:40]
+    from .spec import shape
+    return "silver_stage_" + digest(shape(spec))[:40]

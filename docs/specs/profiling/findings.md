@@ -316,8 +316,10 @@ columns:
      source: <part.column or expression>, sensitivity: none|personal|sensitive_personal}
 key: [<col>, ...]
 links:                          # pointers to masters
-  - {columns: [<col>], kind: <MDM kind>, source_code: <the master's Dataset Contract>, to_part: <part>,
+  - {columns: [<col>], kinds: [<MDM kind>, ...], source_code: <the master's Dataset Contract>, to_part: <part>,
      source_key: <col>, inclusion: <0..1>}
+  # or, found by an identifier the master holds: identifier: <namespace> in place of source_code, and
+  # venue: <col> when the row's column naming its exchange decides a value several masters hold
 time: {as_of: <col|null>, as_at: <col>, event_time: <col|null>}
 partition: [<col>]              # e.g. a date
 load_mode: append|upsert|snapshot
@@ -354,7 +356,8 @@ The writer (`edgar-warehouse silver`) adds a `loaded_at` column when `as_at` is
 `loaded_at`, and lands each delivery as its load mode says: `append` refuses a
 changed row under a landed key, `upsert` updates changed rows, `snapshot` also
 removes rows the delivery no longer holds. A rerun of the same delivery changes
-nothing; a changed spec is registered as a new table. A row's master is found
+nothing; a spec changed only in its links or words is recorded over the held
+one, and any other changed spec is registered as a new table. A row's master is found
 by a join on `master_binding`, so a master mastered (or merged) later needs no
 rewrite of rows already landed; `loaded_at` moves only when a delivered value
 changes.

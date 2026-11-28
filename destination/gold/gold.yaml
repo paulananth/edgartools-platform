@@ -28,6 +28,7 @@ requirements:
   holdings: "A manager's holdings by security and quarter (operator, Approved, ticket 05 section 7)"
   silver_spec: "The silver table's approved spec (operator, 2026-11-20: \"Silver spec = requirement\")"
   rdm_code_set: "A published code set (operator, 2026-11-20: \"Rdm has to publish views on types\"; \"One per code set, in Gold\")"
+  trading_venue: "A ticker several Securities hold resolves by its cover's Trading Venue (operator, 2026-11-27: \"agreed, however uniquify with venue or exchange\"; \"the match is at the operating MIC, then the US ISIN\")"
 
 # Every silver table on the exposure list gets a fact view made from its spec (data-modeling GOLD.md, "No silver table
 # is silver-only"); an object below that reads the table as its source replaces the generated one.
@@ -36,6 +37,18 @@ silver_facts:
   requirement: silver_spec
   dimension_key: "{role}_key"           # each link's dimension key, the master's canonical id
   source_key: "{role}_source_key"       # a silver column of the dimension key's name, the source's own key, is carried as this
+  set_aside: silver.set_aside            # a link's test leaves out a row whose identifier this table holds
+
+# A link with a `venue` (the row's column naming its exchange) resolves a value several masters hold among those listed
+# on the row's Trading Venue, at the operating MIC: the wording's MIC from `wording`'s crosswalk, a MIC's operating MIC
+# from `mic` (a segment's parent, else itself); a master's MICs from `listings`. Of several there, the one holding a
+# `home` identifier. A row whose wording maps to no MIC, for a value several masters hold, is out of the link's test as
+# "exchange not mapped".
+venues:
+  wording: sec-cover-exchange
+  mic: iso-10383-mic
+  listings: security_listing
+  home: {namespace: isin, prefix: US}
 
 # RDM publishes one view per code set (data-modeling GOLD.md, "RDM publishes one view per code set"): each folder of
 # `published` is a code set, and its view holds the latest published version's codes from `source`.
@@ -81,6 +94,14 @@ objects:
   requirement: silver_spec
   grain: one row per canonical fund master, plus the unknown and not-applicable members
 
+- name: security_listing
+  kind: detail
+  master_kind: security
+  detail: listings
+  columns: [ticker, exchange, mic]
+  requirement: trading_venue
+  grain: one row per listing a Security master holds, with its exchange code and MIC
+
 - name: dim_date
   kind: calendar
   from: "1994-01-01"
@@ -93,7 +114,7 @@ objects:
   source: silver.thirteenf_filing
   key: [accession_number, cik]
   links:
-  - {column: cik, kind: company, source_code: sec.company.v1, dimension: dim_company, role: manager}
+  - {column: cik, kinds: [company], identifier: cik, dimensions: [dim_company], role: manager}
   times: {business: report_date, recorded: filing_date}
   carry: [form, primary_document]
   requirement: holdings
@@ -104,7 +125,7 @@ objects:
   source: silver.thirteenf_holding
   key: [accession_number, holding_index]
   links:
-  - {column: cusip, kind: security, source_code: sec.thirteenf.securities.v2, dimension: dim_security, role: held}
+  - {column: cusip, kinds: [security], source_code: sec.thirteenf.securities.v2, dimensions: [dim_security], role: held}
   # The holding states neither manager nor date. They come from its filing, reduced first to one row per accession
   # (a filing listed by two managers has two rows). With one manager the holding has that manager; with several the
   # manager is not applicable and the filing fact answers by manager.
@@ -112,7 +133,7 @@ objects:
     source: silver.thirteenf_filing
     by: [accession_number]
     times: {business: report_date, recorded: filing_date}
-    single_link: {column: cik, kind: company, source_code: sec.company.v1, dimension: dim_company, role: manager}
+    single_link: {column: cik, kinds: [company], identifier: cik, dimensions: [dim_company], role: manager}
   measures: [shares_held, market_value, voting_auth_sole, voting_auth_shared, voting_auth_none]
   carry: [cusip, share_type, put_call, discretion_type]
   requirement: holdings

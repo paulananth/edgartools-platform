@@ -123,8 +123,8 @@ key:
 links:
 - columns:
   - company_key
-  kind: company
-  source_code: sec.company.v1
+  kinds: [company]
+  identifier: cik
   to_part: company
   source_key: company_key
   inclusion: 1.0

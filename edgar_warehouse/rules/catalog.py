@@ -197,7 +197,7 @@ def _profile(source: str, profile: dict) -> tuple[list[dict], dict[str, set]]:
                  f"profiled.", f"Key: {', '.join(silver['key']) or 'none found'}; load mode {silver['load_mode']}."]
         if part.get("kind"):
             about.append(f"MDM kind `{part['kind']}`.")
-        about += [f"`{link['source_key']}` finds the master of `{link['to_part']}` through `master_binding`."
+        about += [f"`{link['source_key']}` finds the master of `{link['to_part']}`."
                   for link in silver.get("links") or []]
         about += [f"Data quality: {r}." for r in rules.get(None, [])]
         tables.append({"name": silver["table"], "databaseSchema": fqn(SERVICE, SILVER, source),
