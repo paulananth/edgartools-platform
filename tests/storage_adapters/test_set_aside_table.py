@@ -4,6 +4,7 @@ import json
 from contextlib import contextmanager
 from pathlib import Path
 
+import pytest
 from sqlalchemy import text
 
 from edgar_warehouse.mastering import links, store as stores
@@ -24,6 +25,8 @@ ADAPTERS = {
 def opened(database_factory):
     """MDM and silver each in its own isolated database, as MySQL keeps them (PostgreSQL takes the same)."""
     with database_factory("mdm") as (mdm_owner, mdm, mdm_role), database_factory("silver") as (owner, runtime, role):
+        if owner.dialect.name == "mssql":
+            pytest.skip("Mastering runs on PostgreSQL and MySQL")
         stores.install(mdm_owner, runtime_role=mdm_role)
         silver.migrate(owner, runtime_role=role)
         silver.register(owner, spec_file(SPEC, None), runtime_role=role)
