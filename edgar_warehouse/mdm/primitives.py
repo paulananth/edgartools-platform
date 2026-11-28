@@ -124,6 +124,7 @@ REGISTRY = MappingProxyType(
         "token_match@1": Primitive(partial(apply_record_test, "token_match@1"), "classification"),
         "token_match@2": Primitive(partial(apply_record_test, "token_match@2"), "classification"),
         "values_overlap@1": Primitive(partial(apply_record_test, "values_overlap@1"), "classification"),
+        "values_within@1": Primitive(partial(apply_record_test, "values_within@1"), "classification"),
         "name_shape@1": Primitive(partial(apply_record_test, "name_shape@1"), "classification"),
         "fields_all_empty@1": Primitive(partial(apply_record_test, "fields_all_empty@1"), "classification"),
     }

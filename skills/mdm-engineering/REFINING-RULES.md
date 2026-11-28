@@ -194,7 +194,9 @@ counts look wrong, or **compare** lists drift handled by data-quality:
 
 For example: a waterfall pass, a name rule, or records waiting for review.
 1. Read `rules/merge/kinds/<kind>.yaml` and `rules/merge/policy.yaml` (which
-   rules are on: those listed under `automatic_rules`).
+   rules are on: those listed under `automatic_rules`). A word list two kinds'
+   rules read lives once in `rules/merge/lists.yaml`: a kind takes each shared
+   list its tests name, and the loader refuses a kind's own copy of one.
 2. Describe the change in plain words: what it would join, and what it
    must never join (parent and subsidiary, a registered agent's address,
    the same name in two places).

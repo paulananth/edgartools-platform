@@ -250,6 +250,19 @@ class TestClassificationPrimitives:
         args = {"field": "forms", "values": "offering", "min_count": 1}
         assert call("values_overlap@1", args, {"forms": ["D/A"]}, doc)
 
+    def test_values_within_holds_when_every_value_is_listed_and_one_is_held(self):
+        args = {"field": "forms", "values": ["D", "D/A"]}
+        assert self.evaluate("values_within@1", args, {"forms": ["D", "D/A", "D"]})
+        assert not self.evaluate("values_within@1", args, {"forms": ["D", "10-K"]})
+        assert not self.evaluate("values_within@1", args, {"forms": []})
+        assert not self.evaluate("values_within@1", args, {})
+
+    def test_values_within_reads_a_declared_list_and_refuses_a_field_that_is_not_a_list(self):
+        doc = {**DOC, "lists": {**DOC["lists"], "offering": ["D", "D/A"]}}
+        assert call("values_within@1", {"field": "forms", "values": "offering"}, {"forms": ["D/A"]}, doc)
+        with pytest.raises(Conflict, match="values_within reads a list field"):
+            self.evaluate("values_within@1", {"field": "forms", "values": ["D"]}, {"forms": "D"})
+
     def test_name_shape_accepts_a_two_token_person_name(self):
         args = {
             "field": "name",

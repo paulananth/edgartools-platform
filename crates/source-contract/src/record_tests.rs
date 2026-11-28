@@ -99,6 +99,37 @@ fn named_values(doc: &Object, raw: &Document, what: &str) -> Result<Vec<Document
     )
 }
 
+/// A list test's list field (a missing one holds nothing) and the values it is tested against.
+fn list_and_wanted(
+    name: &str,
+    args: &Object,
+    record: &Object,
+    doc: &Object,
+) -> Result<(Vec<Document>, Vec<Document>), String> {
+    let raw = read_path(record, &values::read_text(args, "field")?)?;
+    let held = if raw.get() == "null" {
+        Vec::new()
+    } else {
+        values::read_value::<Vec<Document>>(&raw).map_err(|_| {
+            format!(
+                "{name} reads a list field; {} is not",
+                values::read_text(args, "field").unwrap_or_default()
+            )
+        })?
+    };
+    let wanted = named_values(doc, &values::read_optional_value(args, "values")?, "value list")?;
+    Ok((held, wanted))
+}
+
+fn in_list(value: &Document, list: &[Document]) -> Result<bool, String> {
+    for candidate in list {
+        if values::values_match(value, candidate)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 fn within_counts(name: &str, args: &Object, count: usize) -> Result<bool, String> {
     let lower = args
         .get("min_count")
@@ -196,43 +227,26 @@ pub(crate) fn evaluate_record_test(
             within_counts("token_match", args, found.len())
         }
         "values_overlap@1" => {
-            let raw = field()?;
-            let held = if raw.get() == "null" {
-                Vec::new()
-            } else {
-                values::read_value::<Vec<Document>>(&raw).map_err(|_| {
-                    format!(
-                        "values_overlap reads a list field; {} is not",
-                        values::read_text(args, "field").unwrap_or_default()
-                    )
-                })?
-            };
-            let wanted = named_values(
-                doc,
-                &values::read_optional_value(args, "values")?,
-                "value list",
-            )?;
+            let (held, wanted) = list_and_wanted("values_overlap", args, record, doc)?;
             let mut found: Vec<Document> = Vec::new();
             for value in held {
-                let mut shared = false;
-                for candidate in &wanted {
-                    if values::values_match(&value, candidate)? {
-                        shared = true;
-                        break;
-                    }
-                }
-                let mut duplicate = false;
-                for candidate in &found {
-                    if values::values_match(&value, candidate)? {
-                        duplicate = true;
-                        break;
-                    }
-                }
-                if shared && !duplicate {
+                if in_list(&value, &wanted)? && !in_list(&value, &found)? {
                     found.push(value);
                 }
             }
             within_counts("values_overlap", args, found.len())
+        }
+        "values_within@1" => {
+            let (held, wanted) = list_and_wanted("values_within", args, record, doc)?;
+            if held.is_empty() {
+                return Ok(false);
+            }
+            for value in &held {
+                if !in_list(value, &wanted)? {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
         }
         "name_shape@1" => {
             let held = field()?;

@@ -15,7 +15,7 @@ from tests.storage_adapters.test_mastering import AS_OF, POLICY, opened, merge
 PUBLICATION = {"publication_key": "invented", "revision": 1, "artifact_sha256": "a" * 64, "member": "invented"}
 
 COMPANY = ("sec.company", "sec.company.v1", "company",
-           {"cik": 777001, "entity_name": "Example Holdings Inc", "entity_type": "other", "sic": "", "tickers": [],
+           {"cik": 777001, "entity_name": "Jane Example", "entity_type": "other", "sic": "", "tickers": [],
             "forms": ["10-K"], "last_sync_run_id": "c1", "last_synced_at": "2026-01-01T00:00:00+00:00", "raw_object_id": "r1"},
            {"cik": 777002, "entity_name": "Example Corp", "entity_type": "operating", "sic": "3571", "tickers": ["EXC"],
             "forms": ["10-K"], "last_sync_run_id": "c1", "last_synced_at": "2026-01-01T00:00:00+00:00", "raw_object_id": "r2"},

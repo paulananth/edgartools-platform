@@ -178,6 +178,7 @@ Evidence: [research 03](../../../.scratch/mastering-policy-language/research/03-
 | classification | `name_shape` | `field`, `normalizer`, `min_tokens`, `max_tokens`, `suffix_list`, `forbid_digits{applies_to}`, `forbid_characters{applies_to}` | bool |
 | classification | `fields_all_empty` | `fields[]` (declared paths) | bool |
 | classification | `values_overlap` | `field` (a list), `values[]` or a declared list, **at least one of** `min_count` / `max_count` | bool |
+| classification | `values_within` | `field` (a list), `values[]` or a declared list | bool: it holds a value and every value it holds is listed |
 | binding | `identifier_match` | `namespace`, `field`, `normalizer` | matching identity or none |
 | binding | `identifier_cardinality` | `namespace` (contract in §7.2) | veto or pass |
 | binding | `compound_key_equal` | `components[] {field, normalizer, comparison ∈ exact|consistent}` | bool |
@@ -310,6 +311,9 @@ Rules:
   `min_count` or `max_count`, as `token_match` does; `max_count: 0` asks that
   none is shared. A field that is not a list is refused, not read as empty
   (ticket 12, the Forms hold-back).
+- **`values_within@1`** is true when a list field holds at least one value and
+  every value it holds is in the declared set, read as `values_overlap@1`
+  reads it: a filer whose forms are only `D` and `D/A`.
 - A verdict may be `automatic` only for `(rule_id, version, verdict)`
   entries in `automatic_rules` (§9). Every other verdict is Steward review.
 
