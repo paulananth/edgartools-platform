@@ -150,6 +150,37 @@ Do not ask:
 - whether a defect blocks (it does);
 - which value fills a shared field, when the kind file already says.
 
+### Visual rule trial
+After the operator-approved rule meaning is clear, use the matching visual family trial with invented inputs:
+
+
+```mermaid
+flowchart LR
+  A[Choose the matching family] --> B[Enter a rule and invented inputs]
+  B --> C{Full-rule words available?}
+  C -->|yes| D[Show the full rule and inspect stored keys]
+  C -->|no| E[Continue with the visible rule]
+  D --> F[Try]
+  E --> F
+  F --> G{Actual matches expected?}
+  G -->|yes| H[Carry the candidate into approved configuration]
+  G -->|no| B
+```
+
+Run `edgar-warehouse rules try --family <family>`; in a checkout, prefix it
+with `uv run --extra mdm --extra s3`. Family ids live in
+`edgar_warehouse/rules/bench_families/`; the checkout has examples in
+`docs/rules-try/`. For example, `prepare_record` previews contract mapping,
+`entity_type` previews classification, and `check_record` previews one quality
+check.
+
+Use invented inputs only. The page exercises one family function; it does not
+qualify the source reader, contract, or real captures. A passing trial is
+exploratory evidence, not a source proof. Continue with `rules check`, the
+reader's owner-specific tests, and Data Operations' source proof. `Keep a copy`
+and `Store this draft` persist data; they are separate from this visual check.
+
+
 **Write** `sources/<source>/source.yaml`, following REFERENCE.md and
 starting from its "Defaults".
 - Write the values with `files.dumps`, or both files at once with

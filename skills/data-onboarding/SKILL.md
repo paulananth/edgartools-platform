@@ -354,7 +354,7 @@ blocks; do not ask whether it does.
 
 ### map: write the Dataset Contract
 
-Follow [MAP.md](MAP.md) in full when you reach this mode: research the source, infer each record type, ask the real decisions one at a time, then write `source.yaml` (and a kind file for a new domain).
+Follow [MAP.md](MAP.md) in full when you reach this mode: research the source, infer each record type, ask the real decisions one at a time, use its [Visual rule trial](MAP.md#visual-rule-trial) when a supported family applies, then write `source.yaml` (and a kind file for a new domain).
 
 ### quality: the first data quality checks and fixes
 

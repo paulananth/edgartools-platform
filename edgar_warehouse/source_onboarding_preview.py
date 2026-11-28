@@ -36,7 +36,7 @@ PART_STEPS = (
     (
         "Map",
         "Apply approved modeling decisions to the source contract, target, and source sequence.",
-        "Reviewed source.yaml and any required kind rules. Master fields stay in MDM; silver contains transaction facts and link keys.",
+        "Reviewed source.yaml and any required kind rules. Use `edgar-warehouse rules try --family <family>` to inspect a supported family: Show the full rule reveals stored keys, then Try compares invented input with expected output. This is exploratory, not source proof.",
     ),
     (
         "Quality",
@@ -71,9 +71,9 @@ def _step(group: str, number: str, title: str, summary: str, evidence: str) -> s
     return f'''<li class="stage">
       <span class="stage-number" aria-hidden="true">{number}</span>
       <div class="stage-body">
-        <h3>{title}</h3>
-        <p>{summary}</p>
-        <details name="{group}"><summary>Show completion evidence</summary><p>{evidence}</p></details>
+        <h3>{html.escape(title)}</h3>
+        <p>{html.escape(summary)}</p>
+        <details name="{group}"><summary>Show completion evidence</summary><p>{html.escape(evidence)}</p></details>
       </div>
     </li>'''
 
