@@ -158,6 +158,8 @@ When a supported family applies, run Rules Try **in the current conversation** o
 2. **Show the full rule.** If using short words, run `edgar-warehouse rules try --family <family> --button 'Show the full rule' --rule "$SHORT_RULE"`. When it succeeds, post the relevant word-to-key changes and pass the returned `document` directly to Try as JSON. If it returns only vocabulary, use it to write the full rule. If it refuses, report the refusal and stop the trial until corrected. Skip expansion if the rule already uses stored keys.
 3. **Try and compare.** Run `edgar-warehouse rules try --family <family> --button Try --rule "$FULL_RULE" --input "name=$INPUT" --expected "$EXPECTED"`; repeat `--input` for each family field. When field names are unclear, inspect `edgar-warehouse rules try --family <family>` as text for its input labels. Report the actual result beside the expected result for each case. A mismatch or refusal is not a pass; preserve the reason.
 
+**Interactive trial:** When the user asks to try the rule, use Agent Progress's [native in-chat form](../agent-progress/CHAT-FORMS.md). Collect only the relevant invented family input, describe the expected behavior before running Try, and pass the submission as input to the same rule. For `check_record`'s required-name example, a submitted blank means `fields={}`; a nonblank name goes in `fields.name`. Report the actual check or holdout reason.
+
 The trial is **exploratory**. It does not read real captures, write configuration, save a copy, store a draft, or prove onboarding complete. Keep `rules check`, the reader's owner-specific tests, and Data Operations' source proof as separate gates.
 
 **Write** `sources/<source>/source.yaml`, following REFERENCE.md and
