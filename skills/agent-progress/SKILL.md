@@ -21,4 +21,4 @@ Keep the work in the current conversation. This skill reports progress; it does 
 - **Waiting for a decision:** “Report review · The checks passed, but two fields disagree. Which field is authoritative: the source value or the mapped value? That choice determines the comparison rule.”
 - **Rule trial:** “Full rule expanded: `is present` → `present@1`.” End with expected versus observed behavior, not just “Try completed.”
 
-When designing feedback or motion for a host-rendered component, read [Microinteraction design](MICROINTERACTIONS.md).
+When designing or reviewing a progress interaction, use the trigger, rules, feedback, and loops/modes checklist in [Microinteraction design](MICROINTERACTIONS.md#design-one-moment-at-a-time).

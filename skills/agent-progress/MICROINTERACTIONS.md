@@ -2,6 +2,21 @@
 
 These are design sources and their application to agent chat, not evidence that a given host can render a live component.
 
+## Design one moment at a time
+
+Dan Saffer’s [*Microinteractions*, O’Reilly sampler](https://cdn.oreillystatic.com/oreilly/booksamplers/9781491945926_sampler.pdf#page=34) (chapter 1, printed pp. 14–19) gives four parts for designing a single interaction. A whole agent run is not one microinteraction; acknowledgment, a blocker, and a result are separate moments. Use the framework to specify each one before choosing a visual.
+
+| Part | Design question | Worked example: stop a verification run |
+| --- | --- | --- |
+| Trigger | Which user action or observed system event starts this moment? | The user asks to stop one identified run. |
+| Rules | What does the system do, and what evidence changes the state? | If authorized and supported, submit the stop request. Wait for the runner to confirm the outcome; the request itself does not stop the run. |
+| Feedback | What should the user see to understand the rule and the next action? | “Stop requested” after submission; “Cancelled” only on confirmation. State what completed and whether any effects remain, if known. |
+| Loops and modes | What repeats, what ends it, and what changes while waiting or after an interruption? | Repeated pending observations do not create new messages. The terminal result ends updates. If visibility is lost, report “Status unavailable”; after reconnecting, read the same run before reporting another state. |
+
+Walk the design through the first trigger, a repeated observation, an interruption, and the terminal outcome. Check that one state cannot be mistaken for another. If a special mode changes what an action does, name that mode in the feedback; otherwise avoid introducing it.
+
+## Choose the feedback
+
 | Principle | Source guidance | Application in chat |
 | --- | --- | --- |
 | Trigger → feedback | [NN/g: Microinteractions](https://www.nngroup.com/articles/microinteractions/) describes one contextual response to a user action or system-state change. | Acknowledge a meaningful start; then let verified checkpoints, blockers, and outcomes trigger short updates. A polling tick is not a milestone. |
