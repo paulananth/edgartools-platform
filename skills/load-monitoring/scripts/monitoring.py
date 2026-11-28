@@ -6,6 +6,7 @@
     uv run --no-sync python monitoring.py stop      stop the exporter and the containers; the dashboard's data stays
     uv run --no-sync python monitoring.py target [<host:port>]   the exporter Prometheus reads: a load task's on AWS, or
                                                     with no address this Mac's (infra/load-pipeline/aws-load.sh sets both)
+    uv run --no-sync python monitoring.py stream --run <label>  emit only meaningful progress events from Prometheus
 
 The admin login is generated once into a private file (mode 0600) and never printed. The dashboard is pushed from
 `dashboard.py` every `up`, so it never drifts; the viewer needs no login (anonymous viewers cannot edit).
@@ -28,6 +29,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 sys.path.insert(0, str(HERE))
 import dashboard  # noqa: E402
+import progress_relay  # noqa: E402
 
 COMPOSE = ROOT / "infra/monitoring/docker-compose.yml"
 PROJECT = "edgartools-monitoring"
@@ -233,15 +235,22 @@ def stop() -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=["up", "status", "stop", "target"])
+    parser.add_argument("command", choices=["up", "status", "stop", "target", "stream"])
     parser.add_argument("address", nargs="?", help="target: the exporter's host:port; none for this Mac's")
-    parser.add_argument("--run", help="load run whose status the exporter reads when started here")
+    parser.add_argument("--run", help="load run for the standalone exporter or agent progress stream")
+    parser.add_argument("--interval", type=int, default=15, help="maximum seconds between agent progress reads")
     args = parser.parse_args()
     if args.command == "target":
         print(set_target(args.address or LOCAL_TARGET))
         return 0
     if args.address:
         parser.error("only target takes an address")
+    if args.command == "stream" and not args.run:
+        parser.error("stream requires --run <label>")
+    if args.command == "stream":
+        if args.interval < 1:
+            parser.error("--interval must be at least one second")
+        return progress_relay.stream(api, args.run, args.interval)
     if args.run:
         os.environ["RUN"] = args.run
     return up(args.run) if args.command == "up" else {"status": status, "stop": stop}[args.command]

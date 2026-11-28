@@ -27,7 +27,7 @@ and needs no login; the admin login is generated into a private file and never p
 | Bring it up | `up --run <label>` | Containers healthy, exporter up, Prometheus scraping it, dashboard present. Exit 0 only when all are |
 | Is it working? | `status` | The same readback; every `PROBLEM:` line says what is wrong |
 | Take it down | `stop` | Stops the exporter and the containers; Grafana's and Prometheus's data stay |
-| Read another exporter | `target [<host:port>]` | Prometheus reads that exporter within 30 s; with no address, this Mac's |
+| Stream meaningful updates to the agent | `stream --run <label>` | Read-only updates from this Prometheus target; emits only initial state, measured bundle changes, state transitions, and completion |
 
 ## Where the exporter runs
 
@@ -113,9 +113,18 @@ dependency lines need a custom panel plugin, which is a separate decision.
   log; the status does not return them yet).
 - Alert rules (a stall or a failure notifying someone) need a contact point.
 - Animation (see above).
-- Reading a hosted load run elsewhere: the exporter reads the process list of the
-  worker it shares a process space with, so it sees only loads of this machine's pipeline.
 
+## Agent progress relay
+
+With Prometheus pointed at the local exporter or AWS task, run:
+
+```bash
+uv run --no-sync python skills/load-monitoring/scripts/monitoring.py stream --run <label>
+```
+
+The read-only relay queries Prometheus through Grafana's authenticated proxy. It verifies the run fingerprint and snapshot freshness, then emits initial counts and changes to step state, retries, grouped bundle counts, recovery, and completion. A gap means “Status unavailable,” not load failure. It forwards no rows, credentials, logs, or diagnostics.
+
+In chat, launch it as a background job with notifications matching `^LOAD_PROGRESS ` and forward those events through `out://`; ignore poll ticks. Stopping the relay stops observation only, not the load.
 ## Handshake
 
 Reads and shows; changes nothing. Tells [data-operations](../data-operations/SKILL.md) what stalls (the runtime first, then workers against the limit), sends a lock, a slow statement or a store at its limit to [database-monitoring](../database-monitoring/SKILL.md) and an unexplained failure to [production-support](../production-support/SKILL.md). Its numbers come from data-operations' `worker_budget`; the two change together, in the loop of HOSTED-LOADS, "Balancing a load". The table of who owns what and hands off to whom is [OWNERSHIP.md](../data-platform/OWNERSHIP.md).
