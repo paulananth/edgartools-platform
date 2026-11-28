@@ -57,8 +57,8 @@ key:
 links:
 - columns:
   - cik
-  kind: company
-  source_code: sec.company.v1
+  kinds: [company]
+  identifier: cik
   to_part: manager
   source_key: cik
 time:

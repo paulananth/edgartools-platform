@@ -71,8 +71,8 @@ key:
 links:
 - columns:
   - cik
-  kind: company
-  source_code: sec.company.v1
+  kinds: [company]
+  identifier: cik
   to_part: registrant
   source_key: cik
 time:

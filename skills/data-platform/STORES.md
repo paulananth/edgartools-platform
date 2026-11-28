@@ -75,8 +75,8 @@ made from it, never edited by hand. Read the table's columns there, or in the Da
 
 Then every committed silver table, with the silver owner's login:
 `bash infra/scripts/deploy-silver.sh <local environment name | path to owner.env>`. It registers each
-`sources/*/silver-*.yaml` and `rules/silver/silver-*.yaml`; an unchanged spec changes nothing and a changed one
-is refused (register it as a new table).
+`sources/*/silver-*.yaml` and `rules/silver/silver-*.yaml`; an unchanged spec changes nothing, a spec changed only
+in its links or words is recorded over the held one, and any other changed one is refused (register it as a new table).
 
 The runtime role exists, has no administrative privileges, and is not the
 migration login. Done when the selected engine's migration history matches

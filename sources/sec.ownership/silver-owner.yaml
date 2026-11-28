@@ -65,21 +65,15 @@ key:
 - rpt_owner_cik
 links:
 - columns:
-  - owner_record_key
-  kind: person
-  source_code: sec.ownership.reporting_owner.v1
-  to_part: reporting_owner
-  source_key: owner_record_key
-- columns:
   - rpt_owner_cik
-  kind: company
-  source_code: sec.company.v1
-  to_part: company_owner
+  kinds: [person, company]
+  identifier: cik
+  to_part: reporting_owner
   source_key: rpt_owner_cik
 - columns:
   - issuer_cik
-  kind: company
-  source_code: sec.company.v1
+  kinds: [company, fund_structure]
+  identifier: cik
   to_part: issuer
   source_key: issuer_cik
 time:

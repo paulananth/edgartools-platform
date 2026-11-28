@@ -111,7 +111,7 @@ def member(key: str, *figis: str) -> dict:
 
 
 def visit_spec(**more):
-    link = {"columns": ["member_id"], "kind": "security", "source_code": MEMBERS, "to_part": "member",
+    link = {"columns": ["member_id"], "kinds": ["security"], "source_code": MEMBERS, "to_part": "member",
             "source_key": "member_id", "inclusion": 1.0}
     return a_spec(links=[link], **more)
 
@@ -161,7 +161,7 @@ def test_a_spec_becomes_a_table_with_comments_and_a_changed_spec_is_refused(stor
     assert types == {"visit_id": "bigint", "member_id": "text", "amount": "numeric", "visited_on": "date",
                      "tags": "jsonb", "loaded_at": "timestamp with time zone"}
     assert comments == 0  # every column says what it holds
-    assert context["links"] == [{"columns": ["member_id"], "kind": "security", "source_code": MEMBERS,
+    assert context["links"] == [{"columns": ["member_id"], "kinds": ["security"], "source_code": MEMBERS,
                                  "source_key": "member_id", "inclusion": 1.0}]
     assert context["key"] == ["visit_id"] and context["load_mode"] == "append"
 

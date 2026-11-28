@@ -927,7 +927,7 @@ def test_an_approved_profile_puts_silver_fields_quality_rules_and_code_sets_in_t
     assert visit["columns"][0]["dataType"] == "BIGINT" and "Always filled" in visit["columns"][0]["description"]
     assert "missing (exception)" in visit["columns"][0]["description"]
     assert "4 rows failed it when profiled" in visit["columns"][1]["description"]
-    assert "`member_id` finds the master of `member` through `master_binding`" in visit["description"]
+    assert "`member_id` finds the master of `member`." in visit["description"]
     code_set = tables["edgartools-rules.rdm.code_sets.visit_kind"]
     assert "proposed" in code_set["description"] and "5 codes" in code_set["description"]
     edge = next(e for e in plan["lineage"] if e["from"].endswith("code_sets.visit_kind"))
@@ -964,7 +964,7 @@ def test_a_registered_silver_table_shows_as_it_lands(tmp_path):
                      "source": "ID", "sensitivity": "none"},
                     {"name": "seen", "type": "DATE", "nullable": True, "definition": "When it happened.",
                      "source": "SEEN", "sensitivity": "none"}],
-        "links": [{"columns": ["visit_id"], "kind": "company", "source_code": "example.v1", "to_part": "company",
+        "links": [{"columns": ["visit_id"], "kinds": ["company"], "source_code": "example.v1", "to_part": "company",
                    "source_key": "visit_id"}],
         "checks": [{"id": "visit_known", "check": "in_set", "column": "visit_id", "values": ["V1", "V2"],
                     "on_fail": "flag", "why": "A visit is one the desk issued."}]}), encoding="utf-8")

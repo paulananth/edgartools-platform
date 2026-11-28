@@ -220,7 +220,7 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
                 cur.execute("SET ROLE silver_owner")
             connection.commit()
         runtime = first.engine(one, "data", "silver_runtime")
-        table = a_spec(links=[{"columns": ["member_id"], "kind": "company", "source_code": "sec.company.v1",
+        table = a_spec(links=[{"columns": ["member_id"], "kinds": ["company"], "source_code": "sec.company.v1",
                               "source_key": "member_id", "inclusion": 1.0}])
         try:
             silver.register(owner, table, runtime_role="silver_runtime")

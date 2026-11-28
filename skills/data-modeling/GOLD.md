@@ -163,7 +163,8 @@ Gold object, in this order; an object that fails one is dropped or deferred, not
 
 **No silver table is silver-only.** A silver table is approved for a use when its spec is approved, so Gold carries it: the
 fact view is made from the spec, never written by hand. The spec's `key` is the fact's key; each of its `links` becomes a
-`<to_part>_key` column joined to the dimension of the link's `kind` (the unknown member when no master holds the id); its
+`<to_part>_key` column holding the canonical master it resolves to, of any of the link's `kinds` (the unknown member when
+no master holds the id); its
 `time.as_of` is the business date, `time.event_time` the event date and `time.as_at` the recorded date; every other spec column is carried as filed. A fact
 the spec alone cannot make (a date or a manager taken from a parent table) is written as its own object in the
 configuration, and the spec's generated fact gives way to it. Each dimension a link names is configured. The mirror then
@@ -314,8 +315,12 @@ The shared dimensions are Company, Person, Security, the date (business and
 recorded as two roles), and the code sets a fact actually uses
 (`financial-line-items`, `mdm-relationship-types`, and a measure's own code
 when the measure list is a code set). A fact joins a dimension through
-`master_binding` on the row's source key (an identifier link: the one master
-of its kind holding the value); no master id is stored on a silver row.
+`master_binding` on the row's source key (an identifier link: the one
+canonical master of its kinds holding the value; with a `venue`, of several,
+the one listed on the row's Trading Venue at the operating MIC, then the one
+holding the home identifier); no master id is stored on a silver row. A link's
+test leaves out a row whose identifier the Set Aside table holds, and a venue
+link's row whose exchange maps to no MIC when several masters hold its value.
 The Gold generator writes the views and the dbt tests of every link (the data-quality skill, "Gold link rules"); run
 `dbt build`, never `dbt run` alone, so a failed test stops Gold. The build is an init step (the initialize runbook, step 8c), never a step of a
 load: the views read the mirror, which carries each load's writes.

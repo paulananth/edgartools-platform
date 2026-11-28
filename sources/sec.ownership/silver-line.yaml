@@ -192,8 +192,8 @@ key:
 links:
 - columns:
   - issuer_cik
-  kind: company
-  source_code: sec.company.v1
+  kinds: [company, fund_structure]
+  identifier: cik
   to_part: issuer
   source_key: issuer_cik
 time:

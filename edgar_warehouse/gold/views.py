@@ -16,7 +16,11 @@ CONFIG = files.ROOT.parent / "destination" / "gold" / "gold.yaml"  # `destinatio
 DIALECTS = {
     "snowflake": {
         "create": "CREATE OR REPLACE VIEW",
-        "text": lambda body, path, body_type: f"{('PARSE_JSON(' + body + ')') if body_type == 'text' else body}:{path}::VARCHAR",
+        "text": lambda body, path, body_type: f"{('PARSE_JSON(' + body + ')') if body_type == 'text' else body}"
+                                              f"{'' if path.startswith('[') else ':'}{path}::VARCHAR",
+        "each": lambda body, path, body_type, alias:
+            f"LATERAL FLATTEN(input => {('PARSE_JSON(' + body + ')') if body_type == 'text' else body}:{path}) {alias}",
+        "item": lambda alias, field: f"{alias}.value:{field}::VARCHAR",
         "part": lambda part, expr: f"EXTRACT({part} FROM {expr})",
         "next_day": lambda expr: f"DATEADD(day, 1, {expr})",
         "date": lambda text: f"DATE '{text}'",
@@ -24,7 +28,9 @@ DIALECTS = {
     },
     "sqlite": {
         "create": "CREATE VIEW",
-        "text": lambda body, path, body_type: f"json_extract({body}, '$.{path}')",
+        "text": lambda body, path, body_type: f"json_extract({body}, '${'' if path.startswith('[') else '.'}{path}')",
+        "each": lambda body, path, body_type, alias: f"json_each({body}, '$.{path}') {alias}",
+        "item": lambda alias, field: f"json_extract({alias}.value, '$.{field}')",
         "part": lambda part, expr: f"CAST(strftime('{'%Y' if part == 'YEAR' else '%m'}', {expr}) AS INTEGER)",
         "next_day": lambda expr: f"date({expr}, '+1 day')",
         "date": lambda text: f"'{text}'",
@@ -75,10 +81,11 @@ def silver_facts(config: dict) -> list[dict]:
         if entry["layer"] != "silver" or source in taken:
             continue
         spec = files.load(files.ROOT.parent / entry["requirement"])
-        links = [{"column": link["source_key"], "kind": link["kind"], **({"identifier": link["identifier"]} if link.get("identifier")
-                  else {"source_code": link["source_code"]}), "dimension": dimensions[link["kind"]],
-                  "role": link.get("to_part") or link["kind"], **({"inclusion": link["inclusion"]} if link.get("inclusion")
-                  is not None else {})} for link in spec.get("links") or []]
+        links = [{"column": link["source_key"], "kinds": link["kinds"],
+                  **{k: link[k] for k in ("source_code", "identifier", "venue") if link.get(k)},
+                  "dimensions": [dimensions[k] for k in link["kinds"]], "role": link.get("to_part") or link["kinds"][0],
+                  **({"inclusion": link["inclusion"]} if link.get("inclusion") is not None else {})}
+                 for link in spec.get("links") or []]
         time = spec.get("time") or {}
         times = {"business": time.get("as_of"), "event": time.get("event_time"), "recorded": time.get("as_at")}
         used = set(spec["key"]) | {v for v in times.values() if v}
@@ -125,8 +132,12 @@ class Context:
         destination = self.config["destination"]
         return f"{destination['database']}.{destination['schema']}.{name}" if self.qualify else name
 
-    def body(self, path: str) -> str:
-        return self.dialect["text"]("body", path, self.config["mirror"]["body_type"])
+    def body(self, path: str, body: str = "body") -> str:
+        return self.dialect["text"](body, path, self.config["mirror"]["body_type"])
+
+    def code_set(self, code_set: str) -> str:
+        """The Gold view of a published code set."""
+        return self.view(self.config["code_sets"]["name"].format(code_set=re.sub(r"\W", "_", code_set)))
 
 
 def literal(text: str) -> str:
@@ -179,21 +190,84 @@ def link_key(link: dict, ctx: Context, alias: str, column: str | None = None) ->
     return f"COALESCE({alias}.canonical_id, {literal(ctx.unknown)})"
 
 
+def link_type(link: dict) -> str:
+    """How a link finds its master: by a Dataset Contract's record key (`source_code`), by an identifier its master
+    holds (`identifier`), or by an identifier and, when several masters hold it, the row's Trading Venue (`venue`)."""
+    if link.get("venue"):
+        return "venue"
+    return "identifier" if link.get("identifier") else "source_code"
+
+
+def held_by(link: dict, ctx: Context, joins: str = "") -> str:
+    """The identifier rows of the link's namespace, each joined to its master `k` when the master is of the link's
+    kinds, then to `joins`."""
+    kinds = ", ".join(literal(k) for k in link["kinds"])
+    return (f"{ctx.mirror('mdm.mastering_identifier')} i JOIN {ctx.mirror(ctx.config['master']['source'])} k "
+            f"ON k.entity_id = i.entity_id AND k.kind IN ({kinds}) {joins}WHERE i.namespace = {literal(link['identifier'])}")
+
+
 def holders(link: dict, ctx: Context, masters: str) -> str:
-    """The values of the link's identifier, each with its masters of the link's kind; `masters` is the HAVING test on their count."""
-    return (f"SELECT i.value AS value, MIN(i.entity_id) AS master_id FROM {ctx.mirror('mdm.mastering_identifier')} i "
-            f"JOIN {ctx.mirror(ctx.config['master']['source'])} k ON k.entity_id = i.entity_id AND k.kind = {literal(link['kind'])} "
-            f"WHERE i.namespace = {literal(link['identifier'])} GROUP BY i.value HAVING COUNT(DISTINCT i.entity_id) {masters}")
+    """The values of the link's identifier, each with its canonical master of the link's kinds; `masters` is the HAVING
+    test on how many canonical masters hold it (an alias and the master it became are one)."""
+    return (f"SELECT i.value AS value, MIN(k.canonical_id) AS master_id FROM {held_by(link, ctx)} "
+            f"GROUP BY i.value HAVING COUNT(DISTINCT k.canonical_id) {masters}")
+
+
+def wordings(ctx: Context) -> str:
+    """Each venue wording with its operating MIC: the wording code set crosswalks a wording to one MIC, and a segment
+    MIC's operating MIC is its parent."""
+    venues, d = ctx.config["venues"], ctx.dialect
+    mic = d["text"]("w.crosswalk", "[0][2]", ctx.config["mirror"]["body_type"])
+    return (f"SELECT w.code AS wording, COALESCE(o.parent_code, o.code) AS mic FROM {ctx.code_set(venues['wording'])} w "
+            f"JOIN {ctx.code_set(venues['mic'])} o ON o.code = {mic}")
+
+
+def venue_holders(link: dict, ctx: Context) -> str:
+    """Each value of the link's identifier and operating MIC with the one master of the link's kinds listed there; of
+    several there, the one holding a home identifier (the `US` ISIN)."""
+    venues = ctx.config["venues"]
+    home = venues["home"]
+    homes = (f"SELECT DISTINCT hm.canonical_id AS master_id FROM {ctx.mirror('mdm.mastering_identifier')} h "
+             f"JOIN {ctx.mirror(ctx.config['master']['source'])} hm ON hm.entity_id = h.entity_id "
+             f"WHERE h.namespace = {literal(home['namespace'])} AND h.value LIKE {literal(home['prefix'] + '%')}")
+    listed = (f"SELECT l.entity_id, COALESCE(o.parent_code, l.mic) AS mic FROM {ctx.view(venues['listings'])} l "
+              f"LEFT JOIN {ctx.code_set(venues['mic'])} o ON o.code = l.mic WHERE l.mic IS NOT NULL")
+    joins = f"JOIN ({listed}) l ON l.entity_id = k.canonical_id LEFT JOIN ({homes}) hm ON hm.master_id = k.canonical_id "
+    held = (f"SELECT DISTINCT i.value AS value, l.mic AS mic, k.canonical_id AS master_id, hm.master_id AS home_id "
+            f"FROM {held_by(link, ctx, joins)}")
+    return (f"SELECT v.value, v.mic, CASE WHEN COUNT(DISTINCT v.master_id) = 1 THEN MIN(v.master_id) "
+            f"WHEN COUNT(DISTINCT v.home_id) = 1 THEN MIN(v.home_id) END AS master_id FROM ({held}) v GROUP BY v.value, v.mic")
 
 
 def master_join(link: dict, ctx: Context, row: str, alias: str) -> tuple[str, str]:
-    """How a silver row finds its master: (the join, the column holding the master id). A source-code link joins
-    `master_binding` on the row's own source key; an identifier link joins the one master of the kind that holds the value."""
+    """How a silver row finds its master: (the joins, the column holding the master id). A source-code link joins
+    `master_binding` on the row's own source key; an identifier link joins the one master of its kinds holding the value;
+    a venue link, when several hold it, the one listed on the row's Trading Venue."""
     key = f"CAST({ctx.column(link['column'], row)} AS VARCHAR)"
-    if link.get("identifier"):
-        return f"LEFT JOIN ({holders(link, ctx, '= 1')}) {alias} ON {alias}.value = {key}", f"{alias}.master_id"
-    return (f"LEFT JOIN {ctx.mirror('silver.master_binding')} {alias} ON {alias}.source_code = {literal(link['source_code'])} "
-            f"AND {alias}.source_key = {key}"), f"{alias}.master_id"
+    kind = link_type(link)
+    if kind == "source_code":
+        return (f"LEFT JOIN {ctx.mirror('silver.master_binding')} {alias} ON {alias}.source_code = {literal(link['source_code'])} "
+                f"AND {alias}.source_key = {key}"), f"{alias}.master_id"
+    one = f"LEFT JOIN ({holders(link, ctx, '= 1')}) {alias} ON {alias}.value = {key}"
+    if kind == "identifier":
+        return one, f"{alias}.master_id"
+    return (f"{one}\nLEFT JOIN ({wordings(ctx)}) {alias}w ON {alias}w.wording = UPPER(TRIM({ctx.column(link['venue'], row)}))"
+            f"\nLEFT JOIN ({venue_holders(link, ctx)}) {alias}v ON {alias}v.value = {key} AND {alias}v.mic = {alias}w.mic",
+            f"COALESCE({alias}.master_id, {alias}v.master_id)")
+
+
+def in_scope(link: dict, ctx: Context, row: str, alias: str) -> str:
+    """The test's condition on a row beyond a filled key (company phase 2, decision 10): an identifier the Set Aside
+    table holds is out of scope; for a venue link, so is a value several masters hold on a row whose wording maps to no
+    MIC ("exchange not mapped"). A source-code link's key is no identifier, so the Set Aside table holds none of it."""
+    if link_type(link) == "source_code":
+        return ""
+    key = f"CAST({ctx.column(link['column'], row)} AS VARCHAR)"
+    scope = (f" AND NOT EXISTS (SELECT 1 FROM {ctx.mirror(ctx.config['silver_facts']['set_aside'])} a "
+             f"WHERE a.namespace = {literal(link['identifier'])} AND a.value = {key})")
+    if link_type(link) == "venue":
+        scope += f" AND NOT ({alias}w.mic IS NULL AND {key} IN (SELECT x.value FROM ({holders(link, ctx, '> 1')}) x))"
+    return scope
 
 
 def render_fact(item: dict, ctx: Context) -> str:
@@ -227,6 +301,15 @@ def render_fact(item: dict, ctx: Context) -> str:
     return f"SELECT {', '.join(select)}\nFROM {ctx.mirror(item['source'])} s\n" + "\n".join(joins)
 
 
+def render_detail(item: dict, ctx: Context) -> str:
+    """One row per detail row of a kind's masters (a Security's listings), its named fields read from the body here."""
+    d, body_type = ctx.dialect, ctx.config["mirror"]["body_type"]
+    columns = ", ".join(f"{d['item']('l', c)} AS {c}" for c in item["columns"])
+    return (f"SELECT m.entity_id, {columns}\n"
+            f"FROM {ctx.mirror(ctx.config['master']['source'])} m, {d['each']('m.body', 'details.' + item['detail'], body_type, 'l')}\n"
+            f"WHERE m.kind = {literal(item['master_kind'])}")
+
+
 def render_code_set(item: dict, ctx: Context) -> str:
     """The codes of one code set's one published version."""
     return (f"SELECT {', '.join(item['columns'])}\nFROM {ctx.mirror(item['source'])}\n"
@@ -234,14 +317,15 @@ def render_code_set(item: dict, ctx: Context) -> str:
 
 
 RENDERERS = {"base": render_base, "dimension": render_dimension, "calendar": render_calendar, "fact": render_fact,
-             "code_set": render_code_set}
+             "code_set": render_code_set, "detail": render_detail}
+ORDER = {"base": 0, "code_set": 1, "detail": 1}  # what other views read first
 
 
 def render(config: dict | None = None, dialect: str = "snowflake", qualify: bool = True) -> dict[str, str]:
     """{view name: CREATE VIEW statement}, in the order the views depend on each other (base before the rest)."""
     config = config or load()
     ctx = Context(config, dialect, qualify)
-    order = sorted(config["objects"], key=lambda item: item["kind"] != "base")
+    order = sorted(config["objects"], key=lambda item: ORDER.get(item["kind"], 2))
     return {item["name"]: f"{ctx.dialect['create']} {ctx.view(item['name'])} AS\n{RENDERERS[item['kind']](item, ctx)}"
             for item in order}
 
@@ -249,9 +333,9 @@ def render(config: dict | None = None, dialect: str = "snowflake", qualify: bool
 def quality_tests(config: dict | None = None, dialect: str = "snowflake", qualify: bool = True,
                   dbt: bool = False) -> dict[str, str]:
     """{test name: query}, each query returning rows only on a defect (a dbt singular test), so Gold never shows a link
-    turned empty in silence. Every fact link resolves at least its declared share of filled keys (`inclusion`, 1.0 when
-    none is declared); an identifier link also holds each value it reads on one master of its kind; and `master_binding`
-    gives each source key one master, so no join doubles a fact row."""
+    turned empty in silence. Every fact link resolves at least its declared share of its filled keys in scope (`in_scope`;
+    `inclusion`, 1.0 when none is declared); an identifier link also holds each value it reads on one master of its
+    kinds; and `master_binding` gives each source key one master, so no join doubles a fact row."""
     config = config or load()
     ctx = Context(config, dialect, qualify, dbt)
     tests = {"master_binding_one_master_per_key": (
@@ -267,11 +351,13 @@ def quality_tests(config: dict | None = None, dialect: str = "snowflake", qualif
             share = "1.0" if link.get("inclusion") is None else str(link["inclusion"])  # the declared share, never through a float
             tests[f"{table}_{column}_resolves"] = (
                 f"SELECT t.n, t.found FROM (SELECT COUNT(*) AS n, COUNT({master_id}) AS found FROM {ctx.mirror(source)} s "
-                f"{found} WHERE {ctx.column(column)} IS NOT NULL) t WHERE t.found < {share} * t.n")
-            if link.get("identifier"):
+                f"{found} WHERE {ctx.column(column)} IS NOT NULL{in_scope(link, ctx, 's', 'b')}) t WHERE t.found < {share} * t.n")
+            if link_type(link) == "identifier":
                 tests[f"{table}_{column}_one_master"] = (
                     f"SELECT h.value FROM ({holders(link, ctx, '> 1')}) h "
-                    f"WHERE h.value IN (SELECT CAST({ctx.column(column)} AS VARCHAR) FROM {ctx.mirror(source)} s)")
+                    f"WHERE h.value IN (SELECT CAST({ctx.column(column)} AS VARCHAR) FROM {ctx.mirror(source)} s) "
+                    f"AND h.value NOT IN (SELECT a.value FROM {ctx.mirror(config['silver_facts']['set_aside'])} a "
+                    f"WHERE a.namespace = {literal(link['identifier'])})")
     return tests
 
 
@@ -289,9 +375,12 @@ def sources(config: dict | None = None) -> dict:
     config = config or load()
     mirror, read = config["mirror"], {}
     for item in config["objects"]:
-        linked = ["silver.master_binding"] if item.get("links") or item.get("parent") else []
+        links = [*item.get("links", []), *([item["parent"]["single_link"]] if item.get("parent") else [])]
+        linked = ["silver.master_binding"] if links else []
+        if any(link_type(link) != "source_code" for link in links):
+            linked += [config["master"]["source"], "mdm.mastering_identifier", config["silver_facts"]["set_aside"]]
         for source in [item.get("source"), item.get("parent", {}).get("source"), *linked] + (
-                [config["master"]["source"], "mdm.mastering_identifier"] if item["kind"] in ("base", "dimension") else []):
+                [config["master"]["source"], "mdm.mastering_identifier"] if item["kind"] in ("base", "dimension", "detail") else []):
             if source:
                 layer, table = source.split(".")
                 read.setdefault(layer, set()).add(table)

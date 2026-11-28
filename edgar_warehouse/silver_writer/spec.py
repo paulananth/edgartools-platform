@@ -17,7 +17,10 @@ from .checks import check as check_quality
 KEYS = {"table", "grain", "columns", "key", "links", "time", "partition", "load_mode", "why"}
 OPTIONAL = {"definition", "checks", "may_be_empty", "master_columns", "master_through", "holds_no_master"}
 COLUMN_KEYS = {"name", "type", "nullable", "definition", "source", "sensitivity"}
-LINK_KEYS = {"columns", "kind", "source_code", "identifier", "to_part", "source_key", "inclusion"}
+LINK_KEYS = {"columns", "kinds", "source_code", "identifier", "venue", "to_part", "source_key", "inclusion"}
+# What builds the table: a spec that differs from the registered one only outside these (its links, its words) is
+# the same table (operator, 2026-11-28: "Compare table shape (Recommended)").
+COLUMN_SHAPE = ("name", "type", "nullable")
 LOAD_MODES = ("append", "upsert", "snapshot")
 LOADED_AT = "loaded_at"  # the as-at column the writer adds when no source column holds it
 NAME_BYTES = 63  # PostgreSQL cuts longer names silently; two long names could become one
@@ -91,14 +94,18 @@ def check(spec: dict) -> dict:
                       "is empty when the parent has none")
     added = []
     for link in spec["links"] or []:
-        if not isinstance(link, dict) or not {"columns", "kind", "source_key"} <= set(link) \
+        if not isinstance(link, dict) or not {"columns", "kinds", "source_key"} <= set(link) \
                 or set(link) - LINK_KEYS:
-            raise Blocked(f"A link holds columns, kind, source_code or identifier, and source_key: {link!r}")
+            raise Blocked(f"A link holds columns, kinds, source_code or identifier, and source_key: {link!r}")
         finds = [link.get(by) for by in ("source_code", "identifier") if link.get(by) is not None]
-        if not isinstance(link["kind"], str) or not link["kind"] or len(finds) != 1 \
-                or not isinstance(finds[0], str) or not finds[0]:
-            raise Blocked(f"Link on {link['source_key']}: name the master's kind and either the Dataset Contract whose "
+        kinds = link["kinds"]
+        if not isinstance(kinds, list) or not kinds or not all(isinstance(k, str) and k for k in kinds) \
+                or len(set(kinds)) != len(kinds) or len(finds) != 1 or not isinstance(finds[0], str) or not finds[0]:
+            raise Blocked(f"Link on {link['source_key']}: name the master's kinds and either the Dataset Contract whose "
                           "record key the column holds (source_code) or the identifier the master holds (identifier)")
+        if "venue" in link and (not link.get("identifier") or link["venue"] not in names):
+            raise Blocked(f"Link on {link['source_key']}: venue names the column holding the row's exchange, "
+                          "for a link found by an identifier")
         if link["columns"] != [link["source_key"]] or link["source_key"] not in names:
             raise Blocked(f"A link points from one column of the spec, its source key: {link!r}")
         if link.get("inclusion") is not None and not (isinstance(link["inclusion"], (int, float))
@@ -147,12 +154,21 @@ def quality_columns(spec: dict) -> list[str]:
     return [QUALITY] if spec.get("checks") else []
 
 
+def shape(spec: dict) -> dict:
+    """What builds the spec's table: its columns' names, types and nullability, key, partition, checks, load mode and
+    as-at column. Two specs of one shape are one table."""
+    return {"table": spec["table"], "columns": [{k: c[k] for k in COLUMN_SHAPE} for c in spec["columns"]],
+            "key": spec["key"], "partition": spec["partition"], "checks": spec.get("checks") or [],
+            "load_mode": spec["load_mode"], "as_at": spec["time"]["as_at"]}
+
+
 def describe_link(link: dict) -> str:
     """How a link finds its master, in words: the record key of a Dataset Contract, or an identifier."""
+    kinds = " or ".join(link["kinds"])
     if link.get("identifier"):
-        return f"the {link['kind']} that alone holds `{link['source_key']}` as its {link['identifier']} identifier"
-    return f"the {link['kind']} whose `{link['source_code']}` record key is `{link['source_key']}`"
-
+        venue = f", by the venue in `{link['venue']}` when several hold it" if link.get("venue") else ""
+        return f"the {kinds} that alone holds `{link['source_key']}` as its {link['identifier']} identifier{venue}"
+    return f"the {kinds} whose `{link['source_code']}` record key is `{link['source_key']}`"
 
 
 
