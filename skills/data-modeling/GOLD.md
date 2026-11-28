@@ -317,7 +317,8 @@ when the measure list is a code set). A fact joins a dimension through
 `master_binding` on the row's source key (an identifier link: the one master
 of its kind holding the value); no master id is stored on a silver row.
 The Gold generator writes the views and the dbt tests of every link (the data-quality skill, "Gold link rules"); run
-`dbt build`, never `dbt run` alone, so a failed test stops Gold.
+`dbt build`, never `dbt run` alone, so a failed test stops Gold. The build is an init step (the initialize runbook, step 8c), never a step of a
+load: the views read the mirror, which carries each load's writes.
 
 | Silver grain | Fact on the bus | Why it is its own fact |
 |---|---|---|

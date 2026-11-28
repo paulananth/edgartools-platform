@@ -239,6 +239,11 @@ The goal is every document loaded in the least wall-clock time. Each rule below 
   store and this code in place, so the running scheduler keeps starting steps. Any other failure closes the gate, as it should.
 - **The projected end counts a running step from its first attempt's start in the state file**, so a restarted scheduler does not reset it; a step with
   no per-bundle progress (one document) is still an upper bound until it ends.
+- **A mastering step's progress is read from MDM, since the engine logs its count only when the run ends.** As the worker login
+  (`worker.env`; `ops_reader` sees statistics, never MDM's rows), in a read-only transaction with a statement timeout, schema `mdm`:
+  `mastering_delivery` gives the pieces finished and their `records` and `deferred` per `source_code`; `mastering_record` the records
+  stored, `mastering_deferred` those held for a later pass. Records plus deferred against the file's `record_count` (the step log's
+  `publication`) is the share done. Rows written a minute is no measure of it: one record writes several rows.
 - **A scheduler that "stopped" has usually finished everything it could**: it names the failed steps and what waits on them.
   Fix the cause (engine, memory, a login), then start it again; done steps cost one call each.
 - **`mdm build-lookups` and `mdm clear` refuse while Bookkeeping holds a running run of a mastering target** (a worker between two merge transactions holds no
