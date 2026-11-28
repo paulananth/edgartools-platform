@@ -4,7 +4,7 @@ Read before starting or resuming a load on the hosted instance. Each item is a c
 
 ## Prepare a fresh worktree for the local operations
 Before running a hosted-store operation script from a fresh worktree, install the project's runtime dependencies with
-`uv sync --extra s3 --extra mdm-runtime`. `uv run` alone may create `.venv` without installing SQLAlchemy and the
+`uv sync --extra s3 --extra mdm-runtime --extra mirror` (the last for the mirror's refresh after a load). `uv run` alone may create `.venv` without installing SQLAlchemy and the
 other MDM dependencies, so a preflight can fail before it reaches the store. Run project Python commands with `uv run`;
 source the private hosted environment file in the same shell without printing its values. This prepares local tooling;
 the hosted load itself still runs from the CI-built loader image below.
@@ -45,7 +45,7 @@ arguments). Use that label again only when resuming this same load.
 - **On AWS (a whole load, and any large write):** `RUN=<label> infra/load-pipeline/aws-load.sh [--finish] [<step>...]` copies
   the image of `main`'s newest commit to ECR, the captures the load jobs file reads to `s3://<bronze>/load/`, and the logins
   to Secrets Manager; applies `infra/terraform/load-machine` (one Step Functions state machine, the same definition,
-  and one 16 vCPU, 120 GB ARM Fargate task); runs one execution and stops the task when it ends. `--plan <step>` runs readiness and plans those steps, read only, to prove a changed pipeline; `--prepare` stops before
+  and one 16 vCPU, 120 GB ARM Fargate task); runs one execution and stops the task when it ends; after an execution that succeeds it refreshes the mirror and waits for the apply (`mirror_refresh.py`, as the mirror operator), so Gold reads the load at once instead of at the mirror's next interval; `load.sh` does the same. `--plan <step>` runs readiness and plans those steps, read only, to prove a changed pipeline; `--prepare` stops before
   the task. The task holds no provider identity, so a load reads captured files only. Its state file, logs and run documents
   are in `s3://<bronze>/load/runs/<RUN>/` (copied every minute and at a stop), and a task started again with the same
   `RUN` takes them back and carries on. Grafana on the Mac shows the load: the task runs the load monitor's exporter, open

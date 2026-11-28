@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Start a load on the pipeline: the loader image CI built for the newest main commit runs readiness, then the load.
 #
-#   infra/load-pipeline/load.sh [--plan|--force]                every lane of the load jobs file at once, then the finish
+#   infra/load-pipeline/load.sh [--plan|--force]                every lane of the load jobs file at once, then the finish, then the mirror's refresh
 #   --force: force publish: each load ignores the Change Journal and processes every document of its source again (use a new RUN)
 #   infra/load-pipeline/load.sh [--plan] [--finish] <step>...   only those steps, in order
 #   infra/load-pipeline/load.sh [--force] --in-lanes <step>...  only those steps, each in its lane, the lanes at once (restart what is left)
@@ -100,3 +100,8 @@ echo "execution ${execution##*:} ${status}"
     | (.taskFailedEventDetails // .taskTimedOutEventDetails // .executionFailedEventDetails
        // .executionTimedOutEventDetails // .executionAbortedEventDetails // empty) | "\(.error // "-"): \(.cause // "-")"' | head -3
   exit 1; }
+
+# The mirror applies the load's writes now, not at its next interval, and Gold reads them once it returns. A refresh that
+# fails leaves the load done: the mirror applies them at its interval.
+[ "$plan" = false ] || exit 0
+(cd "$here/../.." && uv run --no-sync python skills/data-platform/scripts/exposure/mirror_refresh.py) || true
