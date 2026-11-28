@@ -309,6 +309,15 @@ def _quality(contract: dict, fields: dict, matching: dict) -> dict | None:
     return apply(contract["quality"], fields, matching)
 
 
+def record_identifiers(row: dict, mapping: dict) -> tuple[dict, list[dict]]:
+    """A record's identifiers as its Dataset Contract names and formats them (namespace → value, or values for a listed
+    identifier), and the listed values a format refused, each with its reason."""
+    set_aside: list[dict] = []
+    found = _named_values(row, mapping.get("identifiers", {}), mapping.get("identifier_formats", {}),
+                          set_aside=set_aside, set_aside_invalid=tuple(mapping.get("set_aside_invalid", ())))
+    return found, set_aside
+
+
 def _named_values(row: dict, paths: dict, formats: dict, *, set_aside: list | None = None,
                   set_aside_invalid: tuple = ()) -> dict:
     """namespace → path into namespace → formatted value; an empty value is left out.
@@ -395,9 +404,7 @@ def normalize(
         raise UnsupportedRecord("unsupported_identity_kind")
     key = record_key(row, mapping["record_key"])
     key = format_value(key, mapping.get("record_key_format"))
-    set_aside: list[dict] = []
-    identifiers = _named_values(row, mapping.get("identifiers", {}), mapping.get("identifier_formats", {}),
-                                set_aside=set_aside, set_aside_invalid=tuple(mapping.get("set_aside_invalid", ())))
+    identifiers, set_aside = record_identifiers(row, mapping)
     if not identifiers and set_aside and mapping.get("set_aside_invalid"):
         # Nothing is left to master the record by. A `last_resort` namespace states the value as filed (a real
         # security must be a mastered Security: operator, 2026-11-10); with none, or a value that is no identifier

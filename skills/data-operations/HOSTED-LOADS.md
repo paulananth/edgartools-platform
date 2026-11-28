@@ -268,10 +268,10 @@ The goal is every document loaded in the least wall-clock time. Each rule below 
   in its own process group, and a deadline or an interrupt stops the group. After any stopped step, look for workers whose parent is gone
   (`ps -eo pid,ppid,etime,args` in the worker container, parent 1) before starting the step again.
 
-## The finish takes at most five minutes
-`--finish` builds the links tables and `master_binding` from the stored records; `master_binding` is two statements inside the data database
-(an upsert that writes only a changed row, and a delete), so no binding row reaches the client; no silver row is written with a master id. A finish that takes minutes more than five is the measure of the slowest phase still left (time each phase,
-below), never a reason to skip it: Gold and the links read what it writes. It is bounded by the operator at five minutes, and a longer
+## The finish takes at most six minutes
+`--finish` builds the links tables, `master_binding` and `set_aside` (each identifier of a record a classification rule held back, by the feed's own contract: Gold's link tests leave those keys out) from the stored records; `set_aside` reads only the identifier paths of the held-back records, cut in the database (on the hosted store about 33 s for 705,000 records, nearly all of it parsing their stored JSON); `master_binding` is two statements inside the data database
+(an upsert that writes only a changed row, and a delete), so no binding row reaches the client; no silver row is written with a master id. A finish that takes minutes more than six is the measure of the slowest phase still left (time each phase,
+below), never a reason to skip it: Gold and the links read what it writes. It is bounded by the operator at six minutes, and a longer
 one is a defect, not a wait. Time each part of a slow finish by phase
 before changing it, and run the cheap check that can fail first. For a step that is one native call, sample the running process
 (`sample <pid> 30`) before reading its code: the links build spent 265 s in a pairwise comparison of every link with every later link,

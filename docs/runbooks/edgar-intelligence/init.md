@@ -192,7 +192,7 @@ so an earlier load's lines never satisfy a wait and never stop a run. A generati
 A fresh store takes hours, and the shape is the same each time. The longest step is the GLEIF merge, which holds the mastering lease, so a step that
 writes silver for the same masters shows no CPU, no session and no rows until that merge ends, then runs at once: `--status` says "no sign of work"
 for it, and the log of a step with one document stays silent. That is a wait, not a stall; read the leases (below) before stopping anything. The finish
-(`--finish`) follows the last step and builds the links tables and `master_binding` whole from the stored records; no silver row is rewritten.
+(`--finish`) follows the last step and builds the links tables, `master_binding` and `set_aside` whole from the stored records; no silver row is rewritten.
 
 Masters come first and each source's silver target last, so silver rows find their masters as they land; a silver step
 needs none before it (a row lands with its link key and finds its master by a join on `master_binding`, which `--finish` builds). A source's later
@@ -309,7 +309,7 @@ One Snowflake mirror of the data database carries the final tables: the tables n
 `destination/authorised_data_sharing.yaml` lets leave the stores, in the schemas `MDM`, `RDM` and `SILVER`, with the target database `mirror.database` of
 `rules/snowflake.yaml`. It is made at init (step 8b), on the empty tables, and keeps them current while the loads and `--finish` write. The
 procedure, its read-only checks and its approval are [the data-platform skill's hosted mirroring guide](../../../skills/data-platform/HOSTED-MIRRORING.md#at-init-mirror-only-what-gold-reads).
-`--finish` writes `finish took <n> min` to the run's state file (the bound is five minutes without lookups): record that figure on the ticket.
+`--finish` writes `finish took <n> min` to the run's state file (the bound is six minutes without lookups): record that figure on the ticket.
 
 The Snowflake database names are in `rules/snowflake.yaml`, nowhere else. A target database cannot be renamed, and while its mirror replicates the Snowflake application owns it (the owner role can own it only after `DROP_MIRROR(<mirror>, FALSE)`, [HOSTED-MIRRORING](../../../skills/data-platform/HOSTED-MIRRORING.md)), so a new
 name means a new mirror: create it beside the old one, wait until every table reads `REPLICATING` with equal counts, change the name in

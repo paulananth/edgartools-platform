@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 from collections import defaultdict
+from collections.abc import Iterator
 from pathlib import Path
 
 from . import master_row
@@ -270,6 +271,18 @@ class Store:
         silver row joins to find its master. A merged-away master's records already point to its survivor."""
         return self.rows("select distinct r.source_code,r.source_key,m.kind,r.entity_id from mastering_record r "
                          "join mastering_master m on m.entity_id=r.entity_id")
+
+    held_back_from = "from mastering_deferred where reason like 'classification%%'"
+    held_back_select = f"select source_code,reason,body {held_back_from}"
+
+    def held_back_sources(self) -> list[str]:
+        """The source codes of the records a classification rule held back."""
+        return [code for (code,) in self.rows(f"select distinct source_code {self.held_back_from}")]
+
+    def held_back(self, paths) -> Iterator:
+        """(source code, reason, body) of every record a classification rule held back by its verdict: the Set Aside
+        records. `paths` are the raw record's paths the caller reads (an engine may send only those, as JSON)."""
+        return self.stream(self.held_back_select) if self.scans else iter(self.rows(self.held_back_select))
 
     def members_bound(self, entities) -> dict:
         found = {}
@@ -638,6 +651,32 @@ class Postgres(Store):
     review_upsert = " on conflict(subject,reason) do update set assertion_id=excluded.assertion_id,open_review=1"
 
     scans = True
+
+    def held_back(self, paths) -> Iterator:
+        """Each held-back body cut in the database to its Probable Kind and the raw record's `paths`: a body's bulk (the
+        whole filing as read) never crosses the network."""
+        tree: dict = {}
+        for path in paths:
+            parts = path.split(".")
+            if not all(part and part.lower() != "null" and all(ch.isalnum() or ch in "_$" for ch in part) for part in parts):
+                return super().held_back(paths)  # a path the cut cannot name safely: the whole body
+            node = tree
+            for part in parts[:-1]:
+                node = node.setdefault(part, {})
+                if node is None:
+                    break
+            else:
+                node[parts[-1]] = None
+
+        def cut(node: dict, at: list[str]) -> str:
+            return "json_build_object(" + ", ".join(
+                f"'{name}', " + (cut(child, at + [name]) if isinstance(child, dict) else
+                                 "b#>'{" + ",".join(["raw_record", *at, name]) + "}'")
+                for name, child in node.items()) + ")"
+
+        raw = cut(tree, []) if tree else "'{}'::json"
+        return self.stream("select source_code, reason, json_build_object('probable_kind', b->'probable_kind', 'raw_record', "
+                           f"{raw})::text from (select source_code, reason, body::json as b {self.held_back_from}) held")
 
     # What the links build reads of a record: its identity, its links and the fields the reader requires, cut in the
     # database so the profiles, fields and identifiers (a record's bulk) never cross the network. `json`, not `jsonb`,
