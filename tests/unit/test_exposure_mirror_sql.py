@@ -36,6 +36,12 @@ def test_a_table_reset_suspends_and_resumes_the_recorded_mirror_by_name(action, 
     assert mirror_sql.lifecycle(MANAGED, action) == f"CALL SNOWFLAKE.POSTGRES.{call};\n"
 
 
+def test_refresh_applies_the_recorded_mirrors_pending_changes_now(tmp_path):
+    managed = tmp_path / "managed.yaml"
+    managed.write_text(yaml.safe_dump(MANAGED))
+    assert mirror_sql.main(["refresh", "--managed", str(managed)]) == "CALL SNOWFLAKE.POSTGRES.REFRESH_MIRROR('m1');\n"
+
+
 def test_retire_always_drops_the_target_with_the_mirror():
     assert mirror_sql.retire(MANAGED) == "CALL SNOWFLAKE.POSTGRES.DROP_MIRROR('m1', TRUE);\n"
 

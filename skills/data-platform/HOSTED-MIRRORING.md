@@ -198,7 +198,7 @@ The create plan names the one source database, its tables per schema, its target
 **Done is read back, not assumed:** list the mirror (`mirror_sql.py verify`; its first call can return no rows while metadata fills, and each table's
 `state` stays SNAPSHOTTING until its snapshot ends, about 10 minutes for 20 million rows), save the rows (`source_schema_name`, `source_table_name`,
 `state`) as JSON, and run `mirror_sql.py readback --listing <file>`. It fails naming what is missing, unexpected or still snapshotting, and passes only when the mirror is exactly
-the record with every table REPLICATING; then set `verified: true` in `sources/managed-mirror.yaml`. Read the snapshot cost from metering history
+the record with every table REPLICATING; then set `verified: true` in `sources/managed-mirror.yaml`. **After a load the mirror is refreshed, never waited for:** it applies changes only at its refresh interval, so a load that ends just after an apply reaches Gold up to an interval later. `mirror_refresh.py` (as the mirror operator) calls `REFRESH_MIRROR`, which applies the pending changes now, and waits until `LIST_MIRRORS` shows the mirror's last apply time set again (the refresh clears it, the apply sets it). Both launchers (`aws-load.sh`, `load.sh`) run it after every load that succeeds; its `mirror: applied at` line is when Gold reads the load. A mirror with nothing pending applies nothing, so its wait ends at its minutes. Read the snapshot cost from metering history
 (`SERVERLESS_TASK` lines lag by hours) against the 5-credit bound.
 
 For a hosted table reset, suspend the mirror as the mirror operator

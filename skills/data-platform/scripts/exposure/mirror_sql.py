@@ -13,6 +13,7 @@ the operator's approval:
     python mirror_sql.py alter --mirrored <JSON list of the mirrored schema.table names, read back>   # adds and removes the difference
     python mirror_sql.py verify                  # the listing call
     python mirror_sql.py suspend|restart|resume|status   # around a table reset: suspend, then restart (a new snapshot); status lists the mirror
+    python mirror_refresh.py                      # after a load: the mirror applies its pending changes now, and it waits until they are applied
     python mirror_sql.py verify | python mirror_run.py > listing.json   # mirror_run.py runs one statement as the mirror operator
     python mirror_sql.py readback --listing <JSON list of the listing's rows (source_schema_name, source_table_name, state) or of {table, state}>   # fails until the mirror is exactly the record, every table REPLICATING, in schemas MDM, RDM and SILVER
     python mirror_sql.py check --reads <sources file>   # fails when Gold reads a table the record does not list
@@ -32,6 +33,7 @@ SOURCES = RULES.parent / "sources"  # the managed mirror record is part of the s
 MANAGED = SOURCES / "managed-mirror.yaml"
 EXPOSURE = SOURCES.parent / "destination" / "authorised_data_sharing.yaml"
 NAMES = RULES / "snowflake.yaml"
+LIFECYCLE = ("suspend", "restart", "resume", "refresh", "status")
 
 
 def load(path: Path) -> dict:
@@ -128,8 +130,9 @@ def readback(managed: dict, exposure: dict, listing: list[dict]) -> str:
 
 
 def lifecycle(managed: dict, action: str) -> str:
-    """Suspend, restart or resume the mirror, or list the mirrors with their status. A suspended mirror keeps its PostgreSQL
-    walsender connected (`reset-hosted-tables.py --with-suspended-mirror`); a restart takes a new snapshot of every table."""
+    """Suspend, restart, resume or refresh the mirror, or list the mirrors with their status. A suspended mirror keeps its PostgreSQL
+    walsender connected (`reset-hosted-tables.py --with-suspended-mirror`); a restart takes a new snapshot of every table; a refresh
+    applies the pending changes now."""
     if action == "status":
         return "CALL SNOWFLAKE.POSTGRES.LIST_MIRRORS();\n"  # it takes no mirror name: each row names its mirror
     return f"CALL SNOWFLAKE.POSTGRES.{action.upper()}_MIRROR('{managed['mirror']}');\n"
@@ -162,7 +165,7 @@ def release(managed: dict, names: dict) -> str:
 def main(argv: list[str] | None = None) -> str:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("action", choices=["plan", "create", "alter", "verify", "check", "retire", "release", "exists", "readback",
-                                           "suspend", "restart", "resume", "status"])
+                                           *LIFECYCLE])
     parser.add_argument("--managed", type=Path, default=MANAGED, help="the managed mirror record")
     parser.add_argument("--exposure", type=Path, default=EXPOSURE, help="the exposure list that bounds the record")
     parser.add_argument("--names", type=Path, default=NAMES, help="the file naming the mirror database")
@@ -180,7 +183,7 @@ def main(argv: list[str] | None = None) -> str:
         return plan(managed, load(args.exposure), args.publication_limit, args.publications_held)
     if args.action == "verify":
         return verify(managed)
-    if args.action in ("suspend", "restart", "resume", "status"):
+    if args.action in LIFECYCLE:
         return lifecycle(managed, args.action)
     if args.action == "readback":
         if not args.listing:
@@ -203,6 +206,8 @@ def main(argv: list[str] | None = None) -> str:
         if not args.mirrored:
             parser.error("alter needs --mirrored")
         return alter(managed, load(args.exposure), load(args.mirrored))
+    if args.action != "create":
+        parser.error(f"{args.action} has no handler")
     if not args.instance:
         parser.error("create needs --instance")
     return create(managed, load(args.exposure), load(args.names), args.instance)

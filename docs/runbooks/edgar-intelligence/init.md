@@ -134,7 +134,7 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
 8c. **Gold** (data-modeling's [Gold](../../../skills/data-modeling/GOLD.md)). Gold is views over the mirror, so it is built here, once, and a load
    adds no Gold step: the mirror carries each load's writes and the views read them. As the Gold writer, `dbt build` (the views and the link
    tests; never `dbt run` alone, so a failed test stops Gold). Done when every view and test passes. The link tests read what the loads and
-   the finish write, so the build is run again only when Gold's configuration changes; after a load, `dbt test` reads the links.
+   the finish write, so the build is run again only when Gold's configuration changes; after a load, once the launcher's `mirror: applied at` line shows the mirror's refresh applied it, `dbt test` reads the links.
 
 9. **Ready.** `python <data-operations skill>/scripts/readiness.py` reads the infrastructure and writes `readiness.json` only when every check passes (committed code containing main, `doctor`, guards, reference data, captures, quiet instance, room, audit, each duty file's login, the run's state file). Done when it prints `READY` (twelve checks; `REGISTERED`: the merge policy, the Dataset Contracts and every worker profile; `MIRRORED`: the mirror is exactly its record, every table replicating). The gate is not this runbook: say which steps ran and which did not before a load starts. A load does not start without it, and any reset of the databases or new commit closes it again.
 

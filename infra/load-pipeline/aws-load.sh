@@ -5,7 +5,7 @@
 # also stops itself after the root's max_hours, should this script or its machine be gone. While it runs, the Mac's load
 # monitor (skills/load-monitoring, Grafana) reads the task's exporter, whose port is open to this Mac's address only.
 #
-#   RUN=<label> infra/load-pipeline/aws-load.sh                      every lane at once, then the finish
+#   RUN=<label> infra/load-pipeline/aws-load.sh                      every lane at once, then the finish, then the mirror's refresh
 #   RUN=<label> infra/load-pipeline/aws-load.sh [--finish] <step>... only those steps, in order
 #   RUN=<label> infra/load-pipeline/aws-load.sh --prepare            everything up to the apply: no task, no load
 #   RUN=<label> infra/load-pipeline/aws-load.sh --plan <step>...     readiness, then those steps planned, read only: for a changed pipeline
@@ -190,3 +190,8 @@ echo "execution ${execution##*:} ${result}; record: $(tf output -raw record)"
     | (.taskFailedEventDetails // .taskTimedOutEventDetails // .executionFailedEventDetails
        // .executionTimedOutEventDetails // .executionAbortedEventDetails // empty) | "\(.error // "-"): \(.cause // "-")"' | head -3
   exit 1; }
+
+# The mirror applies the load's writes now, not at its next interval, and Gold reads them once it returns. A refresh that
+# fails leaves the load done: the mirror applies them at its interval.
+[ "$plan" = false ] || exit 0
+(cd "$here/../.." && uv run --no-sync python skills/data-platform/scripts/exposure/mirror_refresh.py) || true
