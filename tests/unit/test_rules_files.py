@@ -97,3 +97,32 @@ def test_quoted_and_block_tabs_keep_existing_values(text):
     from edgar_warehouse.rules import files
     expected = files._value(files._rules_node(text, "<rules>", yaml.SafeLoader), "<rules>")
     assert loads(text) == expected
+
+
+def _policy_folder(root, kinds: dict, shared: dict) -> None:
+    (root / "merge" / "kinds").mkdir(parents=True)
+    (root / "merge" / "policy.yaml").write_text(dumps({"version": "invented"}))
+    (root / "merge" / "lists.yaml").write_text(dumps(shared))
+    for name, kind in kinds.items():
+        (root / "merge" / "kinds" / f"{name}.yaml").write_text(dumps(kind))
+
+
+def test_a_kind_takes_each_shared_list_its_rules_name_and_an_export_keeps_it_shared(tmp_path):
+    from edgar_warehouse.rules import files
+
+    naming = {"rules": [{"steps": [{"when": [{"args": {"token_list": "legal_form"}}]}]}], "lists": {"own": ["X"]}}
+    _policy_folder(tmp_path / "in", {"naming": naming, "silent": {"rules": []}}, {"legal_form": ["INC", "LLC"]})
+    body = files.policy(tmp_path / "in")
+    assert body["kinds"]["naming"]["lists"] == {"own": ["X"], "legal_form": ["INC", "LLC"]}
+    assert "lists" not in body["kinds"]["silent"]
+    files.write_policy(body, tmp_path / "out")
+    assert files.load(tmp_path / "out" / "merge" / "kinds" / "naming.yaml")["lists"] == {"own": ["X"]}
+    assert canonical(files.policy(tmp_path / "out")) == canonical(body)
+
+
+def test_a_kind_declaring_a_list_of_a_shared_name_is_refused(tmp_path):
+    from edgar_warehouse.rules import files
+
+    _policy_folder(tmp_path, {"copying": {"rules": [], "lists": {"legal_form": ["INC"]}}}, {"legal_form": ["INC", "LLC"]})
+    with pytest.raises(RulesFileError, match="copying declares the shared lists"):
+        files.policy(tmp_path)

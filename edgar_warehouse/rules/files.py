@@ -277,7 +277,42 @@ POLICY_FILES = {
     # The reference data the rules read, pinned by RDM version and sha256
     # (profiling ticket 02).
     "reference_pins": "reference-pins.yaml",
+    # Word lists more than one kind's rules read, kept once (`_share_lists`).
+    "lists": "lists.yaml",
 }
+
+
+LIST_ARGS = ("token_list", "suffix_list", "exclude_list", "values")
+
+
+def _named(value) -> set[str]:
+    """The lists a rules section names: each text a test's list argument holds, at any depth."""
+    if isinstance(value, list):
+        return set().union(*map(_named, value))
+    if not isinstance(value, dict):
+        return set()
+    own = {value[arg] for arg in LIST_ARGS if isinstance(value.get(arg), str)}
+    return own.union(*map(_named, value.values()))
+
+
+def _share_lists(body: dict) -> None:
+    """Each kind takes the shared lists its rules name, into its own `lists` (the engine reads a kind's lists only).
+    A kind that declares a list of a shared name is refused: two lists of one name drift apart."""
+    shared = body.get("lists") or {}
+    for name, kind in body["kinds"].items():
+        own = kind.get("lists") or {}
+        if clash := sorted(set(own) & set(shared)):
+            raise RulesFileError(f"Kind {name} declares the shared lists {clash}; take them from merge/lists.yaml")
+        if taken := sorted(set(shared) & _named(kind.get("rules"))):
+            kind["lists"] = own | {list_name: shared[list_name] for list_name in taken}
+
+
+def _unshare_lists(body: dict) -> dict:
+    """The policy with each kind's shared lists left in `lists` alone, as the files keep them."""
+    shared = body.get("lists") or {}
+    kinds = {name: kind | {"lists": {k: v for k, v in kind["lists"].items() if k not in shared}}
+             if isinstance(kind, dict) and kind.get("lists") else kind for name, kind in (body.get("kinds") or {}).items()}
+    return body | {"kinds": kinds} if "kinds" in body else body
 
 
 def policy(root: Path | None = None) -> dict:
@@ -293,6 +328,7 @@ def policy(root: Path | None = None) -> dict:
     for key, name in POLICY_FILES.items():
         if (root / "merge" / name).exists():
             body[key] = load(root / "merge" / name)
+    _share_lists(body)
     return body
 
 
@@ -303,6 +339,7 @@ def write_policy(body: dict, root: Path) -> None:
     reference tables (`reference`); those go back to `reference/<name>.yaml`,
     and only such a body checks that folder (today it also holds tables the
     policy no longer embeds)."""
+    body = _unshare_lists(body)
     split = {"kinds": root / "merge" / "kinds"}
     if "reference" in body:
         split["reference"] = root / "reference"

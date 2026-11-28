@@ -30,21 +30,17 @@ defaults:
   allow_unknown_effective: true
 rules:
 - rule_id: sec-company-candidate
-  version: 2026-11-17.listed-operating-foreign-or-new-listing
+  version: 2026-11-27.operating-investment-and-legal-form-filers
   family: classification
   source: sec.company.v1
   emits:
   - company
   - deferred
+  # Phase 2 (operator, 2026-11-27, company phase 2 decisions 2 to 6 and 8): a filer is mastered with or without a ticker. Asset-backed
+  # issuers, commodity pools and governments stay Set Aside; an investment filer is a company (the Fund Company); an
+  # operating filer is one unless fund-named; a filer SEC types "other" is one by a legal-form word in its name
+  # (the shared `entity_legal_form` list the person rule reads), unless person-suffixed, fund-named or Form-D-only.
   steps:
-  # Phase 1 (operator, 2026-11-09: "For phase 1 master only publically traded companies (filter)"; "Operating and
-  # listed a real company"): a filer with no ticker is not publicly traded and is set aside before any other test.
-  - step: "0"
-    verdict: deferred
-    when:
-    - primitive: fields_all_empty@1
-      args:
-        fields: ticker
   - step: "1"
     verdict: deferred
     when:
@@ -71,6 +67,14 @@ rules:
         field: sic
         values:
         - "8888"
+  - step: "4"
+    verdict: company
+    when:
+    - primitive: field_in_set@1
+      args:
+        field: entity_type
+        values:
+        - investment
   - step: "5"
     verdict: deferred
     probable_kind: fund_structure
@@ -136,6 +140,10 @@ rules:
         field: entity_type
         values:
         - other
+    - primitive: fields_all_empty@1
+      negate: true
+      args:
+        fields: ticker
     - primitive: values_overlap@1
       args:
         field: forms
@@ -146,7 +154,52 @@ rules:
         - 424B1
         - 424B4
         min_count: 1
-  - step: "11"
+  - step: "12"
+    verdict: deferred
+    probable_kind: fund_structure
+    when:
+    - primitive: field_in_set@1
+      args:
+        field: entity_type
+        values:
+        - other
+    - primitive: token_match@2
+      args:
+        field: entity_name
+        normalizer: conformed
+        token_list: fund_name
+        min_count: 1
+  # A filer of Form D alone: a private offering's issuer, decided by the fund-structure step (decision 5).
+  - step: "13"
+    verdict: deferred
+    when:
+    - primitive: field_in_set@1
+      args:
+        field: entity_type
+        values:
+        - other
+    - primitive: values_within@1
+      args:
+        field: forms
+        values:
+        - D
+        - D/A
+  # The legal-form test the person rule makes (token_match@1): a name joining two parties with "&" counts as one.
+  - step: "14"
+    verdict: company
+    when:
+    - primitive: field_in_set@1
+      args:
+        field: entity_type
+        values:
+        - other
+    - primitive: token_match@1
+      args:
+        field: entity_name
+        normalizer: conformed
+        token_list: entity_legal_form
+        min_count: 1
+  - step: "15"
     verdict: deferred
     otherwise: true
 

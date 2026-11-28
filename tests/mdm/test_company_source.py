@@ -20,7 +20,7 @@ TEST_POLICY["automatic_rules"] = [
         "kind": "company",
         "family": "classification",
         "rule_id": "sec-company-candidate",
-        "rule_version": "2026-11-17.listed-operating-foreign-or-new-listing",
+        "rule_version": "2026-11-27.operating-investment-and-legal-form-filers",
         "verdict": "company",
     }
 ]
@@ -71,18 +71,18 @@ def test_native_company_kind_identifiers_and_unknown_effective_time():
     assert a["provenance"]["source"]["observed_at"] == row["last_synced_at"]
     with pytest.raises(UnsupportedRecord, match="classification_deferred"):
         normalize(
-            {**row, "entity_type": "other"},
+            {**row, "entity_type": "other", "entity_name": "Jane Example"},
             source_code=SOURCE_CODE,
             contract=CONTRACT,
             publication=publication,
         )
 
 
-def test_phase_1_masters_listed_operating_filers_and_foreign_issuers():
-    """Operator, 2026-11-09: "For phase 1 master only publically traded companies (filter)"; "Operating and listed a
-    real company". A listed filer SEC types other is a company when it files a 20-F or 40-F (operator, 2026-11-14:
-    "yes make the rule change test locally and reload"), and when it filed an initial registration or a final prospectus
-    (operator, 2026-11-17: "Master the 86 (Recommended)"); any other filer typed other, or one with no ticker, is not."""
+def test_phase_2_masters_every_company_filer_and_sets_aside_the_rest_with_its_probable_kind():
+    """Company phase 2 (operator, 2026-11-27, decisions 2 to 6 and 8): a filer is mastered with or without a ticker. An investment filer is a
+    company; an operating filer is one unless fund-named; a filer SEC types other is one by a 20-F or 40-F, by a new
+    listing's registration (with a ticker, operator, 2026-11-17), or by a legal-form word in its name, unless it is
+    person-suffixed, fund-named or files Form D alone. Asset-backed issuers, commodity pools and governments stay aside."""
     publication = {
         "publication_key": "capture-1/company",
         "revision": 0,
@@ -91,29 +91,42 @@ def test_phase_1_masters_listed_operating_filers_and_foreign_issuers():
         "member": "records.jsonl",
     }
 
-    def row(**changes):
-        made = source_row(1306965, entity_name="Shell plc", sic="1311", category="Large accelerated filer", **changes)
+    def row(name="Example Works", **changes):
+        made = source_row(1000001, **{"entity_name": name, "sic": "1311", "tickers": [], **changes})
         made["last_synced_at"] = made["last_synced_at"].isoformat()
         return made
 
-    def classified(made):
-        return normalize(made, source_code=SOURCE_CODE, contract=CONTRACT, publication=publication)
+    def step(made):
+        try:
+            found = normalize(made, source_code=SOURCE_CODE, contract=CONTRACT, publication=publication)
+        except UnsupportedRecord as held:
+            assert str(held.reason) == "classification_deferred"
+            return "aside", held.detail["classification"]["step"], held.probable_kind
+        return "company", found["provenance"]["classification"]["step"], None
 
-    assert classified(row(entity_type="operating"))["provenance"]["classification"]["step"] == "8"
-    for annual in ("20-F", "40-F"):
-        foreign = classified(row(entity_type="other", forms=["6-K", annual]))
-        assert foreign["provenance"]["classification"]["step"] == "10"
-    for registration in ("S-1", "F-1", "S-11", "424B1", "424B4"):
-        listed = classified(row(entity_type="other", forms=["8-A12B", registration]))
-        assert listed["provenance"]["classification"]["step"] == "10a"
-    for outside, step in ((row(entity_type="other"), "11"), (row(entity_type="other", forms=["S-1/A", "424B3"]), "11"),
-                          (row(entity_type="other", forms=["S-1"], tickers=[]), "0"), (row(entity_type="operating", tickers=[]), "0"),
-                          (row(entity_type="other", tickers=[]), "0"),
-                          (row(entity_type="other", forms=["20-F"], tickers=[]), "0"),
-                          (row(entity_type="other", forms=["20-F/A", "6-K"]), "11")):
-        with pytest.raises(UnsupportedRecord, match="classification_deferred") as caught:
-            classified(outside)
-        assert caught.value.detail["classification"]["step"] == step
+    cases = [
+        (row(entity_type="operating"), ("company", "8", None)),
+        (row(entity_type="operating", tickers=["EXA"]), ("company", "8", None)),
+        (row("Example Income Fund", entity_type="operating"), ("aside", "5", "fund_structure")),
+        (row("Example Income Fund", entity_type="investment"), ("company", "4", None)),
+        (row(entity_type="operating", sic="6189"), ("aside", "1", None)),
+        (row(entity_type="investment", sic="6221"), ("aside", "2", "fund_structure")),
+        (row(entity_type="other", sic="8888"), ("aside", "3", "government")),
+        (row("Example Works Inc", entity_type="other"), ("company", "14", None)),
+        (row("Example Works Inc", entity_type="other", forms=["10-K", "D"]), ("company", "14", None)),
+        (row("Example Works Inc", entity_type="other", forms=["D", "D/A"]), ("aside", "13", None)),
+        (row("Example Works LP", entity_type="other", forms=["D"]), ("aside", "13", None)),
+        (row("Example Partners Fund LP", entity_type="other"), ("aside", "12", "fund_structure")),
+        (row("Jane Example CPA", entity_type="other"), ("aside", "9", "person")),
+        (row("Jane Example", entity_type="other"), ("aside", "15", None)),
+        (row("Example Works", entity_type="other", forms=["6-K", "20-F"]), ("company", "10", None)),
+        (row("Example Works", entity_type="other", forms=["40-F"]), ("company", "10", None)),
+        *[(row("Example Works", entity_type="other", forms=["8-A12B", form], tickers=["EXA"]), ("company", "10a", None))
+          for form in ("S-1", "F-1", "S-11", "424B1", "424B4")],
+        (row("Example Works Inc", entity_type=""), ("aside", "15", None)),
+        (row("Example Works", entity_type="other", forms=["S-1"]), ("aside", "15", None)),
+    ]
+    assert [step(made) for made, _ in cases] == [verdict for _, verdict in cases]
 
 
 def test_a_corrected_reading_of_one_sec_publication_is_a_second_assertion():
@@ -200,7 +213,10 @@ class TestTheCompanyRule:
         file = files.ROOT / "merge" / "kinds" / "company.yaml"
         # Other kinds may sit beside it (platform validation 05a).
         assert "company" in sec_company.POLICY["kinds"]
-        assert sec_company.POLICY["kinds"]["company"] == files.load(file)
+        loaded = sec_company.POLICY["kinds"]["company"]
+        assert {key: value for key, value in loaded.items() if key != "lists"} == {
+            key: value for key, value in files.load(file).items() if key != "lists"}
+        assert files.load(file)["lists"].items() <= loaded["lists"].items() and "entity_legal_form" in loaded["lists"]
         assert sec_company.POLICY["kinds"]["company"]["defaults"]["sources"] == [
             "sec.company.v1",
             "gleif.level1.v1",

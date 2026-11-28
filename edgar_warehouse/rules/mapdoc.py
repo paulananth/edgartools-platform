@@ -79,6 +79,7 @@ CONDITION_WORDS = {
     "name_shape@1": "{field} is shaped like a person's name: {min_tokens} to {max_tokens} words, "
                     "no digits or forbidden characters (suffixes from {suffix_list} allowed)",
     "values_overlap@1": "{field} holds {count} of the list {values}",
+    "values_within@1": "{field} holds only values of the list {values}",
     "evidence_present@1": "The record has {document}",
     "waterfall_pass@1": "Pass {pass}: the names are equal, legal form kept (GLEIF's other names count), and, "
                       "of what earlier passes left, exactly one SEC company and one GLEIF entity agree on "
