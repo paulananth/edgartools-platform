@@ -40,6 +40,8 @@ rules:
   # issuers, commodity pools and governments stay Set Aside; an investment filer is a company (the Fund Company); an
   # operating filer is one unless fund-named; a filer SEC types "other" is one by a legal-form word in its name
   # (the shared `entity_legal_form` list the person rule reads), unless person-suffixed, fund-named or Form-D-only.
+  # Approved (operator, 2026-11-27: "yes") on the real engine's run over the 69,756 held-back company filers: 19,212
+  # become companies, the 6,474 stored are unchanged, and 702 of Gold's 976 unlinked company CIKs resolve.
   steps:
   - step: "1"
     verdict: deferred
