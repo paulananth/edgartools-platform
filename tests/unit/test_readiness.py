@@ -69,6 +69,33 @@ def failed(facts_):
 
 def test_ready_infrastructure_passes_every_check():
     assert failed(facts()) == set()
+def test_readiness_publishes_check_progress_for_a_run_id(tmp_path, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+
+    from edgar_warehouse.hosted_store_clear_progress import snapshot, start_run
+
+    stores = tmp_path / "stores"
+    run_id = start_run(stores_folder=stores)
+    monkeypatch.setattr(readiness, "gather", lambda _stores: facts())
+    monkeypatch.setattr(readiness, "current_sha", lambda: "abc")
+    monkeypatch.setitem(
+        sys.modules,
+        "load_jobs",
+        SimpleNamespace(
+            load_env=lambda _path: {},
+            data_url=lambda _env: "dsn",
+            database_generation=lambda _url: "g1",
+        ),
+    )
+
+    assert readiness.main([
+        "--stores", str(stores), "--progress-run-id", run_id, "--progress-step", "preflight",
+    ]) == 0
+    progress = snapshot(run_id, stores)
+    assert progress["steps"]["preflight"]["state"] == "complete"
+    assert progress["steps"]["preflight"]["completed"] == len(readiness.CHECKS)
+
 
 
 @pytest.mark.parametrize("check, change", [

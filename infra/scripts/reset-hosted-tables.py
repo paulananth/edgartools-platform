@@ -328,6 +328,7 @@ def main(argv: list[str] | None = None) -> int:
                              "reset; its walsender and idle managed workers may stay connected")
     parser.add_argument("--wait-minutes", type=float, default=0,
                         help="with --apply: wait up to this long for blocking sessions (a suspended mirror's walsender) to leave")
+    parser.add_argument("--progress-run-id", help="Record this store transaction in a hosted-clear progress run")
     args = parser.parse_args(argv)
     if args.inventory == (args.manifest is not None):
         return fail("Choose exactly one of --inventory or --manifest")
@@ -337,6 +338,8 @@ def main(argv: list[str] | None = None) -> int:
         return fail("--apply requires exact --words and --plan-sha256")
     if not args.apply and (args.words is not None or args.plan_sha256 is not None):
         return fail("--words and --plan-sha256 require --apply")
+    if args.progress_run_id and not args.apply:
+        return fail("--progress-run-id requires --apply")
     from edgar_warehouse.database_connections import store_engine
 
     try:
@@ -351,21 +354,38 @@ def main(argv: list[str] | None = None) -> int:
                 show_plan(plan)
                 print("Plan only; nothing changed")
                 return 0
+            if args.progress_run_id:
+                from edgar_warehouse.hosted_store_clear_progress import record_unit
+                record_unit(args.progress_run_id, "reset", args.store, "running")
             wait_for_quiet(engine, args.wait_minutes, mirror_suspended=args.with_suspended_mirror)
             plan = apply_plan(engine, args.store, tables, args.words.strip(), args.plan_sha256,
                               require_all=args.require_all_tables, mirror_suspended=args.with_suspended_mirror)
+            if args.progress_run_id:
+                record_unit(args.progress_run_id, "reset", args.store, "completed")
             show_plan(plan)
             print(f"Applied {len(plan['tables'])} table actions; receipt recorded in the private stores folder")
             return 0
         finally:
             engine.dispose()
     except BlockedError as exc:
+        if args.progress_run_id:
+            from edgar_warehouse.hosted_store_clear_progress import record_unit
+            record_unit(args.progress_run_id, "reset", args.store, "failed")
         return fail(str(exc))
     except ReceiptError as exc:
+        if args.progress_run_id:
+            from edgar_warehouse.hosted_store_clear_progress import record_unit
+            record_unit(args.progress_run_id, "reset", args.store, "failed")
         return fail(str(exc) + "; inspect the pending approval receipt before retrying", 3)
     except (KeyError, OSError, ValueError, yaml.YAMLError):
+        if args.progress_run_id:
+            from edgar_warehouse.hosted_store_clear_progress import record_unit
+            record_unit(args.progress_run_id, "reset", args.store, "failed")
         return fail("Table reset refused; inspect the manifest and store configuration")
     except sa.exc.DBAPIError as exc:
+        if args.progress_run_id:
+            from edgar_warehouse.hosted_store_clear_progress import record_unit
+            record_unit(args.progress_run_id, "reset", args.store, "failed")
         code = getattr(exc.orig, "pgcode", None) or getattr(exc.orig, "sqlstate", None) or "database error"
         return fail(f"Table reset refused by the database ({code})")
 

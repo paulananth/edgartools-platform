@@ -320,6 +320,20 @@ a batch before changing its size: the writer made three a batch (70 ms each) and
 
 ### Clear all MDM and Silver tables for a full reload
 
+The read-only screen preview is `edgar-warehouse hosted-store-clear-preview`.
+Without `--run-id`, it shows zeroed example bars; with `--run-id`, it polls
+the private progress event log.
+
+Create a run ID with `edgar-warehouse hosted-store-clear-progress start`; this
+writes only a local event log and does not connect to stores or start cleanup.
+Pass the same `--progress-run-id` to `readiness.py` (`--progress-step preflight`
+before the reset, `readiness` after), `reset-hosted-tables.py` (alongside its
+existing approved `--apply` flags), and `rdm_restore_published.py`. Verify
+completed backups and archived state files with
+`hosted-store-clear-progress verify-backups` and `verify-archive`. These steps
+publish evidence-backed progress; the preview cannot start the cleanup.
+
+
 The clear, in order (the mirror commands are the data-platform skill's `scripts/exposure/mirror_sql.py` and `mirror_run.py`):
 
 1. `mirror_sql.py status | mirror_run.py`: the mirror lists (the warehouse answers); the gate's QUIET check passes (no load runs, the

@@ -39,6 +39,8 @@ bypass-selection = true
 # A folder that belongs wholly to this wheel is included whole.
 [tool.hatch.build.targets.wheel.force-include]
 "../../edgar_warehouse/cli.py" = "edgar_warehouse/cli.py"
+"../../edgar_warehouse/hosted_store_clear_preview.py" = "edgar_warehouse/hosted_store_clear_preview.py"
+"../../edgar_warehouse/hosted_store_clear_progress.py" = "edgar_warehouse/hosted_store_clear_progress.py"
 "../../edgar_warehouse/bundle.py" = "edgar_warehouse/bundle.py"
 "../../edgar_warehouse/context.py" = "edgar_warehouse/context.py"
 "../../edgar_warehouse/database_connections.py" = "edgar_warehouse/database_connections.py"
