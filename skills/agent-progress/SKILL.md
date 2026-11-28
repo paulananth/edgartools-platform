@@ -1,6 +1,6 @@
 ---
 name: agent-progress
-description: Streams evidence-backed progress and inline results in the current agent conversation. Use when asked for live updates, an in-chat progress visual, or a walkthrough of an agent run, regardless of the task domain.
+description: Presents verified progress and inline results in the current conversation. Use for live updates, in-chat progress visuals, agent run walkthroughs, or native interactive trials.
 ---
 
 # Agent progress
@@ -13,6 +13,8 @@ Keep the work in the current conversation. This skill reports progress; it does 
    For a user decision, carry forward the relevant prior choice or finding, ask one question that unblocks the current step, and say what the answer lets you do. Let the user answer in the same conversation; reminders should be timely and actionable, not repeated with every poll.
 4. **Disclose details on demand.** Put the state, evidence, and next action first. Offer named details such as “Show the full rule” or “Show failing checks” only when useful. Keep blockers visible. Share only evidence safe for this conversation, not private reasoning, secrets, or raw sensitive logs.
 5. **Close on evidence.** Report `Complete`, `Failed`, `Cancelled`, or `Status unavailable` only as supported by the run. If work continues after the turn, say what is still running. Use a compact table for comparisons; separate what passed from what was not checked. A stop request is not confirmation of cancellation or rollback.
+
+If the user wants to try an operation or supply structured input in chat, use [Native in-chat forms](CHAT-FORMS.md). Keep submission and outcome in the conversation.
 
 ## Examples
 
