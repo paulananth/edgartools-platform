@@ -84,6 +84,18 @@ WORDS = {
         ticket="138",
         versions={"1": ("claude (ticket 138)", "the operator's rulings of 2026-10-26, recorded under the standing "
                                                 "rule \"auto merge and not ask for approval\"")}),
+    "sec-cover-exchange": dict(
+        name="SEC cover exchange wordings",
+        definition="Each exchange a registration statement's or prospectus's cover names for a listed class, as written "
+                   "(upper case, trimmed), and the ISO 10383 MIC it names.",
+        authority="SEC registration statement and prospectus covers (silver registration_offering, prospectus_offering), "
+                  "mapped to ISO 10383", ticket="company phase 2, 04",
+        usage=[("silver", "registration_offering", "exchange", "upper_trimmed"),
+               ("silver", "prospectus_offering", "exchange", "upper_trimmed")],
+        hints=[("meaning", "The Trading Venue a cover names: its MIC, and through iso-10383-mic's parent the operating MIC."),
+               ("use_when", "Resolving a registration or prospectus ticker among the Securities that share it."),
+               ("avoid_when", "A wording this set lacks: the row is Set Aside as exchange not mapped, never guessed.")],
+        versions={"1": ("claude (company phase 2, ticket 04)", "yes")}),
     "nport-filed-currencies": dict(
         name="Currency codes N-PORT holdings file",
         definition="The three-letter currency codes the N-PORT holdings of the 2026 Q2 data set file, "
@@ -137,7 +149,7 @@ WORDS = {
 }
 # Crosswalk targets must be held before the set that points at them.
 ORDER = ["sec-place-types", "sec-place-codes", "sec-ownership-transaction-codes", "openfigi-country-composite",
-         "iso-10383-mic", "nport-filed-currencies", "sec-sic-codes", "financial-line-items", "corporate-tax-rates",
+         "iso-10383-mic", "sec-cover-exchange", "nport-filed-currencies", "sec-sic-codes", "financial-line-items", "corporate-tax-rates",
          "mdm-kinds", "mdm-relationship-types"]
 CODE_KEYS = ("code", "label", "definition", "parent_code", "valid_from", "valid_to", "status", "invalid_reason",
              "value", "unit", "properties")

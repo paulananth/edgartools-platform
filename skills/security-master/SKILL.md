@@ -406,4 +406,5 @@ Reloaded from `rules/reference/published/` by `scripts/dev/reload_rdm.py`; the w
 |---|---|---|
 | `openfigi-country-composite` | OpenFIGI mapping answers, measured on the local capture: the countries whose ISINs come back with the country's own composite exchange code | 120 |
 | `iso-10383-mic` | ISO 10383 market identifier codes (every active MIC, ISO's market name as label), with OpenFIGI's exchange-code answers as a crosswalk for 246 MICs | 138 |
+| `sec-cover-exchange` | the exchange wordings SEC registration and prospectus covers name for a listed class (upper case, trimmed), each crosswalked to its ISO 10383 MIC; a segment's operating MIC is its Trading Venue | |
 | `nport-filed-currencies` | the 80 three-letter currency codes the N-PORT 2026 Q2 holdings file, ISO 4217 names as labels | 138 |
