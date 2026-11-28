@@ -28,6 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
         register as register_hosted_store_clear_preview,
     )
     from edgar_warehouse.hosted_store_clear_progress import register as register_hosted_store_clear_progress
+    from edgar_warehouse.source_onboarding_preview import register as register_source_onboarding_guide
 
     register_mdm_subparser(subparsers)
     register_bookkeeping(subparsers)
@@ -35,6 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
     register_load(subparsers)
     register_hosted_store_clear_preview(subparsers)
     register_hosted_store_clear_progress(subparsers)
+    register_source_onboarding_guide(subparsers)
     register_journal(subparsers)
     worker_arguments(subparsers.add_parser("workers", help="Run a worker for one profile and run"))
     register_plan(subparsers)

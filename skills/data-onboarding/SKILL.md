@@ -94,6 +94,7 @@ Every step says what differs for each target. Read [TARGETS.md](TARGETS.md) befo
 
 - `edgar-warehouse rules <command> …`. `edgar-warehouse` is the installed data skill bundle (see the **data-platform** skill, Setup). In a checkout of the repository, put `uv run --extra mdm --extra s3` in front of it instead. Run `edgar-warehouse doctor`
   first. The CLI takes from half a minute to three minutes to start; that is not a hang.
+- To view the new-source sequence without reading captures or running any step, open the read-only guide: `edgar-warehouse source-onboarding-guide --source <source>`. It shows the required evidence and dependency order; it does not report live progress.
 - Run the `edgar-warehouse` command, never the `edgar_warehouse.cli` module
   through Python. The module prints nothing and exits 0,
   so a missing command looks like success.
