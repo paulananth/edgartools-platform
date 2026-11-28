@@ -334,29 +334,42 @@ completed backups and archived state files with
 publish evidence-backed progress; the preview cannot start the cleanup.
 
 
-The clear, in order (the mirror commands are the data-platform skill's `scripts/exposure/mirror_sql.py` and `mirror_run.py`):
+**Gates, before step 1.** Each is a separate approval; a previous approval does not carry over.
+- Operator's exact words for the clear, and for each `--apply`, recorded with the reviewed plan digest.
+- Mirror restart is a lifecycle action: it resets change-feed history. Approve it separately.
+- A new Gold destination or Gold build has its own approval. Gold is never built as part of the clear.
+- **No-backup path (install from source).** Bookkeeping and Change Journal are always cleared, with no backup, by standing policy: they hold run state and receipts, not sources. Rules config is never reset and is not part of the clear. The operator may also waive the MDM, Silver and RDM backups in writing, naming the stores. That waiver covers only what can be rebuilt: MDM and Silver from the retained captures and the feed's load, and RDM from its published sources in git (`rdm_restore_published.py`). It never covers `mdm.migration` or `silver.table_spec`: back those up, or get a separate written waiver.
 
-1. `mirror_sql.py status | mirror_run.py`: the mirror lists (the warehouse answers); the gate's QUIET check passes (no load runs, the
-   loader has no session).
-2. Back up the control database and RDM (below); plan each store's manifest and keep its digest.
-3. `mirror_sql.py suspend | mirror_run.py`, then `status` reads `SUSPENDED`.
-4. Apply each store's plan with `--with-suspended-mirror`: a suspended mirror keeps its walsender and a managed worker
-   connected, and the reset lets those two stay; any other session refuses it, named. Stop at the first store that fails.
-5. Restore RDM's published codes (`rdm_restore_published.py`), then restart the mirror (`mirror_sql.py restart | mirror_run.py`, a new snapshot
-   of the emptied tables) and read it back (HOSTED-MIRRORING, "Done is read back").
+**Stop rule.** Any failed check, refused plan, unexpected session, or missing receipt stops the clear at that step. Do not continue to the next store or step. Report the step, the error text (no secrets), and the current state of each store.
+
+1. **Start the run.** `edgar-warehouse hosted-store-clear-progress start`. Record the run ID; pass it as `--progress-run-id` to every later command in this runbook.
+2. **Stop loads and clients.** Stop the scheduler, then confirm `load_jobs.py --status` shows 0 running, and `edgar-warehouse bookkeeping runs --state running|waiting|blocked` returns no open run or lease (see "Stopping loads"). Any open run stops the clear.
+3. **Preflight.** `readiness.py --progress-run-id <id> --progress-step preflight` must pass. This checks the store connections, the QUIET gate and the absence of blocking sessions.
+4. **Back up (or waive).** Back up the MDM, Silver and RDM stores (`pg_dump`, custom format, one archive per store), unless the operator has waived them. Bookkeeping and Change Journal are cleared without backup. Confirm each archive is readable with `pg_restore --list`, then run `hosted-store-clear-progress verify-backups` against those archives. Stop if any archive fails.
+   **Install-from-source option:** if the operator waived the MDM, Silver and RDM backups, skip their archives and record the waiver with the run ID. Before step 7, confirm the captures for every store being reloaded are present and their hashes match the feed's manifest; `readiness.py --progress-run-id <id> --progress-step preflight` must still pass. Without a backup, step 8's "retry" rebuilds from the captures, not from an archive.
+5. **Plan each store.** For each store, run `reset-hosted-tables.py --store <store> --inventory`, write one manifest with `action: truncate` (or `drop`, only where approved) for every resettable table, then run `--manifest <file>` with `--require-all-tables`. Record each plan digest. Never edit a manifest after its digest is recorded; re-plan instead.
+6. **Suspend the mirror.** `mirror_sql.py suspend | mirror_run.py`, then `mirror_sql.py status | mirror_run.py` must read `SUSPENDED`. Do not proceed otherwise.
+7. **Reset each store.** Run `reset-hosted-tables.py --store <store> --manifest <file> --apply --words "<operator's exact words>" --plan-sha256 <digest> --with-suspended-mirror --progress-run-id <id>`, one store at a time, in the order the operator approved. Each store is its own transaction. After each store, confirm its receipt is in the private stores folder. Stop at the first failure.
+8. **If a store fails.** The mirror stays `SUSPENDED`. Do not restart it and do not run another store. Reconcile the receipts for every completed and failed store, then ask the operator whether to retry the failed store or stop. Restarting the mirror is a separate approval and takes a new snapshot of whatever state the stores are in.
+9. **Archive old state files.** Rename (never delete) the prior run-state files; run `hosted-store-clear-progress verify-archive` with the original and archived paths.
+10. **Restore RDM published codes** (only if RDM was in scope): `rdm_restore_published.py --progress-run-id <id>`. Verify each restored code set against its `pin.json`.
+11. **Readiness.** `readiness.py --progress-run-id <id> --progress-step readiness` must pass. The initialization and readiness checks run before any load.
+12. **Restart the mirror.** `mirror_sql.py restart | mirror_run.py`, then `mirror_sql.py verify`, save its rows as JSON, and run `mirror_sql.py readback --listing <file>`. It passes only when every table is `REPLICATING` and matches the record. Only then set `verified: true` in `sources/managed-mirror.yaml`.
+13. **Load.** Start the first load only after step 12 passes. Each successful load is followed by `mirror_refresh.py`; record its `mirror: applied at` line.
+14. **Build Gold.** Only after step 12 passes and under its own approval: `mirror_sql.py check --reads <dbt folder>/models/sources.yml`, then dbt, as described in HOSTED-MIRRORING "At init."
+15. **Report.** Give the before and after row counts for every store, the receipt IDs, the run ID, the plan digests, and the mirror state. Do not claim completion until each step's check has passed.
 
 Prepare a separate manifest for each store. List every resettable table from its
-inventory with `action: truncate`. Use `--require-all-tables` when planning
-and applying each manifest. The script checks the complete inventory during
+inventory with `action: truncate`. The script checks the complete inventory during
 planning and again under the reset locks, and verifies all selected tables are
 empty before commit. Preserve `mdm.migration` and `silver.table_spec`:
 they record the installed migration and registered specifications that
 initialization checks. The script rejects either table in a reset manifest.
 Recover missing metadata from a verified backup or evidence of the installed
 schema and specifications. Keep RDM reference data and Rules configuration for this
-reload. A full hosted data-store clear may also reset RDM when named in scope; verify its published sources and restore
-them with `rdm_restore_published.py` before readiness or mirror creation. Rules configuration remains in config and is never
-reset. Run the hosted initialization and readiness checks before loading.
+reload (RDM is reset only when named in scope). Rules configuration remains in config and is never
+reset.
+
 
 ### Recover missing deployment metadata
 
