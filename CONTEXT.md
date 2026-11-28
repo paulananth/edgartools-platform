@@ -110,6 +110,18 @@ _Avoid_: entity type, domain, a kind kept as a list in code or in a table
 The kind that a rule step gives to a record it holds in the Stage. It sorts the Stage and never creates an identity; the rule of that kind decides.
 _Avoid_: hint, candidate kind, a decided kind
 
+**Mastering Scope**:
+The records a kind's classification rule masters in the current phase. A record outside it is Set Aside, not lost.
+_Avoid_: filter, phase 1 universe, a Set Aside record counted as a defect
+
+**Set Aside**:
+A record a classification rule held back by decision, with its reason and Probable Kind. Gold leaves its links out of a link's test, and it waits for a rule that decides its kind.
+_Avoid_: "deferred" alone (a record can also wait on something missing, which is a gap, not a decision), dropped, rejected
+
+**Trading Venue**:
+Where a listing trades, named by its ISO 10383 operating MIC. A ticker is unique only within one Trading Venue.
+_Avoid_: an exchange name as written, a segment MIC as a venue of its own
+
 **Fund**:
 A collection of Securities that pools investors' money. It is not a Company: a fund that is no company is a Fund Structure, and a business development company stays a Company that also holds a fund registration.
 _Avoid_: A Security, an ETF share, a name ending in "fund" as proof of the registration, treating a fund as a Company
