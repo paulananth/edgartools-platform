@@ -184,6 +184,15 @@ def test_every_silver_spec_of_the_repository_finds_its_master():
         specs.check(files.load(path))
 
 
+def test_only_the_set_aside_table_holds_no_master():
+    """Operator, 2026-11-27: the Set Aside table, which lists records no master holds, is the one exception to "every
+    silver table should join to the appropriate master"."""
+    from edgar_warehouse.rules import files
+
+    paths = [*files.sources_root().glob("*/silver-*.yaml"), *(files.ROOT / "silver").glob("silver-*.yaml")]
+    assert [spec["table"] for spec in map(files.load, paths) if spec.get("holds_no_master")] == ["set_aside"]
+
+
 CHECKS = [
     {"id": "member_shape", "check": "identifier", "column": "member_id", "type": "cusip", "on_fail": "flag",
      "why": "a member id is a CUSIP"},

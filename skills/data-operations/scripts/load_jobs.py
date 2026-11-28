@@ -2144,7 +2144,7 @@ def finish(env: dict, state: Path, lookups: bool = False) -> bool:
         note(f"lookups rc={codes['lookups']}", state)
     codes["links"] = run(['silver', 'links'], env, LOGS / f'chain-{RUN}-links.log')
     note(f"links rc={codes['links']}", state)
-    note(f"finish took {(time.monotonic() - began) / 60:.1f} min (the bound is 5 min without lookups)", state)
+    note(f"finish took {(time.monotonic() - began) / 60:.1f} min (the bound is 6 min without lookups)", state)
     failed = [f"{name} rc={code}" for name, code in codes.items() if code]
     if failed:
         note(f"finish stopped: {', '.join(failed)}: the load is not done; its log is chain-{RUN}-<build>.log", state)

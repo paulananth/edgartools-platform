@@ -309,7 +309,7 @@ One Snowflake mirror of the data database carries the final tables: the tables n
 `destination/authorised_data_sharing.yaml` lets leave the stores, in the schemas `MDM`, `RDM` and `SILVER`, with the target database `mirror.database` of
 `rules/snowflake.yaml`. It is made at init (step 8b), on the empty tables, and keeps them current while the loads and `--finish` write. The
 procedure, its read-only checks and its approval are [the data-platform skill's hosted mirroring guide](../../../skills/data-platform/HOSTED-MIRRORING.md#at-init-mirror-only-what-gold-reads).
-`--finish` writes `finish took <n> min` to the run's state file (the bound is five minutes without lookups): record that figure on the ticket.
+`--finish` writes `finish took <n> min` to the run's state file (the bound is six minutes without lookups): record that figure on the ticket.
 
 The Snowflake database names are in `rules/snowflake.yaml`, nowhere else. A target database cannot be renamed, and while its mirror replicates the Snowflake application owns it (the owner role can own it only after `DROP_MIRROR(<mirror>, FALSE)`, [HOSTED-MIRRORING](../../../skills/data-platform/HOSTED-MIRRORING.md)), so a new
 name means a new mirror: create it beside the old one, wait until every table reads `REPLICATING` with equal counts, change the name in
