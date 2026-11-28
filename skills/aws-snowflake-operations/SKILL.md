@@ -27,6 +27,13 @@ resources, ECR images, ECS clusters, and Terraform state should target `69083958
 There is one environment, prod: AWS account `690839588395` and the `edgartools-prod` Snowflake connection.
 No dev environment exists on AWS or on Snowflake; a command that targets dev has nothing to reach.
 
+## What is running in AWS
+
+For active compute, load jobs, schedules and idle resources that still incur
+charges, follow [RUNNING.md](RUNNING.md). Query live state on each request;
+an idle cluster or a low Cost Explorer total does not establish that the account
+has no running work.
+
 ## Data layers
 
 | Layer | Location | Description |
