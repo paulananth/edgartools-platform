@@ -34,6 +34,12 @@ charges, follow [RUNNING.md](RUNNING.md). Query live state on each request;
 an idle cluster or a low Cost Explorer total does not establish that the account
 has no running work.
 
+## Checking AWS costs
+
+For daily or month-to-date charges and a service breakdown, follow
+[COSTS.md](COSTS.md). Use live Cost Explorer results, state the billing window
+and observation time in ET, and identify estimated charges and tax.
+
 ## Data layers
 
 | Layer | Location | Description |
