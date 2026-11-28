@@ -1,6 +1,6 @@
 # Gold links: by identifier, several kinds, Set Aside out of scope
 
-Status: open
+Status: resolved
 Type: task
 Owner: claude (map decisions 7, 9, 10, 12, 13)
 Blocked by: 02, 04
@@ -59,5 +59,5 @@ source code are unchanged. Ticket 07 measures them again after its load, with th
 - [x] A registration or prospectus ticker several Securities hold resolves by its cover's Trading Venue (`ref_sec_cover_exchange` to `ref_iso_10383_mic`'s operating MIC), then the `US` ISIN; a row whose wording `sec-cover-exchange` lacks, or which gives none, is out of the link test as "exchange not mapped" (from ticket 04): two tests, and 3 of 3 shared tickers on hosted (2026-11-28 09:42 ET)
 - [x] Hosted prediction per link with the new views' SQL, counts here (2026-11-28 09:42 ET)
 - [x] Dependency inference follows an identifier link to every source minting a master of its kinds by that identifier (2026-11-28 09:42 ET)
-- [ ] `/code-review`
-- [ ] Learning → skill
+- [x] `/code-review` (three `risky-reviewer` agents): GoF "no changes"; Standards and Spec fixes made: a cover wording's MIC is read from the crosswalk entry to `iso-10383-mic` in RDM's published shape (objects, not the committed file's lists; the fixture had hidden it), a listing kept on a merged-away master counts for its survivor, the Set Aside test uses `NOT EXISTS` (null-safe), a check's words are outside the table's shape, and the shape test covers key, check and nullability. Registrants of an offering (registration, prospectus, IPO) are `[company, fund_structure]` like the Form 4 issuer. Kept: the context view's change is a numbered file beside `schema.sql`, as RDM's and Bookkeeping's are, since an installed store refuses a changed `schema.sql`; MySQL keeps the column comments written at creation; a MySQL store registered before this keeps a stage table under its old name (no MySQL silver store is hosted). Gold tests 42 passed; the hosted ticker prediction unchanged with RDM's crosswalk shape (2026-11-28 09:46 ET)
+- [x] Learning → skill: `data-modeling` GOLD.md (a code set view's crosswalk is objects; read an entry by `to_set`; fixtures in the published shape), `data-onboarding` TARGETS.md (a link's `kinds`, `identifier` or `source_code`, `venue`), `data-platform` STORES.md and TARGETS.md (a spec changed only in links or words is recorded over the held one) (2026-11-28 09:46 ET)

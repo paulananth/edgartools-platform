@@ -19,7 +19,8 @@ DIALECTS = {
         "text": lambda body, path, body_type: f"{('PARSE_JSON(' + body + ')') if body_type == 'text' else body}"
                                               f"{'' if path.startswith('[') else ':'}{path}::VARCHAR",
         "each": lambda body, path, body_type, alias:
-            f"LATERAL FLATTEN(input => {('PARSE_JSON(' + body + ')') if body_type == 'text' else body}:{path}) {alias}",
+            f"LATERAL FLATTEN(input => {('PARSE_JSON(' + body + ')') if body_type == 'text' else body}"
+            f"{(':' + path) if path else ''}) {alias}",
         "item": lambda alias, field: f"{alias}.value:{field}::VARCHAR",
         "part": lambda part, expr: f"EXTRACT({part} FROM {expr})",
         "next_day": lambda expr: f"DATEADD(day, 1, {expr})",
@@ -29,7 +30,7 @@ DIALECTS = {
     "sqlite": {
         "create": "CREATE VIEW",
         "text": lambda body, path, body_type: f"json_extract({body}, '${'' if path.startswith('[') else '.'}{path}')",
-        "each": lambda body, path, body_type, alias: f"json_each({body}, '$.{path}') {alias}",
+        "each": lambda body, path, body_type, alias: f"json_each({body}{(chr(44) + chr(32) + repr('$.' + path)) if path else ''}) {alias}",
         "item": lambda alias, field: f"json_extract({alias}.value, '$.{field}')",
         "part": lambda part, expr: f"CAST(strftime('{'%Y' if part == 'YEAR' else '%m'}', {expr}) AS INTEGER)",
         "next_day": lambda expr: f"date({expr}, '+1 day')",
@@ -214,12 +215,13 @@ def holders(link: dict, ctx: Context, masters: str) -> str:
 
 
 def wordings(ctx: Context) -> str:
-    """Each venue wording with its operating MIC: the wording code set crosswalks a wording to one MIC, and a segment
-    MIC's operating MIC is its parent."""
+    """Each venue wording with its operating MIC: the wording code set crosswalks a wording to its MIC (the crosswalk
+    entry to the MIC code set), and a segment MIC's operating MIC is its parent."""
     venues, d = ctx.config["venues"], ctx.dialect
-    mic = d["text"]("w.crosswalk", "[0][2]", ctx.config["mirror"]["body_type"])
-    return (f"SELECT w.code AS wording, COALESCE(o.parent_code, o.code) AS mic FROM {ctx.code_set(venues['wording'])} w "
-            f"JOIN {ctx.code_set(venues['mic'])} o ON o.code = {mic}")
+    crosswalk = d["each"]("w.crosswalk", "", ctx.config["mirror"]["body_type"], "x")
+    return (f"SELECT w.code AS wording, COALESCE(o.parent_code, o.code) AS mic FROM {ctx.code_set(venues['wording'])} w, "
+            f"{crosswalk} JOIN {ctx.code_set(venues['mic'])} o ON o.code = {d['item']('x', 'to_code')} "
+            f"WHERE {d['item']('x', 'to_set')} = {literal(venues['mic'])}")
 
 
 def venue_holders(link: dict, ctx: Context) -> str:
@@ -230,7 +232,8 @@ def venue_holders(link: dict, ctx: Context) -> str:
     homes = (f"SELECT DISTINCT hm.canonical_id AS master_id FROM {ctx.mirror('mdm.mastering_identifier')} h "
              f"JOIN {ctx.mirror(ctx.config['master']['source'])} hm ON hm.entity_id = h.entity_id "
              f"WHERE h.namespace = {literal(home['namespace'])} AND h.value LIKE {literal(home['prefix'] + '%')}")
-    listed = (f"SELECT l.entity_id, COALESCE(o.parent_code, l.mic) AS mic FROM {ctx.view(venues['listings'])} l "
+    listed = (f"SELECT lm.canonical_id AS entity_id, COALESCE(o.parent_code, l.mic) AS mic FROM {ctx.view(venues['listings'])} l "
+              f"JOIN {ctx.mirror(ctx.config['master']['source'])} lm ON lm.entity_id = l.entity_id "
               f"LEFT JOIN {ctx.code_set(venues['mic'])} o ON o.code = l.mic WHERE l.mic IS NOT NULL")
     joins = f"JOIN ({listed}) l ON l.entity_id = k.canonical_id LEFT JOIN ({homes}) hm ON hm.master_id = k.canonical_id "
     held = (f"SELECT DISTINCT i.value AS value, l.mic AS mic, k.canonical_id AS master_id, hm.master_id AS home_id "
@@ -256,6 +259,12 @@ def master_join(link: dict, ctx: Context, row: str, alias: str) -> tuple[str, st
             f"COALESCE({alias}.master_id, {alias}v.master_id)")
 
 
+def set_aside_lacks(link: dict, ctx: Context, value: str) -> str:
+    """The condition that the Set Aside table does not hold `value` under the link's identifier namespace."""
+    return (f"NOT EXISTS (SELECT 1 FROM {ctx.mirror(ctx.config['silver_facts']['set_aside'])} a "
+            f"WHERE a.namespace = {literal(link['identifier'])} AND a.value = {value})")
+
+
 def in_scope(link: dict, ctx: Context, row: str, alias: str) -> str:
     """The test's condition on a row beyond a filled key (company phase 2, decision 10): an identifier the Set Aside
     table holds is out of scope; for a venue link, so is a value several masters hold on a row whose wording maps to no
@@ -263,8 +272,7 @@ def in_scope(link: dict, ctx: Context, row: str, alias: str) -> str:
     if link_type(link) == "source_code":
         return ""
     key = f"CAST({ctx.column(link['column'], row)} AS VARCHAR)"
-    scope = (f" AND NOT EXISTS (SELECT 1 FROM {ctx.mirror(ctx.config['silver_facts']['set_aside'])} a "
-             f"WHERE a.namespace = {literal(link['identifier'])} AND a.value = {key})")
+    scope = f" AND {set_aside_lacks(link, ctx, key)}"
     if link_type(link) == "venue":
         scope += f" AND NOT ({alias}w.mic IS NULL AND {key} IN (SELECT x.value FROM ({holders(link, ctx, '> 1')}) x))"
     return scope
@@ -356,8 +364,7 @@ def quality_tests(config: dict | None = None, dialect: str = "snowflake", qualif
                 tests[f"{table}_{column}_one_master"] = (
                     f"SELECT h.value FROM ({holders(link, ctx, '> 1')}) h "
                     f"WHERE h.value IN (SELECT CAST({ctx.column(column)} AS VARCHAR) FROM {ctx.mirror(source)} s) "
-                    f"AND h.value NOT IN (SELECT a.value FROM {ctx.mirror(config['silver_facts']['set_aside'])} a "
-                    f"WHERE a.namespace = {literal(link['identifier'])})")
+                    f"AND {set_aside_lacks(link, ctx, 'h.value')}")
     return tests
 
 

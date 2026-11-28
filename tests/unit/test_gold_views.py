@@ -71,7 +71,8 @@ def rows(conn, sql):
 
 
 def code(code_set, code, crosswalk=(), parent_code=None, level=None):
-    return {"code_set": code_set, "code": code, "crosswalk": json.dumps([list(c) for c in crosswalk]),
+    return {"code_set": code_set, "code": code,   # a crosswalk entry as RDM publishes it
+            "crosswalk": json.dumps([dict(zip(("to_set", "to_version", "to_code", "match_type"), c)) for c in crosswalk]),
             "parent_code": parent_code, "level": level}
 
 
@@ -81,7 +82,8 @@ def published(conn):
     sets = {i["code_set"]: i for i in config["objects"] if i["kind"] == "code_set"}
     columns = config["code_sets"]["columns"]
     conn.execute(f"create table published_code (code_set text, {', '.join(columns)})")
-    for row in (code("sec-cover-exchange", "NASDAQ CAPITAL MARKET", [("iso-10383-mic", "1", "XNCM", "exact")]),
+    for row in (code("sec-cover-exchange", "NASDAQ CAPITAL MARKET", [("another-set", "1", "XNSE", "exact"),
+                                                                     ("iso-10383-mic", "1", "XNCM", "exact")]),
                 code("sec-cover-exchange", "NASDAQ GLOBAL SELECT MARKET", [("iso-10383-mic", "1", "XNGS", "exact")]),
                 code("sec-cover-exchange", "NYSE", [("iso-10383-mic", "1", "XNYS", "exact")]),
                 code("iso-10383-mic", "XNAS", level="Operating MIC"),
@@ -506,3 +508,11 @@ def test_a_securitys_listings_are_one_gold_row_each_with_their_mic(db):
     add_masters(db, [("s7", None, "security", [{"ticker": "GP", "mic": "XNCM", "exchange": "UR"}, {"ticker": "GP"}])], [])
     assert rows(db, "select entity_id, ticker, exchange, mic from security_listing where entity_id = 's7' order by mic") == [
         ("s7", "GP", None, None), ("s7", "GP", "UR", "XNCM")]
+
+
+def test_a_listing_kept_on_a_master_that_merged_away_counts_for_the_master_it_became(db):
+    add_masters(db, [("s7", None, "security", []), ("s3", "s7", "security", [{"ticker": "GP", "mic": "XNCM"}]),
+                     ("s8", None, "security", [{"ticker": "GP", "mic": "XNSE"}])],
+                [("ticker", "GP", "s7"), ("ticker", "GP", "s8")])
+    offering(db, offering_config(VENUE), [("o1", "GP", "Nasdaq Capital Market")])
+    assert rows(db, "select listed_security_key from fact_offering") == [("s7",)]

@@ -157,7 +157,7 @@ key:
 links:
 - columns:
   - cik
-  kinds: [company]
+  kinds: [company, fund_structure]
   identifier: cik
   to_part: registrant
   source_key: cik

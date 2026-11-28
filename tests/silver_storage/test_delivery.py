@@ -121,8 +121,13 @@ def test_a_spec_changed_only_in_links_or_wording_keeps_its_table_and_a_changed_s
     assert TableContext(runtime).table(first["table"])["links"][0]["identifier"] == "invented-id"
     assert land(sink, first["table"], rows())["inserted"] == 0   # the same table, its rows kept, under the new spec
     assert len(stored(runtime, first)) == 2
-    for shape in ({"load_mode": "upsert"}, {"partition": []},
-                  {"columns": [{**c, "type": "VARCHAR"} if c["name"] == "amount" else c for c in first["columns"]]}):
+    check = {"id": "allowed", "check": "in_set", "column": "member_id", "values": ["invented-a"], "on_fail": "flag",
+             "why": "Invented quality policy"}
+    for shape in ({"load_mode": "upsert"}, {"partition": []}, {"key": ["visit_id", "visited_on"],   # a key column is never empty, so the key change also makes visited_on required
+                   "columns": [{**c, "nullable": False} if c["name"] == "visited_on" else c for c in first["columns"]]},
+                  {"checks": [check]},
+                  {"columns": [{**c, "type": "VARCHAR"} if c["name"] == "amount" else c for c in first["columns"]]},
+                  {"columns": [{**c, "nullable": False} if c["name"] == "amount" else c for c in first["columns"]]}):
         with pytest.raises(Blocked, match="registered as a new table"):
             register(owner, {**relinked, **shape}, runtime_role=role)
 

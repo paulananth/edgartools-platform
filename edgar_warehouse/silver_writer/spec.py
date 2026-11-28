@@ -155,10 +155,11 @@ def quality_columns(spec: dict) -> list[str]:
 
 
 def shape(spec: dict) -> dict:
-    """What builds the spec's table: its columns' names, types and nullability, key, partition, checks, load mode and
-    as-at column. Two specs of one shape are one table."""
+    """What builds the spec's table: its columns' names, types and nullability, key, partition, checks (without their
+    words), load mode and as-at column. Two specs of one shape are one table."""
     return {"table": spec["table"], "columns": [{k: c[k] for k in COLUMN_SHAPE} for c in spec["columns"]],
-            "key": spec["key"], "partition": spec["partition"], "checks": spec.get("checks") or [],
+            "key": spec["key"], "partition": spec["partition"],
+            "checks": [{k: v for k, v in check.items() if k != "why"} for check in spec.get("checks") or []],
             "load_mode": spec["load_mode"], "as_at": spec["time"]["as_at"]}
 
 
