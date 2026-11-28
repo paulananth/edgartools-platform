@@ -64,7 +64,7 @@ The reason codes the code raises today:
 | A kind MDM does not take yet | `unsupported_identity_kind` | yes |
 | A valid reporting exception | `reported_parent_exception` | yes |
 | A data quality exception: a critical data element is missing | `quality_<id>` | yes, always (operator) |
-| Held back by a classification rule | `classification_deferred`, `classification_entity_undetermined` | yes (operator: "never stop the run") |
+| Held back by a classification rule | `classification_deferred`, `classification_entity_undetermined`, `classification_not_listed` | yes (operator: "never stop the run") |
 | A relationship type not mapped yet | `unsupported_relationship_type` | yes (operator); each run reports a count by type, so a new type is seen |
 | The policy has not activated the verdict | `classification_not_activated` | no: it means the policy is wrong |
 | A defect: `invalid_*`, `missing_*`, `ambiguous_relationship_period`, `unsupported_relationship_endpoint`, `unsupported_exception_category` | | never, unless the operator rules one defect non-blocking for one contract (the records still never merge; they wait for a steward); quote the ruling in a comment beside the list |

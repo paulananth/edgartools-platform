@@ -29,7 +29,7 @@ from .store import Conflict
 # third copy of the kind set. Evidence and destination vocabulary now come
 # from the same mastering configuration; the destination enforces its installed
 # selection through its owner-managed catalog.
-CLASSIFICATION_VERDICTS = KINDS | {"entity_undetermined", "deferred"}
+CLASSIFICATION_VERDICTS = KINDS | {"entity_undetermined", "deferred", "not_listed"}
 
 
 def resolve_rule(policy: dict, named: dict | None) -> dict | None:

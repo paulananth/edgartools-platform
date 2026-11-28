@@ -220,6 +220,31 @@ rules:
   - primitive: identifier_cardinality@1
     args:
       namespace: figi
+# Whether an OpenFIGI answer is a Security's (operator, 2026-11-27: "Set Aside: not listed (Recommended)"): a
+# ticker asked that OpenFIGI does not know names no listing, so it is Set Aside as not listed, by the ticker asked,
+# and Gold leaves its rows out. A CUSIP or ISIN OpenFIGI does not know is a Security's record: it waits for
+# the Security that holds that identifier. An answer with no CUSIP, ISIN or listing FIGI can only be such a ticker.
+- rule_id: openfigi-listed
+  version: 2026-11-27.ticker-not-listed
+  family: classification
+  source: openfigi.security.v4
+  emits:
+  - security
+  - not_listed
+  steps:
+  - step: "1"
+    verdict: not_listed
+    probable_kind: security
+    when:
+    - primitive: fields_all_empty@1
+      args:
+        fields:
+        - cusip
+        - isin
+        - figis
+  - step: "2"
+    verdict: security
+    otherwise: true
 # OpenFIGI (ticket 138; operator, 2026-10-25: "there should be one processing
 # with all the identifier and this is the first load", "first lookup if not
 # exists then master"): one record per identifier asked, CUSIP or ISIN, with

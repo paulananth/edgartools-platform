@@ -50,10 +50,11 @@ def prepare(store: Artifacts, root: Path, reading: dict, keys: dict) -> dict:
 
 
 def records(store: Artifacts, root: Path, prepared: dict, code: str, contract: dict,
-            refused: dict[str, str] | None = None, key: str | None = None) -> list[dict]:
-    """The prepared records normalized under the Dataset Contract `code`. With
-    `refused`, a record the contract sets aside is kept there by its `key`
-    field, with its reason, instead of failing the test."""
+            refused: dict[str, str] | None = None, key: str | None = None, policy: dict | None = None,
+            held: list[dict] | None = None) -> list[dict]:
+    """The prepared records normalized under the Dataset Contract `code`, under `policy` when the contract names a
+    classification rule. With `refused`, a record the contract sets aside is kept there by its `key` field, with its
+    reason, instead of failing the test, and in `held`, when given, as the record it was."""
     assert (refused is None) == (key is None), "refused and key go together"
     out = []
     for batch in store.json(prepared)["batches"]:
@@ -61,11 +62,13 @@ def records(store: Artifacts, root: Path, prepared: dict, code: str, contract: d
         for line in (root / data["path"]).read_bytes().splitlines():
             row = json.loads(line)
             try:
-                out.append(adapters.normalize(row, source_code=code, contract=contract, publication={
+                out.append(adapters.normalize(row, source_code=code, contract=contract, policy=policy, publication={
                     **data["publication"], "semantics": "patch", "artifact_sha256": data["sha256"],
                     "member": data["path"], "record_locator": f"{data['sha256']}:{len(out)}"}))
             except adapters.UnsupportedRecord as error:
                 if refused is None:
                     raise
                 refused[row[key]] = error.reason
+                if held is not None:
+                    held.append(row)
     return out

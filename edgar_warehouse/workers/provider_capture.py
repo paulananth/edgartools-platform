@@ -104,7 +104,7 @@ def _load(envelope, artifacts):
     return request, authority, completeness, url
 
 
-def _sending(configuration, request):
+def sending(configuration, request):
     """The method, body and extra headers of one request. A POST feed's key is read
     here, for this request only: never stored, logged or put in an error (ticket 92)."""
     if configuration['capabilities']['fetch'] != 'https.post':
@@ -302,7 +302,7 @@ def execute(envelope, artifacts):
             identity = os.environ.get('EDGAR_IDENTITY', '')
             if authority['configuration']['capabilities']['fetch'] == 'sec.conditional' and '@' not in identity:
                 raise ValueError('SEC capture requires the configured identity with email')
-            method, body, headers = _sending(authority['configuration'], request)
+            method, body, headers = sending(authority['configuration'], request)
             def permission():
                 control.renew(envelope)
                 journal.append(_event(envelope, request, authority, 'authorized', [envelope['input'], envelope['rules']], at=request['requested_at']))
