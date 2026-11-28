@@ -160,13 +160,16 @@ def test_a_field_the_spec_does_not_name_is_refused():
     {"links": [], "master_columns": ["nope"]},
     {"links": [], "master_through": ""},
     {"links": []},
+    {"links": [], "holds_no_master": False},
+    {"links": [], "master_columns": ["member_id"], "holds_no_master": True},
 ])
 def test_a_table_finds_its_master_one_way_and_names_real_columns(more):
     with pytest.raises(Blocked, match="one way|names a column|names the table"):
         specs.check(a_spec(**more))
 
 
-@pytest.mark.parametrize("more", [{"links": [], "master_columns": ["member_id"]}, {"links": [], "master_through": "member"}])
+@pytest.mark.parametrize("more", [{"links": [], "master_columns": ["member_id"]}, {"links": [], "master_through": "member"},
+                                  {"links": [], "holds_no_master": True}])
 def test_a_table_may_declare_master_columns_or_the_table_it_carries_the_key_of(more):
     assert specs.check(a_spec(**more))["table"] == "visit"
 

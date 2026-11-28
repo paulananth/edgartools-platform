@@ -192,7 +192,7 @@ so an earlier load's lines never satisfy a wait and never stop a run. A generati
 A fresh store takes hours, and the shape is the same each time. The longest step is the GLEIF merge, which holds the mastering lease, so a step that
 writes silver for the same masters shows no CPU, no session and no rows until that merge ends, then runs at once: `--status` says "no sign of work"
 for it, and the log of a step with one document stays silent. That is a wait, not a stall; read the leases (below) before stopping anything. The finish
-(`--finish`) follows the last step and builds the links tables and `master_binding` whole from the stored records; no silver row is rewritten.
+(`--finish`) follows the last step and builds the links tables, `master_binding` and `set_aside` whole from the stored records; no silver row is rewritten.
 
 Masters come first and each source's silver target last, so silver rows find their masters as they land; a silver step
 needs none before it (a row lands with its link key and finds its master by a join on `master_binding`, which `--finish` builds). A source's later

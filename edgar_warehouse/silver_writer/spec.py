@@ -15,7 +15,7 @@ from .checks import QUALITY
 from .checks import check as check_quality
 
 KEYS = {"table", "grain", "columns", "key", "links", "time", "partition", "load_mode", "why"}
-OPTIONAL = {"definition", "checks", "may_be_empty", "master_columns", "master_through"}
+OPTIONAL = {"definition", "checks", "may_be_empty", "master_columns", "master_through", "holds_no_master"}
 COLUMN_KEYS = {"name", "type", "nullable", "definition", "source", "sensitivity"}
 LINK_KEYS = {"columns", "kind", "source_code", "identifier", "to_part", "source_key", "inclusion"}
 LOAD_MODES = ("append", "upsert", "snapshot")
@@ -105,10 +105,12 @@ def check(spec: dict) -> dict:
                                                       and not isinstance(link["inclusion"], bool)
                                                       and 0 <= link["inclusion"] <= 1):
             raise Blocked(f"Link on {link['source_key']}: inclusion is a share from 0 to 1")
-    ways = [bool(spec["links"]), bool(spec.get("master_columns")), bool(spec.get("master_through"))]
+    ways = [bool(spec["links"]), bool(spec.get("master_columns")), bool(spec.get("master_through")),
+            spec.get("holds_no_master") is True]
     if sum(ways) != 1:
         raise Blocked("A table finds its master exactly one way: links (a key found in master_binding), master_columns "
-                      "(columns that hold master ids) or master_through (the table whose key it carries)")
+                      "(columns that hold master ids) or master_through (the table whose key it carries), or says it "
+                      "holds_no_master (a table of records no master holds)")
     for column in spec.get("master_columns") or []:
         if column not in names:
             raise Blocked(f"master_columns names a column of the spec: {column!r}")

@@ -1,0 +1,53 @@
+# The Set Aside records (CONTEXT.md, Set Aside), by the identifiers a Gold link resolves by. Built whole by the finish,
+# beside master_binding: a Gold link's test leaves out a key this table holds, and every other key resolves to one master.
+table: set_aside
+definition: "An identifier of a record a classification rule held back by decision, with the feed, the reason and the Probable Kind."
+grain: "one row per identifier namespace, value and source code"
+columns:
+- name: namespace
+  type: VARCHAR
+  nullable: false
+  definition: "The identifier's namespace (cik, ticker, lei, ...), as the feed's Dataset Contract names it."
+  source: "the contract's identifiers"
+  sensitivity: none
+- name: value
+  type: VARCHAR
+  nullable: false
+  definition: "The identifier as the contract formats it for a stored record."
+  source: "mastering_deferred.body raw_record, through the contract's identifier formats"
+  sensitivity: none
+- name: source_code
+  type: VARCHAR
+  nullable: false
+  definition: "The Dataset Contract whose classification rule held the record back."
+  source: "mastering_deferred.source_code"
+  sensitivity: none
+- name: reason
+  type: VARCHAR
+  nullable: false
+  definition: "The verdict that held it back (classification_deferred, classification_entity_undetermined, ...)."
+  source: "mastering_deferred.reason"
+  sensitivity: none
+- name: probable_kind
+  type: VARCHAR
+  nullable: true
+  definition: "The kind the rule step names for it, when it names one."
+  source: "mastering_deferred.body probable_kind"
+  sensitivity: none
+key:
+- namespace
+- value
+- source_code
+links: []
+holds_no_master: true
+time:
+  as_of: null
+  as_at: loaded_at
+  event_time: null
+partition: []
+load_mode: snapshot
+may_be_empty: true
+why: >-
+  Gold's link tests keep 100% of in-scope rows: a key held back by a classification rule's decision is out of scope, any
+  other unresolved key is a loss (operator, 2026-11-27, company phase 2 decision 10). Only the key, feed and reason leave
+  the stores, never the record.

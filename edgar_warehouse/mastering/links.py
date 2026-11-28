@@ -199,8 +199,65 @@ def build(silver, mdm, policy_digest: str, as_of: str) -> dict:
             db.close()
         land(sink, "master_binding", bindings)
         bound = {"bindings": len(bindings)}
+    rules = registry.engine()
+    try:
+        held = set_aside(silver, mdm, adapters_of(rules))
+    finally:
+        rules.dispose()
     return {"table": "relationship", "links": made, "rows": spool.counts["relationship"],
-            "bindings": bound["bindings"], "waiting": dict(sorted(waiting.items()))}
+            "bindings": bound["bindings"], "set_aside": held, "waiting": dict(sorted(waiting.items()))}
+
+
+def set_aside(silver, mdm, adapter_of) -> int:
+    """`silver.set_aside`, a snapshot: each identifier of a record a classification rule held back (CONTEXT.md, Set Aside),
+    keyed as a Gold link resolves (namespace, value) with the feed, the reason and the Probable Kind; no field of the record.
+    The identifiers are the feed's own contract's (`adapter_of(source code)`, its adapter mapping), formatted as a stored
+    record's are."""
+    from edgar_warehouse.mastering.store import open_store
+    from edgar_warehouse.mdm.adapters import UnsupportedRecord, record_identifiers
+    from edgar_warehouse.silver_writer.relational import DatabaseSink
+
+    rows = {}
+    db = open_store(mdm)
+    try:
+        codes = db.held_back_sources()
+        paths = sorted({path for code in codes if adapter_of(code) for path in adapter_of(code).get("identifiers", {}).values()})
+        for code, reason, body in db.held_back(paths):
+            mapping = adapter_of(code)
+            if mapping is None:
+                continue
+            record = json.loads(body)
+            identifiers = {}
+            for namespace, path in mapping.get("identifiers", {}).items():
+                try:
+                    identifiers |= record_identifiers(record["raw_record"], {**mapping, "identifiers": {namespace: path}})[0]
+                except UnsupportedRecord:
+                    continue  # an identifier its format refuses names nothing a link could hold; the record's others still do
+            probable = record.get("probable_kind")
+            for namespace, values in identifiers.items():
+                for one in values if isinstance(values, list) else [values]:
+                    key = (namespace, one, code)
+                    if key not in rows or (reason, probable or "") < (rows[key]["reason"], rows[key]["probable_kind"] or ""):
+                        rows[key] = {"namespace": namespace, "value": one, "source_code": code, "reason": reason,
+                                     "probable_kind": probable}  # one row a key, whichever file held it back: the first reason in order
+    finally:
+        db.close()
+    land(DatabaseSink(silver), "set_aside", rows.values())
+    return len(rows)
+
+
+def adapters_of(rules):
+    """The adapter mapping of each source code's current reading in the Rules Database, read once a code."""
+    from functools import cache
+
+    from edgar_warehouse.mdm.store import current_reading
+
+    @cache
+    def adapter_of(code: str):
+        with rules.connect() as conn:
+            found = current_reading(conn, code)
+        return found[1]["adapter"] if found else None
+    return adapter_of
 
 WANTED = ("select distinct on (r.source_code, r.source_key) r.source_code, r.source_key, m.kind, r.entity_id as master_id "
           "from mdm.mastering_record r join mdm.mastering_master m on m.entity_id = r.entity_id "

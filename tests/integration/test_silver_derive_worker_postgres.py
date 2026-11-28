@@ -164,7 +164,7 @@ def test_links_land_as_one_row_a_period_and_a_second_build_keeps_them(postgres, 
 
     with silver_database(admin) as (owner, runtime):
         silver.migrate(owner, runtime_role=RUNTIME)
-        for name in ("relationship", "relationship-evidence", "relationship-path", "master-binding"):
+        for name in ("relationship", "relationship-evidence", "relationship-path", "master-binding", "set-aside"):
             silver.register(owner, spec_file(files.ROOT / "silver" / f"silver-{name}.yaml", None), runtime_role=RUNTIME)
         stores.install(owner, runtime_role=RUNTIME)  # the binding is built by a statement over the mdm tables (none hold a record here)
         monkeypatch.setattr(links, "portions", portions)
@@ -173,7 +173,8 @@ def test_links_land_as_one_row_a_period_and_a_second_build_keeps_them(postgres, 
         monkeypatch.setattr("edgar_warehouse.rules.registry.policy", lambda conn, digest: {"relationships": {}})
         first = links.build(runtime, MasterPolicy(), "invented", "2026-11-06T00:00:00+00:00")
         links.build(runtime, MasterPolicy(), "invented", "2026-11-06T00:00:00+00:00")
-        assert first == {"table": "relationship", "links": 1, "rows": 1, "bindings": 0, "waiting": {"no_master": 2}}
+        assert first == {"table": "relationship", "links": 1, "rows": 1, "bindings": 0, "set_aside": 0,
+                         "waiting": {"no_master": 2}}
         assert seen[0] == [] and [(r["relationship_id"], r["valid_from_basis"]) for r in seen[1]] == [("invented", "observed")]
         with runtime.connect() as conn:
             evidence = [tuple(r) for r in conn.execute(text("SELECT relationship_id, assertion_id FROM silver.relationship_evidence"))]
@@ -192,7 +193,7 @@ def test_a_store_whose_first_load_makes_no_link_builds_an_empty_table_and_a_full
     made = []
     with silver_database(admin) as (owner, runtime):
         silver.migrate(owner, runtime_role=RUNTIME)
-        for name in ("relationship", "relationship-evidence", "relationship-path", "master-binding"):
+        for name in ("relationship", "relationship-evidence", "relationship-path", "master-binding", "set-aside"):
             silver.register(owner, spec_file(files.ROOT / "silver" / f"silver-{name}.yaml", None), runtime_role=RUNTIME)
         stores.install(owner, runtime_role=RUNTIME)
         monkeypatch.setattr(links, "portions", lambda db, policy, as_of, last, spool: iter([(list(made), {"unresolved_endpoint": 1})]))
@@ -200,7 +201,8 @@ def test_a_store_whose_first_load_makes_no_link_builds_an_empty_table_and_a_full
         monkeypatch.setattr("edgar_warehouse.rules.registry.engine", lambda: Rules())
         monkeypatch.setattr("edgar_warehouse.rules.registry.policy", lambda conn, digest: {"relationships": {}})
         build = lambda: links.build(runtime, MasterPolicy(), "invented", "2026-11-06T00:00:00+00:00")
-        assert build() == {"table": "relationship", "links": 0, "rows": 0, "bindings": 0, "waiting": {"unresolved_endpoint": 1}}
+        assert build() == {"table": "relationship", "links": 0, "rows": 0, "bindings": 0, "set_aside": 0,
+                           "waiting": {"unresolved_endpoint": 1}}
         made.append(edge)
         assert build()["rows"] == 1
         made.clear()
@@ -270,3 +272,9 @@ class Master2:
 
     def bindings(self):
         return []
+
+    def held_back_sources(self):
+        return []
+
+    def held_back(self, paths):
+        return iter(())
