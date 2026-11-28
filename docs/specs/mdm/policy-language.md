@@ -272,7 +272,8 @@ Rules:
   governed rules existed", on the same convention as an absent
   `mapping_version` meaning the first source extract.
 
-- A step whose verdict decides no kind (`deferred`, `entity_undetermined`)
+- A step whose verdict decides no kind (`deferred`, `entity_undetermined`,
+  `not_listed`: a ticker asked that no market lists)
   may name a **`probable_kind`**: the kind a record it holds back probably is
   (`CONTEXT.md`, Probable Kind; operator, 2026-09-25). It sorts the Stage and
   never creates an identity; that kind's own rule decides, at its own bar. So

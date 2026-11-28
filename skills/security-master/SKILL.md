@@ -348,9 +348,10 @@ Read [LISTINGS.md](LISTINGS.md), "The listings detail table", before changing th
 | `invalid_isin_checksum`, `invalid_isin` | The same for an ISIN |
 | `missing_record_identity` | No usable CUSIP or ISIN |
 | `placeholder_name_of_issuer` | A name such as NONE, NULL, UNKNOWN, TBD: withheld |
-| `not_found_by_openfigi` | OpenFIGI found nothing for the identifier asked |
 
-Each waits with an open review.
+Each waits with an open review. A CUSIP or ISIN OpenFIGI does not know is a record too: it waits for the Security
+that holds that identifier. A ticker OpenFIGI does not know is Set Aside (`classification_not_listed`), by the ticker
+asked: no market lists it, so it names no Security.
 
 ## Run order
 

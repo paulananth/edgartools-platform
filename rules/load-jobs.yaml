@@ -99,6 +99,13 @@ steps:
     input: form4-tickers
     minutes: 60
     attempts: 3
+  - name: openfigi-registration-tickers
+    lane: S
+    source: openfigi
+    target: mastering
+    input: registration-tickers
+    minutes: 60
+    attempts: 3
   - name: 13f-securities
     lane: S
     source: sec.thirteenf.securities
@@ -171,7 +178,7 @@ steps:
     attempts: 3
   - name: ncen-class
     lane: L
-    waits_for: [openfigi-tickers, 13f-securities, nport-security-other-keys]
+    waits_for: [openfigi-tickers, openfigi-registration-tickers, 13f-securities, nport-security-other-keys]
     source: sec.ncen.class
     target: mastering
     minutes: 60
@@ -224,7 +231,7 @@ steps:
     attempts: 8
   - name: ownership-symbols
     lane: O
-    waits_for: [openfigi-tickers, 13f-securities, nport-security-other-keys]
+    waits_for: [openfigi-tickers, openfigi-registration-tickers, 13f-securities, nport-security-other-keys]
     source: sec.ownership
     target: security_symbols
     minutes: 60

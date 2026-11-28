@@ -8,7 +8,8 @@ mdm.prepare and the one Dataset Contract), then the Merge Stage:
   neither; a single listing that is its own US composite gives both FIGIs;
 - a record carries the identifier asked, CUSIP or ISIN, and every listing's
   FIGI, each an identifier; a FIGI failing its check sets the record aside;
-- an identifier OpenFIGI did not find is set aside (`not_found_by_openfigi`);
+- a CUSIP or ISIN OpenFIGI did not find is a record that waits for its Security; a ticker it does not know is
+  Set Aside as not listed (`classification_not_listed`), by the ticker asked;
 - a record joins the Security holding any of its identifiers, or creates
   one: a CUSIP answer and an ISIN answer sharing a listing FIGI make one
   Security, whichever comes first; an ISIN answer whose FIGIs lead to two
@@ -27,6 +28,7 @@ from pathlib import Path
 import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.mdm import adapters
 from edgar_warehouse.rules import files
 from edgar_warehouse.mastering import reads
 from edgar_warehouse.mastering.store import open_store
@@ -47,6 +49,7 @@ BROKEN = "ZZ0000146"
 OTHERS = ["ZZ0000054", "ZZ0000062", "ZZ0000070", "ZZ0000088", "ZZ0000096", "ZZ0000104", "ZZ0000112"]
 # A Japanese ISIN with no US listing: its Japanese composite is its primary listing (ticket 120).
 HOME = "JP0000000091"
+LISTED, UNLISTED = "EXK", "EXL"  # tickers asked: one OpenFIGI lists, one it does not know
 # An ISIN sharing a listing FIGI with one CUSIP answer (EQUITY's US composite) is that
 # Security; one sharing FIGIs with two (SOLE's and DOUBLE's) leads to two (ticket 138).
 SHARED, TWICE = "ZZ0000000099", "ZZ0000000107"
@@ -90,9 +93,11 @@ ANSWERS = {
                      listing("BBGZ0000VS32", "EXE", "US", "BBGZ0000VS32", "BBGZ0000SC31")]},
     BROKEN: {"data": [listing("BBGZ0000BK13", "EXJ", "US", "BBGZ0000BK13", None),
                       listing("BBGZZ0000US1", "EXJ", "UN", "BBGZ0000BK13", None)]},
+    LISTED: {"data": [listing("BBGZ0000VS87", "EXK", "US", "BBGZ0000VS87", "BBGZ0000SC86")]},
 }
 KINDS = {"cusip": ("id_cusip", [[EQUITY, BOND, MISSING, UNHELD, SOLE, DOUBLE, BROKEN], *[[o] for o in OTHERS]]),
-         "isin": ("id_isin", [[ISIN, HOME, SHARED, TWICE], *[[o] for o in ISIN_OTHERS]])}
+         "isin": ("id_isin", [[ISIN, HOME, SHARED, TWICE], *[[o] for o in ISIN_OTHERS]]),
+         "ticker": ("id_ticker", [[LISTED, UNLISTED]])}
 
 
 def capture(root: Path, word: str) -> list[str]:
@@ -170,7 +175,7 @@ def read_pieces(store: Artifacts, piece_root: Path, combined: str, contract: str
 
 
 def prepared_all(root: Path, words: tuple[str, ...] = ("cusip", "isin"),
-                 listings: list | None = None) -> tuple[list[dict], dict[str, str]]:
+                 listings: list | None = None, held: list | None = None) -> tuple[list[dict], dict[str, str]]:
     """Every record of one run over the answers of `words` (both kinds by default, ticket 138), found or not,
     and each refused identifier with its reason; `listings`, when given, also gets every listing row of the
     source extract."""
@@ -193,7 +198,7 @@ def prepared_all(root: Path, words: tuple[str, ...] = ("cusip", "isin"),
         "consumer": "check", "batch_id": "check-openfigi", "as_of": "2026-10-17T00:00:00+00:00"})
     refused: dict[str, str] = {}
     out = chain.records(store, root / "mdm", prepared, CODE, files.source("openfigi")["dataset_contracts"][CODE]["contract"],
-                        refused=refused, key="id")
+                        refused=refused, key="id", policy=files.policy(), held=held)
     return out, refused
 
 
@@ -541,6 +546,17 @@ def test_an_answer_openfigi_did_not_find_is_a_record_with_its_identifier_and_no_
     records = unfound_records(tmp_path, ("cusip",))
     assert {r["provenance"]["record_key"] for r in records} == {MISSING, *OTHERS}
     assert all(r["identifiers"] == {"cusip": r["provenance"]["record_key"]} for r in records)
+
+
+def test_a_ticker_openfigi_does_not_know_is_set_aside_as_not_listed_by_the_ticker_asked(tmp_path):
+    """Operator, 2026-11-27: "Set Aside: not listed (Recommended)". A ticker OpenFIGI lists is a Security's; one it does
+    not know names no Security, so it is Set Aside by the ticker asked and Gold leaves its rows out."""
+    held: list[dict] = []
+    records, refused = prepared_all(tmp_path, ("ticker",), held=held)
+    assert [(r["provenance"]["record_key"], r["identifiers"]["ticker"]) for r in records] == [(LISTED, LISTED)]
+    assert refused == {UNLISTED: "classification_not_listed"}
+    contract = files.source("openfigi")["dataset_contracts"][CODE]["contract"]["adapter"]
+    assert [adapters.record_identifiers(row, contract)[0] for row in held] == [{"ticker": UNLISTED}]
 
 
 def test_an_answer_openfigi_did_not_find_attaches_to_the_security_holding_its_cusip_and_creates_none(database, tmp_path):

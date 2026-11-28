@@ -1246,7 +1246,7 @@ dataset_contracts:
         contracts
       effective_time: 'none: an answer states no date'
       semantics: patch
-      completeness: the CUSIPs and ISINs asked of OpenFIGI; no retirement by absence
+      completeness: the CUSIPs, ISINs and tickers asked of OpenFIGI; no retirement by absence
       nonblocking_deferred_reasons:
       - invalid_cusip
       - invalid_cusip_checksum
@@ -1334,13 +1334,17 @@ dataset_contracts:
           - security_type2
           - market_sector
           - listings
-        version: openfigi-security-v5
+        version: openfigi-security-v6
         retain_deferred: true
         source_record_provenance: true
-        kind: security
+        # A ticker asked that OpenFIGI does not know is Set Aside as not listed; every other answer is a Security's.
+        classification:
+          kind: security
+          rule_id: openfigi-listed
+          version: 2026-11-27.ticker-not-listed
         record_key:
         - id
-        # The identifier asked, a CUSIP or an ISIN; every listing's FIGI. Each
+        # The identifier asked, a CUSIP, an ISIN or a ticker; every listing's FIGI. Each
         # value is checked by its identifier type.
         identifiers:
           cusip: cusip

@@ -12,3 +12,8 @@ inputs:
     capture_name: ""
     facts: {ticker_file_date: "2026-09-02"}
     revision: 1
+  registration-tickers:
+    folder: openfigi/registration-tickers-20261127
+    capture_name: ""
+    facts: {ticker_file_date: "2026-09-02"}
+    revision: 2

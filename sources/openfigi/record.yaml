@@ -10,7 +10,7 @@ pass:
 # composite's, else the ISIN country's composite's (operator, 2026-10-20:
 # "Use the primary exchange listing", "US, else the ISIN's country"), else
 # none; every listing is kept (`listings`, ticket 120). Both kinds asked in
-# one run: the identifier asked is the record's `cusip` or `isin`
+# one run: the identifier asked is the record's `cusip`, `isin` or `ticker`
 # by its `id_type`, and every listing's FIGI is in `figis`, each an
 # identifier of the one Security, so a CUSIP answer and an ISIN answer of one
 # security meet in MDM by a shared FIGI, with no pairing in these rules.
@@ -133,6 +133,11 @@ read:
                       - {join: {path: us_composite.us_composite_sample, item_path: figi_ticker, separator: "", max_items: 1, null_if_empty: true}}
                       - {join: {path: home_composite.home_composite_sample, item_path: figi_ticker, separator: "", max_items: 1, null_if_empty: true}}
                       - {join: {path: listing.listing_sample, item_path: figi_ticker, separator: "", max_items: 1, null_if_empty: true}}
+                      # A ticker asked that no listing answers keeps the ticker asked: it is Set Aside by it.
+                      - choose:
+                          condition: {equal: {left: {text: {path: id_type}}, right: {const: {value: id_ticker}}}}
+                          then: {text: {path: id}}
+                          else: {value: {path: NO_SUCH_FIELD}}
                   # A class ticker is written with a slash, a dash, a dot or a space (BRK/B); the
                   # identifier keeps letters and digits only, as a Form 4's symbol does. A bond's
                   # description (ten or more once dropped) is no ticker and leaves the field empty.

@@ -1899,6 +1899,7 @@ def test_each_step_resolves_to_the_folder_its_source_names():
         'person': [('sec.submissions.company/all-76230', 'captures')],
         'openfigi-answers': [('openfigi/2026q2-nport', 'captures')],
         'openfigi-tickers': [('openfigi/form4-tickers-20261109', 'captures')],
+        'openfigi-registration-tickers': [('openfigi/registration-tickers-20261127', 'captures')],
         '13f-securities': [('sec.thirteenf.securities/p07-cohort', 'captures')],
         '13f-securities-silver': [('sec.thirteenf.securities/p07-cohort', 'captures')],
         'ncen-registrant': [('sec.ncen-datasets/2025q4', 'captures'), ('sec.ncen-datasets/2026q1', 'captures'), ('sec.ncen-datasets/2026q2', 'captures'), ('sec.ncen-datasets/2026q3', 'captures')],

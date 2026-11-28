@@ -115,7 +115,7 @@ The records a kind's classification rule masters in the current phase. A record 
 _Avoid_: filter, phase 1 universe, a Set Aside record counted as a defect
 
 **Set Aside**:
-A record a classification rule held back by decision, with its reason and Probable Kind. Gold leaves its links out of a link's test, and it waits for a rule that decides its kind.
+A record a classification rule held back by decision, with its reason and Probable Kind: a kind not decided yet, or a ticker no market lists (OpenFIGI does not know it). Gold leaves its links out of a link's test, and it waits for a rule that decides its kind.
 _Avoid_: "deferred" alone (a record can also wait on something missing, which is a gap, not a decision), dropped, rejected
 
 **Trading Venue**:

@@ -43,6 +43,11 @@ automatic_rules:
   rule_version: 2026-10-13.1
   verdict: bind
 - kind: security
+  family: classification
+  rule_id: openfigi-listed
+  rule_version: 2026-11-27.ticker-not-listed
+  verdict: security
+- kind: security
   family: binding
   rule_id: security-cusip
   rule_version: 2026-11-10.source-v2
