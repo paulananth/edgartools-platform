@@ -19,6 +19,9 @@ def test_source_onboarding_guide_is_local_read_only_and_escapes_source_name():
             assert response.headers["Content-Security-Policy"].find("script-src 'none'") >= 0
         assert '<h2 class="source-name" id="source-title">sec &lt;company&gt; &amp; &quot;sample&quot;</h2>' in page
         assert "Guide only · no run state" in page
+        assert "edgar-warehouse rules try --family &lt;family&gt;" in page
+        assert "sources/&lt;source&gt;/quality.yaml" in page
+        assert "Show the full rule" in page
 
         request = Request(url, data=b"", method="POST")
         try:

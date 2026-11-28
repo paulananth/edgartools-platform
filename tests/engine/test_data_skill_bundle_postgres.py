@@ -325,6 +325,19 @@ def test_source_sequence_runs_from_installed_bundle_without_checkout(installed):
     assert report["sources"]["gleif"]["status"] == "deferred"
     assert report["runtime_readiness"] == "not_checked"
 
+def test_rules_try_page_renders_from_the_installed_bundle(installed):
+    _, root = installed
+    result = subprocess.run(
+        [str(root / "bin" / "edgar-warehouse"), "rules", "try", "--family", "prepare_record"],
+        capture_output=True,
+        text=True,
+        cwd=root,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "<h1>Prepare the MDM record</h1>" in result.stdout
+    assert "The row, as JSON" in result.stdout
+    assert "<li>record key record_key</li>" in result.stdout
+
 
 def test_store_migrations_run_from_installed_bundle(installed):
     python, root = installed
