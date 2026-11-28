@@ -21,6 +21,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 sys.path.insert(0, str(HERE))
 import design  # noqa: E402
+import progress_relay  # noqa: E402
 
 
 def jobs_module():
@@ -42,9 +43,12 @@ def sample(name: str, value, **labels) -> str:
 
 def render(snapshot: dict, age: float = 0.0) -> str:
     """The metrics of one reading, in the Prometheus text format."""
+    run = snapshot.get("run")
     lines = ["# Counts, states and times of the load jobs; no row values.",
              sample("load_monitor_up", 1), sample("load_monitor_snapshot_age_seconds", age),
              sample("load_steps_total", snapshot["total"])]
+    if run is not None:
+        lines.append(sample("load_monitor_run_info", 1, run_hash=progress_relay.run_fingerprint(str(run))))
     complete = bool(snapshot.get("complete"))
     lines.append(sample("load_complete", int(complete)))
     counts = {name: 0 for name, *_ in design.STATES}
@@ -56,17 +60,23 @@ def render(snapshot: dict, age: float = 0.0) -> str:
     lines += [sample("load_steps", count, state=state) for state, count in counts.items()]
     for row in snapshot["running"]:
         who = {"lane": row["lane"], "step": row["name"]}
-        lines += [sample("load_step_attempt", row["attempt"], **who), sample("load_step_workers", row["workers"], **who),
-                  sample("load_step_elapsed_minutes", row["elapsed"], **who), sample("load_step_bound_minutes", row["bound"], **who),
+        lines += [sample("load_step_attempt", row["attempt"], **who),
+                  sample("load_step_workers", row["workers"], **who),
+                  sample("load_step_elapsed_minutes", row["elapsed"], **who),
+                  sample("load_step_bound_minutes", row["bound"], **who),
                   sample("load_step_log_age_minutes", row["log_age"], **who),
-                  *([] if row["cpu"] is None else  # its processes run on another machine: not measured, never a zero
-                    [sample("load_step_cpu_percent", row["cpu"], **who), sample("load_step_memory_mb", row["memory_mb"], **who)]),
+                  *([] if row["cpu"] is None else
+                    [sample("load_step_cpu_percent", row["cpu"], **who),
+                     sample("load_step_memory_mb", row["memory_mb"], **who)]),
                   sample("load_step_rows_per_minute", row["rows_per_min"], store=row["store"], **who),
-                  sample("load_step_cause", 1, **who, cause=row["why"][-1])]  # the last of the five whys, a sentence of counts and names
-        if row.get("kind") != "progressing":  # a step that is stalled or locked shows all the load jobs; one that works has none
-            lines += [sample("load_step_why", 1, **who, number=str(number), why=words) for number, words in enumerate(row["why"], 1)]
-    lines += [sample("load_store_rows_per_minute", rate, store=store) for store, rate in snapshot["writes"].items()]
-    lines.append(sample("load_lock_waiters", snapshot["lock_waiters"]))
+                  sample("load_step_cause", 1, **who, cause=row["why"][-1])]
+        if row.get("bundles") is not None:
+            finished, total = row["bundles"]
+            lines += [sample("load_step_bundles_completed", finished, **who),
+                      sample("load_step_bundles_total", total, **who)]
+        if row.get("kind") != "progressing":
+            lines += [sample("load_step_why", 1, **who, number=str(number), why=words)
+                      for number, words in enumerate(row["why"], 1)]
     for database, counts_ in snapshot["sessions"].items():
         lines += [sample("load_sessions", n, database=database, state=state) for state, n in counts_.items()]
     budget = snapshot.get("budget")

@@ -18,6 +18,7 @@ def load(name):
 
 
 exporter, monitoring = load("exporter"), load("monitoring")
+progress_relay = load("progress_relay")
 
 SNAPSHOT = {
     "total": 3, "done": 1, "failed": 1, "writes": {"mdm": 900.0}, "lock_waiters": 1,
@@ -239,3 +240,84 @@ def test_a_step_whose_processes_run_elsewhere_publishes_no_cpu_or_memory_rather_
     text = exporter.render({**SNAPSHOT, "running": [row]})
     assert "load_step_attempt{" in text
     assert "load_step_cpu_percent" not in text and "load_step_memory_mb" not in text
+
+def prometheus_load_response(run_hash="5e09562eab856465261e35c5fbf0b4e0874cafa93c19e5729b225f3f6fbc453b",
+                             state="progressing", bundles=2, complete=0, done=1, failed="failed",
+                             bundle_total=100, attempt=1):
+    def sample(name, value, **labels):
+        return {"metric": {"__name__": name, **labels}, "value": [0, str(value)]}
+
+    counts = {"done": done, "progressing": int(state == "progressing"),
+              "stalled": int(state == "stalled"), "waiting": 0,
+              "failed": int(failed == "failed")}
+    return {"status": "success", "data": {"result": [
+        sample("load_monitor_up", 1),
+        sample("load_monitor_snapshot_age_seconds", 3),
+        sample("load_monitor_run_info", 1, run_hash=run_hash),
+        sample("load_steps_total", 3),
+        sample("load_complete", complete),
+        *(sample("load_steps", count, state=name) for name, count in counts.items()),
+        sample("load_step_info", 1, lane="B", step="mastering", state=state, waits_for=""),
+        sample("load_step_attempt", attempt, lane="B", step="mastering"),
+        sample("load_step_bundles_completed", bundles, lane="B", step="mastering"),
+        sample("load_step_bundles_total", bundle_total, lane="B", step="mastering"),
+    ]}}
+
+
+def test_prometheus_agent_relay_reports_initial_state_changes_and_no_poll_noise():
+    relay = progress_relay.ProgressRelay("demo-run")
+    first = progress_relay.parse_query_response(prometheus_load_response())
+    assert relay.observe(first) == [
+        "LOAD_PROGRESS demo-run: 1/3 steps complete; 1 active, 0 waiting, 1 failed; B/mastering bundles 2/100."
+    ]
+    assert relay.observe(first) == []
+
+    changed = progress_relay.parse_query_response(
+        prometheus_load_response(state="stalled", bundles=4, bundle_total=100, attempt=2))
+    assert relay.observe(changed) == [
+        "LOAD_PROGRESS demo-run: B/mastering restarted (attempt 2); B/mastering stalled; "
+        "1/3 steps complete; 1 active, 0 waiting, 1 failed."
+    ]
+    assert relay.observe(changed) == []
+    advanced = progress_relay.parse_query_response(
+        prometheus_load_response(state="stalled", bundles=7, bundle_total=100, attempt=2))
+    assert relay.observe(advanced) == [
+        "LOAD_PROGRESS demo-run: B/mastering bundles 7/100; "
+        "1/3 steps complete; 1 active, 0 waiting, 1 failed."
+    ]
+    assert relay.observe(advanced) == []
+
+    mismatched = progress_relay.parse_query_response(prometheus_load_response(run_hash="wrong-run"))
+    assert relay.observe(mismatched) == [
+        "LOAD_PROGRESS demo-run: status unavailable — Prometheus is not serving this run; refusing mismatched progress."
+    ]
+    assert relay.observe(advanced) == [
+        "LOAD_PROGRESS demo-run: monitoring restored; 1/3 steps complete; 1 active, 0 waiting, 1 failed; "
+        "B/mastering bundles 7/100."
+    ]
+
+    complete = progress_relay.parse_query_response(
+        prometheus_load_response(state="done", bundles=6, complete=1, done=3, failed="none"))
+    assert relay.observe(complete) == ["LOAD_PROGRESS demo-run: COMPLETE — 3/3 steps complete."]
+    assert relay.observe(complete) == []
+
+
+def test_exporter_publishes_run_fingerprint_and_measured_bundle_counts():
+    row = {**SNAPSHOT["running"][0], "bundles": (4, 8)}
+    text = exporter.render({**SNAPSHOT, "run": "demo-run", "running": [row]})
+    assert 'load_monitor_run_info{run_hash="5e09562eab856465261e35c5fbf0b4e0874cafa93c19e5729b225f3f6fbc453b"} 1' in text
+    assert 'load_step_bundles_completed{lane="B",step="b\\"1"} 4' in text
+    assert 'load_step_bundles_total{lane="B",step="b\\"1"} 8' in text
+
+
+def test_agent_relay_queries_the_existing_prometheus_datasource():
+    called = []
+
+    def api(method, path):
+        called.append((method, path))
+        return 200, prometheus_load_response()
+
+    progress_relay.fetch_metrics(api)
+    assert called[0][0] == "GET"
+    assert called[0][1].startswith("/api/datasources/proxy/uid/prometheus/api/v1/query?")
+    assert "%7B__name__%3D~%22load_." in called[0][1]
