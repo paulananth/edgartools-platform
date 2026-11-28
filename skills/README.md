@@ -51,6 +51,7 @@ The source order is capture, profile, model, approved configuration, then MDM/Si
 
 - [security-master](security-master/SKILL.md) and [company-financials](company-financials/SKILL.md) hold domain-specific rules.
 - [data-engineering-fundamentals](data-engineering-fundamentals/SKILL.md) teaches general concepts; platform rules stay with their owner skills.
+- [agent-progress](agent-progress/SKILL.md) reports verified milestones and results in the current conversation for any workflow.
 
 The role map is an entry point, not a substitute for a skill's own boundaries.
 
