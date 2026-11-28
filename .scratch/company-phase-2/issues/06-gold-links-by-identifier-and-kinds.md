@@ -14,5 +14,7 @@ key the Set Aside table does not hold, and every one resolves to exactly one mas
 - [ ] GoF consult on `edgar_warehouse/gold/views.py`
 - [ ] Silver specs: `kinds` lists where an issuer or owner may be either
 - [ ] Views and tests generated; a test per kind of link fails on today's generator
+- [ ] A Security's listing operating MIC readable by Gold from the mirrored master (from ticket 04)
+- [ ] A registration or prospectus ticker several Securities hold resolves by its cover's Trading Venue (`ref_sec_cover_exchange` to `ref_iso_10383_mic`'s operating MIC), then the `US` ISIN; a row whose wording `sec-cover-exchange` lacks, or which gives none, is out of the link test as "exchange not mapped" (from ticket 04)
 - [ ] `/code-review`
 - [ ] Learning → skill
