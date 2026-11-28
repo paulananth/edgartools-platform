@@ -24,11 +24,17 @@ def build_parser() -> argparse.ArgumentParser:
     from edgar_warehouse.rules.loading import register as register_load
     from edgar_warehouse.application.plan_cli import register as register_plan
     from edgar_warehouse.workers.cli import arguments as worker_arguments
+    from edgar_warehouse.hosted_store_clear_preview import (
+        register as register_hosted_store_clear_preview,
+    )
+    from edgar_warehouse.hosted_store_clear_progress import register as register_hosted_store_clear_progress
 
     register_mdm_subparser(subparsers)
     register_bookkeeping(subparsers)
     register_rules(subparsers)
     register_load(subparsers)
+    register_hosted_store_clear_preview(subparsers)
+    register_hosted_store_clear_progress(subparsers)
     register_journal(subparsers)
     worker_arguments(subparsers.add_parser("workers", help="Run a worker for one profile and run"))
     register_plan(subparsers)

@@ -381,6 +381,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--build-engine", action="store_true", help="rebuild the engine from this checkout, then stop")
     parser.add_argument("--stores", default=os.environ.get("STORES") or str(Path.home() / ".config/edgartools/hosted"))
+    parser.add_argument("--progress-run-id", help="Publish check events to a hosted-clear progress run")
+    parser.add_argument("--progress-step", choices=("preflight", "readiness"), default="readiness")
     args = parser.parse_args(argv)
     if args.build_engine:
         return build_engine()
@@ -389,9 +391,26 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{cid:10} {title}")
         return 0
     stores = Path(args.stores)
+    progress = None
+    if args.progress_run_id:
+        from edgar_warehouse.hosted_store_clear_progress import record_unit, set_step_state, set_step_total
+        progress = (record_unit, set_step_state, set_step_total)
+        set_step_total(args.progress_run_id, args.progress_step, len(CHECKS), stores)
+        set_step_state(args.progress_run_id, args.progress_step, "running", stores)
+    elif args.progress_step != "readiness":
+        parser.error("--progress-step requires --progress-run-id")
     sys.path.insert(0, str(HERE))
     import load_jobs
-    results = evaluate(gather(stores))
+    try:
+        results = evaluate(gather(stores))
+    except Exception:
+        if progress:
+            progress[1](args.progress_run_id, args.progress_step, "failed", stores)
+        raise
+    if progress:
+        for result in results:
+            progress[0](args.progress_run_id, args.progress_step, result["id"],
+                        "completed" if result["ok"] else "failed", stores)
     for r in results:
         print(f"{'PASS' if r['ok'] else 'FAIL':5} {r['id']:10} {r['title']}\n      evidence: {r['evidence']}")
     env = load_jobs.load_env(stores / "worker.env")

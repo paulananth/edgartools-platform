@@ -60,20 +60,49 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--by", default=STANDING_BY, help="Who the approval record names (default: the standing ruling)")
     parser.add_argument("--words", default=STANDING_WORDS, help="The words the approval record holds (default: the standing ruling)")
+    parser.add_argument("--progress-run-id", help="Publish code-set progress to a hosted clear run")
     args = parser.parse_args()
+    code_sets = [path for path in sorted(PUBLISHED.iterdir()) if path.is_dir()]
+    record = set_total = set_state = None
+    if args.progress_run_id:
+        from edgar_warehouse.hosted_store_clear_progress import record_unit, set_step_state, set_step_total
+        record, set_state, set_total = record_unit, set_step_state, set_step_total
+        if not code_sets:
+            set_total(args.progress_run_id, "rdm", 1)
+            set_state(args.progress_run_id, "rdm", "failed")
+            record(args.progress_run_id, "rdm", "no-published-sets", "failed")
+            return 1
+        set_total(args.progress_run_id, "rdm", len(code_sets))
+        set_state(args.progress_run_id, "rdm", "running")
     differing = []
     with tempfile.TemporaryDirectory() as tmp:
-        for code_set in sorted(PUBLISHED.iterdir()):
-            for version in sorted((v.name for v in code_set.iterdir()), key=int):
-                draft = Path(tmp) / f"{code_set.name}-{version}.json"
-                draft.write_text(json.dumps(draft_body(code_set.name, version)))
-                cli("rdm", "draft", "--file", str(draft))
-                cli("rdm", "approve", "--by", args.by, "--words", args.words, code_set.name, version)
-                sha = json.loads(cli("rdm", "publish", "--out", str(Path(tmp) / "out"), code_set.name, version))["sha256"]
-                pin = json.loads((code_set / version / "pin.json").read_text())["sha256"]
-                print(code_set.name, version, "pin ok" if sha == pin else "PIN DIFFERS", flush=True)
-                if sha != pin:
-                    differing.append(f"{code_set.name} {version}")
+        for code_set in code_sets:
+            if record:
+                record(args.progress_run_id, "rdm", code_set.name, "running")
+            set_ok = True
+            try:
+                for version in sorted((v.name for v in code_set.iterdir() if v.is_dir()), key=int):
+                    draft = Path(tmp) / f"{code_set.name}-{version}.json"
+                    draft.write_text(json.dumps(draft_body(code_set.name, version)))
+                    cli("rdm", "draft", "--file", str(draft))
+                    cli("rdm", "approve", "--by", args.by, "--words", args.words, code_set.name, version)
+                    sha = json.loads(cli("rdm", "publish", "--out", str(Path(tmp) / "out"), code_set.name, version))["sha256"]
+                    pin = json.loads((code_set / version / "pin.json").read_text())["sha256"]
+                    matches_pin = sha == pin
+                    print(code_set.name, version, "pin ok" if matches_pin else "PIN DIFFERS", flush=True)
+                    if not matches_pin:
+                        differing.append(f"{code_set.name} {version}")
+                        set_ok = False
+            except SystemExit:
+                if record:
+                    record(args.progress_run_id, "rdm", code_set.name, "failed")
+                raise
+            except Exception:
+                if record:
+                    record(args.progress_run_id, "rdm", code_set.name, "failed")
+                raise
+            if record:
+                record(args.progress_run_id, "rdm", code_set.name, "completed" if set_ok else "failed")
     return 1 if differing else 0
 
 
