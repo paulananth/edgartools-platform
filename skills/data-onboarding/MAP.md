@@ -151,35 +151,14 @@ Do not ask:
 - which value fills a shared field, when the kind file already says.
 
 ### Visual rule trial
-After the operator-approved rule meaning is clear, use the matching visual family trial with invented inputs:
 
+When a supported family applies, run Rules Try **in the current conversation** once the rule meaning is agreed. Use invented inputs and an independently specified expected result. Use `prepare_record` for fixed-type contract mapping, `prepare_by_type_rule` for mapping with a classification rule, `entity_type` for classification, or `check_record` for a quality check. Other families and examples are in the checkout's `docs/rules-try/`.
 
-```mermaid
-flowchart LR
-  A[Choose the matching family] --> B[Enter a rule and invented inputs]
-  B --> C{Full-rule words available?}
-  C -->|yes| D[Show the full rule and inspect stored keys]
-  C -->|no| E[Continue with the visible rule]
-  D --> F[Try]
-  E --> F
-  F --> G{Actual matches expected?}
-  G -->|yes| H[Carry the candidate into approved configuration]
-  G -->|no| B
-```
+1. **Start the trial.** Use [Agent Progress](../agent-progress/SKILL.md) for in-chat updates. Give the family, the behavior being tested, and the expected outcome.
+2. **Show the full rule.** If using short words, run `edgar-warehouse rules try --family <family> --button 'Show the full rule' --rule "$SHORT_RULE"`. When it succeeds, post the relevant word-to-key changes and pass the returned `document` directly to Try as JSON. If it returns only vocabulary, use it to write the full rule. If it refuses, report the refusal and stop the trial until corrected. Skip expansion if the rule already uses stored keys.
+3. **Try and compare.** Run `edgar-warehouse rules try --family <family> --button Try --rule "$FULL_RULE" --input "name=$INPUT" --expected "$EXPECTED"`; repeat `--input` for each family field. When field names are unclear, inspect `edgar-warehouse rules try --family <family>` as text for its input labels. Report the actual result beside the expected result for each case. A mismatch or refusal is not a pass; preserve the reason.
 
-Run `edgar-warehouse rules try --family <family>`; in a checkout, prefix it
-with `uv run --extra mdm --extra s3`. Family ids live in
-`edgar_warehouse/rules/bench_families/`; the checkout has examples in
-`docs/rules-try/`. For example, `prepare_record` previews contract mapping,
-`entity_type` previews classification, and `check_record` previews one quality
-check.
-
-Use invented inputs only. The page exercises one family function; it does not
-qualify the source reader, contract, or real captures. A passing trial is
-exploratory evidence, not a source proof. Continue with `rules check`, the
-reader's owner-specific tests, and Data Operations' source proof. `Keep a copy`
-and `Store this draft` persist data; they are separate from this visual check.
-
+The trial is **exploratory**. It does not read real captures, write configuration, save a copy, store a draft, or prove onboarding complete. Keep `rules check`, the reader's owner-specific tests, and Data Operations' source proof as separate gates.
 
 **Write** `sources/<source>/source.yaml`, following REFERENCE.md and
 starting from its "Defaults".

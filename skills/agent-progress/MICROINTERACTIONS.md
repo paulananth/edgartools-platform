@@ -1,0 +1,38 @@
+# Microinteraction design for agent progress
+
+These are design sources and their application to agent chat, not evidence that a given host can render a live component.
+
+## Design one moment at a time
+
+Dan Saffer’s [*Microinteractions*, O’Reilly sampler](https://cdn.oreillystatic.com/oreilly/booksamplers/9781491945926_sampler.pdf#page=34) (chapter 1, printed pp. 14–19) gives four parts for designing a single interaction. A whole agent run is not one microinteraction; acknowledgment, a blocker, and a result are separate moments. Use the framework to specify each one before choosing a visual.
+
+| Part | Design question | Worked example: stop a verification run |
+| --- | --- | --- |
+| Trigger | Which user action or observed system event starts this moment? | The user asks to stop one identified run. |
+| Rules | What does the system do, and what evidence changes the state? | If authorized and supported, submit the stop request. Wait for the runner to confirm the outcome; the request itself does not stop the run. |
+| Feedback | What should the user see to understand the rule and the next action? | “Stop requested” after submission; “Cancelled” only on confirmation. State what completed and whether any effects remain, if known. |
+| Loops and modes | What repeats, what ends it, and what changes while waiting or after an interruption? | Repeated pending observations do not create new messages. The terminal result ends updates. If visibility is lost, report “Status unavailable”; after reconnecting, read the same run before reporting another state. |
+
+Walk the design through the first trigger, a repeated observation, an interruption, and the terminal outcome. Check that one state cannot be mistaken for another. If a special mode changes what an action does, name that mode in the feedback; otherwise avoid introducing it.
+
+## Choose the feedback
+
+| Principle | Source guidance | Application in chat |
+| --- | --- | --- |
+| Trigger → feedback | [NN/g: Microinteractions](https://www.nngroup.com/articles/microinteractions/) describes one contextual response to a user action or system-state change. | Acknowledge a meaningful start; then let verified checkpoints, blockers, and outcomes trigger short updates. A polling tick is not a milestone. |
+| Show the essentials first | [NN/g: Progressive Disclosure](https://www.nngroup.com/articles/progressive-disclosure/) recommends keeping frequently needed information visible and clearly labeling the path to secondary detail. It distinguishes progressive disclosure from a fixed sequence of steps. | Lead with the current state, result or decision. Keep payloads and diagnostics behind a named detail. Use a numbered stepper only for a known fixed sequence; use event history for branching or parallel work. |
+| Match progress to evidence | The [Microinteractions Toolkit](https://info-design-lab.github.io/microinteractions/Slides/Toolkit.pdf#page=3), “Visualize quantitative information” (pp. 3–5), recommends clear bounds and discrete units that simplify comparison. [Carbon: Progress bar](https://www.carbondesignsystem.com/building-blocks/core/components/progress-bar/guidelines) reserves determinate bars for a measurable goal. | Name the unit and show the verified count against its total. Group minor updates into meaningful batches; for unknown totals, report the activity without a percentage. |
+| Keep the next action in context | The [Microinteractions Toolkit, IDC, IIT Bombay](https://info-design-lab.github.io/microinteractions/Slides/Toolkit.pdf#page=11), “Maintain functional continuity” (pp. 11–13) and “Maintain continuity within a sequence of interactions” (pp. 15–16), recommends minimizing the steps needed to respond and showing only the actions relevant to the current step. | Carry the run label and relevant prior decision forward. When blocked on input, ask for the one decision that unblocks the current step, say what it will let you do, and keep the reply in this chat. |
+| Announce changes without moving focus | [W3C: Understanding WCAG 2.2 SC 4.1.3](https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html) explains how web status messages can be exposed to assistive technology without taking focus, and warns that live regions can get too chatty. | Send self-contained text at meaningful transitions. When you control a web host, use an appropriate status or log role for important updates; do not force focus or announce every tick. This is a renderer responsibility, not a claim about a third-party chat host. |
+| State survives motion and color | [W3C: Use of Color](https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html) says color cannot be the sole means of conveying information. [Animation from Interactions](https://www.w3.org/WAI/WCAG22/Understanding/animation-from-interactions.html) describes disabling nonessential interaction-triggered motion. | Pair icons and colors with state words. Prefer static chat text; in a host you control, respect reduced-motion preferences. |
+
+## Feedback and motion techniques
+
+Michael Filipiuk’s [*UI Design Principles*, “Microinteractions”](https://ebooks.karbust.me/Technology/UI%20Design%20Principles%20-%20Michael%20Filipiuk.pdf#page=284) (PDF pp. 284–292) uses short, subtle feedback to confirm an action without distracting from the task.
+
+- **Acknowledge, then confirm.** “Retry requested” acknowledges the action; “Retry running” means the runner confirmed it. A spinner or skeleton can show an unknown wait in a visual host, but cannot establish progress or success.
+- **Use motion to clarify a change.** A checkbox, switch, or selected tab can briefly change appearance to confirm a new state. Apply the same pattern to a verified checkpoint or an expanded evidence panel. Show the text and make controls usable immediately; preserve the meaning without motion.
+- **Choose easing by purpose.** Filipiuk distinguishes linear (constant rate), ease-in (accelerating), and ease-out (decelerating). For a reveal, try ease-out if a prompt start and gentle finish help the user follow the change. Easing is presentation, not measurement; do not animate invented progress between events. The book's one-second ceiling is advice, not a target. Use the shortest useful transition or none.
+- **Make the action recognizable without hover.** Hover feedback can reinforce clickability. In a host you control, keep the action recognizable at rest and provide visible keyboard focus. In native chat, use clear labels instead of hover effects.
+
+**Review a progress design:** Can the reader tell whether work is running or waiting on them? Can they tell what changed without reading logs? Can they distinguish a completed check from an unverified outcome? If the UI is append-only, does each new message earn its place?
